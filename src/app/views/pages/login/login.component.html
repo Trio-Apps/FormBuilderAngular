@@ -1,0 +1,110 @@
+<div class="bg-light dark:bg-transparent min-vh-100 d-flex flex-row align-items-center">
+  <c-container breakpoint="md">
+    <c-row class="justify-content-center">
+      <c-col md="6" lg="5" xl="4">
+        <c-card class="p-4">
+          <c-card-body>
+            
+            <!-- Success Message -->
+            <div *ngIf="successMessage" class="alert alert-success alert-dismissible fade show" role="alert">
+              <svg cIcon name="cil-check" class="me-2"></svg>
+              {{ successMessage }}
+              <button type="button" class="btn-close" (click)="successMessage = ''"></button>
+            </div>
+
+            <!-- Error Message -->
+            <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">
+              <svg cIcon name="cil-warning" class="me-2"></svg>
+              {{ errorMessage }}
+              <button type="button" class="btn-close" (click)="errorMessage = ''"></button>
+            </div>
+
+            <form (ngSubmit)="onSubmit()" cForm>
+              <h1>Login</h1>
+              <p class="text-body-secondary">Sign In to your account</p>
+              
+              <!-- Email Input -->
+              <c-input-group class="mb-3">
+                <span cInputGroupText>
+                  <svg cIcon name="cil-user"></svg>
+                </span>
+                <input
+                  type="email"
+                  cFormControl
+                  placeholder="Email"
+                  [(ngModel)]="credentials.email"
+                  name="email"
+                  [disabled]="isLoading"
+                  required
+                  autoComplete="username"
+                />
+              </c-input-group>
+              
+              <!-- Password Input -->
+              <c-input-group class="mb-4">
+                <span cInputGroupText>
+                  <svg cIcon name="cil-lock-locked"></svg>
+                </span>
+                <input
+                  type="password"
+                  cFormControl
+                  placeholder="Password"
+                  [(ngModel)]="credentials.password"
+                  name="password"
+                  [disabled]="isLoading"
+                  required
+                  autoComplete="current-password"
+                />
+              </c-input-group>
+              
+              <!-- Remember Me Checkbox -->
+              <div class="mb-4">
+                <c-form-check>
+                  <input
+                    type="checkbox"
+                    cFormCheckInput
+                    id="rememberMe"
+                    [(ngModel)]="credentials.rememberMe"
+                    name="rememberMe"
+                    [disabled]="isLoading"
+                  />
+                  <label cFormCheckLabel for="rememberMe">
+                    Remember me
+                  </label>
+                </c-form-check>
+              </div>
+              
+              <!-- Login Button -->
+              <c-row>
+                <c-col xs="6">
+                  <button 
+                    cButton 
+                    class="px-4 w-100" 
+                    color="primary" 
+                    type="submit"
+                    [disabled]="isLoading"
+                  >
+                    <span *ngIf="!isLoading">
+                      Login
+                    </span>
+                    <span *ngIf="isLoading">
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Loading...
+                    </span>
+                  </button>
+                </c-col>
+                <c-col class="text-end" xs="6">
+                  <button cButton class="px-0" color="link" type="button" [disabled]="isLoading">
+                    Forgot password?
+                  </button>
+                </c-col>
+              </c-row>
+
+             
+            </form>
+          </c-card-body>
+        </c-card>
+      </c-col>
+    </c-row>
+  </c-container>
+</div>
