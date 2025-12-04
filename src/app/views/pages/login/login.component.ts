@@ -20,6 +20,7 @@ import {
   InputGroupTextDirective,
   RowComponent
 } from '@coreui/angular';
+
 import { AuthService } from '../../../auth/auth.service';
 
 @Component({
@@ -47,7 +48,7 @@ import { AuthService } from '../../../auth/auth.service';
 })
 export class LoginComponent implements OnInit {
   credentials = {
-    email: '',
+    username: '',
     password: '',
     rememberMe: false
   };
@@ -62,7 +63,6 @@ export class LoginComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    // التحقق عند تحميل الصفحة - إذا كان مسجلاً، توجيهه إلى Dashboard
     if (this.authService.isAuthenticated()) {
       this.router.navigate(['/dashboard']);
     }
@@ -73,33 +73,24 @@ export class LoginComponent implements OnInit {
     this.errorMessage = '';
     this.successMessage = '';
 
-    if (!this.credentials.email || !this.credentials.password) {
-      this.errorMessage = 'Please enter both email and password';
-      this.isLoading = false;
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(this.credentials.email)) {
-      this.errorMessage = 'Please enter a valid email address';
+    if (!this.credentials.username || !this.credentials.password) {
+      this.errorMessage = 'Please enter both username and password';
       this.isLoading = false;
       return;
     }
 
     this.authService.login(this.credentials).subscribe({
       next: (response: any) => {
-        if (response.success) {
+        if (response && response.token) {
           this.successMessage = 'Login successful! Redirecting...';
-          setTimeout(() => {
-            this.router.navigate(['/dashboard']);
-          }, 1000);
+          setTimeout(() => this.router.navigate(['/dashboard']), 1000);
         } else {
           this.errorMessage = response.errorMessage || 'Login failed';
         }
         this.isLoading = false;
       },
       error: (error) => {
-        this.errorMessage = error.error?.errorMessage || 'An error occurred';
+        this.errorMessage = error.error?.message || 'An error occurred';
         this.isLoading = false;
       }
     });
@@ -107,7 +98,7 @@ export class LoginComponent implements OnInit {
 
   clearForm() {
     this.credentials = {
-      email: '',
+      username: '',
       password: '',
       rememberMe: false
     };

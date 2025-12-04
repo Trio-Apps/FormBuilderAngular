@@ -7,71 +7,62 @@ import { Observable, tap } from 'rxjs';
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'https://localhost:7276/api/Auth';
+  private apiUrl = 'https://localhost:7276/api/account'; // endpoint جديد
 
   constructor(
     private http: HttpClient,
     private router: Router
   ) {}
 
+  // تسجيل الدخول
   login(credentials: any): Observable<any> {
     const apiCredentials = {
-      email: credentials.email,
+      username: credentials.username, // backend يستخدم username
       password: credentials.password
     };
     
-    return this.http.post(`${this.apiUrl}/Login`, apiCredentials).pipe(
+    return this.http.post(`${this.apiUrl}/login`, apiCredentials).pipe(
       tap((response: any) => {
         console.log('API Response:', response);
-        if (response.success) {
-          this.setTokens(response.user);
+        if (response.token) { // التحقق من وجود token
+          this.setToken(response.token, credentials.username);
         }
       })
     );
   }
 
+  // تسجيل الخروج
   logout(): void {
-    const userId = localStorage.getItem('user_id');
-    if (userId) {
-      this.http.post(`${this.apiUrl}/Logout`, { userId }).subscribe();
-    }
-    
-    this.clearTokens();
+    this.clearToken();
     this.router.navigate(['/pages/login']);
   }
 
+  // للتحقق إذا المستخدم مسجل الدخول
   isAuthenticated(): boolean {
     return !!localStorage.getItem('auth_token');
   }
 
-  // دالة للتحقق إذا كان مسجلاً ويمنعه من العودة إلى Login
+  // يمنع المستخدم من العودة إلى صفحة login إذا كان مسجل الدخول
   redirectIfAuthenticated(): void {
     if (this.isAuthenticated()) {
       this.router.navigate(['/dashboard']);
     }
   }
 
+  // الحصول على الـ token من localStorage
   getToken(): string | null {
     return localStorage.getItem('auth_token');
   }
 
-  getRefreshToken(): string | null {
-    return localStorage.getItem('refresh_token');
+  // تخزين token و username
+  private setToken(token: string, username: string): void {
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('user_name', username);
   }
 
-  private setTokens(user: any): void {
-    localStorage.setItem('auth_token', user.token);
-    localStorage.setItem('refresh_token', user.refreshToken);
-    localStorage.setItem('user_email', user.email);
-    localStorage.setItem('user_name', user.displayName || user.email);
-    localStorage.setItem('user_id', user.userId || '');
-  }
-
-  private clearTokens(): void {
+  // إزالة token و username عند تسجيل الخروج
+  private clearToken(): void {
     localStorage.removeItem('auth_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user_email');
     localStorage.removeItem('user_name');
-    localStorage.removeItem('user_id');
   }
 }

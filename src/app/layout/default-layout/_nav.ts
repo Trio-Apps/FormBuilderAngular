@@ -30,21 +30,10 @@ export const navItems: INavData[] = [
     url: '/submissions',
     iconComponent: { name: 'cil-description' }
   },
-  {
-    title: true,
-    name: 'Pages'
-  },
-  {
-    name: 'Login',
-    url: '/pages/login',
-    iconComponent: { name: 'cil-account-logout' }
-  },
+ 
+
   
-  {
-    name: 'Error 404',
-    url: '/pages/404',
-    iconComponent: { name: 'cil-warning' }
-  },
+
   {
     name: 'Logout',
     url: '/logout',

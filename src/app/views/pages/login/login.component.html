@@ -23,20 +23,20 @@
               <h1>Login</h1>
               <p class="text-body-secondary">Sign In to your account</p>
               
-              <!-- Email Input -->
+              <!-- Username Input -->
               <c-input-group class="mb-3">
                 <span cInputGroupText>
                   <svg cIcon name="cil-user"></svg>
                 </span>
                 <input
-                  type="email"
+                  type="text"
                   cFormControl
-                  placeholder="Email"
-                  [(ngModel)]="credentials.email"
-                  name="email"
+                  placeholder="Username"
+                  [(ngModel)]="credentials.username"
+                  name="username"
                   [disabled]="isLoading"
                   required
-                  autoComplete="username"
+                  autocomplete="username"
                 />
               </c-input-group>
               
@@ -53,7 +53,7 @@
                   name="password"
                   [disabled]="isLoading"
                   required
-                  autoComplete="current-password"
+                  autocomplete="current-password"
                 />
               </c-input-group>
               
@@ -99,8 +99,6 @@
                   </button>
                 </c-col>
               </c-row>
-
-             
             </form>
           </c-card-body>
         </c-card>
