@@ -32,3 +32,78 @@
 //  --scrollbar-thumb-transition: height ease-out 150ms, width ease-out 150ms;
 //  --scrollbar-track-transition: height ease-out 150ms, width ease-out 150ms;
 //}
+c-sidebar-header.border-bottom {
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+c-sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+c-sidebar-brand img {
+  /* تنسيق الصورة الأساسي */
+  max-height: 32px; /* نفس ارتفاع الـ SVG */
+  width: auto;
+  max-width: 150px; /* لتحديد العرض الأقصى */
+  object-fit: contain; /* للحفاظ على نسبة الأبعاد */
+  
+  /* تأثيرات عند التمرير */
+  transition: all 0.3s ease;
+}
+
+/* عند توسيع الشريط الجانبي */
+.sidebar-brand-full {
+  display: block;
+}
+
+/* عند تصغير الشريط الجانبي */
+.sidebar-brand-narrow {
+  display: none;
+}
+
+/* إذا كنت تريد إخفاء SVG عند وجود الصورة */
+c-sidebar-brand img + svg.sidebar-brand-narrow {
+  display: none;
+}
+
+/* تأثير عند المرور على الشعار */
+c-sidebar-brand:hover img {
+  transform: scale(1.05);
+  opacity: 0.9;
+}
+
+/* تنسيق للشاشات الصغيرة */
+@media (max-width: 768px) {
+  c-sidebar-brand img {
+    max-height: 28px;
+    max-width: 120px;
+  }
+  
+  c-sidebar-header.border-bottom {
+    padding: 0.75rem;
+  }
+}
+
+/* إذا أردت الشعار دائري */
+c-sidebar-brand img.logo-circle {
+  border-radius: 50%;
+  height: 40px;
+  width: 40px;
+  object-fit: cover;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* إذا أردت إضافة خلفية للشعار */
+c-sidebar-brand {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+}

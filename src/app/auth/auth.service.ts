@@ -1,68 +1,91 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap } from 'rxjs';
+import { Observable, tap, throwError, catchError } from 'rxjs';
+
+export interface LoginCredentials {
+  username: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  success: boolean;
+  token?: string;
+  role?: string;
+  expiresAt?: string;
+  errorMessage?: string;
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'https://localhost:7276/api/account'; // endpoint جديد
+  private apiUrl = 'https://localhost:7276/api/account';
 
-  constructor(
-    private http: HttpClient,
-    private router: Router
-  ) {}
+  constructor(private http: HttpClient, private router: Router) {}
 
-  // تسجيل الدخول
-  login(credentials: any): Observable<any> {
-    const apiCredentials = {
-      username: credentials.username, // backend يستخدم username
-      password: credentials.password
-    };
-    
-    return this.http.post(`${this.apiUrl}/login`, apiCredentials).pipe(
-      tap((response: any) => {
-        console.log('API Response:', response);
-        if (response.token) { // التحقق من وجود token
-          this.setToken(response.token, credentials.username);
+  login(credentials: LoginCredentials): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(`${this.apiUrl}/login`, credentials).pipe(
+      tap((response: LoginResponse) => {
+        if (response.success && response.token) {
+          this.setSession(response.token, credentials.username, response.role!);
         }
-      })
+      }),
+      catchError(this.handleError)
     );
   }
 
-  // تسجيل الخروج
   logout(): void {
-    this.clearToken();
+    this.clearSession();
     this.router.navigate(['/pages/login']);
   }
 
-  // للتحقق إذا المستخدم مسجل الدخول
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('auth_token');
+    const token = this.getToken();
+    return !!token && !this.isTokenExpired(token);
   }
 
-  // يمنع المستخدم من العودة إلى صفحة login إذا كان مسجل الدخول
-  redirectIfAuthenticated(): void {
-    if (this.isAuthenticated()) {
-      this.router.navigate(['/dashboard']);
-    }
-  }
-
-  // الحصول على الـ token من localStorage
   getToken(): string | null {
     return localStorage.getItem('auth_token');
   }
 
-  // تخزين token و username
-  private setToken(token: string, username: string): void {
-    localStorage.setItem('auth_token', token);
-    localStorage.setItem('user_name', username);
+  userName(): string | null {
+    return localStorage.getItem('user_name');
   }
 
-  // إزالة token و username عند تسجيل الخروج
-  private clearToken(): void {
+  role(): string | null {
+    return localStorage.getItem('user_role');
+  }
+
+  private setSession(token: string, username: string, role: string): void {
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('user_name', username);
+    localStorage.setItem('user_role', role);
+  }
+
+  private clearSession(): void {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_name');
+    localStorage.removeItem('user_role');
+  }
+
+  private isTokenExpired(token: string): boolean {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const expiry = payload.exp;
+      return (Math.floor(new Date().getTime() / 1000)) >= expiry;
+    } catch {
+      return true;
+    }
+  }
+
+  private handleError(error: HttpErrorResponse) {
+    let errorMessage = 'حدث خطأ غير متوقع.';
+    if (error.error instanceof ErrorEvent) {
+      errorMessage = `خطأ في الشبكة: ${error.error.message}`;
+    } else if (error.error && error.error.errorMessage) {
+      errorMessage = error.error.errorMessage;
+    }
+    return throwError(() => new Error(errorMessage));
   }
 }
