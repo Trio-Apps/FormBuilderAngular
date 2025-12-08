@@ -1,0 +1,1021 @@
+/* ====== VARIABLES ====== */
+$primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+$success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+$info-gradient: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+$warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+$danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+$warning-yellow-gradient: linear-gradient(135deg, #fde68a 0%, #fbbf24 100%);
+
+$gray-50: #f8fafc;
+$gray-100: #f1f5f9;
+$gray-200: #e2e8f0;
+$gray-300: #cbd5e1;
+$gray-400: #94a3b8;
+$gray-500: #64748b;
+$gray-600: #475569;
+$gray-700: #334155;
+$gray-800: #1e293b;
+$gray-900: #0f172a;
+
+$blue-500: #3b82f6;
+$blue-600: #2563eb;
+$red-500: #ef4444;
+$red-600: #dc2626;
+$red-700: #b91c1c;
+$green-500: #10b981;
+$green-600: #059669;
+$yellow-700: #92400e;
+
+$border-radius: 12px;
+$border-radius-sm: 8px;
+$box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+$box-shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+$transition: all 0.3s ease;
+
+/* ====== MAIN CONTAINER ====== */
+.form-builder-container {
+  border: none;
+  border-radius: $border-radius;
+  box-shadow: $box-shadow;
+  background: #ffffff;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ====== CARD HEADER ====== */
+.card-header {
+  background: $primary-gradient;
+  color: white;
+  padding: 1.25rem 1.5rem;
+  border-bottom: none;
+
+  h5 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }
+}
+
+/* ====== SEARCH CONTAINER ====== */
+.search-container {
+  position: relative;
+  margin-bottom: 1.5rem;
+
+  .search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: $gray-50;
+    border: 2px solid $gray-200;
+    border-radius: 10px;
+    padding: 0 12px;
+    transition: $transition;
+
+    &:focus-within {
+      border-color: $blue-500;
+      box-shadow: 0 0 0 3px rgba($blue-500, 0.1);
+      background: white;
+    }
+  }
+
+  .search-icon {
+    color: $gray-400;
+    font-size: 1.1rem;
+    margin-right: 10px;
+  }
+
+  .search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 12px 0;
+    font-size: 1rem;
+    color: $gray-700;
+    outline: none;
+
+    &::placeholder {
+      color: $gray-400;
+    }
+
+    &:disabled {
+      background: $gray-100;
+      cursor: not-allowed;
+    }
+  }
+
+  .clear-search-btn,
+  .search-btn {
+    background: none;
+    border: none;
+    color: $gray-500;
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover:not(:disabled) {
+      background: rgba($gray-600, 0.05);
+      color: $gray-600;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  .search-info {
+    display: block;
+    margin-top: 8px;
+    color: $gray-500;
+    font-size: 0.875rem;
+  }
+}
+
+/* ====== LOADING SPINNER ====== */
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 3px solid $gray-200;
+  border-top: 3px solid $blue-500;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ====== FORMS TABLE ====== */
+.forms-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+  thead {
+    background: linear-gradient(135deg, $gray-50 0%, $gray-100 100%);
+  }
+
+  th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: $gray-600;
+    border-bottom: 2px solid $gray-200;
+    cursor: pointer;
+    user-select: none;
+    transition: $transition;
+    position: relative;
+
+    &:hover {
+      background: rgba($blue-500, 0.05);
+      color: $blue-500;
+    }
+
+    .sort-icon {
+      margin-left: 6px;
+      font-size: 0.875rem;
+      opacity: 0.7;
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+  }
+
+  td {
+    padding: 18px 20px;
+    border-bottom: 1px solid $gray-100;
+    vertical-align: middle;
+    transition: $transition;
+  }
+
+  tbody tr {
+    transition: $transition;
+
+    &:hover {
+      background: $gray-50;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    &:last-child td {
+      border-bottom: none;
+    }
+  }
+}
+
+/* ====== TABLE CELL STYLES ====== */
+.form-name {
+  font-weight: 600;
+  color: $gray-800;
+  font-size: 1rem;
+  display: inline-block;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.form-code {
+  font-family: 'Courier New', monospace;
+  background: $gray-100;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: $gray-600;
+  display: inline-block;
+}
+
+.form-description {
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: $gray-500;
+  font-size: 0.9375rem;
+}
+
+/* ====== STATUS BADGES ====== */
+.status-badge {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: $gray-100;
+  color: $gray-500;
+  transition: $transition;
+
+  &.published {
+    background: $success-gradient;
+    color: white;
+  }
+
+  &.active {
+    background: $info-gradient;
+    color: white;
+  }
+}
+
+/* ====== ACTION BUTTONS ====== */
+.actions {
+  display: flex;
+  gap: 8px;
+
+  .btn-icon {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: $border-radius-sm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: $transition;
+    font-size: 1rem;
+
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    &.btn-edit {
+      background: lighten($blue-500, 40%);
+      color: $blue-600;
+
+      &:hover:not(:disabled) {
+        background: $blue-500;
+        color: white;
+      }
+    }
+
+    &.btn-delete {
+      background: lighten($red-500, 40%);
+      color: $red-600;
+
+      &:hover:not(:disabled) {
+        background: $red-600;
+        color: white;
+      }
+    }
+  }
+}
+
+/* ====== EMPTY STATE ====== */
+.empty-state {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: $gray-500;
+
+  .empty-icon {
+    font-size: 3rem;
+    color: $gray-300;
+    margin-bottom: 1rem;
+    opacity: 0.7;
+  }
+
+  h4 {
+    color: $gray-600;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    font-size: 1.25rem;
+  }
+
+  p {
+    color: $gray-500;
+    margin-bottom: 0.5rem;
+    font-size: 0.9375rem;
+  }
+}
+
+/* ====== PAGINATION ====== */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+  margin-top: 20px;
+  border-top: 1px solid $gray-200;
+  flex-wrap: wrap;
+  gap: 15px;
+
+  .pagination-info {
+    color: $gray-500;
+    font-size: 0.875rem;
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pagination-btn,
+  .page-number {
+    padding: 8px 16px;
+    border: 1px solid $gray-200;
+    background: white;
+    color: $gray-600;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: $transition;
+    font-size: 0.875rem;
+    min-width: 40px;
+    text-align: center;
+
+    &:hover:not(:disabled):not(.active) {
+      background: $gray-50;
+      border-color: $gray-300;
+      color: $gray-700;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  .page-number {
+    &.active {
+      background: $info-gradient;
+      color: white;
+      border-color: $blue-600;
+      font-weight: 600;
+    }
+  }
+
+  .page-size {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: $gray-500;
+    font-size: 0.875rem;
+    flex-wrap: wrap;
+
+    .page-size-select {
+      padding: 6px 12px;
+      border: 1px solid $gray-200;
+      border-radius: 6px;
+      background: white;
+      color: $gray-600;
+      cursor: pointer;
+      transition: $transition;
+      font-size: 0.875rem;
+
+      &:focus {
+        outline: none;
+        border-color: $blue-500;
+        box-shadow: 0 0 0 3px rgba($blue-500, 0.1);
+      }
+    }
+  }
+}
+
+/* ====== FORM DIALOG STYLES ====== */
+::ng-deep {
+  .p-dialog-mask {
+    background: transparent !important;
+    z-index: 10000 !important;
+  }
+
+  .form-dialog {
+    z-index: 10001 !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    box-shadow: $box-shadow-lg !important;
+    border: 2px solid $gray-200 !important;
+    animation: dialogSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    max-height: 90vh !important;
+
+    @keyframes dialogSlideIn {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -48%) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+    }
+
+    .p-dialog-header {
+      background: $primary-gradient !important;
+      color: white !important;
+      border-bottom: none !important;
+      padding: 1.5rem 2rem !important;
+
+      .p-dialog-title {
+        color: white !important;
+        font-size: 1.25rem !important;
+        font-weight: 600 !important;
+        margin: 0 !important;
+      }
+
+      .p-dialog-header-icon {
+        color: white !important;
+        background: rgba(255, 255, 255, 0.2) !important;
+        border: none !important;
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+        border-radius: 50% !important;
+        transition: $transition !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+
+        &:hover {
+          background: rgba(255, 255, 255, 0.3) !important;
+          transform: rotate(90deg) !important;
+        }
+
+        &:focus {
+          box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3) !important;
+        }
+      }
+    }
+
+    .p-dialog-content {
+      background: #ffffff !important;
+      padding: 2rem !important;
+      overflow-y: auto !important;
+      max-height: calc(80vh - 70px) !important;
+
+      .field {
+        margin-bottom: 1.5rem;
+
+        &:last-child {
+          margin-bottom: 0;
+        }
+
+        label {
+          display: block;
+          font-weight: 500;
+          color: $gray-700;
+          margin-bottom: 0.5rem;
+
+          .text-red-500 {
+            color: $red-500 !important;
+          }
+        }
+      }
+    }
+  }
+
+  .form-input,
+  .form-textarea {
+    border: 2px solid $gray-200 !important;
+    border-radius: 10px !important;
+    padding: 0.875rem 1rem !important;
+    font-size: 1rem !important;
+    transition: $transition !important;
+    background: $gray-50 !important;
+    width: 100% !important;
+    color: $gray-800 !important;
+
+    &:focus {
+      border-color: $blue-500 !important;
+      background: white !important;
+      box-shadow: 0 0 0 3px rgba($blue-500, 0.1) !important;
+      outline: none !important;
+    }
+
+    &.ng-invalid.ng-dirty {
+      border-color: $red-500 !important;
+      background: lighten($red-500, 45%) !important;
+    }
+  }
+
+  .form-textarea {
+    resize: vertical !important;
+    min-height: 100px !important;
+    line-height: 1.5 !important;
+  }
+
+  .form-checkbox {
+    .p-checkbox-box {
+      border: 2px solid $gray-300 !important;
+      border-radius: 8px !important;
+      width: 1.25rem !important;
+      height: 1.25rem !important;
+      transition: $transition !important;
+      background: white !important;
+
+      &.p-highlight {
+        background: $blue-500 !important;
+        border-color: $blue-500 !important;
+
+        .p-checkbox-icon {
+          color: white !important;
+          font-size: 0.875rem !important;
+        }
+      }
+
+      &:not(.p-disabled):hover {
+        border-color: $blue-500 !important;
+      }
+    }
+  }
+
+  .dialog-footer {
+    background: $gray-50 !important;
+    border-top: 1px solid $gray-200 !important;
+    padding: 1.5rem 2rem !important;
+    margin: 0 -2rem -2rem -2rem !important;
+
+    .dialog-btn {
+      min-width: 100px !important;
+      border-radius: 10px !important;
+      padding: 0.75rem 1.5rem !important;
+      font-weight: 600 !important;
+      transition: $transition !important;
+      border: 2px solid transparent !important;
+
+      &:hover:not(:disabled) {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      &.p-button-secondary {
+        background: $gray-500 !important;
+        border-color: $gray-500 !important;
+        color: white !important;
+
+        &:hover:not(:disabled) {
+          background: $gray-600 !important;
+          border-color: $gray-600 !important;
+        }
+      }
+
+      &.p-button-success {
+        background: $success-gradient !important;
+        border: none !important;
+        color: white !important;
+
+        &:hover:not(:disabled) {
+          opacity: 0.9;
+        }
+      }
+
+      &.p-button-warning {
+        background: $warning-gradient !important;
+        border: none !important;
+        color: white !important;
+
+        &:hover:not(:disabled) {
+          opacity: 0.9;
+        }
+      }
+    }
+  }
+
+  .p-error {
+    color: $red-600 !important;
+    font-size: 0.875rem !important;
+    margin-top: 0.25rem !important;
+    display: block;
+  }
+
+  .p-text-secondary {
+    color: $gray-500 !important;
+    font-size: 0.875rem !important;
+    display: block;
+    margin-top: 0.25rem !important;
+  }
+
+  .text-gray-500 {
+    color: $gray-500 !important;
+  }
+}
+
+/* ====== CONFIRM DIALOG STYLES ====== */
+::ng-deep {
+  .p-confirm-dialog {
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3) !important;
+    border: 2px solid $gray-200 !important;
+    animation: dialogSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+    .p-dialog-header {
+      background: $danger-gradient !important;
+      color: white !important;
+      border-bottom: none !important;
+      padding: 1.5rem 2rem !important;
+
+      .p-dialog-title {
+        color: white !important;
+        font-size: 1.25rem !important;
+        font-weight: 600 !important;
+        margin: 0 !important;
+      }
+
+      .p-dialog-header-icon {
+        color: white !important;
+        background: rgba(255, 255, 255, 0.2) !important;
+        border: none !important;
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+        border-radius: 50% !important;
+        transition: $transition !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+
+        &:hover {
+          background: rgba(255, 255, 255, 0.3) !important;
+          transform: rotate(90deg) !important;
+        }
+      }
+    }
+
+    .p-dialog-content {
+      background: #ffffff !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+
+      .confirm-dialog-content {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.5rem;
+        padding: 2rem;
+
+        .warning-icon {
+          background: $warning-yellow-gradient;
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          box-shadow: 0 4px 12px rgba(251, 191, 36, 0.2);
+
+          .pi-exclamation-triangle {
+            font-size: 1.75rem;
+            color: $yellow-700;
+          }
+        }
+
+        .message-text {
+          flex: 1;
+
+          h4 {
+            color: $gray-800;
+            margin: 0 0 0.75rem 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+          }
+
+          p {
+            color: $gray-700;
+            margin: 0 0 0.5rem 0;
+            font-size: 1.0625rem;
+            line-height: 1.5;
+
+            strong {
+              color: $red-600;
+              font-weight: 600;
+            }
+          }
+
+          .text-gray-500 {
+            color: $gray-500;
+            font-size: 0.875rem;
+            display: block;
+            margin-top: 0.5rem;
+          }
+        }
+      }
+    }
+
+    .p-dialog-footer {
+      background: $gray-50 !important;
+      border-top: 1px solid $gray-200 !important;
+      padding: 1.5rem 2rem !important;
+      display: flex !important;
+      justify-content: flex-end !important;
+      gap: 1rem !important;
+
+      .p-button {
+        min-width: 120px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 600 !important;
+        font-size: 0.9375rem !important;
+        border-radius: 10px !important;
+        transition: $transition !important;
+        border: 2px solid transparent !important;
+
+        &:hover:not(:disabled) {
+          transform: translateY(-2px) !important;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+        }
+
+        &:focus {
+          box-shadow: 0 0 0 3px rgba($blue-500, 0.2) !important;
+        }
+      }
+
+      .delete-btn {
+        background: $danger-gradient !important;
+        border: none !important;
+        color: white !important;
+
+        &:hover:not(:disabled) {
+          background: linear-gradient(135deg, #f87171 0%, $red-600 100%) !important;
+        }
+
+        .pi-trash {
+          margin-right: 8px !important;
+          font-size: 1rem !important;
+        }
+      }
+
+      .cancel-btn {
+        background: transparent !important;
+        color: $gray-600 !important;
+        border-color: $gray-300 !important;
+
+        &:hover:not(:disabled) {
+          background: $gray-50 !important;
+          color: $gray-700 !important;
+          border-color: $gray-400 !important;
+        }
+
+        .pi-times {
+          margin-right: 8px !important;
+          font-size: 1rem !important;
+        }
+      }
+    }
+  }
+
+  .p-confirm-dialog-mask {
+    background: rgba(0, 0, 0, 0.3) !important;
+    backdrop-filter: blur(2px) !important;
+    z-index: 11000 !important;
+  }
+}
+
+/* ====== UTILITY CLASSES ====== */
+.text-center { text-align: center !important; }
+.block { display: block !important; }
+.flex { display: flex !important; }
+.d-flex { display: flex !important; }
+.flex-wrap { flex-wrap: wrap !important; }
+.align-items-center { align-items: center !important; }
+.justify-content-between { justify-content: space-between !important; }
+.justify-content-end { justify-content: flex-end !important; }
+.m-0 { margin: 0 !important; }
+.mb-4 { margin-bottom: 1rem !important; }
+.mt-3 { margin-top: 0.75rem !important; }
+.ml-2 { margin-left: 0.5rem !important; }
+.p-5 { padding: 3rem !important; }
+.w-full { width: 100% !important; }
+.font-medium { font-weight: 500 !important; }
+.cursor-pointer { cursor: pointer !important; }
+.border-top-1 { border-top: 1px solid !important; }
+.surface-border { border-color: $gray-300 !important; }
+.gap-2 { gap: 0.5rem !important; }
+.gap-4 { gap: 1rem !important; }
+
+/* ====== RESPONSIVE DESIGN ====== */
+@media (max-width: 768px) {
+  .card-header {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .forms-table {
+    display: block;
+    overflow-x: auto;
+
+    th, td {
+      padding: 12px 8px;
+      font-size: 0.875rem;
+    }
+
+    .form-name {
+      max-width: 150px;
+    }
+
+    .form-description {
+      max-width: 200px;
+    }
+  }
+
+  .pagination {
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+
+    .pagination-info {
+      order: 1;
+      width: 100%;
+    }
+
+    .pagination-controls {
+      order: 2;
+      width: 100%;
+    }
+
+    .page-size {
+      order: 3;
+      justify-content: center;
+      width: 100%;
+    }
+  }
+
+  ::ng-deep {
+    .form-dialog {
+      width: 95vw !important;
+      margin: 1rem !important;
+
+      .p-dialog-content {
+        padding: 1.5rem !important;
+      }
+
+      .dialog-footer {
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 1rem 1.5rem !important;
+
+        .dialog-btn {
+          width: 100%;
+        }
+      }
+    }
+
+    .p-confirm-dialog {
+      width: 95vw !important;
+      margin: 1rem !important;
+
+      .p-dialog-content {
+        .confirm-dialog-content {
+          flex-direction: column;
+          text-align: center;
+          padding: 1.5rem !important;
+
+          .warning-icon {
+            margin: 0 auto;
+          }
+        }
+      }
+
+      .p-dialog-footer {
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+        padding: 1.25rem !important;
+
+        .p-button {
+          width: 100% !important;
+          justify-content: center !important;
+        }
+      }
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .actions {
+    flex-direction: column;
+    gap: 4px;
+
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+    }
+  }
+
+  .status-badge {
+    padding: 4px 10px;
+    font-size: 0.6875rem;
+  }
+
+  .search-input-wrapper {
+    padding: 0 8px;
+
+    .search-input {
+      font-size: 0.9375rem;
+    }
+  }
+
+  ::ng-deep {
+    .p-confirm-dialog {
+      .p-dialog-header {
+        padding: 1.25rem !important;
+        
+        .p-dialog-title {
+          font-size: 1.125rem !important;
+        }
+      }
+
+      .p-dialog-content {
+        .confirm-dialog-content {
+          padding: 1.25rem !important;
+
+          .warning-icon {
+            width: 50px;
+            height: 50px;
+
+            .pi-exclamation-triangle {
+              font-size: 1.5rem;
+            }
+          }
+
+          .message-text {
+            h4 {
+              font-size: 1.125rem;
+            }
+
+            p {
+              font-size: 1rem;
+            }
+          }
+        }
+      }
+
+      .p-dialog-footer {
+        padding: 1rem !important;
+        
+        .p-button {
+          padding: 0.625rem 1.25rem !important;
+          font-size: 0.875rem !important;
+        }
+      }
+    }
+  }
+}

@@ -1,9 +1,10 @@
+// ./views/FormBuilder/form-builder/routes.ts
 import { Routes } from '@angular/router';
+import { FormBuilderComponent } from './form-builder.component';
 
 export const routes: Routes = [
   {
     path: '',
-    loadComponent: () => import('./form-builder.component').then(m => m.FormBuilderComponent),
-    data: { title: 'Form Builder' }
+    component: FormBuilderComponent
   }
 ];

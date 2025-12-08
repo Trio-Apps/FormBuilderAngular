@@ -1,1 +1,332 @@
-<p>form-builder works!</p>
+<!-- form-builder.component.html -->
+<p-toast position="top-right"></p-toast>
+<p-confirmDialog 
+  [style]="{width: '450px'}"
+  [baseZIndex]="10000">
+</p-confirmDialog>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="m-0">Form Builder</h5>
+    <button 
+      pButton 
+      type="button" 
+      label="Add Form" 
+      icon="pi pi-plus" 
+      class="p-button-success"
+      (click)="openModal()">
+    </button>
+  </div>
+
+  <div class="card-body">
+    <!-- شريط البحث العادي - مصحح -->
+    <div class="search-container mb-4">
+      <div class="search-input-wrapper">
+        <i class="pi pi-search search-icon"></i>
+     <input
+  type="text"
+  placeholder="Search forms by name, code, or description..."
+  class="search-input"
+  [(ngModel)]="searchTerm"
+  (keyup)="onSearch()"
+  (keydown)="handleEnterKey($event)" 
+  [disabled]="loading.forms"/>
+        <button 
+          *ngIf="searchTerm"
+          type="button"
+          class="clear-search-btn"
+          (click)="clearSearch()"
+          title="Clear search">
+          <i class="pi pi-times"></i>
+        </button>
+        <button 
+          type="button"
+          class="search-btn"
+          (click)="onSearch()"
+          [disabled]="loading.forms"
+          title="Search">
+          <i class="pi pi-search"></i>
+        </button>
+      </div>
+      <small class="search-info">
+        Showing {{ paginatedForms.length }} of {{ forms.length }} forms
+        <span *ngIf="searchTerm"> (searched: "{{ searchTerm }}")</span>
+      </small>
+    </div>
+
+    <!-- مؤشر التحميل -->
+    <div *ngIf="loading.forms" class="text-center p-5">
+      <div class="spinner"></div>
+      <p class="mt-3">Loading forms...</p>
+    </div>
+
+    <!-- جدول النماذج العادي -->
+    <div *ngIf="!loading.forms" class="table-responsive">
+      <table class="forms-table">
+        <thead>
+          <tr>
+            <th (click)="sortBy('formName')">
+              Form Name 
+              <i class="sort-icon pi pi-sort-alt"></i>
+            </th>
+            <th (click)="sortBy('formCode')">
+              Form Code 
+              <i class="sort-icon pi pi-sort-alt"></i>
+            </th>
+            <th (click)="sortBy('description')">
+              Description 
+              <i class="sort-icon pi pi-sort-alt"></i>
+            </th>
+            <th>Published</th>
+            <th>Active</th>
+            <th style="width: 120px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="paginatedForms.length === 0">
+            <td colspan="6" class="text-center p-5">
+              <div class="empty-state">
+                <i class="pi pi-inbox"></i>
+                <h4>No Forms Found</h4>
+                <p *ngIf="searchTerm">No results for "{{ searchTerm }}"</p>
+                <p *ngIf="!searchTerm">Click "Add Form" to create your first form</p>
+              </div>
+            </td>
+          </tr>
+          
+          <tr *ngFor="let form of paginatedForms">
+            <td>
+              <span class="form-name">{{ form.formName }}</span>
+            </td>
+            <td>
+              <span class="form-code">{{ form.formCode }}</span>
+            </td>
+            <td>
+              <div class="form-description" [title]="form.description">
+                {{ form.description || 'No description' }}
+              </div>
+            </td>
+            <td>
+              <span class="status-badge" [class.published]="form.isPublished">
+                {{ form.isPublished ? 'Published' : 'Draft' }}
+              </span>
+            </td>
+            <td>
+              <span class="status-badge" [class.active]="form.isActive">
+                {{ form.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            <td>
+              <div class="actions">
+                <button
+                  type="button"
+                  class="btn-icon btn-edit"
+                  (click)="openModal(form)"
+                  [disabled]="loading.delete"
+                  title="Edit">
+                  <i class="pi pi-pencil"></i>
+                </button>
+                <button
+                  type="button"
+                  class="btn-icon btn-delete"
+                  (click)="deleteForm(form.id)"
+                  [disabled]="loading.delete"
+                  title="Delete">
+                  <i class="pi pi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Pagination العادية -->
+      <div *ngIf="forms.length > 0" class="pagination">
+        <div class="pagination-info">
+          Page {{ currentPage }} of {{ totalPages }}
+          ({{ forms.length }} total forms)
+        </div>
+        
+        <div class="pagination-controls">
+          <button 
+            type="button"
+            class="pagination-btn"
+            (click)="prevPage()"
+            [disabled]="currentPage === 1">
+            <i class="pi pi-chevron-left"></i> Previous
+          </button>
+          
+          <div class="page-numbers">
+            <button 
+              *ngFor="let page of getPageNumbers()"
+              type="button"
+              class="page-number"
+              [class.active]="page === currentPage"
+              (click)="goToPage(page)">
+              {{ page }}
+            </button>
+          </div>
+          
+          <button 
+            type="button"
+            class="pagination-btn"
+            (click)="nextPage()"
+            [disabled]="currentPage === totalPages">
+            Next <i class="pi pi-chevron-right"></i>
+          </button>
+        </div>
+        
+        <div class="page-size">
+          <label>Show:</label>
+          <select 
+            [(ngModel)]="itemsPerPage" 
+            (change)="currentPage = 1; updatePagination()"
+            class="page-size-select">
+            <option [value]="5">5</option>
+            <option [value]="10">10</option>
+            <option [value]="20">20</option>
+            <option [value]="50">50</option>
+          </select>
+          <span>per page</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog للفورم (نفسه بدون تغيير) -->
+<p-dialog
+  [header]="modalTitle"
+  [(visible)]="showModal"
+  [modal]="true"
+  [style]="{ width: '550px', maxWidth: '90vw' }"
+  [draggable]="false"
+  [resizable]="false"
+  (onHide)="closeModal()"
+  [breakpoints]="{'960px': '75vw', '640px': '90vw'}"
+  [contentStyle]="{ 'max-height': '80vh', 'overflow-y': 'auto' }"
+>
+  <form [formGroup]="formGroup" (ngSubmit)="saveForm()" class="p-fluid">
+    <!-- Form Name -->
+    <div class="field mb-4">
+      <label for="formName" class="block font-medium mb-2">
+        Form Name <span class="text-red-500">*</span>
+      </label>
+      <input 
+        pInputText 
+        id="formName" 
+        formControlName="formName"
+        [class]="isFieldInvalid('formName') ? 'ng-invalid ng-dirty' : ''"
+        placeholder="Enter form name"
+        autocomplete="off"
+        class="w-full"
+      />
+      <small *ngIf="isFieldInvalid('formName')" class="p-error block mt-1">
+        {{ getFieldError('formName') }}
+      </small>
+      <small *ngIf="!isFieldInvalid('formName')" class="p-text-secondary">
+        Enter a unique name for this form (3-200 characters)
+      </small>
+    </div>
+
+    <!-- Form Code -->
+    <div class="field mb-4">
+      <label for="formCode" class="block font-medium mb-2">
+        Form Code <span class="text-red-500">*</span>
+      </label>
+      <input 
+        pInputText 
+        id="formCode" 
+        formControlName="formCode"
+        [class]="isFieldInvalid('formCode') ? 'ng-invalid ng-dirty' : ''"
+        placeholder="e.g., CONTACT_FORM"
+        autocomplete="off"
+        (input)="cleanFormCode()"
+        class="w-full"
+      />
+      <small *ngIf="isFieldInvalid('formCode')" class="p-error block mt-1">
+        {{ getFieldError('formCode') }}
+      </small>
+      <small *ngIf="!isFieldInvalid('formCode')" class="p-text-secondary">
+        Uppercase letters, numbers, and underscores only (2-100 characters)
+      </small>
+    </div>
+
+    <!-- Description -->
+    <div class="field mb-4">
+      <label for="description" class="block font-medium mb-2">
+        Description
+      </label>
+      <textarea
+        id="description"
+        formControlName="description"
+        rows="3"
+        placeholder="Optional description for this form"
+        class="w-full p-3 border-1 border-round border-gray-300"
+        style="resize: vertical; min-height: 80px;"
+      ></textarea>
+      <small class="text-gray-500 block mt-1">
+        {{ formGroup.get('description')?.value?.length || 0 }}/500 characters
+      </small>
+    </div>
+
+    <!-- Checkboxes -->
+    <div class="flex flex-wrap gap-4 mb-6">
+      <div class="field-checkbox flex align-items-center">
+        <p-checkbox 
+          id="isPublished" 
+          formControlName="isPublished" 
+          binary="true"
+          [inputId]="'isPublished'"
+          class="mr-2">
+        </p-checkbox>
+        <div>
+          <label for="isPublished" class="font-medium cursor-pointer">
+            Published
+          </label>
+        </div>
+      </div>
+
+      <div class="field-checkbox flex align-items-center">
+        <p-checkbox 
+          id="isActive" 
+          formControlName="isActive" 
+          binary="true"
+          [inputId]="'isActive'"
+          class="mr-2">
+        </p-checkbox>
+        <div>
+          <label for="isActive" class="font-medium cursor-pointer">
+            Active
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- أزرار الحفظ والإلغاء -->
+    <div class="flex justify-content-end gap-2 pt-4 border-top-1 surface-border">
+      <button
+        pButton
+        type="button"
+        label="Cancel"
+        icon="pi pi-times"
+        class="p-button-outlined p-button-secondary"
+        (click)="closeModal()"
+        [disabled]="loading.save"
+      ></button>
+      
+      <button
+        pButton
+        type="submit"
+        [label]="editingFormId ? 'Update' : 'Create'"
+        [icon]="editingFormId ? 'pi pi-check' : 'pi pi-save'"
+        [class]="editingFormId ? 'p-button-warning' : 'p-button-success'"
+        [disabled]="formGroup.invalid || loading.save"
+      >
+        <span *ngIf="loading.save" class="ml-2">
+          <i class="pi pi-spin pi-spinner" style="font-size: 1rem"></i>
+        </span>
+      </button>
+    </div>
+  </form>
+</p-dialog>
