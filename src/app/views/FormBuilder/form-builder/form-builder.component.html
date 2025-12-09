@@ -1,4 +1,3 @@
-<!-- form-builder.component.html -->
 <p-toast position="top-right"></p-toast>
 <p-confirmDialog 
   [style]="{width: '450px'}"
@@ -19,18 +18,18 @@
   </div>
 
   <div class="card-body">
-    <!-- شريط البحث العادي - مصحح -->
+    <!-- شريط البحث العادي -->
     <div class="search-container mb-4">
       <div class="search-input-wrapper">
         <i class="pi pi-search search-icon"></i>
-     <input
-  type="text"
-  placeholder="Search forms by name, code, or description..."
-  class="search-input"
-  [(ngModel)]="searchTerm"
-  (keyup)="onSearch()"
-  (keydown)="handleEnterKey($event)" 
-  [disabled]="loading.forms"/>
+        <input
+          type="text"
+          placeholder="Search forms by name, code, or description..."
+          class="search-input"
+          [(ngModel)]="searchTerm"
+          (keyup)="onSearch()"
+          (keydown)="handleEnterKey($event)" 
+          [disabled]="loading.forms"/>
         <button 
           *ngIf="searchTerm"
           type="button"
@@ -123,7 +122,8 @@
                   class="btn-icon btn-edit"
                   (click)="openModal(form)"
                   [disabled]="loading.delete"
-                  title="Edit">
+                  title="Edit"
+                  pRipple>
                   <i class="pi pi-pencil"></i>
                 </button>
                 <button
@@ -131,7 +131,10 @@
                   class="btn-icon btn-delete"
                   (click)="deleteForm(form.id)"
                   [disabled]="loading.delete"
-                  title="Delete">
+                  title="Delete Form"
+                  pRipple
+                  pTooltip="Delete this form"
+                  tooltipPosition="top">
                   <i class="pi pi-trash"></i>
                 </button>
               </div>
@@ -194,7 +197,7 @@
   </div>
 </div>
 
-<!-- Dialog للفورم (نفسه بدون تغيير) -->
+<!-- Dialog للفورم -->
 <p-dialog
   [header]="modalTitle"
   [(visible)]="showModal"

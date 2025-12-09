@@ -21,3 +21,8 @@
 // We use those styles to show code examples, you should remove them in your application.
 @use "examples";
 
+// PrimeFlex (USE — NOT IMPORT)
+@use "primeflex/primeflex" as *;
+
+// PrimeIcons (CSS import is OK)
+@import "primeicons/primeicons.css";

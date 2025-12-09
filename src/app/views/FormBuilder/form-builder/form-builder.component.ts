@@ -140,39 +140,38 @@ export class FormBuilderComponent implements OnInit {
     });
   }
 
-onSearch(): void {
-  console.log('Searching for:', this.searchTerm);
-  
-  if (!this.searchTerm || this.searchTerm.trim() === '') {
-    this.forms = [...this.allForms];
-  } else {
-    const searchTerm = this.searchTerm.toLowerCase().trim();
+  onSearch(): void {
+    console.log('Searching for:', this.searchTerm);
     
-    this.forms = this.allForms.filter(form => {
-      const formNameMatch = form.formName?.toLowerCase().includes(searchTerm) || false;
-      const formCodeMatch = form.formCode?.toLowerCase().includes(searchTerm) || false;
-      const descriptionMatch = form.description?.toLowerCase().includes(searchTerm) || false;
+    if (!this.searchTerm || this.searchTerm.trim() === '') {
+      this.forms = [...this.allForms];
+    } else {
+      const searchTerm = this.searchTerm.toLowerCase().trim();
       
-      return formNameMatch || formCodeMatch || descriptionMatch;
-    });
+      this.forms = this.allForms.filter(form => {
+        const formNameMatch = form.formName?.toLowerCase().includes(searchTerm) || false;
+        const formCodeMatch = form.formCode?.toLowerCase().includes(searchTerm) || false;
+        const descriptionMatch = form.description?.toLowerCase().includes(searchTerm) || false;
+        
+        return formNameMatch || formCodeMatch || descriptionMatch;
+      });
+    }
+    
+    if (this.sortColumn) {
+      this.sortForms();
+    }
+    
+    this.currentPage = 1;
+    this.updatePagination();
   }
-  
-  if (this.sortColumn) {
-    this.sortForms();
-  }
-  
-  this.currentPage = 1;
-  this.updatePagination();
-}
 
-// **الدالة الجديدة للتعامل مع Enter - تم التحديث**
-handleEnterKey(event: KeyboardEvent): void {
-  if (event.key === 'Enter') {
-    event.preventDefault(); // لمنع سلوك النموذج الافتراضي
-    this.onSearch();
+  // الدالة الجديدة للتعامل مع Enter
+  handleEnterKey(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault(); // لمنع سلوك النموذج الافتراضي
+      this.onSearch();
+    }
   }
-}
-
 
   // البحث عند الضغط على Enter
   onSearchKeydown(event: KeyboardEvent): void {
@@ -248,7 +247,7 @@ handleEnterKey(event: KeyboardEvent): void {
     console.log('Sorting by:', column);
     
     if (this.sortColumn === column) {
-      // إذا ناقش على نفس العمود، غير الاتجاه
+      // إذا نقر على نفس العمود، غير الاتجاه
       this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       // إذا عمود جديد، ابدأ تصاعدياً
@@ -392,7 +391,12 @@ handleEnterKey(event: KeyboardEvent): void {
       message: 'Are you sure you want to delete this form?',
       header: 'Confirm Deletion',
       icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Yes, Delete',
+      rejectLabel: 'No, Cancel',
+      acceptIcon: 'pi pi-check',
+      rejectIcon: 'pi pi-times',
       acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-outlined',
       accept: () => {
         this.loading.delete = true;
         

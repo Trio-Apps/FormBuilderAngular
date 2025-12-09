@@ -38,11 +38,9 @@
               "src/assets"
             ],
                   "styles": [
-                "node_modules/primeicons/primeicons.css",
-                "node_modules/primeflex/primeflex.scss",
-                "src/scss/styles.scss"
+  "node_modules/primeicons/primeicons.css",
+  "src/scss/styles.scss"
 ]
-
                             ,
             "scripts": [],
             "allowedCommonJsDependencies": [],

@@ -30,27 +30,17 @@ export const routes: Routes = [
           .then(m => m.DashboardComponent)
       },
 
+      // Form Builder Routes
       {
         path: 'forms',
         loadChildren: () => import('./views/FormBuilder/form-builder/routes')
           .then(m => m.routes)
       },
 
-      {
-        path: 'fields',
-        loadChildren: () => import('./views/FormBuilder/fields/routes')
-          .then(m => m.routes)
-      },
-
+      // Submissions
       {
         path: 'submissions',
         loadChildren: () => import('./views/submissions/routes')
-          .then(m => m.routes)
-      },
-
-      {
-        path: 'tabs',
-        loadChildren: () => import('./views/tabs/routes')
           .then(m => m.routes)
       }
     ]
