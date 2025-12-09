@@ -386,46 +386,109 @@ export class FormBuilderComponent implements OnInit {
     }
   }
 
-  deleteForm(id: number): void {
-    this.confirmationService.confirm({
-      message: 'Are you sure you want to delete this form?',
-      header: 'Confirm Deletion',
-      icon: 'pi pi-exclamation-triangle',
-      acceptLabel: 'Yes, Delete',
-      rejectLabel: 'No, Cancel',
-      acceptIcon: 'pi pi-check',
-      rejectIcon: 'pi pi-times',
-      acceptButtonStyleClass: 'p-button-danger',
-      rejectButtonStyleClass: 'p-button-outlined',
-      accept: () => {
-        this.loading.delete = true;
-        
-        this.formsService.deleteForm(id).subscribe({
-          next: () => {
-            this.loading.delete = false;
-            this.messageService.add({
-              severity: 'success',
-              summary: 'Deleted',
-              detail: 'Form deleted successfully',
-              life: 5000
-            });
-            this.loadForms();
-          },
-          error: (error) => {
-            console.error('Error deleting form:', error);
-            this.loading.delete = false;
-            this.messageService.add({
-              severity: 'error',
-              summary: 'Error',
-              detail: 'Failed to delete form. Please try again.',
-              life: 5000
-            });
-          }
+deleteForm(id: number): void {
+  // إنشاء overlay ConfirmDialog
+  const confirmOverlay = document.createElement('div');
+  confirmOverlay.style.position = 'fixed';
+  confirmOverlay.style.top = '0';
+  confirmOverlay.style.left = '0';
+  confirmOverlay.style.width = '100%';
+  confirmOverlay.style.height = '100%';
+  confirmOverlay.style.backgroundColor = 'rgba(0,0,0,0.5)'; // تغميق الخلفية قليلاً
+  confirmOverlay.style.display = 'flex';
+  confirmOverlay.style.alignItems = 'center';
+  confirmOverlay.style.justifyContent = 'center';
+  confirmOverlay.style.zIndex = '10000';
+
+  const dialog = document.createElement('div');
+  dialog.style.background = '#fff';
+  dialog.style.padding = '30px 25px';
+  dialog.style.borderRadius = '12px';
+  dialog.style.minWidth = '320px';
+  dialog.style.maxWidth = '90%';
+  dialog.style.textAlign = 'center';
+  dialog.style.boxShadow = '0 10px 25px rgba(0,0,0,0.3)';
+  dialog.style.animation = 'fadeIn 0.2s ease-in-out'; // تأثير دخول خفيف
+
+  // رسالة التأكيد
+  const msg = document.createElement('p');
+  msg.innerText = 'Are you sure you want to delete this form?';
+  msg.style.margin = '0 0 25px 0';
+  msg.style.fontSize = '16px';
+  msg.style.fontWeight = '500';
+  dialog.appendChild(msg);
+
+  // زر الموافقة (Delete)
+  const acceptBtn = document.createElement('button');
+  acceptBtn.innerText = 'Delete';
+  acceptBtn.style.marginRight = '15px';
+  acceptBtn.style.padding = '10px 25px';
+  acceptBtn.style.fontSize = '14px';
+  acceptBtn.style.borderRadius = '6px';
+  acceptBtn.style.cursor = 'pointer';
+  acceptBtn.style.border = 'none';
+  acceptBtn.style.backgroundColor = '#dc2626'; // أحمر
+  acceptBtn.style.color = '#fff';
+  acceptBtn.onmouseenter = () => acceptBtn.style.backgroundColor = '#b91c1c';
+  acceptBtn.onmouseleave = () => acceptBtn.style.backgroundColor = '#dc2626';
+  acceptBtn.onclick = () => {
+    document.body.removeChild(confirmOverlay);
+    this.loading.delete = true;
+    this.formsService.deleteForm(id).subscribe({
+      next: () => {
+        this.loading.delete = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Deleted',
+          detail: 'Form deleted successfully',
+          life: 5000
         });
+        this.loadForms();
       },
-      reject: () => {}
+      error: (error) => {
+        console.error('Error deleting form:', error);
+        this.loading.delete = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to delete form. Please try again.',
+          life: 5000
+        });
+      }
     });
-  }
+  };
+
+  // زر الرفض (Cancel)
+  const rejectBtn = document.createElement('button');
+  rejectBtn.innerText = 'Cancel';
+  rejectBtn.style.padding = '10px 25px';
+  rejectBtn.style.fontSize = '14px';
+  rejectBtn.style.borderRadius = '6px';
+  rejectBtn.style.cursor = 'pointer';
+  rejectBtn.style.border = '2px solid #6b7280'; // رمادي
+  rejectBtn.style.backgroundColor = '#fff';
+  rejectBtn.style.color = '#374151';
+  rejectBtn.onmouseenter = () => rejectBtn.style.backgroundColor = '#f3f4f6';
+  rejectBtn.onmouseleave = () => rejectBtn.style.backgroundColor = '#fff';
+  rejectBtn.onclick = () => document.body.removeChild(confirmOverlay);
+
+  dialog.appendChild(acceptBtn);
+  dialog.appendChild(rejectBtn);
+
+  confirmOverlay.appendChild(dialog);
+  document.body.appendChild(confirmOverlay);
+
+  // إضافة تأثير fadeIn من CSS
+  const style = document.createElement('style');
+  style.innerHTML = `
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 
   // دوال مساعدة للتحقق من الصحة
   isFieldInvalid(fieldName: string): boolean {

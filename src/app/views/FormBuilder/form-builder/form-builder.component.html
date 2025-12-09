@@ -210,68 +210,73 @@
   [contentStyle]="{ 'max-height': '80vh', 'overflow-y': 'auto' }"
 >
   <form [formGroup]="formGroup" (ngSubmit)="saveForm()" class="p-fluid">
-    <!-- Form Name -->
-    <div class="field mb-4">
-      <label for="formName" class="block font-medium mb-2">
-        Form Name <span class="text-red-500">*</span>
-      </label>
-      <input 
-        pInputText 
-        id="formName" 
-        formControlName="formName"
-        [class]="isFieldInvalid('formName') ? 'ng-invalid ng-dirty' : ''"
-        placeholder="Enter form name"
-        autocomplete="off"
-        class="w-full"
-      />
-      <small *ngIf="isFieldInvalid('formName')" class="p-error block mt-1">
-        {{ getFieldError('formName') }}
-      </small>
-      <small *ngIf="!isFieldInvalid('formName')" class="p-text-secondary">
-        Enter a unique name for this form (3-200 characters)
-      </small>
-    </div>
+<!-- Form Name -->
+<div class="field mb-4">
+  <label for="formName" class="block font-medium mb-2">
+    Form Name <span class="text-red-500">*</span>
+  </label>
+  <input 
+    pInputText 
+    id="formName" 
+    formControlName="formName"
+    [ngClass]="{
+      'border-red-500 border-2': isFieldInvalid('formName'), 
+      'border-gray-300 border rounded focus:border-blue-500 focus:outline-none': !isFieldInvalid('formName')
+    }"
+    placeholder="Enter form name"
+    autocomplete="off"
+    class="w-full p-2"
+  />
+  <small *ngIf="isFieldInvalid('formName')" class="p-error block mt-1">
+    {{ getFieldError('formName') }}
+  </small>
+  <small *ngIf="!isFieldInvalid('formName')" class="p-text-secondary block mt-1">
+    Enter a unique name for this form (3-200 characters)
+  </small>
+</div>
 
-    <!-- Form Code -->
-    <div class="field mb-4">
-      <label for="formCode" class="block font-medium mb-2">
-        Form Code <span class="text-red-500">*</span>
-      </label>
-      <input 
-        pInputText 
-        id="formCode" 
-        formControlName="formCode"
-        [class]="isFieldInvalid('formCode') ? 'ng-invalid ng-dirty' : ''"
-        placeholder="e.g., CONTACT_FORM"
-        autocomplete="off"
-        (input)="cleanFormCode()"
-        class="w-full"
-      />
-      <small *ngIf="isFieldInvalid('formCode')" class="p-error block mt-1">
-        {{ getFieldError('formCode') }}
-      </small>
-      <small *ngIf="!isFieldInvalid('formCode')" class="p-text-secondary">
-        Uppercase letters, numbers, and underscores only (2-100 characters)
-      </small>
-    </div>
 
-    <!-- Description -->
-    <div class="field mb-4">
-      <label for="description" class="block font-medium mb-2">
-        Description
-      </label>
-      <textarea
-        id="description"
-        formControlName="description"
-        rows="3"
-        placeholder="Optional description for this form"
-        class="w-full p-3 border-1 border-round border-gray-300"
-        style="resize: vertical; min-height: 80px;"
-      ></textarea>
-      <small class="text-gray-500 block mt-1">
-        {{ formGroup.get('description')?.value?.length || 0 }}/500 characters
-      </small>
-    </div>
+  <!-- Form Code -->
+<div class="field mb-4">
+  <label for="formCode" class="block font-medium mb-2">
+    Form Code <span class="text-red-500">*</span>
+  </label>
+  <input 
+    pInputText 
+    id="formCode" 
+    formControlName="formCode"
+    [ngClass]="{'border-red-500 border-2': isFieldInvalid('formCode'), 'border-gray-300 border rounded': !isFieldInvalid('formCode')}"
+    placeholder="e.g., CONTACT_FORM"
+    autocomplete="off"
+    (input)="cleanFormCode()"
+    class="w-full p-2"
+  />
+  <small *ngIf="isFieldInvalid('formCode')" class="p-error block mt-1">
+    {{ getFieldError('formCode') }}
+  </small>
+  <small *ngIf="!isFieldInvalid('formCode')" class="p-text-secondary block mt-1">
+    Uppercase letters, numbers, and underscores only (2-100 characters)
+  </small>
+</div>
+
+<!-- Description -->
+<div class="field mb-4">
+  <label for="description" class="block font-medium mb-2">
+    Description
+  </label>
+  <textarea
+    id="description"
+    formControlName="description"
+    rows="3"
+    placeholder="Optional description for this form"
+    class="w-full p-3 border rounded border-gray-300 focus:border-blue-500 focus:outline-none"
+    style="resize: vertical; min-height: 80px;"
+  ></textarea>
+  <small class="text-gray-500 block mt-1">
+    {{ formGroup.get('description')?.value?.length || 0 }}/500 characters
+  </small>
+</div>
+
 
     <!-- Checkboxes -->
     <div class="flex flex-wrap gap-4 mb-6">
