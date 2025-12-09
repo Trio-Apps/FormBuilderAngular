@@ -1,340 +1,814 @@
-<p-toast position="top-right"></p-toast>
-<p-confirmDialog 
-  [style]="{width: '450px'}"
-  [baseZIndex]="10000">
-</p-confirmDialog>
-
-<div class="card">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <h5 class="m-0">Form Builder</h5>
-    <button 
-      pButton 
-      type="button" 
-      label="Add Form" 
-      icon="pi pi-plus" 
-      class="p-button-success"
-      (click)="openModal()">
+<!-- Main Container -->
+<div class="container-fluid py-4">
+  
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h2 mb-0">Form Builder</h1>
+    <button pButton 
+            type="button" 
+            icon="pi pi-plus" 
+            label="Add Form" 
+            (click)="openFormModal()"
+            class="p-button-primary">
     </button>
   </div>
 
-  <div class="card-body">
-    <!-- شريط البحث العادي -->
-    <div class="search-container mb-4">
-      <div class="search-input-wrapper">
-        <i class="pi pi-search search-icon"></i>
-        <input
-          type="text"
-          placeholder="Search forms by name, code, or description..."
-          class="search-input"
-          [(ngModel)]="searchTerm"
-          (keyup)="onSearch()"
-          (keydown)="handleEnterKey($event)" 
-          [disabled]="loading.forms"/>
-        <button 
-          *ngIf="searchTerm"
-          type="button"
-          class="clear-search-btn"
-          (click)="clearSearch()"
-          title="Clear search">
-          <i class="pi pi-times"></i>
-        </button>
-        <button 
-          type="button"
-          class="search-btn"
-          (click)="onSearch()"
-          [disabled]="loading.forms"
-          title="Search">
-          <i class="pi pi-search"></i>
-        </button>
-      </div>
-      <small class="search-info">
-        Showing {{ paginatedForms.length }} of {{ forms.length }} forms
-        <span *ngIf="searchTerm"> (searched: "{{ searchTerm }}")</span>
-      </small>
-    </div>
-
-    <!-- مؤشر التحميل -->
-    <div *ngIf="loading.forms" class="text-center p-5">
-      <div class="spinner"></div>
-      <p class="mt-3">Loading forms...</p>
-    </div>
-
-    <!-- جدول النماذج العادي -->
-    <div *ngIf="!loading.forms" class="table-responsive">
-      <table class="forms-table">
-        <thead>
-          <tr>
-            <th (click)="sortBy('formName')">
-              Form Name 
-              <i class="sort-icon pi pi-sort-alt"></i>
-            </th>
-            <th (click)="sortBy('formCode')">
-              Form Code 
-              <i class="sort-icon pi pi-sort-alt"></i>
-            </th>
-            <th (click)="sortBy('description')">
-              Description 
-              <i class="sort-icon pi pi-sort-alt"></i>
-            </th>
-            <th>Published</th>
-            <th>Active</th>
-            <th style="width: 120px;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngIf="paginatedForms.length === 0">
-            <td colspan="6" class="text-center p-5">
-              <div class="empty-state">
-                <i class="pi pi-inbox"></i>
-                <h4>No Forms Found</h4>
-                <p *ngIf="searchTerm">No results for "{{ searchTerm }}"</p>
-                <p *ngIf="!searchTerm">Click "Add Form" to create your first form</p>
-              </div>
-            </td>
-          </tr>
-          
-          <tr *ngFor="let form of paginatedForms">
-            <td>
-              <span class="form-name">{{ form.formName }}</span>
-            </td>
-            <td>
-              <span class="form-code">{{ form.formCode }}</span>
-            </td>
-            <td>
-              <div class="form-description" [title]="form.description">
-                {{ form.description || 'No description' }}
-              </div>
-            </td>
-            <td>
-              <span class="status-badge" [class.published]="form.isPublished">
-                {{ form.isPublished ? 'Published' : 'Draft' }}
-              </span>
-            </td>
-            <td>
-              <span class="status-badge" [class.active]="form.isActive">
-                {{ form.isActive ? 'Active' : 'Inactive' }}
-              </span>
-            </td>
-            <td>
-              <div class="actions">
-                <button
-                  type="button"
-                  class="btn-icon btn-edit"
-                  (click)="openModal(form)"
-                  [disabled]="loading.delete"
-                  title="Edit"
-                  pRipple>
-                  <i class="pi pi-pencil"></i>
-                </button>
-                <button
-                  type="button"
-                  class="btn-icon btn-delete"
-                  (click)="deleteForm(form.id)"
-                  [disabled]="loading.delete"
-                  title="Delete Form"
-                  pRipple
-                  pTooltip="Delete this form"
-                  tooltipPosition="top">
-                  <i class="pi pi-trash"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <!-- Pagination العادية -->
-      <div *ngIf="forms.length > 0" class="pagination">
-        <div class="pagination-info">
-          Page {{ currentPage }} of {{ totalPages }}
-          ({{ forms.length }} total forms)
-        </div>
-        
-        <div class="pagination-controls">
-          <button 
-            type="button"
-            class="pagination-btn"
-            (click)="prevPage()"
-            [disabled]="currentPage === 1">
-            <i class="pi pi-chevron-left"></i> Previous
-          </button>
-          
-          <div class="page-numbers">
-            <button 
-              *ngFor="let page of getPageNumbers()"
-              type="button"
-              class="page-number"
-              [class.active]="page === currentPage"
-              (click)="goToPage(page)">
-              {{ page }}
+  <!-- Search Bar -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="row align-items-center">
+        <div class="col-md-4">
+          <div class="input-group">
+            <span class="input-group-text">
+              <i class="pi pi-search"></i>
+            </span>
+            <input type="text" 
+                   class="form-control" 
+                   placeholder="Search forms..." 
+                   [(ngModel)]="searchTerm"
+                   (keyup.enter)="onSearch()"
+                   (input)="onSearch()">
+            <button *ngIf="searchTerm" 
+                    class="btn btn-outline-secondary" 
+                    type="button" 
+                    (click)="clearSearch()">
+              Clear
             </button>
           </div>
-          
-          <button 
-            type="button"
-            class="pagination-btn"
-            (click)="nextPage()"
-            [disabled]="currentPage === totalPages">
-            Next <i class="pi pi-chevron-right"></i>
-          </button>
         </div>
-        
-        <div class="page-size">
-          <label>Show:</label>
-          <select 
-            [(ngModel)]="itemsPerPage" 
-            (change)="currentPage = 1; updatePagination()"
-            class="page-size-select">
-            <option [value]="5">5</option>
-            <option [value]="10">10</option>
-            <option [value]="20">20</option>
-            <option [value]="50">50</option>
-          </select>
-          <span>per page</span>
+        <div class="col-md-8 text-end">
+          <span class="text-muted me-3">
+            {{ forms.length }} form(s) found
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forms Table -->
+  <div class="card">
+    <div class="card-body p-0">
+      <div *ngIf="loading.forms" class="p-4 text-center">
+        <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+        <p class="mt-2">Loading forms...</p>
+      </div>
+
+      <div *ngIf="!loading.forms && paginatedForms.length === 0" class="p-4 text-center">
+        <i class="pi pi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+        <h4 class="mt-3">No Forms Found</h4>
+        <p class="text-muted">No forms have been created yet.</p>
+        <button pButton 
+                type="button" 
+                icon="pi pi-plus" 
+                label="Create Your First Form" 
+                (click)="openFormModal()"
+                class="p-button-primary mt-2">
+        </button>
+      </div>
+
+      <div *ngIf="!loading.forms && paginatedForms.length > 0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead>
+              <tr>
+                <th (click)="sortBy('formName')" style="cursor: pointer; width: 25%;">
+                  Form Name
+                  <i *ngIf="sortColumn === 'formName'" 
+                     class="pi" 
+                     [ngClass]="sortDirection === 'asc' ? 'pi-sort-up' : 'pi-sort-down'">
+                  </i>
+                  <i *ngIf="sortColumn !== 'formName'" class="pi pi-sort-alt"></i>
+                </th>
+                <th (click)="sortBy('formCode')" style="cursor: pointer; width: 15%;">
+                  Form Code
+                  <i *ngIf="sortColumn === 'formCode'" 
+                     class="pi" 
+                     [ngClass]="sortDirection === 'asc' ? 'pi-sort-up' : 'pi-sort-down'">
+                  </i>
+                  <i *ngIf="sortColumn !== 'formCode'" class="pi pi-sort-alt"></i>
+                </th>
+                <th style="width: 15%;">Tabs</th>
+                <th style="width: 15%;">Fields</th>
+                <th style="width: 20%;">Status</th>
+                <th style="width: 10%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let form of paginatedForms">
+                <td>
+                  <div class="d-flex align-items-center">
+                    <i class="pi pi-file me-2 text-primary"></i>
+                    <div>
+                      <strong>{{ form.formName }}</strong>
+                      <div *ngIf="form.description" class="text-muted small">
+                        {{ form.description }}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <code class="bg-light p-1 rounded">{{ form.formCode }}</code>
+                </td>
+                <td>
+                  <span class="badge bg-info">
+                    {{ form.tabsCount || form.tabs?.length || 0 }} tabs
+                  </span>
+                </td>
+                <td>
+                  <span class="badge bg-secondary">
+                    {{ form.fieldsCount || 0 }} fields
+                  </span>
+                </td>
+                <td>
+                  <div class="d-flex align-items-center">
+                    <span *ngIf="form.isPublished" 
+                          class="badge bg-success me-2">
+                          Published
+                    </span>
+                    <span *ngIf="!form.isPublished" 
+                          class="badge bg-warning me-2">
+                          Draft
+                    </span>
+                    <span *ngIf="form.isActive" 
+                          class="badge bg-primary">
+                          Active
+                    </span>
+                    <span *ngIf="!form.isActive" 
+                          class="badge bg-danger">
+                          Inactive
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <div class="btn-group" role="group">
+                    <button pButton 
+                            type="button" 
+                            icon="pi pi-pencil" 
+                            pTooltip="Edit" 
+                            tooltipPosition="top"
+                            (click)="openFormModal(form)"
+                            class="p-button-text p-button-sm p-button-success">
+                    </button>
+                    <button pButton 
+                            type="button" 
+                            icon="pi pi-table" 
+                            pTooltip="Manage Tabs" 
+                            tooltipPosition="top"
+                            (click)="manageTabs(form)"
+                            class="p-button-text p-button-sm p-button-info">
+                    </button>
+                    <button pButton 
+                            type="button" 
+                            icon="pi pi-trash" 
+                            pTooltip="Delete" 
+                            tooltipPosition="top"
+                            (click)="deleteForm(form.id)"
+                            class="p-button-text p-button-sm p-button-danger">
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div *ngIf="totalPages > 1" class="p-3 border-top">
+          <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center mb-0">
+              <li class="page-item" [class.disabled]="currentPage === 1">
+                <a class="page-link" (click)="prevPage()" style="cursor: pointer;">
+                  <i class="pi pi-chevron-left"></i>
+                </a>
+              </li>
+              
+              <li *ngFor="let page of getPageNumbers()" 
+                  class="page-item" 
+                  [class.active]="page === currentPage">
+                <a class="page-link" 
+                   (click)="goToPage(page)" 
+                   style="cursor: pointer;">
+                  {{ page }}
+                </a>
+              </li>
+              
+              <li class="page-item" [class.disabled]="currentPage === totalPages">
+                <a class="page-link" (click)="nextPage()" style="cursor: pointer;">
+                  <i class="pi pi-chevron-right"></i>
+                </a>
+              </li>
+            </ul>
+          </nav>
+          <div class="text-center text-muted small mt-2">
+            Page {{ currentPage }} of {{ totalPages }} ({{ forms.length }} total forms)
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Dialog للفورم -->
-<p-dialog
-  [header]="modalTitle"
-  [(visible)]="showModal"
-  [modal]="true"
-  [style]="{ width: '550px', maxWidth: '90vw' }"
-  [draggable]="false"
-  [resizable]="false"
-  (onHide)="closeModal()"
-  [breakpoints]="{'960px': '75vw', '640px': '90vw'}"
-  [contentStyle]="{ 'max-height': '80vh', 'overflow-y': 'auto' }"
->
-  <form [formGroup]="formGroup" (ngSubmit)="saveForm()" class="p-fluid">
-<!-- Form Name -->
-<div class="field mb-4">
-  <label for="formName" class="block font-medium mb-2">
-    Form Name <span class="text-red-500">*</span>
-  </label>
-  <input 
-    pInputText 
-    id="formName" 
-    formControlName="formName"
-    [ngClass]="{
-      'border-red-500 border-2': isFieldInvalid('formName'), 
-      'border-gray-300 border rounded focus:border-blue-500 focus:outline-none': !isFieldInvalid('formName')
-    }"
-    placeholder="Enter form name"
-    autocomplete="off"
-    class="w-full p-2"
-  />
-  <small *ngIf="isFieldInvalid('formName')" class="p-error block mt-1">
-    {{ getFieldError('formName') }}
-  </small>
-  <small *ngIf="!isFieldInvalid('formName')" class="p-text-secondary block mt-1">
-    Enter a unique name for this form (3-200 characters)
-  </small>
-</div>
+<!-- Add/Edit Form Modal -->
+<p-dialog [(visible)]="showFormModal" 
+          [modal]="true" 
+          [style]="{width: '500px'}" 
+          [header]="modalTitle"
+          [draggable]="false" 
+          [resizable]="false"
+          (onHide)="closeFormModal()">
+  
+  <form [formGroup]="formGroup" (ngSubmit)="saveForm()">
+    <!-- Form Name -->
+    <div class="mb-3">
+      <label for="formName" class="form-label">
+        Form Name <span class="text-danger">*</span>
+      </label>
+      <input type="text" 
+             id="formName" 
+             class="form-control" 
+             formControlName="formName"
+             placeholder="Enter form name">
+      <div *ngIf="isFieldInvalid('formName')" class="text-danger small mt-1">
+        <span *ngIf="formGroup.get('formName')?.errors?.['required']">
+          Form name is required
+        </span>
+        <span *ngIf="formGroup.get('formName')?.errors?.['minlength']">
+          Minimum 3 characters required
+        </span>
+        <span *ngIf="formGroup.get('formName')?.errors?.['maxlength']">
+          Maximum 200 characters allowed
+        </span>
+      </div>
+    </div>
 
+    <!-- Form Code -->
+    <div class="mb-3">
+      <label for="formCode" class="form-label">
+        Form Code <span class="text-danger">*</span>
+      </label>
+      <input type="text" 
+             id="formCode" 
+             class="form-control" 
+             formControlName="formCode"
+             placeholder="FORM_CODE"
+             (blur)="cleanFormCode()">
+      <div *ngIf="isFieldInvalid('formCode')" class="text-danger small mt-1">
+        <span *ngIf="formGroup.get('formCode')?.errors?.['required']">
+          Form code is required
+        </span>
+        <span *ngIf="formGroup.get('formCode')?.errors?.['pattern']">
+          Only uppercase letters, numbers and underscores allowed
+        </span>
+        <span *ngIf="formGroup.get('formCode')?.errors?.['minlength']">
+          Minimum 2 characters required
+        </span>
+        <span *ngIf="formGroup.get('formCode')?.errors?.['maxlength']">
+          Maximum 100 characters allowed
+        </span>
+      </div>
+      <div class="form-text">
+        Use uppercase letters, numbers and underscores only
+      </div>
+    </div>
 
-  <!-- Form Code -->
-<div class="field mb-4">
-  <label for="formCode" class="block font-medium mb-2">
-    Form Code <span class="text-red-500">*</span>
-  </label>
-  <input 
-    pInputText 
-    id="formCode" 
-    formControlName="formCode"
-    [ngClass]="{'border-red-500 border-2': isFieldInvalid('formCode'), 'border-gray-300 border rounded': !isFieldInvalid('formCode')}"
-    placeholder="e.g., CONTACT_FORM"
-    autocomplete="off"
-    (input)="cleanFormCode()"
-    class="w-full p-2"
-  />
-  <small *ngIf="isFieldInvalid('formCode')" class="p-error block mt-1">
-    {{ getFieldError('formCode') }}
-  </small>
-  <small *ngIf="!isFieldInvalid('formCode')" class="p-text-secondary block mt-1">
-    Uppercase letters, numbers, and underscores only (2-100 characters)
-  </small>
-</div>
+    <!-- Description -->
+    <div class="mb-3">
+      <label for="description" class="form-label">Description</label>
+      <textarea id="description" 
+                class="form-control" 
+                formControlName="description"
+                rows="3"
+                placeholder="Optional description"></textarea>
+      <div class="form-text">
+        Maximum 500 characters
+      </div>
+    </div>
 
-<!-- Description -->
-<div class="field mb-4">
-  <label for="description" class="block font-medium mb-2">
-    Description
-  </label>
-  <textarea
-    id="description"
-    formControlName="description"
-    rows="3"
-    placeholder="Optional description for this form"
-    class="w-full p-3 border rounded border-gray-300 focus:border-blue-500 focus:outline-none"
-    style="resize: vertical; min-height: 80px;"
-  ></textarea>
-  <small class="text-gray-500 block mt-1">
-    {{ formGroup.get('description')?.value?.length || 0 }}/500 characters
-  </small>
-</div>
-
-
-    <!-- Checkboxes -->
-    <div class="flex flex-wrap gap-4 mb-6">
-      <div class="field-checkbox flex align-items-center">
-        <p-checkbox 
-          id="isPublished" 
-          formControlName="isPublished" 
-          binary="true"
-          [inputId]="'isPublished'"
-          class="mr-2">
-        </p-checkbox>
-        <div>
-          <label for="isPublished" class="font-medium cursor-pointer">
+    <!-- Status Fields -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="form-check">
+          <input type="checkbox" 
+                 id="isPublished" 
+                 class="form-check-input" 
+                 formControlName="isPublished">
+          <label for="isPublished" class="form-check-label">
             Published
           </label>
         </div>
       </div>
-
-      <div class="field-checkbox flex align-items-center">
-        <p-checkbox 
-          id="isActive" 
-          formControlName="isActive" 
-          binary="true"
-          [inputId]="'isActive'"
-          class="mr-2">
-        </p-checkbox>
-        <div>
-          <label for="isActive" class="font-medium cursor-pointer">
+      <div class="col-md-6">
+        <div class="form-check">
+          <input type="checkbox" 
+                 id="isActive" 
+                 class="form-check-input" 
+                 formControlName="isActive">
+          <label for="isActive" class="form-check-label">
             Active
           </label>
         </div>
       </div>
     </div>
 
-    <!-- أزرار الحفظ والإلغاء -->
-    <div class="flex justify-content-end gap-2 pt-4 border-top-1 surface-border">
-      <button
-        pButton
-        type="button"
-        label="Cancel"
-        icon="pi pi-times"
-        class="p-button-outlined p-button-secondary"
-        (click)="closeModal()"
-        [disabled]="loading.save"
-      ></button>
-      
-      <button
-        pButton
-        type="submit"
-        [label]="editingFormId ? 'Update' : 'Create'"
-        [icon]="editingFormId ? 'pi pi-check' : 'pi pi-save'"
-        [class]="editingFormId ? 'p-button-warning' : 'p-button-success'"
-        [disabled]="formGroup.invalid || loading.save"
-      >
-        <span *ngIf="loading.save" class="ml-2">
-          <i class="pi pi-spin pi-spinner" style="font-size: 1rem"></i>
-        </span>
+    <!-- Modal Footer -->
+    <div class="d-flex justify-content-end gap-2 mt-4">
+      <button pButton 
+              type="button" 
+              label="Cancel" 
+              (click)="closeFormModal()"
+              class="p-button-text">
+      </button>
+      <button pButton 
+              type="submit" 
+              label="Save" 
+              [disabled]="formGroup.invalid || loading.save"
+              class="p-button-primary">
+        <i *ngIf="loading.save" class="pi pi-spin pi-spinner mr-2"></i>
+        Save
       </button>
     </div>
   </form>
 </p-dialog>
+
+<!-- Tabs Management Modal -->
+<p-dialog [(visible)]="showTabsModal" 
+          [modal]="true" 
+          [style]="{width: '700px', height: '500px'}" 
+          header="Manage Tabs"
+          [draggable]="false" 
+          [resizable]="false"
+          (onHide)="closeTabsModal()">
+  
+  <div *ngIf="!selectedForm" class="text-center p-4">
+    <i class="pi pi-exclamation-circle text-warning" style="font-size: 3rem;"></i>
+    <p class="mt-3">No form selected</p>
+  </div>
+
+  <div *ngIf="selectedForm">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h5 class="mb-0">{{ selectedForm.formName }}</h5>
+        <small class="text-muted">{{ selectedForm.formCode }}</small>
+      </div>
+      <button pButton 
+              type="button" 
+              icon="pi pi-plus" 
+              label="Add Tab" 
+              (click)="openAddTabModal()"
+              class="p-button-primary p-button-sm">
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="loading.tabs" class="text-center p-4">
+      <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+      <p class="mt-2">Loading tabs...</p>
+    </div>
+
+    <!-- Tabs List -->
+    <div *ngIf="!loading.tabs && selectedForm.tabs && selectedForm.tabs.length > 0" class="tabs-list">
+      <div class="list-group">
+        <div *ngFor="let tab of selectedForm.tabs" 
+             class="list-group-item list-group-item-action">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="mb-1">{{ tab.tabName }}</h6>
+              <small *ngIf="tab.tabCode" class="text-muted">Code: {{ tab.tabCode }}</small>
+              <div class="mt-1">
+                <span class="badge bg-secondary me-2">
+                  {{ tab.fieldsCount || tab.fields?.length || 0 }} fields
+                </span>
+                <span *ngIf="tab.isActive" class="badge bg-success">Active</span>
+                <span *ngIf="!tab.isActive" class="badge bg-danger">Inactive</span>
+              </div>
+            </div>
+            <div class="btn-group">
+              <button pButton 
+                      type="button" 
+                      icon="pi pi-pencil" 
+                      pTooltip="Edit" 
+                      (click)="openEditTabModal(tab)"
+                      class="p-button-text p-button-sm p-button-success">
+              </button>
+              <button pButton 
+                      type="button" 
+                      icon="pi pi-list" 
+                      pTooltip="Manage Fields" 
+                      (click)="manageTabFields(tab)"
+                      class="p-button-text p-button-sm p-button-info">
+              </button>
+              <button pButton 
+                      type="button" 
+                      icon="pi pi-trash" 
+                      pTooltip="Delete" 
+                      (click)="deleteTab(tab.id)"
+                      class="p-button-text p-button-sm p-button-danger">
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- No Tabs -->
+    <div *ngIf="!loading.tabs && (!selectedForm.tabs || selectedForm.tabs.length === 0)" 
+         class="text-center p-4">
+      <i class="pi pi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+      <h5 class="mt-3">No Tabs Found</h5>
+      <p class="text-muted">This form doesn't have any tabs yet.</p>
+      <button pButton 
+              type="button" 
+              icon="pi pi-plus" 
+              label="Add First Tab" 
+              (click)="openAddTabModal()"
+              class="p-button-primary">
+      </button>
+    </div>
+  </div>
+</p-dialog>
+
+<!-- Add/Edit Tab Modal -->
+<p-dialog [(visible)]="showTabModal" 
+          [modal]="true" 
+          [style]="{width: '450px'}" 
+          [header]="editingTab ? 'Edit Tab' : 'Add Tab'"
+          [draggable]="false" 
+          [resizable]="false"
+          (onHide)="closeTabModal()">
+  
+  <form [formGroup]="tabForm" (ngSubmit)="saveTab()">
+    <!-- Tab Name -->
+    <div class="mb-3">
+      <label for="tabName" class="form-label">
+        Tab Name <span class="text-danger">*</span>
+      </label>
+      <input type="text" 
+             id="tabName" 
+             class="form-control" 
+             formControlName="tabName"
+             placeholder="Enter tab name">
+      <div *ngIf="isTabFieldInvalid('tabName')" class="text-danger small mt-1">
+        <span *ngIf="tabForm.get('tabName')?.errors?.['required']">
+          Tab name is required
+        </span>
+        <span *ngIf="tabForm.get('tabName')?.errors?.['minlength']">
+          Minimum 2 characters required
+        </span>
+      </div>
+    </div>
+
+    <!-- Tab Code -->
+    <div class="mb-3">
+      <label for="tabCode" class="form-label">Tab Code</label>
+      <input type="text" 
+             id="tabCode" 
+             class="form-control" 
+             formControlName="tabCode"
+             placeholder="tab_code"
+             (blur)="cleanTabCode()">
+      <div *ngIf="isTabFieldInvalid('tabCode')" class="text-danger small mt-1">
+        <span *ngIf="tabForm.get('tabCode')?.errors?.['pattern']">
+          Only lowercase letters, numbers and underscores allowed
+        </span>
+      </div>
+      <div class="form-text">
+        Optional. Use lowercase letters, numbers and underscores
+      </div>
+    </div>
+
+    <!-- Tab Order -->
+    <div class="mb-3">
+      <label for="tabOrder" class="form-label">Tab Order</label>
+      <input type="number" 
+             id="tabOrder" 
+             class="form-control" 
+             formControlName="tabOrder"
+             min="1">
+    </div>
+
+    <!-- Is Active -->
+    <div class="mb-3">
+      <div class="form-check">
+        <input type="checkbox" 
+               id="tabIsActive" 
+               class="form-check-input" 
+               formControlName="isActive">
+        <label for="tabIsActive" class="form-check-label">
+          Active
+        </label>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="d-flex justify-content-end gap-2 mt-4">
+      <button pButton 
+              type="button" 
+              label="Cancel" 
+              (click)="closeTabModal()"
+              class="p-button-text">
+      </button>
+      <button pButton 
+              type="submit" 
+              label="Save" 
+              [disabled]="tabForm.invalid || loading.save"
+              class="p-button-primary">
+        <i *ngIf="loading.save" class="pi pi-spin pi-spinner mr-2"></i>
+        Save
+      </button>
+    </div>
+  </form>
+</p-dialog>
+
+<!-- Fields Management Modal -->
+<p-dialog [(visible)]="showFieldsModal" 
+          [modal]="true" 
+          [style]="{width: '800px', height: '600px'}" 
+          header="Manage Fields"
+          [draggable]="false" 
+          [resizable]="false"
+          (onHide)="closeFieldsModal()">
+  
+  <div *ngIf="!selectedTab" class="text-center p-4">
+    <i class="pi pi-exclamation-circle text-warning" style="font-size: 3rem;"></i>
+    <p class="mt-3">No tab selected</p>
+  </div>
+
+  <div *ngIf="selectedTab">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h5 class="mb-0">{{ selectedTab.tabName }}</h5>
+        <small class="text-muted">Tab in {{ selectedForm?.formName }}</small>
+      </div>
+      <button pButton 
+              type="button" 
+              icon="pi pi-plus" 
+              label="Add Field" 
+              (click)="openAddFieldModal()"
+              class="p-button-primary p-button-sm">
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="loading.fields" class="text-center p-4">
+      <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+      <p class="mt-2">Loading fields...</p>
+    </div>
+
+    <!-- Fields List -->
+    <div *ngIf="!loading.fields && selectedTab.fields && selectedTab.fields.length > 0" class="fields-list">
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Field Name</th>
+              <th>Field Code</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let field of selectedTab.fields">
+              <td>
+                <strong>{{ field.fieldName }}</strong>
+                <div *ngIf="field.placeholder" class="text-muted small">
+                  Placeholder: {{ field.placeholder }}
+                </div>
+              </td>
+              <td>
+                <code class="bg-light p-1 rounded">{{ field.fieldCode }}</code>
+              </td>
+              <td>
+                {{ getFieldTypeLabel(field.fieldTypeId) }}
+              </td>
+              <td>
+                <div>
+                  <span *ngIf="field.isMandatory" class="badge bg-danger me-1">Required</span>
+                  <span *ngIf="field.isEditable" class="badge bg-info me-1">Editable</span>
+                  <span *ngIf="field.isVisible" class="badge bg-success me-1">Visible</span>
+                  <span *ngIf="field.isActive" class="badge bg-primary">Active</span>
+                  <span *ngIf="!field.isActive" class="badge bg-secondary">Inactive</span>
+                </div>
+              </td>
+              <td>
+                <div class="btn-group">
+                  <button pButton 
+                          type="button" 
+                          icon="pi pi-pencil" 
+                          pTooltip="Edit" 
+                          (click)="openEditFieldModal(field)"
+                          class="p-button-text p-button-sm p-button-success">
+                  </button>
+                  <button pButton 
+                          type="button" 
+                          icon="pi pi-trash" 
+                          pTooltip="Delete" 
+                          (click)="deleteField(field.id)"
+                          class="p-button-text p-button-sm p-button-danger">
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- No Fields -->
+    <div *ngIf="!loading.fields && (!selectedTab.fields || selectedTab.fields.length === 0)" 
+         class="text-center p-4">
+      <i class="pi pi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+      <h5 class="mt-3">No Fields Found</h5>
+      <p class="text-muted">This tab doesn't have any fields yet.</p>
+      <button pButton 
+              type="button" 
+              icon="pi pi-plus" 
+              label="Add First Field" 
+              (click)="openAddFieldModal()"
+              class="p-button-primary">
+      </button>
+    </div>
+  </div>
+</p-dialog>
+
+<!-- Add/Edit Field Modal -->
+<p-dialog [(visible)]="showFieldModal" 
+          [modal]="true" 
+          [style]="{width: '500px'}" 
+          [header]="editingField ? 'Edit Field' : 'Add Field'"
+          [draggable]="false" 
+          [resizable]="false"
+          (onHide)="closeFieldModal()">
+  
+  <form [formGroup]="fieldForm" (ngSubmit)="saveField()">
+    <!-- Field Name -->
+    <div class="mb-3">
+      <label for="fieldName" class="form-label">
+        Field Name <span class="text-danger">*</span>
+      </label>
+      <input type="text" 
+             id="fieldName" 
+             class="form-control" 
+             formControlName="fieldName"
+             placeholder="Enter field name">
+      <div *ngIf="isFieldFieldInvalid('fieldName')" class="text-danger small mt-1">
+        <span *ngIf="fieldForm.get('fieldName')?.errors?.['required']">
+          Field name is required
+        </span>
+        <span *ngIf="fieldForm.get('fieldName')?.errors?.['minlength']">
+          Minimum 2 characters required
+        </span>
+      </div>
+    </div>
+
+    <!-- Field Code -->
+    <div class="mb-3">
+      <label for="fieldCode" class="form-label">
+        Field Code <span class="text-danger">*</span>
+      </label>
+      <input type="text" 
+             id="fieldCode" 
+             class="form-control" 
+             formControlName="fieldCode"
+             placeholder="field_code"
+             (blur)="cleanFieldCode()">
+      <div *ngIf="isFieldFieldInvalid('fieldCode')" class="text-danger small mt-1">
+        <span *ngIf="fieldForm.get('fieldCode')?.errors?.['required']">
+          Field code is required
+        </span>
+        <span *ngIf="fieldForm.get('fieldCode')?.errors?.['pattern']">
+          Only lowercase letters, numbers and underscores allowed
+        </span>
+      </div>
+    </div>
+
+    <!-- Field Type -->
+    <div class="mb-3">
+      <label for="fieldTypeId" class="form-label">
+        Field Type <span class="text-danger">*</span>
+      </label>
+      <select id="fieldTypeId"
+              class="form-select"
+              [(ngModel)]="selectedFieldType"
+              name="fieldTypeId"
+              [ngModelOptions]="{standalone: true}"
+              (change)="onFieldTypeChange($event)">
+        <option *ngFor="let type of fieldTypes" [value]="type.value">
+          {{ type.label }}
+        </option>
+      </select>
+    </div>
+
+    <!-- Placeholder -->
+    <div class="mb-3">
+      <label for="placeholder" class="form-label">Placeholder</label>
+      <input type="text" 
+             id="placeholder" 
+             class="form-control" 
+             formControlName="placeholder"
+             placeholder="Enter placeholder text">
+    </div>
+
+    <!-- Hint Text -->
+    <div class="mb-3">
+      <label for="hintText" class="form-label">Hint Text</label>
+      <textarea id="hintText" 
+                class="form-control" 
+                formControlName="hintText"
+                rows="2"
+                placeholder="Help text for users"></textarea>
+    </div>
+
+    <!-- Default Value -->
+    <div class="mb-3">
+      <label for="defaultValue" class="form-label">Default Value</label>
+      <input type="text" 
+             id="defaultValue" 
+             class="form-control" 
+             formControlName="defaultValue"
+             placeholder="Default value">
+    </div>
+
+    <!-- Field Order -->
+    <div class="mb-3">
+      <label for="fieldOrder" class="form-label">Field Order</label>
+      <input type="number" 
+             id="fieldOrder" 
+             class="form-control" 
+             formControlName="fieldOrder"
+             min="1">
+    </div>
+
+    <!-- Checkbox Options -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="form-check">
+          <input type="checkbox" 
+                 id="isMandatory" 
+                 class="form-check-input" 
+                 formControlName="isMandatory">
+          <label for="isMandatory" class="form-check-label">
+            Required
+          </label>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="form-check">
+          <input type="checkbox" 
+                 id="isEditable" 
+                 class="form-check-input" 
+                 formControlName="isEditable">
+          <label for="isEditable" class="form-check-label">
+            Editable
+          </label>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="form-check">
+          <input type="checkbox" 
+                 id="isVisible" 
+                 class="form-check-input" 
+                 formControlName="isVisible">
+          <label for="isVisible" class="form-check-label">
+            Visible
+          </label>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="form-check">
+          <input type="checkbox" 
+                 id="isActive" 
+                 class="form-check-input" 
+                 formControlName="isActive">
+          <label for="isActive" class="form-check-label">
+            Active
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="d-flex justify-content-end gap-2 mt-4">
+      <button pButton 
+              type="button" 
+              label="Cancel" 
+              (click)="closeFieldModal()"
+              class="p-button-text">
+      </button>
+      <button pButton 
+              type="submit" 
+              label="Save" 
+              [disabled]="fieldForm.invalid || loading.save"
+              class="p-button-primary">
+        <i *ngIf="loading.save" class="pi pi-spin pi-spinner mr-2"></i>
+        Save
+      </button>
+    </div>
+  </form>
+</p-dialog>
+
+<!-- Toast Container -->
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>

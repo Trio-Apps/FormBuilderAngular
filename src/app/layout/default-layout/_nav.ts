@@ -12,28 +12,30 @@ export const navItems: INavData[] = [
   },
   {
     name: 'Form Builder',
-    url: '/forms',
-    iconComponent: { name: 'cil-puzzle' }
+    iconComponent: { name: 'cil-puzzle' },
+    children: [
+      {
+        name: 'Forms',
+        url: '/forms',
+        iconComponent: { name: 'cil-description' }
+      },
+      {
+        name: 'Tabs',
+        url: '/forms/tabs',
+        iconComponent: { name: 'cil-applications' }
+      },
+      {
+        name: 'Fields',
+        url: '/forms/fields',
+        iconComponent: { name: 'cil-input-power' }
+      },
+      {
+        name: 'Submissions',
+        url: '/forms/submissions',
+        iconComponent: { name: 'cil-description' }
+      }
+    ]
   },
-  {
-    name: 'Tabs',
-    url: '/tabs',
-    iconComponent: { name: 'cil-applications' }
-  },
-  {
-    name: 'Fields',
-    url: '/fields',
-    iconComponent: { name: 'cil-input-power' }
-  },
-  {
-    name: 'Submissions',
-    url: '/submissions',
-    iconComponent: { name: 'cil-description' }
-  },
- 
-
-  
-
   {
     name: 'Logout',
     url: '/logout',

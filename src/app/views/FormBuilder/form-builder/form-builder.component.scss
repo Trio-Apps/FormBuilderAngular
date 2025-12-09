@@ -1041,4 +1041,67 @@ $transition: all 0.3s ease;
       }
     }
   }
+}/* form-builder.component.scss */
+
+/* Checkbox container */
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding-left: 30px;
+  cursor: pointer;
+  font-size: 16px;
+  user-select: none;
+}
+
+/* Hide the default checkbox */
+.checkbox-container input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+/* Custom checkbox */
+.checkmark {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 20px;
+  width: 20px;
+  background-color: #fff;
+  border: 2px solid #ccc;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+/* On hover */
+.checkbox-container:hover input ~ .checkmark {
+  border-color: #888;
+}
+
+/* When checked */
+.checkbox-container input:checked ~ .checkmark {
+  border-color: inherit; /* يحافظ على لون الخلفية */
+}
+
+/* Checkmark / علامة الصح */
+.checkmark:after {
+  content: "";
+  position: absolute;
+  display: none;
+}
+
+/* Show the checkmark when checked */
+.checkbox-container input:checked ~ .checkmark:after {
+  display: block;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
