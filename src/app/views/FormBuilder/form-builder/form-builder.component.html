@@ -53,7 +53,7 @@
         <p class="mt-2">Loading forms...</p>
       </div>
 
-      <div *ngIf="!loading.forms && paginatedForms.length === 0" class="p-4 text-center">
+      <div *ngIf="!loading.forms && paginatedForms.length === 0" class="text-center p-4">
         <i class="pi pi-inbox" style="font-size: 3rem; color: #ccc;"></i>
         <h4 class="mt-3">No Forms Found</h4>
         <p class="text-muted">No forms have been created yet.</p>
@@ -111,12 +111,12 @@
                 </td>
                 <td>
                   <span class="badge bg-info">
-                    {{ form.tabsCount || form.tabs?.length || 0 }} tabs
+                    {{ getFormTabsCount(form) }} tabs
                   </span>
                 </td>
                 <td>
                   <span class="badge bg-secondary">
-                    {{ form.fieldsCount || 0 }} fields
+                    {{ getFormFieldsCount(form) }} fields
                   </span>
                 </td>
                 <td>
@@ -320,7 +320,6 @@
       </button>
       <button pButton 
               type="submit" 
-              label="Save" 
               [disabled]="formGroup.invalid || loading.save"
               class="p-button-primary">
         <i *ngIf="loading.save" class="pi pi-spin pi-spinner mr-2"></i>
@@ -377,7 +376,7 @@
               <small *ngIf="tab.tabCode" class="text-muted">Code: {{ tab.tabCode }}</small>
               <div class="mt-1">
                 <span class="badge bg-secondary me-2">
-                  {{ tab.fieldsCount || tab.fields?.length || 0 }} fields
+                  {{ tab.fields?.length || 0 }} fields
                 </span>
                 <span *ngIf="tab.isActive" class="badge bg-success">Active</span>
                 <span *ngIf="!tab.isActive" class="badge bg-danger">Inactive</span>
@@ -510,7 +509,6 @@
       </button>
       <button pButton 
               type="submit" 
-              label="Save" 
               [disabled]="tabForm.invalid || loading.save"
               class="p-button-primary">
         <i *ngIf="loading.save" class="pi pi-spin pi-spinner mr-2"></i>
@@ -636,7 +634,7 @@
 <!-- Add/Edit Field Modal -->
 <p-dialog [(visible)]="showFieldModal" 
           [modal]="true" 
-          [style]="{width: '500px'}" 
+          [style]="{width: '600px'}" 
           [header]="editingField ? 'Edit Field' : 'Add Field'"
           [draggable]="false" 
           [resizable]="false"
@@ -691,14 +689,17 @@
       </label>
       <select id="fieldTypeId"
               class="form-select"
-              [(ngModel)]="selectedFieldType"
-              name="fieldTypeId"
-              [ngModelOptions]="{standalone: true}"
-              (change)="onFieldTypeChange($event)">
-        <option *ngFor="let type of fieldTypes" [value]="type.value">
-          {{ type.label }}
+              formControlName="fieldTypeId">
+        <option value="">Select Field Type</option>
+        <option *ngFor="let type of fieldTypes" [value]="type.id">
+          {{ type.typeName }}
         </option>
       </select>
+      <div *ngIf="isFieldFieldInvalid('fieldTypeId')" class="text-danger small mt-1">
+        <span *ngIf="fieldForm.get('fieldTypeId')?.errors?.['required']">
+          Field type is required
+        </span>
+      </div>
     </div>
 
     <!-- Placeholder -->
@@ -739,6 +740,82 @@
              class="form-control" 
              formControlName="fieldOrder"
              min="1">
+    </div>
+
+    <!-- Advanced Field Options -->
+    <div class="card mb-3">
+      <div class="card-header">
+        <h6 class="mb-0">Advanced Field Options</h6>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="dataType" class="form-label">Data Type</label>
+            <input type="text" 
+                   id="dataType" 
+                   class="form-control" 
+                   formControlName="dataType"
+                   placeholder="string">
+          </div>
+          <div class="col-md-6">
+            <label for="validationMessage" class="form-label">Validation Message</label>
+            <input type="text" 
+                   id="validationMessage" 
+                   class="form-control" 
+                   formControlName="validationMessage"
+                   placeholder="Please enter a valid value">
+          </div>
+        </div>
+        
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="minValue" class="form-label">Min Value</label>
+            <input type="number" 
+                   id="minValue" 
+                   class="form-control" 
+                   formControlName="minValue"
+                   placeholder="Minimum value">
+          </div>
+          <div class="col-md-6">
+            <label for="maxValue" class="form-label">Max Value</label>
+            <input type="number" 
+                   id="maxValue" 
+                   class="form-control" 
+                   formControlName="maxValue"
+                   placeholder="Maximum value">
+          </div>
+        </div>
+        
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="minLength" class="form-label">Min Length</label>
+            <input type="number" 
+                   id="minLength" 
+                   class="form-control" 
+                   formControlName="minLength"
+                   min="0"
+                   placeholder="Minimum length">
+          </div>
+          <div class="col-md-6">
+            <label for="maxLength" class="form-label">Max Length</label>
+            <input type="number" 
+                   id="maxLength" 
+                   class="form-control" 
+                   formControlName="maxLength"
+                   min="1"
+                   placeholder="Maximum length">
+          </div>
+        </div>
+        
+        <div class="mb-3">
+          <label for="regexPattern" class="form-label">Regex Pattern</label>
+          <input type="text" 
+                 id="regexPattern" 
+                 class="form-control" 
+                 formControlName="regexPattern"
+                 placeholder="^[a-zA-Z0-9]*$">
+        </div>
+      </div>
     </div>
 
     <!-- Checkbox Options -->
@@ -799,7 +876,6 @@
       </button>
       <button pButton 
               type="submit" 
-              label="Save" 
               [disabled]="fieldForm.invalid || loading.save"
               class="p-button-primary">
         <i *ngIf="loading.save" class="pi pi-spin pi-spinner mr-2"></i>

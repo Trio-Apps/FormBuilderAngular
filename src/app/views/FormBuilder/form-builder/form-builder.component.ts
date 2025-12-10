@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormControl } from '@angular/forms';
 import { FormsService } from '../forms.service';
 
@@ -12,6 +12,7 @@ import {
   CreateFormTabDto,
   UpdateFormFieldDto,
   CreateFormFieldDto,
+  FieldTypeDto
 } from '../form-builder/models/form-builder-dto.model';
 
 import { CommonModule } from '@angular/common';
@@ -28,14 +29,6 @@ import { TagModule } from 'primeng/tag';
 import { TableModule } from 'primeng/table';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { TooltipModule } from 'primeng/tooltip';
-
-// Import CoreUI modules
-import { 
-  FormModule,
-  GridModule,
-  CardModule,
-  BadgeModule
-} from '@coreui/angular';
 
 @Component({
   selector: 'app-form-builder',
@@ -56,11 +49,6 @@ import {
     TagModule,
     TableModule,
     TooltipModule,
-    // CoreUI modules
-    FormModule,
-    GridModule,
-    CardModule,
-    BadgeModule,
   ],
   providers: [MessageService, ConfirmationService]
 })
@@ -90,23 +78,8 @@ export class FormBuilderComponent implements OnInit {
   editingField: FormFieldDto | null = null;
   selectedTab: FormTabDto | null = null;
   
-  // Field Types - Using proper typing
-  fieldTypes: { label: string; value: number }[] = [
-    { label: 'Text', value: 1 },
-    { label: 'Number', value: 2 },
-    { label: 'Date', value: 3 },
-    { label: 'Email', value: 4 },
-    { label: 'Phone', value: 5 },
-    { label: 'Select', value: 6 },
-    { label: 'Checkbox', value: 7 },
-    { label: 'Radio', value: 8 },
-    { label: 'Text Area', value: 9 },
-    { label: 'Password', value: 10 },
-    { label: 'File', value: 11 }
-  ];
-
-  // For dropdown binding
-  selectedFieldType: number = 1;
+  // Field Types
+  fieldTypes: FieldTypeDto[] = [];
 
   // Search
   searchTerm: string = '';
@@ -117,7 +90,8 @@ export class FormBuilderComponent implements OnInit {
     save: false,
     delete: false,
     tabs: false,
-    fields: false
+    fields: false,
+    fieldTypes: false
   };
 
   // Pagination
@@ -134,13 +108,17 @@ export class FormBuilderComponent implements OnInit {
     private formsService: FormsService,
     private fb: FormBuilder,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
     this.loadForms();
+    this.loadFieldTypes();
     this.initForms();
   }
+
+  // ============ INITIALIZATION ============
 
   initForms(): void {
     // Main Form
@@ -158,7 +136,7 @@ export class FormBuilderComponent implements OnInit {
       ]],
       description: ['', [Validators.maxLength(500)]],
       isPublished: [false],
-      isActive: [true] // ADDED
+      isActive: [true]
     });
 
     // Tab Form
@@ -174,12 +152,13 @@ export class FormBuilderComponent implements OnInit {
         Validators.pattern('^[a-z0-9_]*$')
       ]],
       tabOrder: [1, [Validators.min(1)]],
-      isActive: [true] // ADDED
+      isActive: [true]
     });
 
     // Field Form
     this.fieldForm = this.fb.group({
       tabId: [null, [Validators.required]],
+      fieldTypeId: ['', [Validators.required]],
       fieldName: ['', [
         Validators.required,
         Validators.minLength(2),
@@ -198,14 +177,22 @@ export class FormBuilderComponent implements OnInit {
       isVisible: [true],
       defaultValue: ['', [Validators.maxLength(500)]],
       fieldOrder: [1, [Validators.min(1)]],
-      fieldTypeId: [1, [Validators.required]],
-      isActive: [true] // ADDED
+      isActive: [true],
+      dataType: ['string'],
+      regexPattern: [''],
+      validationMessage: [''],
+      minValue: [null],
+      maxValue: [null],
+      maxLength: [null],
+      createdByUserId: ['f776321b-3476-494d-aaef-18439f35a1b4'],
+      readOnlyRuleJson: ['{}'],
+      visibilityRuleJson: ['{}']
     });
 
     // Auto-clean form code
     this.formGroup.get('formCode')?.valueChanges.subscribe(value => {
       if (value) {
-        const cleanedValue = value.replace(/[^A-Za-z0-9_]/g, '').toUpperCase();
+        const cleanedValue = value.replace(/[^A-Z0-9_]/g, '').toUpperCase();
         if (cleanedValue !== value) {
           this.formGroup.get('formCode')?.setValue(cleanedValue, { emitEvent: false });
         }
@@ -231,31 +218,90 @@ export class FormBuilderComponent implements OnInit {
         }
       }
     });
+
+    // Update validation message when field name changes
+    this.fieldForm.get('fieldName')?.valueChanges.subscribe((fieldName) => {
+      if (fieldName) {
+        this.fieldForm.patchValue({
+          validationMessage: `Please enter a valid ${fieldName}`
+        }, { emitEvent: false });
+      }
+    });
   }
 
   // ============ HELPER METHODS ============
+
+  convertDecimalToInt(value: number | undefined | null): number {
+    if (value === undefined || value === null) {
+      return 0;
+    }
+    
+    if (value < 1 && value > 0) {
+      return Math.round(value * 1000);
+    }
+    
+    return Math.round(value);
+  }
+  
+  getFormTabsCount(form: FormBuilderDto): number {
+    if (form.tabsCount !== undefined) {
+      return this.convertDecimalToInt(form.tabsCount);
+    }
+    if (form.tabs && Array.isArray(form.tabs)) {
+      return form.tabs.length;
+    }
+    return 0;
+  }
+  
+  getFormFieldsCount(form: FormBuilderDto): number {
+    if (form.fieldsCount !== undefined) {
+      return this.convertDecimalToInt(form.fieldsCount);
+    }
+    let totalFields = 0;
+    if (form.tabs && Array.isArray(form.tabs)) {
+      form.tabs.forEach(tab => {
+        if (tab.fields && Array.isArray(tab.fields)) {
+          totalFields += tab.fields.length;
+        }
+      });
+    }
+    return totalFields;
+  }
 
   getFieldTypeLabel(fieldTypeId: number | undefined | null): string {
     if (fieldTypeId === undefined || fieldTypeId === null) {
       return 'Unknown Type';
     }
-    
-    const fieldType = this.fieldTypes.find(ft => ft.value === fieldTypeId);
-    return fieldType ? fieldType.label : `Type ${fieldTypeId}`;
+    const fieldType = this.fieldTypes.find(ft => ft.id === fieldTypeId);
+    return fieldType ? fieldType.typeName : `Type ${fieldTypeId}`;
   }
 
-  getFormTabs(): FormTabDto[] {
-    return this.selectedForm?.tabs || [];
+  getTotalTabs(): number {
+    return this.allForms.reduce((total, form) => total + this.getFormTabsCount(form), 0);
   }
 
-  getTabFields(): FormFieldDto[] {
-    return this.selectedTab?.fields || [];
+  getTotalFields(): number {
+    return this.allForms.reduce((total, form) => total + this.getFormFieldsCount(form), 0);
   }
 
-  // Getter for field type control
-  get fieldTypeIdControl(): FormControl {
-    return this.fieldForm.get('fieldTypeId') as FormControl;
+  formatDate(date: any): string {
+  if (!date) return '';
+  
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) {
+      return '';
+    }
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return '';
   }
+}
 
   // ============ FORM CRUD ============
 
@@ -264,8 +310,13 @@ export class FormBuilderComponent implements OnInit {
     
     this.formsService.getForms().subscribe({
       next: (data) => {
-        this.allForms = data;
-        this.forms = [...data];
+        this.allForms = data.map(form => ({
+          ...form,
+          tabsCount: this.convertDecimalToInt(form.tabsCount),
+          fieldsCount: this.convertDecimalToInt(form.fieldsCount)
+        }));
+        
+        this.forms = [...this.allForms];
         this.currentPage = 1;
         this.updatePagination();
         this.loading.forms = false;
@@ -280,7 +331,6 @@ export class FormBuilderComponent implements OnInit {
       error: (error) => {
         console.error('Error loading forms:', error);
         this.loading.forms = false;
-        
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
@@ -291,12 +341,25 @@ export class FormBuilderComponent implements OnInit {
     });
   }
 
+  loadFieldTypes(): void {
+    this.loading.fieldTypes = true;
+    this.formsService.getFieldTypes().subscribe({
+      next: (data) => {
+        this.fieldTypes = data.filter(type => type.isActive);
+        this.loading.fieldTypes = false;
+      },
+      error: (error) => {
+        console.error('Error loading field types:', error);
+        this.loading.fieldTypes = false;
+      }
+    });
+  }
+
   openFormModal(form?: FormBuilderDto): void {
     if (form) {
       this.editingFormId = form.id;
       this.editingForm = form;
       this.modalTitle = 'Edit Form';
-      
       this.formGroup.patchValue({
         formName: form.formName,
         formCode: form.formCode,
@@ -329,7 +392,6 @@ export class FormBuilderComponent implements OnInit {
   saveForm(): void {
     if (this.formGroup.invalid) {
       this.markFormGroupTouched(this.formGroup);
-      
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation Error',
@@ -344,7 +406,6 @@ export class FormBuilderComponent implements OnInit {
 
     if (this.editingFormId) {
       const updateDto: UpdateFormBuilderDto = { ...formData };
-
       this.formsService.updateForm(this.editingFormId, updateDto).subscribe({
         next: () => {
           this.loading.save = false;
@@ -384,7 +445,14 @@ export class FormBuilderComponent implements OnInit {
             detail: 'Form created successfully',
             life: 5000
           });
-          this.allForms.unshift(newForm);
+          
+          const processedForm = {
+            ...newForm,
+            tabsCount: this.convertDecimalToInt(newForm.tabsCount),
+            fieldsCount: this.convertDecimalToInt(newForm.fieldsCount)
+          };
+          
+          this.allForms.unshift(processedForm);
           this.forms = [...this.allForms];
           this.currentPage = 1;
           this.updatePagination();
@@ -404,19 +472,50 @@ export class FormBuilderComponent implements OnInit {
     }
   }
 
-  deleteForm(id: number): void {
+  cleanFormCode(): void {
+    const formCodeControl = this.formGroup.get('formCode');
+    if (formCodeControl) {
+      let value = formCodeControl.value || '';
+      value = value.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+      formCodeControl.setValue(value, { emitEvent: false });
+    }
+  }
+
+  cleanTabCode(): void {
+    const tabCodeControl = this.tabForm.get('tabCode');
+    if (tabCodeControl) {
+      let value = tabCodeControl.value || '';
+      value = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+      tabCodeControl.setValue(value, { emitEvent: false });
+    }
+  }
+
+  cleanFieldCode(): void {
+    const fieldCodeControl = this.fieldForm.get('fieldCode');
+    if (fieldCodeControl) {
+      let value = fieldCodeControl.value || '';
+      value = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+      fieldCodeControl.setValue(value, { emitEvent: false });
+    }
+  }
+
+deleteForm(id: number): void {
     const formToDelete = this.forms.find(f => f.id === id);
-    
     if (!formToDelete) return;
 
     this.confirmationService.confirm({
       message: `Are you sure you want to delete the form "${formToDelete.formName}"?`,
       header: 'Confirm Delete',
       icon: 'pi pi-exclamation-triangle',
-      acceptButtonStyleClass: 'p-button-danger',
+      acceptButtonStyleClass: 'p-button-danger p-button-outlined',
+      rejectButtonStyleClass: 'p-button-secondary p-button-outlined',
+      acceptLabel: 'Delete',
+      rejectLabel: 'Cancel',
+      acceptIcon: 'pi pi-trash',
+      rejectIcon: 'pi pi-times',
+      defaultFocus: 'reject',
       accept: () => {
         this.loading.delete = true;
-        
         this.formsService.deleteForm(id).subscribe({
           next: () => {
             this.loading.delete = false;
@@ -439,38 +538,37 @@ export class FormBuilderComponent implements OnInit {
             });
           }
         });
+      },
+      reject: () => {
+        // Optional: handle cancel action
       }
     });
   }
-
   // ============ TABS CRUD ============
 
-manageTabs(form: FormBuilderDto): void {
-    this.selectedForm = form;
+  manageTabs(form: FormBuilderDto): void {
+    this.selectedForm = { ...form };
     this.loading.tabs = true;
     
-    // استدعاء خدمة التبويبات مع معالجة الخطأ
     this.formsService.getTabs(form.id).subscribe({
       next: (tabs) => {
-        // تأكد من أن tabs دائماً مصفوفة (حتى لو كانت فارغة)
-        this.selectedForm!.tabs = tabs || [];
+        this.selectedForm = { 
+          ...form, 
+          tabs: tabs || [] 
+        };
         this.showTabsModal = true;
         this.loading.tabs = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Error loading tabs:', error);
-        // حتى لو حدث خطأ، عيّن مصفوفة فارغة
-        this.selectedForm!.tabs = [];
+        this.selectedForm = { 
+          ...form, 
+          tabs: [] 
+        };
         this.showTabsModal = true;
         this.loading.tabs = false;
-        
-        // عرض رسالة تحذير فقط (لا تمنع المستخدم من إضافة تبويبات)
-        this.messageService.add({
-          severity: 'warn',
-          summary: 'Warning',
-          detail: 'Could not load existing tabs, but you can still add new ones',
-          life: 3000
-        });
+        this.cdr.detectChanges();
       }
     });
   }
@@ -479,11 +577,9 @@ manageTabs(form: FormBuilderDto): void {
     if (!this.selectedForm) return;
     
     this.editingTab = null;
-    
-    // حساب ترتيب التبويب الجديد
     let nextOrder = 1;
+    
     if (this.selectedForm.tabs && this.selectedForm.tabs.length > 0) {
-      // البحث عن أعلى ترتيب موجود
       const maxOrder = Math.max(...this.selectedForm.tabs.map(tab => tab.tabOrder || 0));
       nextOrder = maxOrder + 1;
     }
@@ -497,7 +593,6 @@ manageTabs(form: FormBuilderDto): void {
     });
     this.showTabModal = true;
   }
-
 
   openEditTabModal(tab: FormTabDto): void {
     this.editingTab = tab;
@@ -522,6 +617,12 @@ manageTabs(form: FormBuilderDto): void {
   saveTab(): void {
     if (this.tabForm.invalid || !this.selectedForm) {
       this.markFormGroupTouched(this.tabForm);
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation Error',
+        detail: 'Please fill all required fields correctly',
+        life: 5000
+      });
       return;
     }
 
@@ -545,7 +646,7 @@ manageTabs(form: FormBuilderDto): void {
             detail: 'Tab updated successfully',
             life: 3000
           });
-          this.manageTabs(this.selectedForm!);
+          this.refreshTabs();
           this.closeTabModal();
         },
         error: (error) => {
@@ -577,11 +678,19 @@ manageTabs(form: FormBuilderDto): void {
             detail: 'Tab created successfully',
             life: 3000
           });
+          
           if (!this.selectedForm!.tabs) {
             this.selectedForm!.tabs = [];
           }
-          this.selectedForm!.tabs.push(newTab);
+          
+          this.selectedForm = {
+            ...this.selectedForm!,
+            tabs: [...this.selectedForm!.tabs, newTab]
+          };
+          
+          this.updateFormCountersAfterTabChange();
           this.closeTabModal();
+          this.cdr.detectChanges();
         },
         error: (error) => {
           console.error('Error creating tab:', error);
@@ -597,11 +706,56 @@ manageTabs(form: FormBuilderDto): void {
     }
   }
 
+  updateFormCountersAfterTabChange(): void {
+    if (!this.selectedForm) return;
+    
+    const formIndex = this.forms.findIndex(f => f.id === this.selectedForm?.id);
+    if (formIndex !== -1) {
+      this.forms[formIndex].tabsCount = this.selectedForm.tabs?.length || 0;
+      
+      let totalFields = 0;
+      if (this.selectedForm.tabs) {
+        this.selectedForm.tabs.forEach(tab => {
+          if (tab.fields) {
+            totalFields += tab.fields.length;
+          }
+        });
+      }
+      this.forms[formIndex].fieldsCount = totalFields;
+      
+      this.updatePagination();
+      this.cdr.detectChanges();
+    }
+  }
+
+  refreshTabs(): void {
+    if (!this.selectedForm) return;
+    
+    this.loading.tabs = true;
+    this.formsService.getTabs(this.selectedForm.id).subscribe({
+      next: (tabs) => {
+        this.selectedForm = {
+          ...this.selectedForm!,
+          tabs: tabs || []
+        };
+        this.loading.tabs = false;
+        this.cdr.detectChanges();
+        this.updateFormCountersAfterTabChange();
+      },
+      error: (error) => {
+        console.error('Error refreshing tabs:', error);
+        this.loading.tabs = false;
+      }
+    });
+  }
+
   deleteTab(tabId: number): void {
     if (!this.selectedForm) return;
     
+    const tabToDelete = this.selectedForm.tabs?.find(t => t.id === tabId);
+    
     this.confirmationService.confirm({
-      message: 'Are you sure you want to delete this tab?',
+      message: `Are you sure you want to delete the tab "${tabToDelete?.tabName || 'this tab'}"?`,
       header: 'Confirm Delete',
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
@@ -615,7 +769,7 @@ manageTabs(form: FormBuilderDto): void {
               detail: 'Tab deleted successfully',
               life: 3000
             });
-            this.manageTabs(this.selectedForm!);
+            this.refreshTabs();
           },
           error: (error) => {
             console.error('Error deleting tab:', error);
@@ -640,24 +794,28 @@ manageTabs(form: FormBuilderDto): void {
   // ============ FIELDS CRUD ============
 
   manageTabFields(tab: FormTabDto): void {
-    this.selectedTab = tab;
+    this.selectedTab = { ...tab };
     this.loading.fields = true;
     
     this.formsService.getFields(tab.formBuilderId, tab.id).subscribe({
       next: (fields) => {
-        this.selectedTab!.fields = fields;
+        this.selectedTab = { 
+          ...tab, 
+          fields: fields || [] 
+        };
         this.showFieldsModal = true;
         this.loading.fields = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Error loading fields:', error);
+        this.selectedTab = { 
+          ...tab, 
+          fields: [] 
+        };
+        this.showFieldsModal = true;
         this.loading.fields = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to load fields',
-          life: 3000
-        });
+        this.cdr.detectChanges();
       }
     });
   }
@@ -666,42 +824,66 @@ manageTabs(form: FormBuilderDto): void {
     if (!this.selectedTab) return;
     
     this.editingField = null;
-    this.selectedFieldType = 1;
+    let nextOrder = 1;
+    
+    if (this.selectedTab.fields && this.selectedTab.fields.length > 0) {
+      const maxOrder = Math.max(...this.selectedTab.fields.map(field => field.fieldOrder || 0));
+      nextOrder = maxOrder + 1;
+    }
+    
+    const defaultFieldTypeId = this.fieldTypes.length > 0 ? this.fieldTypes[0].id : '';
     
     this.fieldForm.reset({
       tabId: this.selectedTab.id,
+      fieldTypeId: defaultFieldTypeId,
       fieldName: '',
       fieldCode: '',
+      fieldOrder: nextOrder,
       placeholder: '',
       hintText: '',
       isMandatory: false,
       isEditable: true,
       isVisible: true,
       defaultValue: '',
-      fieldOrder: this.selectedTab?.fields?.length ? this.selectedTab.fields.length + 1 : 1,
-      fieldTypeId: 1,
-      isActive: true
+      isActive: true,
+      dataType: 'string',
+      regexPattern: '',
+      validationMessage: '',
+      minValue: null,
+      maxValue: null,
+      maxLength: null,
+      readOnlyRuleJson: '{}',
+      visibilityRuleJson: '{}'
     });
     this.showFieldModal = true;
   }
 
   openEditFieldModal(field: FormFieldDto): void {
     this.editingField = field;
-    this.selectedFieldType = field.fieldTypeId || 1;
+    
+    const fieldAny = field as any;
     
     this.fieldForm.patchValue({
       tabId: field.tabId,
+      fieldTypeId: field.fieldTypeId,
       fieldName: field.fieldName,
       fieldCode: field.fieldCode,
+      fieldOrder: field.fieldOrder || 1,
       placeholder: field.placeholder || '',
       hintText: field.hintText || '',
-      isMandatory: field.isMandatory || false,
+      isMandatory: field.isMandatory !== false,
       isEditable: field.isEditable !== false,
       isVisible: field.isVisible !== false,
       defaultValue: field.defaultValue || '',
-      fieldOrder: field.fieldOrder || 1,
-      fieldTypeId: field.fieldTypeId || 1,
-      isActive: field.isActive !== false
+      isActive: field.isActive !== false,
+      dataType: fieldAny.dataType || 'string',
+      regexPattern: fieldAny.regexPattern || '',
+      validationMessage: fieldAny.validationMessage || '',
+      minValue: fieldAny.minValue || null,
+      maxValue: fieldAny.maxValue || null,
+      maxLength: fieldAny.maxLength || null,
+      readOnlyRuleJson: fieldAny.readOnlyRuleJson || '{}',
+      visibilityRuleJson: fieldAny.visibilityRuleJson || '{}'
     });
     this.showFieldModal = true;
   }
@@ -714,14 +896,24 @@ manageTabs(form: FormBuilderDto): void {
       isEditable: true,
       isVisible: true,
       fieldOrder: 1,
-      fieldTypeId: 1,
-      isActive: true
+      isActive: true,
+      dataType: 'string',
+      regexPattern: '',
+      validationMessage: '',
+      readOnlyRuleJson: '{}',
+      visibilityRuleJson: '{}'
     });
   }
 
   saveField(): void {
     if (this.fieldForm.invalid || !this.selectedTab) {
       this.markFormGroupTouched(this.fieldForm);
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation Error',
+        detail: 'Please fill all required fields correctly',
+        life: 5000
+      });
       return;
     }
 
@@ -730,16 +922,16 @@ manageTabs(form: FormBuilderDto): void {
 
     if (this.editingField) {
       const updateDto: UpdateFormFieldDto = { 
+        fieldTypeId: fieldData.fieldTypeId,
         fieldName: fieldData.fieldName,
         fieldCode: fieldData.fieldCode,
+        fieldOrder: fieldData.fieldOrder,
         placeholder: fieldData.placeholder,
         hintText: fieldData.hintText,
         isMandatory: fieldData.isMandatory,
         isEditable: fieldData.isEditable,
         isVisible: fieldData.isVisible,
         defaultValue: fieldData.defaultValue,
-        fieldTypeId: fieldData.fieldTypeId,
-        fieldOrder: fieldData.fieldOrder,
         isActive: fieldData.isActive
       };
       
@@ -752,7 +944,7 @@ manageTabs(form: FormBuilderDto): void {
             detail: 'Field updated successfully',
             life: 3000
           });
-          this.manageTabFields(this.selectedTab!);
+          this.refreshFields();
           this.closeFieldModal();
         },
         error: (error) => {
@@ -762,25 +954,40 @@ manageTabs(form: FormBuilderDto): void {
             severity: 'error',
             summary: 'Error',
             detail: 'Failed to update field',
-            life: 3000
+            life: 5000
           });
         }
       });
     } else {
-      const createDto: CreateFormFieldDto = {
+      const createDto: any = {
         tabId: this.selectedTab.id,
+        fieldTypeId: Number(fieldData.fieldTypeId),
         fieldName: fieldData.fieldName,
-        fieldCode: fieldData.fieldCode,
-        placeholder: fieldData.placeholder,
-        hintText: fieldData.hintText,
-        isMandatory: fieldData.isMandatory,
-        isEditable: fieldData.isEditable,
-        isVisible: fieldData.isVisible,
-        defaultValueJson: fieldData.defaultValue,
-        fieldTypeId: fieldData.fieldTypeId,
-        fieldOrder: fieldData.fieldOrder,
-        isActive: fieldData.isActive
+        fieldCode: fieldData.fieldCode.toUpperCase(),
+        fieldOrder: Number(fieldData.fieldOrder || 1),
+        placeholder: fieldData.placeholder || '',
+        hintText: fieldData.hintText || '',
+        isMandatory: Boolean(fieldData.isMandatory),
+        isEditable: Boolean(fieldData.isEditable),
+        isVisible: Boolean(fieldData.isVisible),
+        defaultValueJson: fieldData.defaultValue || '',
+        isActive: Boolean(fieldData.isActive),
+        dataType: fieldData.dataType || 'string',
+        regexPattern: fieldData.regexPattern || '',
+        validationMessage: fieldData.validationMessage || `Please enter a valid ${fieldData.fieldName}`,
+        minValue: fieldData.minValue ? Number(fieldData.minValue) : 0,
+        maxValue: fieldData.maxValue ? Number(fieldData.maxValue) : 0,
+        maxLength: fieldData.maxLength ? Number(fieldData.maxLength) : null,
+        visibilityRuleJson: fieldData.visibilityRuleJson || '{}',
+        readOnlyRuleJson: fieldData.readOnlyRuleJson || '{}',
+        createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
       };
+      
+      Object.keys(createDto).forEach(key => {
+        if (createDto[key] === null || createDto[key] === undefined || createDto[key] === '') {
+          delete createDto[key];
+        }
+      });
       
       this.formsService.createField(createDto).subscribe({
         next: (newField) => {
@@ -791,11 +998,19 @@ manageTabs(form: FormBuilderDto): void {
             detail: 'Field created successfully',
             life: 3000
           });
+          
           if (!this.selectedTab!.fields) {
             this.selectedTab!.fields = [];
           }
-          this.selectedTab!.fields.push(newField);
+          
+          this.selectedTab = {
+            ...this.selectedTab!,
+            fields: [...this.selectedTab!.fields, newField]
+          };
+          
+          this.updateFormCountersAfterFieldChange();
           this.closeFieldModal();
+          this.cdr.detectChanges();
         },
         error: (error) => {
           console.error('Error creating field:', error);
@@ -804,18 +1019,53 @@ manageTabs(form: FormBuilderDto): void {
             severity: 'error',
             summary: 'Error',
             detail: 'Failed to create field',
-            life: 3000
+            life: 5000
           });
         }
       });
     }
   }
 
+  updateFormCountersAfterFieldChange(): void {
+    if (!this.selectedForm || !this.selectedTab) return;
+    
+    const formIndex = this.forms.findIndex(f => f.id === this.selectedForm?.id);
+    if (formIndex !== -1 && this.selectedForm) {
+      this.forms[formIndex].fieldsCount = this.getFormFieldsCount(this.selectedForm);
+      this.updatePagination();
+      this.cdr.detectChanges();
+    }
+  }
+
+  refreshFields(): void {
+    if (!this.selectedTab) return;
+    
+    this.loading.fields = true;
+    this.formsService.getFields(this.selectedTab.formBuilderId, this.selectedTab.id)
+      .subscribe({
+        next: (fields) => {
+          this.selectedTab = {
+            ...this.selectedTab!,
+            fields: fields || []
+          };
+          this.loading.fields = false;
+          this.cdr.detectChanges();
+          this.updateFormCountersAfterFieldChange();
+        },
+        error: (error) => {
+          console.error('Error refreshing fields:', error);
+          this.loading.fields = false;
+        }
+      });
+  }
+
   deleteField(fieldId: number): void {
     if (!this.selectedTab) return;
     
+    const fieldToDelete = this.selectedTab.fields?.find(f => f.id === fieldId);
+    
     this.confirmationService.confirm({
-      message: 'Are you sure you want to delete this field?',
+      message: `Are you sure you want to delete the field "${fieldToDelete?.fieldName || 'this field'}"?`,
       header: 'Confirm Delete',
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
@@ -829,7 +1079,7 @@ manageTabs(form: FormBuilderDto): void {
               detail: 'Field deleted successfully',
               life: 3000
             });
-            this.manageTabFields(this.selectedTab!);
+            this.refreshFields();
           },
           error: (error) => {
             console.error('Error deleting field:', error);
@@ -851,13 +1101,7 @@ manageTabs(form: FormBuilderDto): void {
     this.selectedTab = null;
   }
 
-  // Handle field type change
-  onFieldTypeChange(event: any): void {
-    const value = Number(event.target.value);
-    this.fieldForm.controls['fieldTypeId'].setValue(value);
-  }
-
-  // ============ OTHER HELPER METHODS ============
+  // ============ VALIDATION HELPERS ============
 
   isFieldInvalid(fieldName: string): boolean {
     const field = this.formGroup.get(fieldName);
@@ -874,63 +1118,9 @@ manageTabs(form: FormBuilderDto): void {
     return field ? (field.invalid && (field.dirty || field.touched)) : false;
   }
 
-  getFieldError(fieldName: string): string {
-    const field = this.formGroup.get(fieldName);
-    
-    if (!field || !field.errors || !field.touched) return '';
-    
-    if (field.errors['required']) {
-      return 'This field is required';
-    }
-    
-    if (field.errors['minlength']) {
-      const requiredLength = field.errors['minlength'].requiredLength;
-      return `Minimum length is ${requiredLength} characters`;
-    }
-    
-    if (field.errors['maxlength']) {
-      const requiredLength = field.errors['maxlength'].requiredLength;
-      return `Maximum length is ${requiredLength} characters`;
-    }
-    
-    if (field.errors['pattern']) {
-      return 'Only uppercase letters, numbers and underscores are allowed';
-    }
-    
-    return 'Invalid value';
-  }
-
-  cleanFormCode(): void {
-    const formCodeControl = this.formGroup.get('formCode');
-    if (formCodeControl) {
-      let value = formCodeControl.value || '';
-      value = value.toUpperCase().replace(/[^A-Z0-9_]/g, '');
-      formCodeControl.setValue(value, { emitEvent: false });
-    }
-  }
-
-  cleanTabCode(): void {
-    const tabCodeControl = this.tabForm.get('tabCode');
-    if (tabCodeControl) {
-      let value = tabCodeControl.value || '';
-      value = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
-      tabCodeControl.setValue(value, { emitEvent: false });
-    }
-  }
-
-  cleanFieldCode(): void {
-    const fieldCodeControl = this.fieldForm.get('fieldCode');
-    if (fieldCodeControl) {
-      let value = fieldCodeControl.value || '';
-      value = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
-      fieldCodeControl.setValue(value, { emitEvent: false });
-    }
-  }
-
   private markFormGroupTouched(formGroup: FormGroup): void {
     Object.values(formGroup.controls).forEach(control => {
       control.markAsTouched();
-      
       if (control instanceof FormGroup) {
         this.markFormGroupTouched(control);
       }
@@ -944,12 +1134,10 @@ manageTabs(form: FormBuilderDto): void {
       this.forms = [...this.allForms];
     } else {
       const searchTerm = this.searchTerm.toLowerCase().trim();
-      
       this.forms = this.allForms.filter(form => {
         const formNameMatch = form.formName?.toLowerCase().includes(searchTerm) || false;
         const formCodeMatch = form.formCode?.toLowerCase().includes(searchTerm) || false;
         const descriptionMatch = form.description?.toLowerCase().includes(searchTerm) || false;
-        
         return formNameMatch || formCodeMatch || descriptionMatch;
       });
     }
@@ -960,13 +1148,6 @@ manageTabs(form: FormBuilderDto): void {
     
     this.currentPage = 1;
     this.updatePagination();
-  }
-
-  handleEnterKey(event: KeyboardEvent): void {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      this.onSearch();
-    }
   }
 
   clearSearch(): void {
@@ -1030,6 +1211,28 @@ manageTabs(form: FormBuilderDto): void {
     }
     this.sortForms();
   }
+getEndIndex(): number {
+  const end = this.currentPage * this.itemsPerPage;
+  return end > this.forms.length ? this.forms.length : end;
+}
+getFormDate(form: FormBuilderDto): string {
+  // Check what date properties your form has
+  // Adjust based on your actual FormBuilderDto properties
+  
+  // If you don't have a date property, return empty string
+  if (!form) return '';
+  
+  // Try common date field names
+  const dateValue = (form as any).modifiedOn || 
+                    (form as any).updatedAt || 
+                    (form as any).modifiedDate || 
+                    (form as any).lastUpdated ||
+                    (form as any).createdOn ||
+                    (form as any).createdAt;
+  
+  return this.formatDate(dateValue);
+}
+
 
   sortForms(): void {
     if (!this.sortColumn) return;
@@ -1052,6 +1255,7 @@ manageTabs(form: FormBuilderDto): void {
       }
       return 0;
     });
+    
 
     this.currentPage = 1;
     this.updatePagination();

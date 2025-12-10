@@ -99,25 +99,28 @@ export interface FieldTypeDto {
 }
 
 // أضف fieldTypeId في CreateFormFieldDto إذا كان ناقص
+// تحقق من واجهة CreateFormFieldDto
 export interface CreateFormFieldDto {
   tabId: number;
-  fieldTypeId: number; // تأكد من وجوده
+  fieldTypeId: number;
   fieldName: string;
   fieldCode: string;
-  fieldOrder?: number;
   placeholder?: string;
   hintText?: string;
   isMandatory?: boolean;
   isEditable?: boolean;
   isVisible?: boolean;
   defaultValueJson?: string;
-  dataType?: string;
-  maxLength?: number;
+  fieldOrder?: number;
+  isActive?: boolean;
+  dataType: string;
+  regexPattern: string;
+  createdByUserId: number;
+  readOnlyRuleJson: string;
+  validationMessage: string;
+  visibilityRuleJson: string;
   minValue?: number;
   maxValue?: number;
-  regexPattern?: string;
-  validationMessage?: string;
-  visibilityRuleJson?: string;
-  readOnlyRuleJson?: string;
-  isActive?: boolean;
+  minLength?: number;
+  maxLength?: number;
 }
