@@ -1,4 +1,5 @@
 // src/app/views/form-builder/models/form-builder-dto.model.ts
+
 export interface FormBuilderDto {
   id: number;
   formName: string;
@@ -60,37 +61,55 @@ export interface FormFieldDto {
   tabId: number;
   fieldName: string;
   fieldCode: string;
-  fieldOrder?: number;
+  fieldTypeId?: number;
+  fieldType?: string;  // أضف هذا الحقل
   placeholder?: string;
   hintText?: string;
+  fieldOrder?: number;
   isMandatory?: boolean;
   isEditable?: boolean;
   isVisible?: boolean;
-  defaultValue?: string;
-  fieldTypeId?: number;
-  fieldType?: string;
   isActive?: boolean;
+  dataType?: string;
+  defaultValue?: string;  // أضف هذا الحقل
+  regexPattern?: string;
+  validationMessage?: string;
+  visibilityRuleJson?: string;
+  readOnlyRuleJson?: string;
+  defaultValueJson?: string;
+  minValue?: number;      // أضف هذا الحقل
+  maxValue?: number;      // أضف هذا الحقل
+  maxLength?: number;     // أضف هذا الحقل
 }
-
-
 
 export interface UpdateFormFieldDto {
   fieldName?: string;
   fieldCode?: string;
+  fieldTypeId?: number;
+  fieldType?: string;
   placeholder?: string;
   hintText?: string;
   isMandatory?: boolean;
   isEditable?: boolean;
   isVisible?: boolean;
-  defaultValue?: string;
-  fieldTypeId?: number;
-  fieldType?: string;
-  fieldOrder?: number;
   isActive?: boolean;
+  dataType?: string;
+  defaultValue?: string;
+  regexPattern?: string;
+  validationMessage?: string;
+  minValue?: number;
+  maxValue?: number;
+  maxLength?: number;
+  fieldOrder?: number;
+  visibilityRuleJson?: string;
+  readOnlyRuleJson?: string;
+  defaultValueJson?: string;
 }
+
 export interface FieldTypeDto {
   id: number;
   typeName: string;
+  description?: string;  // أضف هذا الحقل
   dataType?: string;
   maxLength?: number;
   hasOptions: boolean;
@@ -98,29 +117,30 @@ export interface FieldTypeDto {
   isActive: boolean;
 }
 
-// أضف fieldTypeId في CreateFormFieldDto إذا كان ناقص
-// تحقق من واجهة CreateFormFieldDto
 export interface CreateFormFieldDto {
   tabId: number;
   fieldTypeId: number;
   fieldName: string;
   fieldCode: string;
+  fieldOrder?: number;
   placeholder?: string;
   hintText?: string;
   isMandatory?: boolean;
   isEditable?: boolean;
   isVisible?: boolean;
-  defaultValueJson?: string;
-  fieldOrder?: number;
   isActive?: boolean;
-  dataType: string;
-  regexPattern: string;
-  createdByUserId: number;
-  readOnlyRuleJson: string;
-  validationMessage: string;
-  visibilityRuleJson: string;
+  dataType?: string;
+  defaultValue?: string;
+  regexPattern?: string;
+  validationMessage?: string;
   minValue?: number;
   maxValue?: number;
   minLength?: number;
   maxLength?: number;
+  
+  // الحقول الاختيارية
+  createdByUserId?: string;
+  readOnlyRuleJson?: string;
+  visibilityRuleJson?: string;
+  defaultValueJson?: string;
 }

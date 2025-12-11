@@ -1,1 +1,159 @@
-<p>tabs-list works!</p>
+<div class="container-fluid">
+  <!-- Header with Back Button -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex align-items-center">
+      <button pButton 
+              type="button" 
+              icon="pi pi-arrow-left" 
+              class="p-button-text me-3"
+              routerLink="../forms">
+      </button>
+      <h2 class="mb-0">Tabs Management</h2>
+    </div>
+    <button pButton 
+            type="button" 
+            icon="pi pi-plus" 
+            label="Add Tab" 
+            (click)="openTabModal()"
+            class="p-button-primary">
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="text-center p-4">
+    <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+    <p class="mt-2">Loading tabs...</p>
+  </div>
+
+  <!-- Empty State -->
+  <div *ngIf="!loading && tabs.length === 0" class="text-center p-4">
+    <i class="pi pi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+    <h4 class="mt-3">No Tabs Found</h4>
+    <p class="text-muted">Create your first tab to get started</p>
+    <button pButton 
+            type="button" 
+            icon="pi pi-plus" 
+            label="Create First Tab" 
+            (click)="openTabModal()"
+            class="p-button-primary mt-2">
+    </button>
+  </div>
+
+  <!-- Tabs Table -->
+  <div *ngIf="!loading && tabs.length > 0" class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Tab Name</th>
+              <th>Tab Code</th>
+              <th>Order</th>
+              <th>Fields</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let tab of tabs">
+              <td>
+                <strong>{{ tab.tabName }}</strong>
+              </td>
+              <td>
+                <code class="bg-light p-1 rounded">{{ tab.tabCode || '-' }}</code>
+              </td>
+              <td>{{ tab.tabOrder }}</td>
+              <td>
+                <span class="badge bg-secondary">
+                  {{ getFieldsCount(tab) }}
+                </span>
+              </td>
+              <td>
+                <div class="btn-group" role="group">
+                  <button pButton 
+                          type="button" 
+                          icon="pi pi-pencil" 
+                          pTooltip="Edit" 
+                          (click)="openTabModal(tab)"
+                          class="p-button-text p-button-sm p-button-success">
+                  </button>
+                  <button pButton 
+                          type="button" 
+                          icon="pi pi-list" 
+                          pTooltip="Manage Fields" 
+                          [routerLink]="['../../fields', tab.id]"
+                          class="p-button-text p-button-sm p-button-info">
+                  </button>
+                  <button pButton 
+                          type="button" 
+                          icon="pi pi-trash" 
+                          pTooltip="Delete" 
+                          (click)="deleteTab(tab.id)"
+                          class="p-button-text p-button-sm p-button-danger">
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Tab Modal -->
+  <p-dialog [(visible)]="showTabModal" 
+            [modal]="true" 
+            [header]="editingTab ? 'Edit Tab' : 'Add Tab'" 
+            [style]="{width: '450px'}"
+            [draggable]="false" 
+            [resizable]="false"
+            (onHide)="closeTabModal()">
+    
+    <form (ngSubmit)="saveTab()">
+      <div class="mb-3">
+        <label class="form-label">Tab Name *</label>
+        <input type="text" 
+               class="form-control" 
+               [(ngModel)]="tabName"
+               name="tabName"
+               required>
+      </div>
+      
+      <div class="mb-3">
+        <label class="form-label">Tab Code</label>
+        <input type="text" 
+               class="form-control" 
+               [(ngModel)]="tabCode"
+               name="tabCode"
+               placeholder="Optional">
+      </div>
+      
+      <div class="mb-3">
+        <label class="form-label">Tab Order</label>
+        <input type="number" 
+               class="form-control" 
+               [(ngModel)]="tabOrder"
+               name="tabOrder"
+               min="1">
+      </div>
+      
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button pButton 
+                type="button" 
+                label="Cancel" 
+                (click)="closeTabModal()"
+                class="p-button-text">
+        </button>
+        <button pButton 
+                type="submit" 
+                [disabled]="!tabName || loading"
+                class="p-button-primary">
+          <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>
+          Save
+        </button>
+      </div>
+    </form>
+  </p-dialog>
+</div>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>

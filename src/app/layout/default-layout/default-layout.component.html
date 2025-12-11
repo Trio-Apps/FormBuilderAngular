@@ -1,4 +1,4 @@
-<!--sidebar-->
+<!-- Sidebar -->
 <c-sidebar
   #sidebar1="cSidebar"
   class="d-print-none sidebar sidebar-fixed border-end"
@@ -8,8 +8,7 @@
 >
   <c-sidebar-header class="border-bottom">
     <c-sidebar-brand [routerLink]="[]">
-      <!-- <svg [class]="{icon: false}" cIcon class="sidebar-brand-full" height="32" name="logo" title="CoreUI Logo"></svg> -->
-       <img src="../../../assets/images/image.png" alt="">
+      <img src="../../../assets/images/image.png" alt="">
       <svg cIcon class="sidebar-brand-narrow" height="32" name="signet" title="CoreUI Logo"></svg>
     </c-sidebar-brand>
   </c-sidebar-header>
@@ -18,28 +17,28 @@
     <c-sidebar-nav [navItems]="navItems" dropdownMode="close" compact />
   </ng-scrollbar>
 
-  @if (!sidebar1.narrow) {
-    <c-sidebar-footer cSidebarToggle="sidebar1" class="border-top d-none d-lg-flex" toggle="unfoldable" style="cursor: pointer;">
-      <button cSidebarToggler aria-label="Toggle sidebar fold"></button>
-    </c-sidebar-footer>
-  }
+  <c-sidebar-footer *ngIf="!sidebar1.narrow" cSidebarToggle="sidebar1" class="border-top d-none d-lg-flex" toggle="unfoldable" style="cursor: pointer;">
+    <button cSidebarToggler aria-label="Toggle sidebar fold"></button>
+  </c-sidebar-footer>
 </c-sidebar>
 
-<!--main-->
+<!-- Main wrapper -->
 <div class="wrapper d-flex flex-column min-vh-100">
-  <!--app-header-->
+  <!-- Header -->
   <app-default-header
     [cShadowOnScroll]="'sm'"
     class="mb-4 d-print-none header header-sticky p-0 shadow-sm"
     position="sticky"
     sidebarId="sidebar1"
-  />
-  <!--app-body-->
+  ></app-default-header>
+
+  <!-- Body -->
   <div class="body flex-grow-1">
     <c-container breakpoint="lg" class="h-auto px-4">
-      <router-outlet />
+      <router-outlet></router-outlet>
     </c-container>
   </div>
-  <!--app footer-->
-  <app-default-footer />
+
+  <!-- Footer -->
+  <app-default-footer></app-default-footer>
 </div>

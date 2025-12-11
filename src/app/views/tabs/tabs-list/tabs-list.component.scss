@@ -1,0 +1,87 @@
+// tabs-list.component.scss
+:host {
+  display: block;
+}
+
+// زر العودة
+.p-button.p-button-text {
+  color: #64748b !important;
+  padding: 8px !important;
+  border-radius: 8px !important;
+  
+  &:hover {
+    background: rgba(100, 116, 139, 0.1) !important;
+    color: #475569 !important;
+  }
+  
+  .pi-arrow-left {
+    font-size: 1.2em;
+  }
+}
+
+// تحسين قائمة التبويبات
+.list-group {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  
+  .list-group-item {
+    border-color: #e2e8f0;
+    padding: 16px 20px;
+    transition: all 0.2s;
+    
+    &:hover {
+      background-color: #f8fafc;
+      transform: translateX(4px);
+    }
+    
+    h6 {
+      color: #1e293b;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    
+    .text-muted {
+      font-size: 13px;
+      color: #64748b;
+    }
+    
+    .badge {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 20px;
+      
+      &.bg-secondary {
+        background-color: #f1f5f9 !important;
+        color: #475569;
+      }
+      
+      &.bg-success {
+        background-color: #d1fae5 !important;
+        color: #065f46;
+      }
+      
+      &.bg-danger {
+        background-color: #fee2e2 !important;
+        color: #991b1b;
+      }
+    }
+  }
+}
+
+// تحسين الحالة الفارغة
+.text-center {
+  .pi-inbox {
+    opacity: 0.3;
+  }
+  
+  h4 {
+    color: #475569;
+    font-weight: 600;
+  }
+  
+  .text-muted {
+    color: #94a3b8;
+    font-size: 15px;
+  }
+}

@@ -64,7 +64,7 @@ export class LoginComponent implements OnInit {
 
   ngOnInit(): void {
     if (this.authService.isAuthenticated()) {
-      this.router.navigate(['/dashboard']);
+      this.router.navigate(['/form-builder']);
     }
   }
 
@@ -83,7 +83,7 @@ export class LoginComponent implements OnInit {
       next: (response: any) => {
         if (response && response.token) {
           this.successMessage = 'Login successful! Redirecting...';
-          setTimeout(() => this.router.navigate(['/dashboard']), 1000);
+          setTimeout(() => this.router.navigate(['/form-builder']), 1000);
         } else {
           this.errorMessage = response.errorMessage || 'Login failed';
         }

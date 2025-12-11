@@ -1,1 +1,437 @@
-<p>fields-list works!</p>
+<!-- fields-list.component.html -->
+<div class="fields-management-container">
+  <!-- Header -->
+  <div class="header">
+    <h1>
+      <i class="fas fa-table"></i>
+      Fields Management
+      <span class="badge">{{fields.length}}</span>
+    </h1>
+    
+    <div class="header-actions">
+      <button 
+        class="btn btn-primary" 
+        (click)="openAddFieldModal()"
+        [disabled]="loading.fields || loading.fieldTypes">
+        <i class="fas fa-plus"></i> Add New Field
+      </button>
+      
+      <button 
+        class="btn btn-secondary" 
+        (click)="loadFields()"
+        [disabled]="loading.fields">
+        <i class="fas fa-sync" [class.fa-spin]="loading.fields"></i> Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading.fields" class="loading-overlay">
+    <div class="spinner"></div>
+    <p>Loading fields...</p>
+  </div>
+
+  <!-- Fields Table -->
+  <div class="table-responsive" *ngIf="!loading.fields">
+    <table class="fields-table">
+      <thead>
+        <tr>
+          <th>Order</th>
+          <th>Field Name</th>
+          <th>Field Code</th>
+          <th>Type</th>
+          <th>Mandatory</th>
+          <th>Editable</th>
+          <th>Visible</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- No Fields Message -->
+        <tr *ngIf="fields.length === 0" class="no-data">
+          <td colspan="9">
+            <div class="empty-state">
+              <i class="fas fa-inbox"></i>
+              <h3>No Fields Found</h3>
+              <p>Get started by adding your first field.</p>
+              <button class="btn btn-primary" (click)="openAddFieldModal()">
+                <i class="fas fa-plus"></i> Add Field
+              </button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Fields List -->
+        <tr *ngFor="let field of fields" [class.selected]="selectedField?.id === field.id">
+          <td class="order-cell">
+            <span class="order-badge">{{field.fieldOrder || '-'}}</span>
+          </td>
+          
+          <td class="field-name-cell">
+            <div class="field-name">{{field.fieldName || '-'}}</div>
+            <div *ngIf="field.placeholder" class="field-placeholder">
+              <small>{{field.placeholder}}</small>
+            </div>
+            <div *ngIf="field.hintText" class="field-hint">
+              <small><i class="fas fa-info-circle"></i> {{field.hintText}}</small>
+            </div>
+          </td>
+          
+          <td>
+            <code class="field-code">{{field.fieldCode || '-'}}</code>
+          </td>
+          
+          <td>
+            <span class="field-type">{{getFieldTypeName(field.fieldTypeId)}}</span>
+          </td>
+          
+          <td>
+            <span class="mandatory-badge" [class.mandatory]="field.isMandatory">
+              {{field.isMandatory ? 'Yes' : 'No'}}
+            </span>
+          </td>
+          
+          <td>
+            <span class="editable-badge" [class.editable]="field.isEditable">
+              {{field.isEditable !== false ? 'Yes' : 'No'}}
+            </span>
+          </td>
+          
+          <td>
+            <span class="visible-badge" [class.visible]="field.isVisible">
+              {{field.isVisible !== false ? 'Yes' : 'No'}}
+            </span>
+          </td>
+          
+          <td>
+            <span class="status-badge" [ngClass]="getFieldStatusClass(field)">
+              {{field.isActive ? 'Active' : 'Inactive'}}
+            </span>
+          </td>
+          
+          <td>
+           <div class="action-buttons">
+  <button 
+    class="btn-action btn-edit" 
+    (click)="openEditFieldModal(field)"
+    title="Edit">
+    <i class="fas fa-edit"></i>
+    <span class="btn-text">Edit</span>
+  </button>
+  
+  <button 
+    class="btn-action btn-duplicate" 
+    (click)="duplicateField(field)"
+    title="Duplicate">
+    <i class="fas fa-copy"></i>
+    <span class="btn-text">Duplicate</span>
+  </button>
+  
+  <button 
+    class="btn-action btn-toggle" 
+    (click)="toggleFieldStatus(field)"
+    [title]="field.isActive ? 'Deactivate' : 'Activate'">
+    <i [class]="field.isActive ? 'fas fa-toggle-on' : 'fas fa-toggle-off'"></i>
+    <span class="btn-text">{{field.isActive ? 'Deactivate' : 'Activate'}}</span>
+  </button>
+  
+  <button 
+    class="btn-action btn-delete" 
+    (click)="deleteField(field.id!)"
+    title="Delete">
+    <i class="fas fa-trash"></i>
+    <span class="btn-text">Delete</span>
+  </button>
+</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Field Modal -->
+  <div *ngIf="showFieldModal" class="modal-overlay" (click)="closeFieldModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>
+          <i class="fas" [class.fa-plus]="!editingField" [class.fa-edit]="!!editingField"></i>
+          {{editingField ? 'Edit Field' : 'Add New Field'}}
+        </h2>
+        <button class="btn-close" (click)="closeFieldModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <form [formGroup]="fieldForm" (ngSubmit)="saveField()">
+        <div class="modal-body">
+          
+          <!-- Basic Information -->
+          <div class="form-section">
+            <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
+            
+            <div class="form-row">
+              <div class="form-group" [class.invalid]="isFieldInvalid('fieldName')">
+                <label for="fieldName">
+                  Field Name *
+                  <span *ngIf="isFieldInvalid('fieldName')" class="error-text">
+                    {{getFieldErrorMessage('fieldName')}}
+                  </span>
+                </label>
+                <input 
+                  type="text" 
+                  id="fieldName" 
+                  formControlName="fieldName"
+                  placeholder="Enter field name">
+              </div>
+              
+              <div class="form-group" [class.invalid]="isFieldInvalid('fieldCode')">
+                <label for="fieldCode">
+                  Field Code *
+                  <span *ngIf="isFieldInvalid('fieldCode')" class="error-text">
+                    {{getFieldErrorMessage('fieldCode')}}
+                  </span>
+                </label>
+                <input 
+                  type="text" 
+                  id="fieldCode" 
+                  formControlName="fieldCode"
+                  placeholder="FIELD_CODE">
+                <small class="hint">Uppercase letters, numbers, and underscores only</small>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group" [class.invalid]="isFieldInvalid('fieldOrder')">
+                <label for="fieldOrder">
+                  Order *
+                  <span *ngIf="isFieldInvalid('fieldOrder')" class="error-text">
+                    {{getFieldErrorMessage('fieldOrder')}}
+                  </span>
+                </label>
+                <input 
+                  type="number" 
+                  id="fieldOrder" 
+                  formControlName="fieldOrder"
+                  min="1">
+              </div>
+              
+              <div class="form-group" [class.invalid]="isFieldInvalid('fieldTypeId')">
+                <label for="fieldTypeId">
+                  Field Type *
+                  <span *ngIf="isFieldInvalid('fieldTypeId')" class="error-text">
+                    {{getFieldErrorMessage('fieldTypeId')}}
+                  </span>
+                </label>
+                <div class="select-with-search">
+                  <input 
+                    type="text" 
+                    [(ngModel)]="searchTerm"
+                    [ngModelOptions]="{standalone: true}"
+                    (input)="filterFieldTypes()"
+                    placeholder="Search field types..."
+                    class="search-input">
+                  <select id="fieldTypeId" formControlName="fieldTypeId">
+                    <option value="" disabled selected>Select field type</option>
+                    <option *ngFor="let type of filteredFieldTypes" [value]="type.id">
+                      {{type.typeName}}
+                      <span *ngIf="type.description"> - {{type.description}}</span>
+                    </option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Display Properties -->
+          <div class="form-section">
+            <h3><i class="fas fa-eye"></i> Display Properties</h3>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="placeholder">Placeholder Text</label>
+                <input 
+                  type="text" 
+                  id="placeholder" 
+                  formControlName="placeholder"
+                  placeholder="Enter placeholder text">
+              </div>
+              
+              <div class="form-group">
+                <label for="hintText">Hint Text</label>
+                <textarea 
+                  id="hintText" 
+                  formControlName="hintText"
+                  rows="2"
+                  placeholder="Enter hint text"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Validation Rules -->
+          <div class="form-section">
+            <h3><i class="fas fa-check-circle"></i> Validation Rules</h3>
+            
+            <div class="form-row">
+              <div class="form-group checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" formControlName="isMandatory" id="isMandatory">
+                  <span class="checkmark"></span>
+                  Mandatory Field
+                </label>
+              </div>
+              
+              <div class="form-group">
+                <label for="validationMessage">Validation Message</label>
+                <input 
+                  type="text" 
+                  id="validationMessage" 
+                  formControlName="validationMessage"
+                  placeholder="Custom validation message">
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="regexPattern">Regex Pattern</label>
+                <input 
+                  type="text" 
+                  id="regexPattern" 
+                  formControlName="regexPattern"
+                  placeholder="^[A-Za-z0-9]+$">
+              </div>
+              
+              <div class="form-group">
+                <label for="maxLength">Max Length</label>
+                <input 
+                  type="number" 
+                  id="maxLength" 
+                  formControlName="maxLength"
+                  min="1"
+                  placeholder="Maximum characters">
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="minValue">Min Value</label>
+                <input 
+                  type="number" 
+                  id="minValue" 
+                  formControlName="minValue"
+                  placeholder="Minimum value">
+              </div>
+              
+              <div class="form-group">
+                <label for="maxValue">Max Value</label>
+                <input 
+                  type="number" 
+                  id="maxValue" 
+                  formControlName="maxValue"
+                  placeholder="Maximum value">
+              </div>
+            </div>
+          </div>
+
+          <!-- Field Behavior -->
+          <div class="form-section">
+            <h3><i class="fas fa-cogs"></i> Field Behavior</h3>
+            
+            <div class="form-row">
+              <div class="form-group checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" formControlName="isEditable" id="isEditable">
+                  <span class="checkmark"></span>
+                  Editable
+                </label>
+              </div>
+              
+              <div class="form-group checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" formControlName="isVisible" id="isVisible">
+                  <span class="checkmark"></span>
+                  Visible
+                </label>
+              </div>
+              
+              <div class="form-group checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" formControlName="isActive" id="isActive">
+                  <span class="checkmark"></span>
+                  Active
+                </label>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="defaultValue">Default Value</label>
+                <input 
+                  type="text" 
+                  id="defaultValue" 
+                  formControlName="defaultValue"
+                  placeholder="Default value">
+              </div>
+              
+              <div class="form-group">
+                <label for="dataType">Data Type</label>
+                <select id="dataType" formControlName="dataType">
+                  <option value="string">String</option>
+                  <option value="number">Number</option>
+                  <option value="boolean">Boolean</option>
+                  <option value="date">Date</option>
+                  <option value="array">Array</option>
+                  <option value="object">Object</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Advanced Rules -->
+          <div class="form-section">
+            <h3><i class="fas fa-code"></i> Advanced Rules (JSON)</h3>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="visibilityRuleJson">Visibility Rule JSON</label>
+                <textarea 
+                  id="visibilityRuleJson" 
+                  formControlName="visibilityRuleJson"
+                  rows="3"
+                  placeholder='{"condition": "value", "operator": "==", "target": true}'></textarea>
+              </div>
+              
+              <div class="form-group">
+                <label for="readOnlyRuleJson">Read-Only Rule JSON</label>
+                <textarea 
+                  id="readOnlyRuleJson" 
+                  formControlName="readOnlyRuleJson"
+                  rows="3"
+                  placeholder='{"condition": "value", "operator": "!=", "target": ""}'></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button 
+            type="button" 
+            class="btn btn-secondary" 
+            (click)="closeFieldModal()"
+            [disabled]="loading.save">
+            Cancel
+          </button>
+          
+          <button 
+            type="submit" 
+            class="btn btn-primary" 
+            [disabled]="fieldForm.invalid || loading.save">
+            <i class="fas" [class.fa-save]="editingField" [class.fa-plus]="!editingField"></i>
+            {{editingField ? 'Update Field' : 'Create Field'}}
+            <span *ngIf="loading.save" class="spinner-small"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

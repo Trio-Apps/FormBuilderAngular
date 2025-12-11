@@ -16,24 +16,10 @@ export const navItems: INavData[] = [
     children: [
       {
         name: 'Forms',
-        url: '/forms',
-        iconComponent: { name: 'cil-description' }
-      },
-      {
-        name: 'Tabs',
-        url: '/forms/tabs',
-        iconComponent: { name: 'cil-applications' }
-      },
-      {
-        name: 'Fields',
-        url: '/forms/fields',
-        iconComponent: { name: 'cil-input-power' }
-      },
-      {
-        name: 'Submissions',
-        url: '/forms/submissions',
+        url: '/form-builder/forms',
         iconComponent: { name: 'cil-description' }
       }
+      // Tabs و Fields تحتاج IDs ديناميكية، فلا يمكن وضع رابط ثابت هنا
     ]
   },
   {
@@ -42,3 +28,5 @@ export const navItems: INavData[] = [
     iconComponent: { name: 'cil-lock-locked' }
   }
 ];
+  
+;

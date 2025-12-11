@@ -1,11 +1,196 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ActivatedRoute, RouterModule } from '@angular/router';
+import { FormsModule } from '@angular/forms';
+import { TabsService } from '../../FormBuilder/services/tabs.service';
+import { MessageService, ConfirmationService } from 'primeng/api';
+import { FormTabDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+
+// PrimeNG Modules
+import { ButtonModule } from 'primeng/button';
+import { TableModule } from 'primeng/table';
+import { InputTextModule } from 'primeng/inputtext';
+import { DialogModule } from 'primeng/dialog';
+import { ToastModule } from 'primeng/toast';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { TooltipModule } from 'primeng/tooltip';
 
 @Component({
   selector: 'app-tabs-list',
-  imports: [],
+  standalone: true,
+  imports: [
+    CommonModule,
+    RouterModule,
+    FormsModule,
+    ButtonModule,
+    TableModule,
+    InputTextModule,
+    DialogModule,
+    ToastModule,
+    ConfirmDialogModule,
+    TooltipModule
+  ],
   templateUrl: './tabs-list.component.html',
-  styleUrl: './tabs-list.component.scss',
+  styleUrls: ['./tabs-list.component.scss'],
+  providers: [MessageService, ConfirmationService]
 })
-export class TabsListComponent {
+export class TabsListComponent implements OnInit {
+  formId!: number;
+  tabs: FormTabDto[] = [];
+  loading = false;
+  
+  // Tab Modal
+  showTabModal = false;
+  tabName = '';
+  tabCode = '';
+  tabOrder = 1;
+  editingTab: FormTabDto | null = null;
 
+  constructor(
+    private route: ActivatedRoute,
+    private tabsService: TabsService,
+    private messageService: MessageService,
+    private confirmationService: ConfirmationService
+  ) {}
+
+  ngOnInit(): void {
+    this.route.params.subscribe(params => {
+      this.formId = +params['formId'];
+      this.loadTabs();
+    });
+  }
+
+  loadTabs(): void {
+    this.loading = true;
+    this.tabsService.getTabs(this.formId).subscribe({
+      next: (tabs) => {
+        this.tabs = tabs;
+        this.loading = false;
+      },
+      error: (error) => {
+        console.error('Error loading tabs:', error);
+        this.loading = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load tabs'
+        });
+      }
+    });
+  }
+
+  openTabModal(tab?: FormTabDto): void {
+    if (tab) {
+      this.editingTab = tab;
+      this.tabName = tab.tabName;
+      this.tabCode = tab.tabCode || '';
+      this.tabOrder = tab.tabOrder || 1;
+    } else {
+      this.editingTab = null;
+      this.tabName = '';
+      this.tabCode = '';
+      this.tabOrder = this.tabs.length + 1;
+    }
+    this.showTabModal = true;
+  }
+
+  closeTabModal(): void {
+    this.showTabModal = false;
+    this.editingTab = null;
+    this.tabName = '';
+    this.tabCode = '';
+    this.tabOrder = 1;
+  }
+
+  saveTab(): void {
+    if (!this.tabName) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Tab name is required'
+      });
+      return;
+    }
+
+    this.loading = true;
+    
+    if (this.editingTab) {
+      const updateDto = {
+        tabName: this.tabName,
+        tabCode: this.tabCode,
+        tabOrder: this.tabOrder
+      };
+      
+      this.tabsService.updateTab(this.editingTab.id, updateDto).subscribe({
+        next: () => {
+          this.loadTabs();
+          this.closeTabModal();
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Tab updated successfully'
+          });
+        },
+        error: () => {
+          this.loading = false;
+        }
+      });
+    } else {
+      const createDto = {
+        formBuilderId: this.formId,
+        tabName: this.tabName,
+        tabCode: this.tabCode,
+        tabOrder: this.tabOrder
+      };
+      
+      this.tabsService.createTab(createDto).subscribe({
+        next: () => {
+          this.loadTabs();
+          this.closeTabModal();
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Tab created successfully'
+          });
+        },
+        error: () => {
+          this.loading = false;
+        }
+      });
+    }
+  }
+
+  deleteTab(id: number): void {
+    const tabToDelete = this.tabs.find(t => t.id === id);
+    if (!tabToDelete) return;
+
+    this.confirmationService.confirm({
+      message: `Delete "${tabToDelete.tabName}"?`,
+      header: 'Confirm Delete',
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        this.tabsService.deleteTab(id).subscribe({
+          next: () => {
+            this.loadTabs();
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Deleted',
+              detail: 'Tab deleted successfully'
+            });
+          },
+          error: () => {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Failed to delete tab'
+            });
+          }
+        });
+      }
+    });
+  }
+
+  getFieldsCount(tab: FormTabDto): number {
+    return tab.fields?.length || 0;
+  }
 }

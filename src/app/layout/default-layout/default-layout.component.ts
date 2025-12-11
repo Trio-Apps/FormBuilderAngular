@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { RouterLink, RouterOutlet } from '@angular/router';
 import { NgScrollbar } from 'ngx-scrollbar';
+import { CommonModule } from '@angular/common';
 
 import { IconDirective } from '@coreui/icons-angular';
 import {
@@ -18,18 +19,12 @@ import {
 import { DefaultFooterComponent, DefaultHeaderComponent } from './';
 import { navItems } from './_nav';
 
-function isOverflown(element: HTMLElement) {
-  return (
-    element.scrollHeight > element.clientHeight ||
-    element.scrollWidth > element.clientWidth
-  );
-}
-
 @Component({
   selector: 'app-dashboard',
   templateUrl: './default-layout.component.html',
   styleUrls: ['./default-layout.component.scss'],
   imports: [
+    CommonModule,
     SidebarComponent,
     SidebarHeaderComponent,
     SidebarBrandComponent,
