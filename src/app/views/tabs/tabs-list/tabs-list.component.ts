@@ -1,10 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { FormTabDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { Subscription } from 'rxjs';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -34,10 +35,11 @@ import { TooltipModule } from 'primeng/tooltip';
   styleUrls: ['./tabs-list.component.scss'],
   providers: [MessageService, ConfirmationService]
 })
-export class TabsListComponent implements OnInit {
+export class TabsListComponent implements OnInit, OnDestroy {
   formId!: number;
   tabs: FormTabDto[] = [];
   loading = false;
+  private routeSubscription?: Subscription;
   
   // Tab Modal
   showTabModal = false;
@@ -54,21 +56,45 @@ export class TabsListComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.route.params.subscribe(params => {
-      this.formId = +params['formId'];
-      this.loadTabs();
+    this.routeSubscription = this.route.params.subscribe(params => {
+      const newFormId = +params['formId'];
+      if (newFormId && newFormId !== this.formId) {
+        this.formId = newFormId;
+        this.loadTabs();
+      } else if (newFormId && !this.formId) {
+        this.formId = newFormId;
+        this.loadTabs();
+      }
     });
   }
 
+  ngOnDestroy(): void {
+    if (this.routeSubscription) {
+      this.routeSubscription.unsubscribe();
+    }
+  }
+
   loadTabs(): void {
+    if (!this.formId || isNaN(this.formId)) {
+      this.loading = false;
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Invalid form ID'
+      });
+      return;
+    }
+
     this.loading = true;
     this.tabsService.getTabs(this.formId).subscribe({
       next: (tabs) => {
-        this.tabs = tabs;
+        // Filter tabs to ensure they belong to this form
+        this.tabs = Array.isArray(tabs) ? tabs.filter(tab => 
+          tab.formBuilderId === this.formId
+        ) : [];
         this.loading = false;
       },
-      error: (error) => {
-        console.error('Error loading tabs:', error);
+      error: () => {
         this.loading = false;
         this.messageService.add({
           severity: 'error',

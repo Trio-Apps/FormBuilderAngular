@@ -19,8 +19,7 @@ export class FormsService {
 
   getForms(): Observable<FormBuilderDto[]> {
     return this.http.get<FormBuilderDto[]>(this.baseUrl).pipe(
-      catchError(error => {
-        console.error('Error loading forms:', error);
+      catchError(() => {
         return of([]);
       })
     );

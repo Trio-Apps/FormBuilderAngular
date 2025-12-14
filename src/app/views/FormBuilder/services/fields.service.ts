@@ -82,8 +82,7 @@ export class FieldsService {
   
   // تصحيح الدوال حسب API الخاص بك
   private handleError<T>(operation = 'operation', result?: T) {
-    return (error: any): Observable<T> => {
-      console.error(`${operation} failed:`, error);
+    return (): Observable<T> => {
       return of(result as T);
     };
   }

@@ -1,11 +1,16 @@
 
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { FormsService } from '../../services/forms.service';
+import { TabsService } from '../../services/tabs.service';
+import { FieldsService } from '../../services/fields.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { FormBuilderDto } from '../../form-builder/models/form-builder-dto.model';
+import { forkJoin, of } from 'rxjs';
+import { catchError, map, filter, distinctUntilChanged } from 'rxjs/operators';
+import { Subscription } from 'rxjs';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -37,12 +42,14 @@ import { PaginatorModule } from 'primeng/paginator';
   styleUrls: ['./forms-list.component.scss'],
   providers: [MessageService, ConfirmationService]
 })
-export class FormsListComponent implements OnInit {
+export class FormsListComponent implements OnInit, OnDestroy {
   forms: FormBuilderDto[] = [];
   filteredForms: FormBuilderDto[] = [];
   searchTerm = '';
   loading = false;
-  
+  private routerSubscription?: Subscription;
+  private windowFocusHandler: () => void;
+
   // Form Modal
   showFormModal = false;
   formName = '';
@@ -59,26 +66,77 @@ export class FormsListComponent implements OnInit {
 
   constructor(
     private formsService: FormsService,
+    private tabsService: TabsService,
+    private fieldsService: FieldsService,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
-  ) {}
+    private confirmationService: ConfirmationService,
+    private router: Router
+  ) {
+    // Bind window focus handler to preserve reference for cleanup
+    this.windowFocusHandler = this.onWindowFocus.bind(this);
+  }
 
   ngOnInit(): void {
     this.loadForms();
+    
+    // Listen to router navigation events to refresh data when returning to this page
+    this.routerSubscription = this.router.events
+      .pipe(
+        filter(event => event instanceof NavigationEnd),
+        distinctUntilChanged((prev: NavigationEnd, curr: NavigationEnd) => {
+          return prev.urlAfterRedirects === curr.urlAfterRedirects;
+        })
+      )
+      .subscribe((event: NavigationEnd) => {
+        // Check if we're navigating to the forms list page
+        const url = event.urlAfterRedirects || event.url || '';
+        const isFormsPage = url && (
+          url.includes('/form-builder/forms') || 
+          url === '/form-builder' || 
+          url.endsWith('/form-builder') ||
+          url === '/#/form-builder/forms' ||
+          url === '/form-builder/'
+        );
+        
+        if (isFormsPage) {
+          // Force reload after navigation
+          setTimeout(() => {
+            this.loadForms();
+          }, 500);
+        }
+      });
+    
+    // Also refresh when window gains focus (user returns to tab)
+    window.addEventListener('focus', this.windowFocusHandler);
+  }
+
+  onWindowFocus(): void {
+    // Refresh data when window gains focus (user returns to browser tab)
+    if (this.router.url && this.router.url.includes('/form-builder/forms')) {
+      this.loadForms();
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.routerSubscription) {
+      this.routerSubscription.unsubscribe();
+    }
+    // Remove window focus event listener using saved reference
+    window.removeEventListener('focus', this.windowFocusHandler);
   }
 
   loadForms(): void {
     this.loading = true;
+    // Clear existing data to force refresh
+    this.forms = [];
+    this.filteredForms = [];
+    
     this.formsService.getForms().subscribe({
       next: (forms) => {
-        this.forms = forms;
-        this.filteredForms = [...forms];
-        this.totalItems = forms.length;
-        this.updatePagination();
-        this.loading = false;
+        // Load tabs and fields count for each form
+        this.loadFormsWithCounts(forms);
       },
-      error: (error) => {
-        console.error('Error loading forms:', error);
+      error: () => {
         this.loading = false;
         this.messageService.add({
           severity: 'error',
@@ -87,6 +145,173 @@ export class FormsListComponent implements OnInit {
         });
       }
     });
+  }
+
+  loadFormsWithCounts(forms: FormBuilderDto[]): void {
+    if (forms.length === 0) {
+      this.filteredForms = [];
+      this.totalItems = 0;
+      this.updatePagination();
+      this.loading = false;
+      return;
+    }
+
+    // Create observables to load tabs for each form
+    const tabsObservables = forms.map(form => 
+      this.tabsService.getTabs(form.id).pipe(
+        catchError(() => of([])),
+        map(tabs => ({ formId: form.id, tabs }))
+      )
+    );
+
+    // Load all tabs in parallel
+    forkJoin(tabsObservables).subscribe({
+      next: (tabsResults) => {
+        // Create a map of formId -> tabs (filter to ensure tabs belong to correct form)
+        const tabsMap = new Map<number, any[]>();
+        tabsResults.forEach(result => {
+          // Filter tabs to ensure they belong to this form
+          const filteredTabs = Array.isArray(result.tabs) 
+            ? result.tabs.filter((tab: any) => 
+                tab && (tab.formBuilderId === result.formId || tab.formId === result.formId)
+              )
+            : [];
+          tabsMap.set(result.formId, filteredTabs);
+        });
+
+        // Load fields for all tabs - use filtered tabs from tabsMap
+        const allTabs: Array<{formId: number, tabId: number}> = [];
+        tabsMap.forEach((tabs, formId) => {
+          tabs.forEach((tab: any) => {
+            if (tab && tab.id) {
+              allTabs.push({ formId: formId, tabId: tab.id });
+            }
+          });
+        });
+
+        if (allTabs.length === 0) {
+          // No tabs, just update forms with tabs count
+          this.updateFormsWithCounts(forms, tabsMap, new Map());
+          return;
+        }
+
+        // Load fields for all tabs in parallel
+        const fieldsObservables = allTabs.map(({formId, tabId}) =>
+          this.fieldsService.getFields(formId, tabId).pipe(
+            catchError(() => of([])),
+            map(fields => ({ formId, tabId, fields }))
+          )
+        );
+
+        forkJoin(fieldsObservables).subscribe({
+          next: (fieldsResults) => {
+            // Create a map of tabId -> fields count
+            const fieldsCountMap = new Map<number, number>();
+            fieldsResults.forEach(result => {
+              if (result && result.tabId !== undefined && result.tabId !== null) {
+                const fieldsLength = (result.fields && Array.isArray(result.fields)) 
+                  ? result.fields.length 
+                  : 0;
+                // Use the actual count (don't sum, each tab should have its own count)
+                if (fieldsLength > 0 || !fieldsCountMap.has(result.tabId)) {
+                  fieldsCountMap.set(result.tabId, fieldsLength);
+                }
+              }
+            });
+
+            this.updateFormsWithCounts(forms, tabsMap, fieldsCountMap);
+          },
+          error: () => {
+            // Continue with forms even if fields loading fails
+            this.updateFormsWithCounts(forms, tabsMap, new Map());
+          }
+        });
+      },
+      error: () => {
+        // Continue with forms even if tabs loading fails - set counts to 0
+        const formsWithZeroCounts = forms.map(form => ({
+          ...form,
+          tabs: [],
+          tabsCount: 0,
+          fieldsCount: 0
+        }));
+        this.forms = formsWithZeroCounts;
+        this.filteredForms = [...formsWithZeroCounts];
+        this.totalItems = formsWithZeroCounts.length;
+        this.updatePagination();
+        this.loading = false;
+      }
+    });
+  }
+
+  updateFormsWithCounts(
+    forms: FormBuilderDto[], 
+    tabsMap: Map<number, any[]>, 
+    fieldsCountMap: Map<number, number>
+  ): void {
+    const updatedForms = forms.map(form => {
+      const tabs = tabsMap.get(form.id) || [];
+      
+      // Calculate tabs count
+      const tabsCount = form.tabsCount !== undefined && form.tabsCount !== null 
+        ? form.tabsCount 
+        : tabs.length;
+
+      // Calculate fields count
+      // Priority: API fieldsCount > calculated from loaded fields > calculated from tabs > 0
+      let fieldsCount = 0;
+      const formAny = form as any;
+      if (form.fieldsCount !== undefined && form.fieldsCount !== null) {
+        const count = Number(form.fieldsCount);
+        fieldsCount = isNaN(count) ? 0 : count;
+      } else if (formAny.FieldsCount !== undefined && formAny.FieldsCount !== null) {
+        const count = Number(formAny.FieldsCount);
+        fieldsCount = isNaN(count) ? 0 : count;
+      } else {
+        // Calculate from loaded fields count map - only for tabs belonging to this form
+        tabs.forEach((tab: any) => {
+          if (tab && tab.id) {
+            // First try to get from fieldsCountMap (loaded fields)
+            const tabFieldsCount = fieldsCountMap.get(tab.id);
+            if (tabFieldsCount !== undefined && tabFieldsCount !== null) {
+              const count = Number(tabFieldsCount);
+              fieldsCount += isNaN(count) ? 0 : count;
+            } 
+            // Fallback to tab's own fieldsCount property
+            else if (tab.fieldsCount !== undefined && tab.fieldsCount !== null) {
+              const count = Number(tab.fieldsCount);
+              fieldsCount += isNaN(count) ? 0 : count;
+            } 
+            // Fallback to tab's fields array
+            else if (tab.fields && Array.isArray(tab.fields)) {
+              fieldsCount += tab.fields.length;
+            } 
+            // Fallback to PascalCase
+            else if (tab.FieldsCount !== undefined && tab.FieldsCount !== null) {
+              const count = Number(tab.FieldsCount);
+              fieldsCount += isNaN(count) ? 0 : count;
+            }
+          }
+        });
+      }
+
+      // Ensure fieldsCount is always a valid number
+      const finalFieldsCount = isNaN(fieldsCount) || fieldsCount < 0 ? 0 : Math.floor(fieldsCount);
+
+
+      return {
+        ...form,
+        tabs,
+        tabsCount,
+        fieldsCount: finalFieldsCount
+      };
+    });
+
+    this.forms = updatedForms;
+    this.filteredForms = [...updatedForms];
+    this.totalItems = updatedForms.length;
+    this.updatePagination();
+    this.loading = false;
   }
 
   filterForms(): void {
@@ -100,43 +325,48 @@ export class FormsListComponent implements OnInit {
         (form.description && form.description.toLowerCase().includes(term))
       );
     }
-    
+
     this.totalItems = this.filteredForms.length;
     this.currentPage = 1;
     this.updatePagination();
   }
- get currentItemEnd(): number {
+  get currentItemEnd(): number {
     return Math.min(this.currentPage * this.itemsPerPage, this.totalItems);
   }
   updatePagination(): void {
     this.totalPages = Math.ceil(this.totalItems / this.itemsPerPage);
-    
+
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
     const endIndex = Math.min(startIndex + this.itemsPerPage, this.totalItems);
-    
+
     this.paginatedForms = this.filteredForms.slice(startIndex, endIndex);
   }
 
   onPageChange(event: any): void {
-    this.currentPage = event.page + 1; // PrimeNG paginator يبدأ من 0
+    // Handle both PrimeNG paginator (0-based) and custom pagination (1-based)
+    if (event && typeof event.page === 'number') {
+      this.currentPage = event.page + 1;
+    } else if (typeof event === 'number') {
+      this.currentPage = event;
+    }
     this.updatePagination();
   }
 
   getPageNumbers(): number[] {
     const pages: number[] = [];
     const maxPagesToShow = 5;
-    
+
     let startPage = Math.max(1, this.currentPage - Math.floor(maxPagesToShow / 2));
     let endPage = Math.min(this.totalPages, startPage + maxPagesToShow - 1);
-    
+
     if (endPage - startPage + 1 < maxPagesToShow) {
       startPage = Math.max(1, endPage - maxPagesToShow + 1);
     }
-    
+
     for (let i = startPage; i <= endPage; i++) {
       pages.push(i);
     }
-    
+
     return pages;
   }
 
@@ -194,14 +424,14 @@ export class FormsListComponent implements OnInit {
     }
 
     this.loading = true;
-    
+
     if (this.editingForm) {
       const updateDto = {
         formName: this.formName,
         formCode: this.formCode,
         description: this.description
       };
-      
+
       this.formsService.updateForm(this.editingForm.id, updateDto).subscribe({
         next: () => {
           this.loadForms();
@@ -222,7 +452,7 @@ export class FormsListComponent implements OnInit {
         formCode: this.formCode,
         description: this.description
       };
-      
+
       this.formsService.createForm(createDto).subscribe({
         next: () => {
           this.loadForms();
@@ -270,16 +500,65 @@ export class FormsListComponent implements OnInit {
     });
   }
 
-  getTabsCount(form: FormBuilderDto): number {
-    return form.tabs?.length || 0;
+  getTabsCount(form: any): number {
+    // Priority: tabsCount from API > calculated from tabs array > 0
+    if (form.tabsCount !== undefined && form.tabsCount !== null) {
+      return form.tabsCount;
+    }
+    if (form.TabsCount !== undefined && form.TabsCount !== null) {
+      return form.TabsCount; // Handle PascalCase
+    }
+    if (form.tabs && Array.isArray(form.tabs)) {
+      return form.tabs.length;
+    }
+    return 0;
   }
 
-  getFieldsCount(form: FormBuilderDto): number {
-    let total = 0;
-    form.tabs?.forEach(tab => {
-      total += tab.fields?.length || 0;
-    });
-    return total;
+  getFieldsCount(form: any): number {
+    // Priority: Use the pre-calculated fieldsCount from updateFormsWithCounts
+    if (form.fieldsCount !== undefined && form.fieldsCount !== null) {
+      const count = Number(form.fieldsCount);
+      if (!isNaN(count) && count >= 0) {
+        return Math.floor(count);
+      }
+    }
+    
+    // Fallback to PascalCase
+    const formAny = form as any;
+    if (formAny.FieldsCount !== undefined && formAny.FieldsCount !== null) {
+      const count = Number(formAny.FieldsCount);
+      if (!isNaN(count) && count >= 0) {
+        return Math.floor(count);
+      }
+    }
+
+    // Last resort: Calculate from tabs if available (shouldn't happen if updateFormsWithCounts worked)
+    if (form.tabs && Array.isArray(form.tabs)) {
+      let total = 0;
+      form.tabs.forEach((tab: any) => {
+        if (tab && tab.id) {
+          if (tab.fieldsCount !== undefined && tab.fieldsCount !== null) {
+            const count = Number(tab.fieldsCount);
+            total += isNaN(count) ? 0 : Math.floor(count);
+          } else if (tab.fields && Array.isArray(tab.fields)) {
+            total += tab.fields.length;
+          } else if (tab.FieldsCount !== undefined && tab.FieldsCount !== null) {
+            const count = Number(tab.FieldsCount);
+            total += isNaN(count) ? 0 : Math.floor(count);
+          }
+        }
+      });
+      return total;
+    }
+
+    return 0;
+  }
+  getPublishedClass(isPublished: boolean | undefined): string {
+    return isPublished ? 'status-published' : 'status-draft';
+  }
+
+  getActiveClass(isActive: boolean | undefined): string {
+    return isActive !== false ? 'status-active' : 'status-inactive';
   }
 }
 

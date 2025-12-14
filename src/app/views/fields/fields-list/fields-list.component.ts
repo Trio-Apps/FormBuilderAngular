@@ -1,9 +1,13 @@
 import { Component, OnInit, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterModule } from '@angular/router';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormControl } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { FieldsService } from '../../FormBuilder/services/fields.service';
+import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FormFieldDto, FieldTypeDto, UpdateFormFieldDto, CreateFormFieldDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { MessageService, ConfirmationService } from 'primeng/api';
+import { ToastModule } from 'primeng/toast';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -11,23 +15,25 @@ import { Subscription } from 'rxjs';
   standalone: true,
   imports: [
     CommonModule,
-    RouterModule,
     FormsModule,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    ToastModule,
+    ConfirmDialogModule
   ],
   templateUrl: './fields-list.component.html',
-  styleUrls: ['./fields-list.component.scss']
+  styleUrls: ['./fields-list.component.scss'],
+  providers: [MessageService, ConfirmationService]
 })
 export class FieldsListComponent implements OnInit, OnDestroy {
   // Route Parameters
   tabId!: number;
   formBuilderId!: number;
-  
+
   // Data Arrays
   fields: FormFieldDto[] = [];
   fieldTypes: FieldTypeDto[] = [];
   filteredFieldTypes: FieldTypeDto[] = [];
-  
+
   // Loading States
   loading = {
     fields: false,
@@ -35,28 +41,32 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     delete: false,
     fieldTypes: false
   };
-  
+
   // Field Modal
   showFieldModal = false;
   editingField: FormFieldDto | null = null;
-  
+
   // Reactive Form
   fieldForm: FormGroup;
-  
+
   // Field Type Filter
   searchTerm = '';
-  
+
   // Selected Field for Context Actions
   selectedField: FormFieldDto | null = null;
-  
+
   // Subscriptions
   private routeSub!: Subscription;
-  
+  private parentRouteSub?: Subscription;
+
   constructor(
     private route: ActivatedRoute,
     private fieldsService: FieldsService,
+    private tabsService: TabsService,
     private fb: FormBuilder,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private messageService: MessageService,
+    private confirmationService: ConfirmationService
   ) {
     // Initialize the form
     this.fieldForm = this.fb.group({
@@ -86,27 +96,94 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.routeSub = this.route.params.subscribe(params => {
       this.tabId = +params['tabId'];
-      this.formBuilderId = +params['formId'] || 1;
-      
+
       if (this.tabId) {
-        this.loadFields();
+        // Get formBuilderId from tab data first, then load fields
+        this.loadTabAndFormId();
         this.loadFieldTypes();
       }
     });
-    
+
     // Set tabId in form
     this.fieldForm.patchValue({ tabId: this.tabId });
+  }
+
+  loadTabAndFormId(): void {
+    if (!this.tabId) return;
+    
+    this.tabsService.getTabById(this.tabId).subscribe({
+      next: (tab) => {
+        if (tab && tab.formBuilderId) {
+          this.formBuilderId = tab.formBuilderId;
+          // Load fields with correct formBuilderId
+          this.loadFields();
+        } else {
+          // Fallback: try parent route
+          this.getFormIdFromParentRoute();
+        }
+      },
+      error: () => {
+        // If tab not found, try to get formId from parent route or use default
+        this.getFormIdFromParentRoute();
+      }
+    });
+  }
+
+  private getFormIdFromParentRoute(): void {
+    // Try to get formId from parent route (snapshot first for immediate value)
+    let parent = this.route.parent;
+    let depth = 0;
+    
+    while (parent && depth < 3) {
+      const snapshot = parent.snapshot;
+      if (snapshot && snapshot.params && snapshot.params['formId']) {
+        this.formBuilderId = +snapshot.params['formId'];
+        this.loadFields();
+        return;
+      }
+      parent = parent.parent;
+      depth++;
+    }
+    
+    // If not found in snapshot, try subscription (async)
+    parent = this.route.parent;
+    depth = 0;
+    while (parent && depth < 3) {
+      this.parentRouteSub = parent.params.subscribe(parentParams => {
+        if (parentParams['formId'] && !this.formBuilderId) {
+          this.formBuilderId = +parentParams['formId'];
+          this.loadFields();
+        }
+      });
+      parent = parent.parent;
+      depth++;
+    }
+    
+    // Default fallback if not found
+    if (!this.formBuilderId) {
+      this.formBuilderId = 1;
+      this.loadFields();
+    }
   }
 
   ngOnDestroy(): void {
     if (this.routeSub) {
       this.routeSub.unsubscribe();
     }
+    if (this.parentRouteSub) {
+      this.parentRouteSub.unsubscribe();
+    }
   }
 
   loadFields(): void {
+    if (!this.tabId) {
+      return;
+    }
+    
     this.loading.fields = true;
-    this.fieldsService.getFields(this.formBuilderId, this.tabId).subscribe({
+    // Use formBuilderId if available, otherwise use 1 as fallback
+    const formId = this.formBuilderId || 1;
+    this.fieldsService.getFields(formId, this.tabId).subscribe({
       next: (response: any) => {
         // تأكد أن response هي array
         if (Array.isArray(response)) {
@@ -122,10 +199,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       },
       error: (error) => {
-        console.error('Error loading fields:', error);
         this.fields = [];
         this.loading.fields = false;
-        alert('Failed to load fields');
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: 'Error', 
+          detail: 'Failed to load fields' 
+        });
       }
     });
   }
@@ -136,25 +216,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       next: (response: any) => {
         // تأكد أن response هي array
         let types: FieldTypeDto[] = [];
-        
+
         if (Array.isArray(response)) {
           types = response;
         } else if (response && typeof response === 'object') {
           const data = response.data || response.items || response.result || [];
           types = Array.isArray(data) ? data : [];
         }
-        
+
         this.fieldTypes = types.filter(type => type.isActive);
         this.filteredFieldTypes = [...this.fieldTypes];
         this.loading.fieldTypes = false;
         this.cdr.detectChanges();
       },
-      error: (error) => {
-        console.error('Error loading field types:', error);
+      error: () => {
         this.fieldTypes = [];
         this.filteredFieldTypes = [];
         this.loading.fieldTypes = false;
-        alert('Failed to load field types');
+        this.loading.fieldTypes = false;
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load field types' });
       }
     });
   }
@@ -164,7 +244,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.filteredFieldTypes = [...this.fieldTypes];
       return;
     }
-    
+
     const term = this.searchTerm.toLowerCase();
     this.filteredFieldTypes = this.fieldTypes.filter(type =>
       type.typeName.toLowerCase().includes(term) ||
@@ -175,15 +255,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   openAddFieldModal(): void {
     this.editingField = null;
     this.showFieldModal = true;
-    
+
     let nextOrder = 1;
     if (this.fields && this.fields.length > 0) {
       const maxOrder = Math.max(...this.fields.map(field => field.fieldOrder || 0));
       nextOrder = maxOrder + 1;
     }
-    
+
     const defaultFieldTypeId = this.fieldTypes.length > 0 ? this.fieldTypes[0].id : '';
-    
+
     this.fieldForm.reset({
       tabId: this.tabId,
       fieldTypeId: defaultFieldTypeId,
@@ -211,7 +291,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   openEditFieldModal(field: FormFieldDto): void {
     this.editingField = field;
     this.showFieldModal = true;
-    
+
     this.fieldForm.patchValue({
       tabId: this.tabId,
       fieldTypeId: field.fieldTypeId || '',
@@ -253,7 +333,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   saveField(): void {
     if (this.fieldForm.invalid) {
       this.markFormGroupTouched(this.fieldForm);
-      alert('Please fill all required fields correctly');
+      this.markFormGroupTouched(this.fieldForm);
+      this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Please fill all required fields correctly' });
       return;
     }
 
@@ -286,31 +367,30 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       Object.keys(updateDto).forEach(key => {
         const typedKey = key as keyof UpdateFormFieldDto;
         const value = updateDto[typedKey];
-        
+
         if (value === null || value === undefined || value === '' || value === '{}') {
           delete updateDto[typedKey];
         }
       });
-      
+
       this.fieldsService.updateField(this.editingField.id, updateDto).subscribe({
         next: (updatedField) => {
           this.loading.save = false;
-          alert('Field updated successfully');
-          
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field updated successfully' });
+
           // Update the field in the array
           const index = this.fields.findIndex(f => f.id === this.editingField?.id);
           if (index !== -1 && updatedField) {
             this.fields[index] = { ...this.fields[index], ...updatedField };
             this.fields = this.sortFieldsByOrder([...this.fields]);
           }
-          
+
           this.closeFieldModal();
           this.cdr.detectChanges();
         },
-        error: (error) => {
-          console.error('Error updating field:', error);
+        error: () => {
           this.loading.save = false;
-          alert('Failed to update field');
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to update field' });
         }
       });
     } else {
@@ -337,30 +417,29 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         readOnlyRuleJson: fieldData.readOnlyRuleJson || '{}',
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
       };
-      
+
       // تنظيف الحقول الفارغة
       Object.keys(createDto).forEach(key => {
         if (createDto[key] === null || createDto[key] === undefined || createDto[key] === '') {
           delete createDto[key];
         }
       });
-      
+
       this.fieldsService.createField(createDto).subscribe({
         next: (newField) => {
           this.loading.save = false;
-          alert('Field created successfully');
-          
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field created successfully' });
+
           // Add new field to the array
           this.fields = this.sortFieldsByOrder([...this.fields, newField]);
-          
+
           this.closeFieldModal();
           this.cdr.detectChanges();
         },
-        error: (error) => {
-          console.error('Error creating field:', error);
-          this.loading.save = false;
-          alert('Failed to create field');
-        }
+          error: () => {
+            this.loading.save = false;
+            this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to create field' });
+          }
       });
     }
   }
@@ -368,37 +447,41 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   deleteField(fieldId: number): void {
     const fieldToDelete = this.fields.find(f => f.id === fieldId);
     if (!fieldToDelete) return;
-    
-    if (confirm(`Are you sure you want to delete the field "${fieldToDelete.fieldName}"?`)) {
-      this.loading.delete = true;
-      this.fieldsService.deleteField(fieldId).subscribe({
-        next: () => {
-          this.loading.delete = false;
-          alert('Field deleted successfully');
-          
-          // Remove field from array
-          this.fields = this.fields.filter(f => f.id !== fieldId);
-          this.cdr.detectChanges();
-        },
-        error: (error) => {
-          console.error('Error deleting field:', error);
-          this.loading.delete = false;
-          alert('Failed to delete field');
-        }
-      });
-    }
+
+    this.confirmationService.confirm({
+      message: `Are you sure you want to delete the field "${fieldToDelete.fieldName}"?`,
+      header: 'Confirm Delete',
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        this.loading.delete = true;
+        this.fieldsService.deleteField(fieldId).subscribe({
+          next: () => {
+            this.loading.delete = false;
+            this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field deleted successfully' });
+
+            // Remove field from array
+            this.fields = this.fields.filter(f => f.id !== fieldId);
+            this.cdr.detectChanges();
+          },
+          error: () => {
+            this.loading.delete = false;
+            this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete field' });
+          }
+        });
+      }
+    });
   }
 
   duplicateField(field: FormFieldDto): void {
     this.editingField = null;
     this.showFieldModal = true;
-    
+
     let nextOrder = 1;
     if (this.fields && this.fields.length > 0) {
       const maxOrder = Math.max(...this.fields.map(f => f.fieldOrder || 0));
       nextOrder = maxOrder + 1;
     }
-    
+
     this.fieldForm.patchValue({
       tabId: this.tabId,
       fieldTypeId: field.fieldTypeId || '',
@@ -426,34 +509,37 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   toggleFieldStatus(field: FormFieldDto): void {
     const newStatus = !field.isActive;
     const action = newStatus ? 'activate' : 'deactivate';
-    
-    if (confirm(`Are you sure you want to ${action} the field "${field.fieldName}"?`)) {
-      this.fieldsService.updateField(field.id, { isActive: newStatus }).subscribe({
-        next: () => {
-          // Update field in array
-          const index = this.fields.findIndex(f => f.id === field.id);
-          if (index !== -1) {
-            this.fields[index].isActive = newStatus;
-            this.fields = [...this.fields];
+
+    this.confirmationService.confirm({
+      message: `Are you sure you want to ${action} the field "${field.fieldName}"?`,
+      header: 'Confirm Status Change',
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        this.fieldsService.updateField(field.id, { isActive: newStatus }).subscribe({
+          next: () => {
+            // Update field in array
+            const index = this.fields.findIndex(f => f.id === field.id);
+            if (index !== -1) {
+              this.fields[index].isActive = newStatus;
+              this.fields = [...this.fields];
+            }
+
+            this.messageService.add({ severity: 'success', summary: 'Success', detail: `Field ${action}d successfully` });
+          },
+          error: () => {
+            this.messageService.add({ severity: 'error', summary: 'Error', detail: `Failed to ${action} field` });
           }
-          
-          alert(`Field ${action}d successfully`);
-        },
-        error: (error) => {
-          console.error(`Error ${action}ing field:`, error);
-          alert(`Failed to ${action} field`);
-        }
-      });
-    }
+        });
+      }
+    });
   }
 
   sortFieldsByOrder(fields: FormFieldDto[]): FormFieldDto[] {
     // تأكد أن fields هي array قبل استخدام sort
     if (!Array.isArray(fields)) {
-      console.error('sortFieldsByOrder: fields is not an array:', fields);
       return [];
     }
-    
+
     return fields.sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
   }
 
@@ -487,13 +573,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   getFieldErrorMessage(fieldName: string): string {
     const control = this.fieldForm.get(fieldName);
     if (!control || !control.errors) return '';
-    
+
     if (control.errors['required']) return 'This field is required';
     if (control.errors['minlength']) return `Minimum length is ${control.errors['minlength'].requiredLength}`;
     if (control.errors['maxlength']) return `Maximum length is ${control.errors['maxlength'].requiredLength}`;
     if (control.errors['pattern']) return 'Invalid format. Use only uppercase letters, numbers and underscores';
     if (control.errors['min']) return `Minimum value is ${control.errors['min'].min}`;
-    
+
     return 'Invalid value';
   }
 }

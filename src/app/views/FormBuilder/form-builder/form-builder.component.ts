@@ -24,6 +24,6 @@ import { RouterModule } from '@angular/router';
 })
 export class FormBuilderComponent implements OnInit {
   ngOnInit(): void {
-    console.log('Form Builder Component Loaded');
+    // Component initialized
   }
 }
