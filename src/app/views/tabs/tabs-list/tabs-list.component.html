@@ -49,7 +49,6 @@
               <th>Tab Name</th>
               <th>Tab Code</th>
               <th>Order</th>
-              <th>Fields</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -62,11 +61,6 @@
                 <code class="bg-light p-1 rounded">{{ tab.tabCode || '-' }}</code>
               </td>
               <td>{{ tab.tabOrder }}</td>
-              <td>
-                <span class="badge bg-secondary">
-                  {{ getFieldsCount(tab) }}
-                </span>
-              </td>
               <td>
                 <div class="btn-group" role="group">
                   <button pButton 

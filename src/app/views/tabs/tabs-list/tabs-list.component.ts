@@ -216,7 +216,4 @@ export class TabsListComponent implements OnInit, OnDestroy {
     });
   }
 
-  getFieldsCount(tab: FormTabDto): number {
-    return tab.fields?.length || 0;
-  }
 }

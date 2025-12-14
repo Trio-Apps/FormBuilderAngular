@@ -1,17 +1,22 @@
 // tabs-list.component.scss
+@use "../../../../scss/shared-design" as *;
+
 :host {
   display: block;
+  @include page-container;
 }
 
 // زر العودة
 .p-button.p-button-text {
-  color: #64748b !important;
-  padding: 8px !important;
-  border-radius: 8px !important;
+  color: $text-secondary !important;
+  padding: $spacing-sm !important;
+  border-radius: $border-radius-sm !important;
+  transition: all $transition-fast !important;
   
   &:hover {
     background: rgba(100, 116, 139, 0.1) !important;
-    color: #475569 !important;
+    color: $text-primary !important;
+    transform: translateX(-2px);
   }
   
   .pi-arrow-left {
@@ -21,49 +26,45 @@
 
 // تحسين قائمة التبويبات
 .list-group {
-  border-radius: 8px;
+  @include card-style;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
   
   .list-group-item {
-    border-color: #e2e8f0;
-    padding: 16px 20px;
-    transition: all 0.2s;
+    border-color: $border-color;
+    padding: $spacing-lg $spacing-xl;
+    transition: all $transition-fast;
     
     &:hover {
-      background-color: #f8fafc;
+      background: $gray-50;
       transform: translateX(4px);
+      box-shadow: -4px 0 0 0 $primary-blue;
     }
     
     h6 {
-      color: #1e293b;
-      font-weight: 600;
-      margin-bottom: 4px;
+      color: $text-primary;
+      font-weight: $font-weight-semibold;
+      margin-bottom: $spacing-xs;
     }
     
     .text-muted {
-      font-size: 13px;
-      color: #64748b;
+      font-size: $font-size-sm;
+      color: $text-secondary;
     }
     
     .badge {
-      font-size: 11px;
-      padding: 4px 8px;
-      border-radius: 20px;
+      @include badge-style($primary-gradient, white);
+      font-size: $font-size-xs;
       
       &.bg-secondary {
-        background-color: #f1f5f9 !important;
-        color: #475569;
+        @include badge-style(linear-gradient(135deg, $gray-200 0%, $gray-300 100%), $text-primary);
       }
       
       &.bg-success {
-        background-color: #d1fae5 !important;
-        color: #065f46;
+        @include badge-style($success-gradient, white);
       }
       
       &.bg-danger {
-        background-color: #fee2e2 !important;
-        color: #991b1b;
+        @include badge-style($danger-gradient, white);
       }
     }
   }

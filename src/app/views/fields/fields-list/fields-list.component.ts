@@ -71,25 +71,26 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Initialize the form
     this.fieldForm = this.fb.group({
       tabId: ['', Validators.required],
-      fieldName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
-      fieldCode: ['', [Validators.required, Validators.pattern('^[A-Z_][A-Z0-9_]*$'), Validators.maxLength(50)]],
+      fieldName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(200)]],
+      fieldCode: ['', [Validators.required, Validators.pattern('^[A-Z_][A-Z0-9_]*$'), Validators.maxLength(100)]],
       fieldTypeId: ['', Validators.required],
       placeholder: ['', Validators.maxLength(200)],
       hintText: ['', Validators.maxLength(500)],
       fieldOrder: [1, [Validators.required, Validators.min(1)]],
-      isMandatory: [false],
+      isMandatory: [true],
       isEditable: [true],
       isVisible: [true],
       isActive: [true],
       dataType: ['string'],
       defaultValue: [''],
+      defaultValueJson: [''],
       regexPattern: [''],
       validationMessage: ['', Validators.maxLength(500)],
       minValue: [null],
       maxValue: [null],
       maxLength: [null],
-      visibilityRuleJson: ['{}'],
-      readOnlyRuleJson: ['{}']
+      visibilityRuleJson: [''],
+      readOnlyRuleJson: ['']
     });
   }
 
@@ -184,17 +185,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Use formBuilderId if available, otherwise use 1 as fallback
     const formId = this.formBuilderId || 1;
     this.fieldsService.getFields(formId, this.tabId).subscribe({
-      next: (response: any) => {
-        // تأكد أن response هي array
-        if (Array.isArray(response)) {
-          this.fields = this.sortFieldsByOrder(response);
-        } else if (response && typeof response === 'object') {
-          // إذا كان response كائن يحتوي على data
-          const data = response.data || response.items || response.result || [];
-          this.fields = this.sortFieldsByOrder(Array.isArray(data) ? data : []);
-        } else {
-          this.fields = [];
-        }
+      next: (fields: FormFieldDto[]) => {
+        // getFields الآن يرجع FormFieldDto[] مباشرة بعد استخراج data من response
+        this.fields = this.sortFieldsByOrder(fields || []);
         this.loading.fields = false;
         this.cdr.detectChanges();
       },
@@ -232,7 +225,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       error: () => {
         this.fieldTypes = [];
         this.filteredFieldTypes = [];
-        this.loading.fieldTypes = false;
         this.loading.fieldTypes = false;
         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load field types' });
       }
@@ -272,19 +264,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       fieldOrder: nextOrder,
       placeholder: '',
       hintText: '',
-      isMandatory: false,
+      isMandatory: true,
       isEditable: true,
       isVisible: true,
       isActive: true,
       dataType: 'string',
       defaultValue: '',
+      defaultValueJson: '',
       regexPattern: '',
       validationMessage: '',
       minValue: null,
       maxValue: null,
       maxLength: null,
-      visibilityRuleJson: '{}',
-      readOnlyRuleJson: '{}'
+      visibilityRuleJson: '',
+      readOnlyRuleJson: ''
     });
   }
 
@@ -305,14 +298,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       isVisible: field.isVisible !== false,
       isActive: field.isActive !== false,
       dataType: field.dataType || 'string',
-      defaultValue: field.defaultValue || '',
+      defaultValue: field.defaultValueJson || '',
+      defaultValueJson: field.defaultValueJson || '',
       regexPattern: field.regexPattern || '',
       validationMessage: field.validationMessage || '',
       minValue: field.minValue || null,
       maxValue: field.maxValue || null,
       maxLength: field.maxLength || null,
-      visibilityRuleJson: field.visibilityRuleJson || '{}',
-      readOnlyRuleJson: field.readOnlyRuleJson || '{}'
+      visibilityRuleJson: field.visibilityRuleJson || '',
+      readOnlyRuleJson: field.readOnlyRuleJson || ''
     });
   }
 
@@ -333,7 +327,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   saveField(): void {
     if (this.fieldForm.invalid) {
       this.markFormGroupTouched(this.fieldForm);
-      this.markFormGroupTouched(this.fieldForm);
       this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Please fill all required fields correctly' });
       return;
     }
@@ -343,35 +336,31 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     if (this.editingField) {
       const updateDto: UpdateFormFieldDto = {
-        fieldTypeId: fieldData.fieldTypeId,
+        tabId: this.tabId,
+        fieldTypeId: Number(fieldData.fieldTypeId),
         fieldName: fieldData.fieldName,
         fieldCode: fieldData.fieldCode,
-        fieldOrder: fieldData.fieldOrder,
+        fieldOrder: Number(fieldData.fieldOrder || 1),
         placeholder: fieldData.placeholder || '',
         hintText: fieldData.hintText || '',
-        isMandatory: fieldData.isMandatory,
-        isEditable: fieldData.isEditable,
-        isVisible: fieldData.isVisible,
-        isActive: fieldData.isActive,
-        defaultValue: fieldData.defaultValue || '',
+        isMandatory: Boolean(fieldData.isMandatory),
+        isEditable: Boolean(fieldData.isEditable),
+        isVisible: Boolean(fieldData.isVisible),
+        isActive: Boolean(fieldData.isActive ?? true),
+        defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || '',
+        dataType: fieldData.dataType || 'string',
         regexPattern: fieldData.regexPattern || '',
         validationMessage: fieldData.validationMessage || '',
-        minValue: fieldData.minValue || null,
-        maxValue: fieldData.maxValue || null,
-        maxLength: fieldData.maxLength || null,
-        visibilityRuleJson: fieldData.visibilityRuleJson || '{}',
-        readOnlyRuleJson: fieldData.readOnlyRuleJson || '{}'
+        minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
+          ? Number(fieldData.minValue) 
+          : 0,
+        maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== '' 
+          ? Number(fieldData.maxValue) 
+          : 0,
+        maxLength: fieldData.maxLength ? Number(fieldData.maxLength) : undefined,
+        visibilityRuleJson: fieldData.visibilityRuleJson || '',
+        readOnlyRuleJson: fieldData.readOnlyRuleJson || ''
       };
-
-      // تنظيف الحقول الفارغة
-      Object.keys(updateDto).forEach(key => {
-        const typedKey = key as keyof UpdateFormFieldDto;
-        const value = updateDto[typedKey];
-
-        if (value === null || value === undefined || value === '' || value === '{}') {
-          delete updateDto[typedKey];
-        }
-      });
 
       this.fieldsService.updateField(this.editingField.id, updateDto).subscribe({
         next: (updatedField) => {
@@ -394,7 +383,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         }
       });
     } else {
-      const createDto: any = {
+      const createDto: CreateFormFieldDto = {
         tabId: this.tabId,
         fieldTypeId: Number(fieldData.fieldTypeId),
         fieldName: fieldData.fieldName,
@@ -402,28 +391,24 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         fieldOrder: Number(fieldData.fieldOrder || 1),
         placeholder: fieldData.placeholder || '',
         hintText: fieldData.hintText || '',
-        isMandatory: Boolean(fieldData.isMandatory),
-        isEditable: Boolean(fieldData.isEditable),
-        isVisible: Boolean(fieldData.isVisible),
-        isActive: Boolean(fieldData.isActive),
+        isMandatory: Boolean(fieldData.isMandatory ?? true),
+        isEditable: Boolean(fieldData.isEditable ?? true),
+        isVisible: Boolean(fieldData.isVisible ?? true),
+        defaultValueJson: fieldData.defaultValue || fieldData.defaultValueJson || '',
         dataType: fieldData.dataType || 'string',
-        defaultValueJson: fieldData.defaultValue || '',
         regexPattern: fieldData.regexPattern || '',
         validationMessage: fieldData.validationMessage || `Please enter a valid ${fieldData.fieldName}`,
-        minValue: fieldData.minValue ? Number(fieldData.minValue) : 0,
-        maxValue: fieldData.maxValue ? Number(fieldData.maxValue) : 0,
-        maxLength: fieldData.maxLength ? Number(fieldData.maxLength) : null,
-        visibilityRuleJson: fieldData.visibilityRuleJson || '{}',
-        readOnlyRuleJson: fieldData.readOnlyRuleJson || '{}',
+        minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
+          ? Number(fieldData.minValue) 
+          : 0,
+        maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== '' 
+          ? Number(fieldData.maxValue) 
+          : 0,
+        maxLength: fieldData.maxLength ? Number(fieldData.maxLength) : undefined,
+        visibilityRuleJson: fieldData.visibilityRuleJson || '',
+        readOnlyRuleJson: fieldData.readOnlyRuleJson || '',
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
       };
-
-      // تنظيف الحقول الفارغة
-      Object.keys(createDto).forEach(key => {
-        if (createDto[key] === null || createDto[key] === undefined || createDto[key] === '') {
-          delete createDto[key];
-        }
-      });
 
       this.fieldsService.createField(createDto).subscribe({
         next: (newField) => {
@@ -490,19 +475,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       fieldOrder: nextOrder,
       placeholder: field.placeholder || '',
       hintText: field.hintText || '',
-      isMandatory: field.isMandatory || false,
+      isMandatory: field.isMandatory !== false,
       isEditable: field.isEditable !== false,
       isVisible: field.isVisible !== false,
       isActive: field.isActive !== false,
       dataType: field.dataType || 'string',
-      defaultValue: field.defaultValue || '',
+      defaultValue: field.defaultValueJson || '',
+      defaultValueJson: field.defaultValueJson || '',
       regexPattern: field.regexPattern || '',
       validationMessage: field.validationMessage || '',
       minValue: field.minValue || null,
       maxValue: field.maxValue || null,
       maxLength: field.maxLength || null,
-      visibilityRuleJson: field.visibilityRuleJson || '{}',
-      readOnlyRuleJson: field.readOnlyRuleJson || '{}'
+      visibilityRuleJson: field.visibilityRuleJson || '',
+      readOnlyRuleJson: field.readOnlyRuleJson || ''
     });
   }
 
@@ -515,19 +501,52 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       header: 'Confirm Status Change',
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
-        this.fieldsService.updateField(field.id, { isActive: newStatus }).subscribe({
-          next: () => {
+        const updateDto: UpdateFormFieldDto = {
+          tabId: field.tabId,
+          fieldTypeId: field.fieldTypeId,
+          fieldName: field.fieldName,
+          fieldCode: field.fieldCode,
+          fieldOrder: field.fieldOrder,
+          placeholder: field.placeholder || '',
+          hintText: field.hintText || '',
+          isMandatory: field.isMandatory,
+          isEditable: field.isEditable,
+          isVisible: field.isVisible,
+          isActive: newStatus,
+          defaultValueJson: field.defaultValueJson || '',
+          dataType: field.dataType || 'string',
+          regexPattern: field.regexPattern || '',
+          validationMessage: field.validationMessage || '',
+          minValue: field.minValue !== null && field.minValue !== undefined 
+            ? field.minValue 
+            : 0,
+          maxValue: field.maxValue !== null && field.maxValue !== undefined 
+            ? field.maxValue 
+            : 0,
+          maxLength: field.maxLength,
+          visibilityRuleJson: field.visibilityRuleJson || '',
+          readOnlyRuleJson: field.readOnlyRuleJson || ''
+        };
+
+        this.fieldsService.updateField(field.id, updateDto).subscribe({
+          next: (updatedField) => {
             // Update field in array
             const index = this.fields.findIndex(f => f.id === field.id);
             if (index !== -1) {
-              this.fields[index].isActive = newStatus;
+              this.fields[index] = { ...this.fields[index], ...updatedField, isActive: newStatus };
               this.fields = [...this.fields];
             }
 
             this.messageService.add({ severity: 'success', summary: 'Success', detail: `Field ${action}d successfully` });
           },
-          error: () => {
-            this.messageService.add({ severity: 'error', summary: 'Error', detail: `Failed to ${action} field` });
+          error: (error) => {
+            console.error('Error updating field status:', error);
+            const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || `Failed to ${action} field`;
+            this.messageService.add({ 
+              severity: 'error', 
+              summary: 'Error', 
+              detail: errorMessage 
+            });
           }
         });
       }

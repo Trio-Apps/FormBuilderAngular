@@ -1,9 +1,9 @@
-<div class="bg-light dark:bg-transparent min-vh-100 d-flex flex-row align-items-center">
+<div class="login-container">
   <c-container breakpoint="md">
     <c-row class="justify-content-center">
       <c-col md="6" lg="5" xl="4">
-        <c-card class="p-4">
-          <c-card-body>
+        <c-card class="login-card">
+          <c-card-body class="p-4">
             
             <!-- Success Message -->
             <div *ngIf="successMessage" class="alert alert-success alert-dismissible fade show" role="alert">
@@ -19,18 +19,21 @@
               <button type="button" class="btn-close" (click)="errorMessage = ''"></button>
             </div>
 
-            <form (ngSubmit)="onSubmit()" cForm>
-              <h1>Login</h1>
-              <p class="text-body-secondary">Sign In to your account</p>
+            <form (ngSubmit)="onSubmit()" cForm class="login-form">
+              <div class="text-center mb-4">
+                <h1 class="login-title">Login</h1>
+                <p class="login-subtitle">Sign In to your account</p>
+              </div>
               
               <!-- Username Input -->
               <c-input-group class="mb-3">
-                <span cInputGroupText>
+                <span cInputGroupText class="input-icon">
                   <svg cIcon name="cil-user"></svg>
                 </span>
                 <input
                   type="text"
                   cFormControl
+                  class="form-input"
                   placeholder="Username"
                   [(ngModel)]="credentials.username"
                   name="username"
@@ -41,13 +44,14 @@
               </c-input-group>
               
               <!-- Password Input -->
-              <c-input-group class="mb-4">
-                <span cInputGroupText>
+              <c-input-group class="mb-3">
+                <span cInputGroupText class="input-icon">
                   <svg cIcon name="cil-lock-locked"></svg>
                 </span>
                 <input
                   type="password"
                   cFormControl
+                  class="form-input"
                   placeholder="Password"
                   [(ngModel)]="credentials.password"
                   name="password"
@@ -57,8 +61,8 @@
                 />
               </c-input-group>
               
-              <!-- Remember Me Checkbox -->
-              <div class="mb-4">
+              <!-- Remember Me and Forgot Password -->
+              <div class="d-flex justify-content-between align-items-center mb-4">
                 <c-form-check>
                   <input
                     type="checkbox"
@@ -68,37 +72,31 @@
                     name="rememberMe"
                     [disabled]="isLoading"
                   />
-                  <label cFormCheckLabel for="rememberMe">
+                  <label cFormCheckLabel for="rememberMe" class="remember-label">
                     Remember me
                   </label>
                 </c-form-check>
+                <a href="#" class="forgot-password-link" [class.disabled]="isLoading">
+                  Forgot password?
+                </a>
               </div>
               
               <!-- Login Button -->
-              <c-row>
-                <c-col xs="6">
-                  <button 
-                    cButton 
-                    class="px-4 w-100" 
-                    color="primary" 
-                    type="submit"
-                    [disabled]="isLoading"
-                  >
-                    <span *ngIf="!isLoading">
-                      Login
-                    </span>
-                    <span *ngIf="isLoading">
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      Loading...
-                    </span>
-                  </button>
-                </c-col>
-                <c-col class="text-end" xs="6">
-                  <button cButton class="px-0" color="link" type="button" [disabled]="isLoading">
-                    Forgot password?
-                  </button>
-                </c-col>
-              </c-row>
+              <button 
+                cButton 
+                class="login-button w-100" 
+                color="primary" 
+                type="submit"
+                [disabled]="isLoading"
+              >
+                <span *ngIf="!isLoading">
+                  Login
+                </span>
+                <span *ngIf="isLoading">
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Loading...
+                </span>
+              </button>
             </form>
           </c-card-body>
         </c-card>

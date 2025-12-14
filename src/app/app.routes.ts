@@ -49,14 +49,14 @@ export const routes: Routes = [
           // تبويبات فورم معين (مثال: form-builder/tabs/5)
           { 
             path: 'tabs/:formId', 
-            loadComponent: () => import('../app/views/tabs/tabs-list/tabs-list.component')
+            loadComponent: () => import('./views/tabs/tabs-list/tabs-list.component')
               .then(m => m.TabsListComponent) 
           },
           
           // حقول تبويب معين (مثال: form-builder/fields/10)
           { 
             path: 'fields/:tabId', 
-            loadComponent: () => import('../app/views/fields/fields-list/fields-list.component')
+            loadComponent: () => import('./views/fields/fields-list/fields-list.component')
               .then(m => m.FieldsListComponent) 
           }
         ]

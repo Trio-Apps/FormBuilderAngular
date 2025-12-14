@@ -157,12 +157,17 @@ export class FormsListComponent implements OnInit, OnDestroy {
     }
 
     // Create observables to load tabs for each form
-    const tabsObservables = forms.map(form => 
-      this.tabsService.getTabs(form.id).pipe(
+    const tabsObservables = forms.map(form => {
+      // تحقق من أن form.id موجود وصحيح
+      if (!form.id || isNaN(form.id)) {
+        return of({ formId: form.id || 0, tabs: [] });
+      }
+      
+      return this.tabsService.getTabs(form.id).pipe(
         catchError(() => of([])),
-        map(tabs => ({ formId: form.id, tabs }))
-      )
-    );
+        map(tabs => ({ formId: form.id, tabs: Array.isArray(tabs) ? tabs : [] }))
+      );
+    });
 
     // Load all tabs in parallel
     forkJoin(tabsObservables).subscribe({
@@ -189,51 +194,15 @@ export class FormsListComponent implements OnInit, OnDestroy {
           });
         });
 
-        if (allTabs.length === 0) {
-          // No tabs, just update forms with tabs count
-          this.updateFormsWithCounts(forms, tabsMap, new Map());
-          return;
-        }
-
-        // Load fields for all tabs in parallel
-        const fieldsObservables = allTabs.map(({formId, tabId}) =>
-          this.fieldsService.getFields(formId, tabId).pipe(
-            catchError(() => of([])),
-            map(fields => ({ formId, tabId, fields }))
-          )
-        );
-
-        forkJoin(fieldsObservables).subscribe({
-          next: (fieldsResults) => {
-            // Create a map of tabId -> fields count
-            const fieldsCountMap = new Map<number, number>();
-            fieldsResults.forEach(result => {
-              if (result && result.tabId !== undefined && result.tabId !== null) {
-                const fieldsLength = (result.fields && Array.isArray(result.fields)) 
-                  ? result.fields.length 
-                  : 0;
-                // Use the actual count (don't sum, each tab should have its own count)
-                if (fieldsLength > 0 || !fieldsCountMap.has(result.tabId)) {
-                  fieldsCountMap.set(result.tabId, fieldsLength);
-                }
-              }
-            });
-
-            this.updateFormsWithCounts(forms, tabsMap, fieldsCountMap);
-          },
-          error: () => {
-            // Continue with forms even if fields loading fails
-            this.updateFormsWithCounts(forms, tabsMap, new Map());
-          }
-        });
+        // No need to load fields, just update forms with tabs count
+        this.updateFormsWithCounts(forms, tabsMap);
       },
       error: () => {
         // Continue with forms even if tabs loading fails - set counts to 0
         const formsWithZeroCounts = forms.map(form => ({
           ...form,
           tabs: [],
-          tabsCount: 0,
-          fieldsCount: 0
+          tabsCount: 0
         }));
         this.forms = formsWithZeroCounts;
         this.filteredForms = [...formsWithZeroCounts];
@@ -246,8 +215,7 @@ export class FormsListComponent implements OnInit, OnDestroy {
 
   updateFormsWithCounts(
     forms: FormBuilderDto[], 
-    tabsMap: Map<number, any[]>, 
-    fieldsCountMap: Map<number, number>
+    tabsMap: Map<number, any[]>
   ): void {
     const updatedForms = forms.map(form => {
       const tabs = tabsMap.get(form.id) || [];
@@ -257,53 +225,10 @@ export class FormsListComponent implements OnInit, OnDestroy {
         ? form.tabsCount 
         : tabs.length;
 
-      // Calculate fields count
-      // Priority: API fieldsCount > calculated from loaded fields > calculated from tabs > 0
-      let fieldsCount = 0;
-      const formAny = form as any;
-      if (form.fieldsCount !== undefined && form.fieldsCount !== null) {
-        const count = Number(form.fieldsCount);
-        fieldsCount = isNaN(count) ? 0 : count;
-      } else if (formAny.FieldsCount !== undefined && formAny.FieldsCount !== null) {
-        const count = Number(formAny.FieldsCount);
-        fieldsCount = isNaN(count) ? 0 : count;
-      } else {
-        // Calculate from loaded fields count map - only for tabs belonging to this form
-        tabs.forEach((tab: any) => {
-          if (tab && tab.id) {
-            // First try to get from fieldsCountMap (loaded fields)
-            const tabFieldsCount = fieldsCountMap.get(tab.id);
-            if (tabFieldsCount !== undefined && tabFieldsCount !== null) {
-              const count = Number(tabFieldsCount);
-              fieldsCount += isNaN(count) ? 0 : count;
-            } 
-            // Fallback to tab's own fieldsCount property
-            else if (tab.fieldsCount !== undefined && tab.fieldsCount !== null) {
-              const count = Number(tab.fieldsCount);
-              fieldsCount += isNaN(count) ? 0 : count;
-            } 
-            // Fallback to tab's fields array
-            else if (tab.fields && Array.isArray(tab.fields)) {
-              fieldsCount += tab.fields.length;
-            } 
-            // Fallback to PascalCase
-            else if (tab.FieldsCount !== undefined && tab.FieldsCount !== null) {
-              const count = Number(tab.FieldsCount);
-              fieldsCount += isNaN(count) ? 0 : count;
-            }
-          }
-        });
-      }
-
-      // Ensure fieldsCount is always a valid number
-      const finalFieldsCount = isNaN(fieldsCount) || fieldsCount < 0 ? 0 : Math.floor(fieldsCount);
-
-
       return {
         ...form,
         tabs,
-        tabsCount,
-        fieldsCount: finalFieldsCount
+        tabsCount
       };
     });
 
@@ -514,45 +439,6 @@ export class FormsListComponent implements OnInit, OnDestroy {
     return 0;
   }
 
-  getFieldsCount(form: any): number {
-    // Priority: Use the pre-calculated fieldsCount from updateFormsWithCounts
-    if (form.fieldsCount !== undefined && form.fieldsCount !== null) {
-      const count = Number(form.fieldsCount);
-      if (!isNaN(count) && count >= 0) {
-        return Math.floor(count);
-      }
-    }
-    
-    // Fallback to PascalCase
-    const formAny = form as any;
-    if (formAny.FieldsCount !== undefined && formAny.FieldsCount !== null) {
-      const count = Number(formAny.FieldsCount);
-      if (!isNaN(count) && count >= 0) {
-        return Math.floor(count);
-      }
-    }
-
-    // Last resort: Calculate from tabs if available (shouldn't happen if updateFormsWithCounts worked)
-    if (form.tabs && Array.isArray(form.tabs)) {
-      let total = 0;
-      form.tabs.forEach((tab: any) => {
-        if (tab && tab.id) {
-          if (tab.fieldsCount !== undefined && tab.fieldsCount !== null) {
-            const count = Number(tab.fieldsCount);
-            total += isNaN(count) ? 0 : Math.floor(count);
-          } else if (tab.fields && Array.isArray(tab.fields)) {
-            total += tab.fields.length;
-          } else if (tab.FieldsCount !== undefined && tab.FieldsCount !== null) {
-            const count = Number(tab.FieldsCount);
-            total += isNaN(count) ? 0 : Math.floor(count);
-          }
-        }
-      });
-      return total;
-    }
-
-    return 0;
-  }
   getPublishedClass(isPublished: boolean | undefined): string {
     return isPublished ? 'status-published' : 'status-draft';
   }

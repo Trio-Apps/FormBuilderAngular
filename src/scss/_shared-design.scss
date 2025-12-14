@@ -1,0 +1,462 @@
+// ============================================
+// Shared Design System - توحيد التصميم
+// ============================================
+
+// ========== Colors (الألوان) ==========
+$primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+$primary-blue: #3b82f6;
+$primary-blue-dark: #2563eb;
+$primary-blue-light: #60a5fa;
+
+$success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+$success-color: #10b981;
+$success-light: #d1fae5;
+
+$danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+$danger-color: #ef4444;
+$danger-light: #fee2e2;
+
+$warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+$warning-color: #f59e0b;
+$warning-light: #fef3c7;
+
+$info-gradient: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+$info-color: #0ea5e9;
+$info-light: #e0f2fe;
+
+// Neutral Colors
+$gray-50: #f9fafb;
+$gray-100: #f3f4f6;
+$gray-200: #e5e7eb;
+$gray-300: #d1d5db;
+$gray-400: #9ca3af;
+$gray-500: #6b7280;
+$gray-600: #4b5563;
+$gray-700: #374151;
+$gray-800: #1f2937;
+$gray-900: #111827;
+
+$text-primary: #1e293b;
+$text-secondary: #64748b;
+$text-muted: #94a3b8;
+
+$bg-primary: #f8fafc;
+$bg-white: #ffffff;
+$bg-gray: #f1f5f9;
+
+$border-color: #e2e8f0;
+$border-radius-sm: 8px;
+$border-radius-md: 12px;
+$border-radius-lg: 16px;
+$border-radius-xl: 20px;
+
+// ========== Typography (الخطوط) ==========
+$font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+$font-family-mono: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+
+$font-size-xs: 12px;
+$font-size-sm: 13px;
+$font-size-base: 14px;
+$font-size-md: 16px;
+$font-size-lg: 18px;
+$font-size-xl: 20px;
+$font-size-2xl: 24px;
+$font-size-3xl: 32px;
+
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+
+// ========== Spacing (المسافات) ==========
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 12px;
+$spacing-lg: 16px;
+$spacing-xl: 24px;
+$spacing-2xl: 32px;
+
+// ========== Shadows (الظلال) ==========
+$shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+$shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+$shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+$shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+// ========== Transitions (الحركات) ==========
+$transition-fast: 0.2s ease;
+$transition-base: 0.3s ease;
+$transition-slow: 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+// ========== Mixins (الدوال المساعدة) ==========
+
+// Gradient Button
+@mixin gradient-button($gradient, $hover-gradient: null) {
+  background: $gradient;
+  color: white;
+  border: none;
+  border-radius: $border-radius-md;
+  padding: 12px 24px;
+  font-weight: $font-weight-semibold;
+  font-size: $font-size-base;
+  cursor: pointer;
+  transition: all $transition-base;
+  box-shadow: $shadow-md;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-sm;
+
+  &:hover:not(:disabled) {
+    @if $hover-gradient {
+      background: $hover-gradient;
+    } @else {
+      filter: brightness(0.95);
+    }
+    transform: translateY(-2px);
+    box-shadow: $shadow-lg;
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+}
+
+// Card Style
+@mixin card-style {
+  background: $bg-white;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-md;
+  border: 1px solid $border-color;
+  transition: box-shadow $transition-base;
+
+  &:hover {
+    box-shadow: $shadow-lg;
+  }
+}
+
+// Badge Style
+@mixin badge-style($bg-color, $text-color: white) {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+  background: $bg-color;
+  color: $text-color;
+  box-shadow: $shadow-sm;
+  transition: transform $transition-fast;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+// Input Style
+@mixin input-style {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid $border-color;
+  border-radius: $border-radius-md;
+  font-size: $font-size-base;
+  transition: all $transition-base;
+  background: $bg-white;
+  color: $text-primary;
+  font-family: $font-family;
+
+  &:focus {
+    outline: none;
+    border-color: $primary-blue;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+    transform: translateY(-1px);
+  }
+
+  &::placeholder {
+    color: $text-muted;
+  }
+
+  &.invalid {
+    border-color: $danger-color;
+
+    &:focus {
+      box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
+    }
+  }
+}
+
+// Table Header Style
+@mixin table-header-style {
+  background: $primary-gradient;
+  color: white;
+  padding: 18px 16px;
+  font-weight: $font-weight-bold;
+  font-size: $font-size-sm;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  border-bottom: none;
+}
+
+// Table Row Hover
+@mixin table-row-hover {
+  transition: all $transition-base;
+
+  &:hover {
+    background: linear-gradient(90deg, $gray-50 0%, $gray-100 100%);
+    transform: translateX(4px);
+    box-shadow: -4px 0 0 0 $primary-blue;
+  }
+}
+
+// Loading Spinner
+@mixin loading-spinner($size: 50px, $color: $primary-blue) {
+  width: $size;
+  height: $size;
+  border: 5px solid $gray-200;
+  border-top: 5px solid $color;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+// ========== Animations (الحركات) ==========
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// ========== Common Mixins (الدوال المشتركة) ==========
+
+// Container Mixin
+@mixin page-container {
+  padding: $spacing-xl;
+  font-family: $font-family;
+  background-color: $bg-primary;
+  min-height: 100vh;
+}
+
+// Header
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: $spacing-2xl;
+  padding: $spacing-xl $spacing-2xl;
+  @include card-style;
+
+  h1 {
+    color: $text-primary;
+    font-size: $font-size-3xl;
+    font-weight: $font-weight-bold;
+    display: flex;
+    align-items: center;
+    gap: $spacing-md;
+    margin: 0;
+
+    i {
+      color: $primary-blue;
+      font-size: 28px;
+    }
+
+    .badge {
+      @include badge-style($primary-gradient, white);
+      animation: pulse 2s infinite;
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    gap: $spacing-md;
+  }
+}
+
+// Buttons
+.btn {
+  @include gradient-button($primary-gradient, linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%));
+}
+
+.btn-primary {
+  @include gradient-button($primary-gradient, linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%));
+}
+
+.btn-success {
+  @include gradient-button($success-gradient, linear-gradient(135deg, #059669 0%, #047857 100%));
+}
+
+.btn-danger {
+  @include gradient-button($danger-gradient, linear-gradient(135deg, #dc2626 0%, #b91c1c 100%));
+}
+
+.btn-warning {
+  @include gradient-button($warning-gradient, linear-gradient(135deg, #d97706 0%, #b45309 100%));
+}
+
+.btn-secondary {
+  @include gradient-button(linear-gradient(135deg, $gray-600 0%, $gray-700 100%), linear-gradient(135deg, $gray-700 0%, $gray-800 100%));
+}
+
+// Badges
+.badge {
+  @include badge-style($primary-gradient, white);
+}
+
+.badge-success {
+  @include badge-style($success-gradient, white);
+}
+
+.badge-danger {
+  @include badge-style($danger-gradient, white);
+}
+
+.badge-warning {
+  @include badge-style($warning-gradient, white);
+}
+
+.badge-info {
+  @include badge-style($info-gradient, white);
+}
+
+// Table
+.table-container {
+  @include card-style;
+  overflow: hidden;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+
+  thead {
+    th {
+      @include table-header-style;
+    }
+  }
+
+  tbody {
+    tr {
+      border-bottom: 1px solid $gray-200;
+      @include table-row-hover;
+
+      td {
+        padding: 18px 16px;
+        color: $text-primary;
+        vertical-align: middle;
+        font-size: $font-size-base;
+      }
+    }
+  }
+}
+
+// Inputs
+input, select, textarea {
+  @include input-style;
+}
+
+// Loading
+.loading-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  @include card-style;
+
+  .spinner {
+    @include loading-spinner(60px, $primary-blue);
+    margin-bottom: $spacing-xl;
+  }
+
+  p {
+    color: $text-secondary;
+    font-size: $font-size-lg;
+    font-weight: $font-weight-medium;
+  }
+}
+
+// Empty State
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+
+  i {
+    font-size: 64px;
+    color: $gray-300;
+    margin-bottom: $spacing-xl;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  h3 {
+    color: $text-primary;
+    margin-bottom: $spacing-md;
+    font-size: $font-size-2xl;
+    font-weight: $font-weight-bold;
+  }
+
+  p {
+    color: $text-secondary;
+    margin-bottom: $spacing-xl;
+    font-size: $font-size-md;
+  }
+}
+
+// Modal
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: $spacing-xl;
+}
+
+.modal-content {
+  background: $bg-white;
+  border-radius: $border-radius-xl;
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: $shadow-xl;
+  animation: slideIn $transition-slow;
+  border: 1px solid $border-color;
+}
+

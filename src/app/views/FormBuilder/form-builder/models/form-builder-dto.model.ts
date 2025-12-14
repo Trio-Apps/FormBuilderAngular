@@ -59,57 +59,62 @@ export interface UpdateFormTabDto {
 export interface FormFieldDto {
   id: number;
   tabId: number;
+  fieldTypeId: number;
+  fieldTypeName?: string;
   fieldName: string;
   fieldCode: string;
-  fieldTypeId?: number;
-  fieldType?: string;  // أضف هذا الحقل
+  fieldOrder: number;
   placeholder?: string;
   hintText?: string;
-  fieldOrder?: number;
-  isMandatory?: boolean;
-  isEditable?: boolean;
-  isVisible?: boolean;
-  isActive?: boolean;
+  isMandatory: boolean;
+  isEditable: boolean;
+  isVisible: boolean;
+  isActive: boolean;
+  defaultValueJson?: string;
   dataType?: string;
-  defaultValue?: string;  // أضف هذا الحقل
+  maxLength?: number;
+  minValue?: number;
+  maxValue?: number;
   regexPattern?: string;
   validationMessage?: string;
   visibilityRuleJson?: string;
   readOnlyRuleJson?: string;
-  defaultValueJson?: string;
-  minValue?: number;      // أضف هذا الحقل
-  maxValue?: number;      // أضف هذا الحقل
-  maxLength?: number;     // أضف هذا الحقل
+  createdDate?: string;
+  createdByUserId?: string;
+  createdByUserName?: string;
+  // Navigation properties
+  tab?: FormTabDto;
+  fieldType?: FieldTypeDto;
+  fieldOptions?: FieldOptionDto[];
 }
 
 export interface UpdateFormFieldDto {
-  fieldName?: string;
-  fieldCode?: string;
-  fieldTypeId?: number;
-  fieldType?: string;
+  tabId: number;
+  fieldTypeId: number;
+  fieldName: string;
+  fieldCode: string;
+  fieldOrder: number;
   placeholder?: string;
   hintText?: string;
-  isMandatory?: boolean;
-  isEditable?: boolean;
-  isVisible?: boolean;
+  isMandatory: boolean;
+  isEditable: boolean;
+  isVisible: boolean;
   isActive?: boolean;
+  defaultValueJson?: string;
   dataType?: string;
-  defaultValue?: string;
-  regexPattern?: string;
-  validationMessage?: string;
+  maxLength?: number;
   minValue?: number;
   maxValue?: number;
-  maxLength?: number;
-  fieldOrder?: number;
+  regexPattern?: string;
+  validationMessage?: string;
   visibilityRuleJson?: string;
   readOnlyRuleJson?: string;
-  defaultValueJson?: string;
 }
 
 export interface FieldTypeDto {
   id: number;
   typeName: string;
-  description?: string;  // أضف هذا الحقل
+  description?: string;
   dataType?: string;
   maxLength?: number;
   hasOptions: boolean;
@@ -117,30 +122,34 @@ export interface FieldTypeDto {
   isActive: boolean;
 }
 
+export interface FieldOptionDto {
+  id?: number;
+  fieldId?: number;
+  optionValue: string;
+  optionText: string;
+  optionOrder?: number;
+  isActive?: boolean;
+}
+
 export interface CreateFormFieldDto {
   tabId: number;
   fieldTypeId: number;
   fieldName: string;
   fieldCode: string;
-  fieldOrder?: number;
+  fieldOrder: number;
   placeholder?: string;
   hintText?: string;
   isMandatory?: boolean;
   isEditable?: boolean;
   isVisible?: boolean;
-  isActive?: boolean;
+  defaultValueJson?: string;
   dataType?: string;
-  defaultValue?: string;
-  regexPattern?: string;
-  validationMessage?: string;
+  maxLength?: number;
   minValue?: number;
   maxValue?: number;
-  minLength?: number;
-  maxLength?: number;
-  
-  // الحقول الاختيارية
-  createdByUserId?: string;
-  readOnlyRuleJson?: string;
+  regexPattern?: string;
+  validationMessage?: string;
   visibilityRuleJson?: string;
-  defaultValueJson?: string;
+  readOnlyRuleJson?: string;
+  createdByUserId?: string;
 }

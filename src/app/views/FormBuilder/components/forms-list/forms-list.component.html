@@ -68,7 +68,6 @@
           <th pSortableColumn="formName">FORM NAME <p-sortIcon field="formName"></p-sortIcon></th>
           <th pSortableColumn="formCode">FORM CODE <p-sortIcon field="formCode"></p-sortIcon></th>
           <th>TABS</th>
-          <th>FIELDS</th>
           <th>STATUS</th>
           <th class="text-end">ACTIONS</th>
         </tr>
@@ -89,9 +88,6 @@
           </td>
           <td class="text-center">
             <span class="badge-pill badge-tabs">{{ getTabsCount(form) }} tabs</span>
-          </td>
-          <td class="text-center">
-            <span class="badge-pill badge-fields">{{ getFieldsCount(form) }} fields</span>
           </td>
           <td>
             <div class="d-flex align-items-center gap-2">

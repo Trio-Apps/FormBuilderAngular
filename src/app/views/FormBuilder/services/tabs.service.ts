@@ -18,10 +18,20 @@ export class TabsService {
   constructor(private http: HttpClient) {}
 
   getTabs(formId: number): Observable<FormTabDto[]> {
-    return this.http.get<FormTabDto[]>(`${this.baseUrl}/form/${formId}`).pipe(
+    if (!formId || isNaN(formId)) {
+      return of([]);
+    }
+
+    // محاولة المسار البديل أولاً (query parameter) لأنه قد يكون المسار الصحيح
+    return this.http.get<FormTabDto[]>(`${this.baseUrl}?formId=${formId}`).pipe(
       catchError(() => {
-        return this.http.get<FormTabDto[]>(`${this.baseUrl}?formId=${formId}`).pipe(
-          catchError(() => of([]))
+        // إذا فشل، جرب المسار الأول
+        return this.http.get<FormTabDto[]>(`${this.baseUrl}/form/${formId}`).pipe(
+          catchError(() => {
+            // إذا فشل كلا المسارين، أرجع مصفوفة فارغة بدون طباعة خطأ
+            // هذا طبيعي إذا لم يكن هناك tabs للـ form
+            return of([]);
+          })
         );
       })
     );

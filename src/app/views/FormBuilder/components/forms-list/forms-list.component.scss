@@ -1,9 +1,9 @@
 // forms-list.component.scss
+@use "../../../../../scss/shared-design" as *;
 
 :host {
   display: block;
-  background-color: #f3f4f6; // Lighter gray background suitable for admin dashboards
-  min-height: 100vh;
+  @include page-container;
 }
 
 // Card styling override for premium feel
@@ -45,59 +45,47 @@
 }
 
 .badge-code {
-  color: #ec4899; // Pink-500 (more vibrant like in the image)
-  background-color: transparent;
-  border: none;
-  padding: 0;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.875rem;
-  font-weight: 600;
+  color: #ec4899;
+  background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);
+  padding: 6px 12px;
+  border-radius: $border-radius-sm;
+  font-family: $font-family-mono;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
   letter-spacing: 0.5px;
+  border: 1px solid #f9a8d4;
+  box-shadow: 0 1px 3px rgba(236, 72, 153, 0.2);
 }
 
 .badge-pill {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: white;
-  text-align: center;
-  white-space: nowrap;
+  @include badge-style($primary-gradient, white);
 
   &.badge-tabs {
-    background-color: #3b82f6; // Blue
+    @include badge-style($primary-gradient, white);
   }
 
   &.badge-fields {
-    background-color: #6b7280; // Gray
+    @include badge-style(linear-gradient(135deg, $gray-600 0%, $gray-700 100%), white);
   }
 }
 
 .status-badge {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: white;
-  text-align: center;
-  white-space: nowrap;
+  @include badge-style($primary-gradient, white);
 
   &.status-published {
-    background-color: #10b981; // Green
+    @include badge-style($success-gradient, white);
   }
 
   &.status-draft {
-    background-color: #f59e0b; // Orange
+    @include badge-style($warning-gradient, white);
   }
 
   &.status-active {
-    background-color: #2563eb; // Deep Blue
+    @include badge-style($primary-gradient, white);
   }
 
   &.status-inactive {
-    background-color: #ef4444; // Red
+    @include badge-style($danger-gradient, white);
   }
 }
 
@@ -144,9 +132,8 @@
     padding: 1rem;
     white-space: nowrap;
 
-    &:nth-child(4),
-    &:nth-child(5) {
-      text-align: center; // Center Tabs and Fields headers
+    &:nth-child(4) {
+      text-align: center; // Center Tabs header
     }
   }
 
