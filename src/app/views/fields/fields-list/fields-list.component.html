@@ -249,7 +249,7 @@
             <div class="form-row">
               <div class="form-group">
                 <label for="regexPattern">Regex Pattern</label>
-                <select class="regex-select" (change)="onRegexPresetChange($event.target.value)">
+                <select class="regex-select" (change)="onRegexPresetChange($any($event.target)?.value || '')">
                   <option *ngFor="let opt of regexOptions" [value]="opt.value">{{opt.label}}</option>
                 </select>
                 <input type="text" id="regexPattern" formControlName="regexPattern" placeholder="^[A-Za-z0-9]+$">

@@ -7,22 +7,43 @@ import {
   CreateFormBuilderDto,
   UpdateFormBuilderDto
 } from '../form-builder/models/form-builder-dto.model';
+import { environment } from '../../../environments/environment';
+
+export interface PagedResult<T> {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class FormsService {
 
-  private baseUrl = 'https://localhost:7276/api/FormBuilder';
+  private baseUrl = `${environment.apiUrl}/FormBuilder`;
 
   constructor(private http: HttpClient) {}
 
-  getForms(): Observable<FormBuilderDto[]> {
-    return this.http.get<FormBuilderDto[]>(this.baseUrl).pipe(
-      catchError(() => {
-        return of([]);
-      })
-    );
+  getForms(page: number = 1, pageSize: number = 20): Observable<PagedResult<FormBuilderDto>> {
+    return this.http
+      .get<PagedResult<FormBuilderDto>>(`${this.baseUrl}?page=${page}&pageSize=${pageSize}`)
+      .pipe(
+        catchError(() => {
+          return of({
+            items: [],
+            totalCount: 0,
+            page,
+            pageSize,
+            totalPages: 0,
+            hasPrevious: false,
+            hasNext: false
+          });
+        })
+      );
   }
 
   getFormById(id: number): Observable<FormBuilderDto> {

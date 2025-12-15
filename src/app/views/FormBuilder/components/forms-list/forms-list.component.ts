@@ -127,14 +127,19 @@ export class FormsListComponent implements OnInit, OnDestroy {
     window.removeEventListener('focus', this.windowFocusHandler);
   }
 
-  loadForms(): void {
+  loadForms(page: number = this.currentPage): void {
     this.loading = true;
-    // Clear existing data to force refresh
     this.forms = [];
     this.filteredForms = [];
     
-    this.formsService.getForms().subscribe({
-      next: (forms) => {
+    this.formsService.getForms(page, this.itemsPerPage).subscribe({
+      next: (paged) => {
+        const forms = paged.items || [];
+        this.totalItems = paged.totalCount || forms.length;
+        this.totalPages = paged.totalPages || Math.max(1, Math.ceil(this.totalItems / this.itemsPerPage));
+        this.itemsPerPage = paged.pageSize || this.itemsPerPage;
+        this.currentPage = paged.page || page;
+
         // Load tabs and fields count for each form
         this.loadFormsWithCounts(forms);
       },
@@ -152,7 +157,10 @@ export class FormsListComponent implements OnInit, OnDestroy {
   loadFormsWithCounts(forms: FormBuilderDto[]): void {
     if (forms.length === 0) {
       this.filteredForms = [];
-      this.totalItems = 0;
+      // totalItems already set from API response if available
+      if (this.totalItems === 0) {
+        this.totalItems = 0;
+      }
       this.updatePagination();
       this.loading = false;
       return;
@@ -236,7 +244,10 @@ export class FormsListComponent implements OnInit, OnDestroy {
 
     this.forms = updatedForms;
     this.filteredForms = [...updatedForms];
-    this.totalItems = updatedForms.length;
+    // totalItems already set from API response
+    if (!this.totalItems) {
+      this.totalItems = updatedForms.length;
+    }
     this.updatePagination();
     this.loading = false;
   }
@@ -253,6 +264,7 @@ export class FormsListComponent implements OnInit, OnDestroy {
       );
     }
 
+    // عند البحث، نعرض النتائج الحالية فقط دون استدعاء API جديد
     this.totalItems = this.filteredForms.length;
     this.currentPage = 1;
     this.updatePagination();
@@ -261,22 +273,20 @@ export class FormsListComponent implements OnInit, OnDestroy {
     return Math.min(this.currentPage * this.itemsPerPage, this.totalItems);
   }
   updatePagination(): void {
-    this.totalPages = Math.ceil(this.totalItems / this.itemsPerPage);
-
-    const startIndex = (this.currentPage - 1) * this.itemsPerPage;
-    const endIndex = Math.min(startIndex + this.itemsPerPage, this.totalItems);
-
-    this.paginatedForms = this.filteredForms.slice(startIndex, endIndex);
+    this.totalPages = Math.max(1, Math.ceil(this.totalItems / this.itemsPerPage));
+    // عند استخدام paging من السيرفر، لا نقوم بالتقطيع محلياً
+    this.paginatedForms = [...this.filteredForms];
   }
 
   onPageChange(event: any): void {
-    // Handle both PrimeNG paginator (0-based) and custom pagination (1-based)
+    // PrimeNG paginator (0-based) or numeric input (1-based)
     if (event && typeof event.page === 'number') {
       this.currentPage = event.page + 1;
     } else if (typeof event === 'number') {
       this.currentPage = event;
     }
-    this.updatePagination();
+    // استدعاء البيانات من الـ API للصفحة المطلوبة
+    this.loadForms(this.currentPage);
   }
 
   getPageNumbers(): number[] {
@@ -300,20 +310,20 @@ export class FormsListComponent implements OnInit, OnDestroy {
   goToPage(page: number): void {
     if (page < 1 || page > this.totalPages) return;
     this.currentPage = page;
-    this.updatePagination();
+    this.loadForms(this.currentPage);
   }
 
   nextPage(): void {
     if (this.currentPage < this.totalPages) {
       this.currentPage++;
-      this.updatePagination();
+      this.loadForms(this.currentPage);
     }
   }
 
   prevPage(): void {
     if (this.currentPage > 1) {
       this.currentPage--;
-      this.updatePagination();
+      this.loadForms(this.currentPage);
     }
   }
 

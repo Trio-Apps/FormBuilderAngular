@@ -34,16 +34,12 @@ import { AuthService } from '../../../auth/auth.service';
     NavLinkDirective,
     RouterLink,
     RouterLinkActive,
-    NgTemplateOutlet,
     DropdownComponent,
     DropdownToggleDirective,
     AvatarComponent,
     DropdownMenuDirective,
     DropdownHeaderDirective,
-    DropdownItemDirective,
-    BadgeComponent,
-    DropdownDividerDirective,
-    BreadcrumbRouterComponent
+    DropdownItemDirective
   ]
 })
 export class DefaultHeaderComponent extends HeaderComponent {
