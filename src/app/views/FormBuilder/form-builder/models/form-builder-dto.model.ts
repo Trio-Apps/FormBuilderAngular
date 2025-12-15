@@ -36,26 +36,30 @@ export interface FormTabDto {
   id: number;
   formBuilderId: number;
   tabName: string;
-  tabCode?: string;
-  tabOrder?: number;
+  tabCode: string;
+  tabOrder: number;
+  isActive: boolean;
+  createdByUserId?: string;
+  createdDate?: string;
+  // Extra client-side/navigation data (قد لا تكون موجودة حرفيًا في الـ DTO في الباك إند)
   fields?: FormFieldDto[];
   fieldsCount?: number;
-  isActive?: boolean;
 }
 
 export interface CreateFormTabDto {
   formBuilderId: number;
   tabName: string;
-  tabCode?: string;
-  tabOrder?: number;
-  isActive?: boolean;
+  tabCode: string;
+  tabOrder: number;
+  isActive: boolean;
+  createdByUserId?: string;
 }
 
 export interface UpdateFormTabDto {
-  tabName?: string;
-  tabCode?: string;
-  tabOrder?: number;
-  isActive?: boolean;
+  tabName: string;
+  tabCode: string;
+  tabOrder: number;
+  isActive: boolean;
 }
 
 export interface FormFieldDto {

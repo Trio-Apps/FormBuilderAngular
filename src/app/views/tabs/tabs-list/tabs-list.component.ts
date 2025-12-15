@@ -46,6 +46,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
   tabName = '';
   tabCode = '';
   tabOrder = 1;
+  isActive = true;
   editingTab: FormTabDto | null = null;
 
   constructor(
@@ -111,11 +112,13 @@ export class TabsListComponent implements OnInit, OnDestroy {
       this.tabName = tab.tabName;
       this.tabCode = tab.tabCode || '';
       this.tabOrder = tab.tabOrder || 1;
+      this.isActive = tab.isActive !== false;
     } else {
       this.editingTab = null;
       this.tabName = '';
       this.tabCode = '';
       this.tabOrder = this.tabs.length + 1;
+      this.isActive = true;
     }
     this.showTabModal = true;
   }
@@ -126,14 +129,24 @@ export class TabsListComponent implements OnInit, OnDestroy {
     this.tabName = '';
     this.tabCode = '';
     this.tabOrder = 1;
+    this.isActive = true;
   }
 
   saveTab(): void {
-    if (!this.tabName) {
+    if (!this.tabName || !this.tabCode) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation',
-        detail: 'Tab name is required'
+        detail: 'Tab name and code are required'
+      });
+      return;
+    }
+
+    if (!this.formId || isNaN(this.formId)) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Validation Error',
+        detail: 'Invalid form ID. Please go back and try again.'
       });
       return;
     }
@@ -144,11 +157,13 @@ export class TabsListComponent implements OnInit, OnDestroy {
       const updateDto = {
         tabName: this.tabName,
         tabCode: this.tabCode,
-        tabOrder: this.tabOrder
+        tabOrder: this.tabOrder,
+        isActive: this.isActive
       };
       
       this.tabsService.updateTab(this.editingTab.id, updateDto).subscribe({
         next: () => {
+          this.loading = false;
           this.loadTabs();
           this.closeTabModal();
           this.messageService.add({
@@ -157,8 +172,14 @@ export class TabsListComponent implements OnInit, OnDestroy {
             detail: 'Tab updated successfully'
           });
         },
-        error: () => {
+        error: (error) => {
           this.loading = false;
+          const errorMessage = error?.error?.message || error?.message || 'Failed to update tab';
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage
+          });
         }
       });
     } else {
@@ -166,11 +187,13 @@ export class TabsListComponent implements OnInit, OnDestroy {
         formBuilderId: this.formId,
         tabName: this.tabName,
         tabCode: this.tabCode,
-        tabOrder: this.tabOrder
+        tabOrder: this.tabOrder,
+        isActive: this.isActive
       };
       
       this.tabsService.createTab(createDto).subscribe({
         next: () => {
+          this.loading = false;
           this.loadTabs();
           this.closeTabModal();
           this.messageService.add({
@@ -179,8 +202,14 @@ export class TabsListComponent implements OnInit, OnDestroy {
             detail: 'Tab created successfully'
           });
         },
-        error: () => {
+        error: (error) => {
           this.loading = false;
+          const errorMessage = error?.error?.message || error?.error?.title || error?.message || 'Failed to create tab';
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage
+          });
         }
       });
     }
