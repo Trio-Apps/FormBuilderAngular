@@ -20,6 +20,8 @@ export interface CreateFormBuilderDto {
   formName: string;
   formCode: string;
   description?: string;
+  isPublished?: boolean;
+  isActive?: boolean;
 }
 
 export interface UpdateFormBuilderDto {

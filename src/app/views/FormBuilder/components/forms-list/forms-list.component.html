@@ -3,11 +3,6 @@
   <div class="card border-0 shadow-none mb-4 bg-transparent">
     <div class="d-flex flex-column gap-4">
 
-      <!-- Title -->
-      <div class="mb-3">
-        <h4 class="mb-0 text-dark fw-bold">Forms List</h4>
-      </div>
-
       <!-- Title & Add Button -->
       <div class="d-flex justify-content-between align-items-center">
         <h2 class="mb-0 font-weight-bold text-dark d-flex align-items-center gap-2">
@@ -152,6 +147,37 @@
         <label class="form-label text-muted small fw-bold">DESCRIPTION</label>
         <textarea class="form-control" [(ngModel)]="description" name="description" rows="3"
           placeholder="Enter description"></textarea>
+      </div>
+
+      <div class="row mb-3 g-3">
+        <div class="col-6">
+          <label class="form-label text-muted small fw-bold d-block">PUBLISHED STATUS</label>
+          <div class="form-check form-switch">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="isPublished"
+              [(ngModel)]="isPublished"
+              name="isPublished">
+            <label class="form-check-label" for="isPublished">
+              {{ isPublished ? 'Published' : 'Draft' }}
+            </label>
+          </div>
+        </div>
+        <div class="col-6">
+          <label class="form-label text-muted small fw-bold d-block">ACTIVE STATUS</label>
+          <div class="form-check form-switch">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="isActive"
+              [(ngModel)]="isActive"
+              name="isActive">
+            <label class="form-check-label" for="isActive">
+              {{ isActive ? 'Active' : 'Inactive' }}
+            </label>
+          </div>
+        </div>
       </div>
 
       <div class="d-flex justify-content-end gap-2 pt-3">

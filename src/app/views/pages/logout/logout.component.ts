@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { AuthService } from '../../../auth/auth.service';
 
 @Component({
   selector: 'app-logout',
@@ -8,23 +9,17 @@ import { Router } from '@angular/router';
 })
 export class LogoutComponent implements OnInit {
   
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private authService: AuthService
+  ) {}
 
   ngOnInit(): void {
     this.logout();
   }
 
   logout() {
-    // مسح جميع بيانات المصادقة
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user_email');
-    localStorage.removeItem('user_name');
-    localStorage.removeItem('user_id');
-    
-    // تأخير قليل ثم التوجيه إلى Login
-    setTimeout(() => {
-      this.router.navigate(['/pages/login']);
-    }, 1000);
+    // استخدام AuthService لمسح جميع بيانات المصادقة
+    this.authService.logout();
   }
 }

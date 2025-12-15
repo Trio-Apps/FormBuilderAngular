@@ -128,7 +128,6 @@ export const environment = {
     enableCsrf: true,
     enableHttps: true,
     tokenKey: 'form_builder_token',
-    refreshTokenKey: 'form_builder_refresh_token',
     tokenExpiry: 86400, // 24 ساعة
   },
   

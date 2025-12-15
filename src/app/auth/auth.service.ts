@@ -2,10 +2,12 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, tap, throwError, catchError } from 'rxjs';
+import { StorageService } from './storage.service';
 
 export interface LoginCredentials {
   username: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export interface LoginResponse {
@@ -22,13 +24,24 @@ export interface LoginResponse {
 export class AuthService {
   private apiUrl = 'https://localhost:7276/api/account';
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(
+    private http: HttpClient,
+    private router: Router,
+    private storageService: StorageService
+  ) {}
 
   login(credentials: LoginCredentials): Observable<LoginResponse> {
-    return this.http.post<LoginResponse>(`${this.apiUrl}/login`, credentials).pipe(
+    return this.http.post<LoginResponse>(`${this.apiUrl}/login`, {
+      username: credentials.username,
+      password: credentials.password
+    }).pipe(
       tap((response: LoginResponse) => {
         if (response.success && response.token) {
-          this.setSession(response.token, credentials.username, response.role!);
+          this.setSession(
+            response.token,
+            credentials.username,
+            response.role || 'User'
+          );
         }
       }),
       catchError(this.handleError)
@@ -46,34 +59,32 @@ export class AuthService {
   }
 
   getToken(): string | null {
-    return localStorage.getItem('auth_token');
+    return this.storageService.getToken();
   }
 
   userName(): string | null {
-    return localStorage.getItem('user_name');
+    return this.storageService.getUsername();
   }
 
   role(): string | null {
-    return localStorage.getItem('user_role');
+    return this.storageService.getRole();
   }
 
   private setSession(token: string, username: string, role: string): void {
-    localStorage.setItem('auth_token', token);
-    localStorage.setItem('user_name', username);
-    localStorage.setItem('user_role', role);
+    this.storageService.setToken(token);
+    this.storageService.setUserInfo(username, role);
   }
 
   private clearSession(): void {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user_name');
-    localStorage.removeItem('user_role');
+    this.storageService.clear();
   }
 
   private isTokenExpired(token: string): boolean {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const expiry = payload.exp;
-      return (Math.floor(new Date().getTime() / 1000)) >= expiry;
+      const currentTime = Math.floor(new Date().getTime() / 1000);
+      return currentTime >= expiry;
     } catch {
       return true;
     }

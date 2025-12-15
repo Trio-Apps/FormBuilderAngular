@@ -1,14 +1,15 @@
 import { CanActivateFn } from '@angular/router';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
+import { AuthService } from './auth.service';
 
 export const loginGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
-  const token = localStorage.getItem('auth_token');
+  const authService = inject(AuthService);
   
-  if (token) {
+  if (authService.isAuthenticated()) {
     // إذا كان مسجلاً، امنعه من الوصول إلى Login
-    router.navigate(['/dashboard']);
+    router.navigate(['/form-builder']);
     return false;
   }
   

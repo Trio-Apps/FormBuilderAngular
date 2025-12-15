@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
+import { AuthService } from '../../auth/auth.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -20,8 +21,10 @@ export class DashboardComponent implements OnInit {
   userName = '';
   userEmail = '';
 
+  constructor(private authService: AuthService) {}
+
   ngOnInit(): void {
-    this.userName = localStorage.getItem('user_name') || 'User';
-    this.userEmail = localStorage.getItem('user_email') || '';
+    this.userName = this.authService.userName() || 'User';
+    this.userEmail = ''; // Email not stored in current implementation
   }
 }

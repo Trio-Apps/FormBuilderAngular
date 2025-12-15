@@ -55,6 +55,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
   formName = '';
   formCode = '';
   description = '';
+  isPublished = false;
+  isActive = true;
   editingForm: FormBuilderDto | null = null;
 
   // Pagination
@@ -321,11 +323,15 @@ export class FormsListComponent implements OnInit, OnDestroy {
       this.formName = form.formName;
       this.formCode = form.formCode;
       this.description = form.description || '';
+      this.isPublished = form.isPublished ?? false;
+      this.isActive = form.isActive !== false;
     } else {
       this.editingForm = null;
       this.formName = '';
       this.formCode = '';
       this.description = '';
+      this.isPublished = false;
+      this.isActive = true;
     }
     this.showFormModal = true;
   }
@@ -336,6 +342,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
     this.formName = '';
     this.formCode = '';
     this.description = '';
+    this.isPublished = false;
+    this.isActive = true;
   }
 
   saveForm(): void {
@@ -354,7 +362,9 @@ export class FormsListComponent implements OnInit, OnDestroy {
       const updateDto = {
         formName: this.formName,
         formCode: this.formCode,
-        description: this.description
+        description: this.description,
+        isPublished: this.isPublished,
+        isActive: this.isActive
       };
 
       this.formsService.updateForm(this.editingForm.id, updateDto).subscribe({
@@ -375,7 +385,9 @@ export class FormsListComponent implements OnInit, OnDestroy {
       const createDto = {
         formName: this.formName,
         formCode: this.formCode,
-        description: this.description
+        description: this.description,
+        isPublished: this.isPublished,
+        isActive: this.isActive
       };
 
       this.formsService.createForm(createDto).subscribe({

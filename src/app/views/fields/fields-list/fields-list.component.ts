@@ -33,6 +33,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   fields: FormFieldDto[] = [];
   fieldTypes: FieldTypeDto[] = [];
   filteredFieldTypes: FieldTypeDto[] = [];
+  regexOptions = [
+    { label: 'No preset (custom)', value: '' },
+    { label: 'Email', value: '^[\\w.-]+@[\\w.-]+\\.[A-Za-z]{2,}$' },
+    { label: 'Phone (digits, +, -, spaces)', value: '^[0-9+\\-()\\s]{6,}$' },
+    { label: 'URL', value: '^(https?:\\/\\/)?([\\w-]+\\.)+[\\w-]{2,}(\\/\\S*)?$' },
+    { label: 'Digits only', value: '^\\d+$' },
+    { label: 'Letters only', value: '^[A-Za-z]+$' },
+    { label: 'Alphanumeric', value: '^[A-Za-z0-9]+$' }
+  ];
 
   // Loading States
   loading = {
@@ -72,7 +81,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.fieldForm = this.fb.group({
       tabId: ['', Validators.required],
       fieldName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(200)]],
-      fieldCode: ['', [Validators.required, Validators.pattern('^[A-Z_][A-Z0-9_]*$'), Validators.maxLength(100)]],
+      fieldCode: ['', [Validators.required, Validators.pattern('^[A-Za-z_][A-Za-z0-9_]*$'), Validators.maxLength(100)]],
       fieldTypeId: ['', Validators.required],
       placeholder: ['', Validators.maxLength(200)],
       hintText: ['', Validators.maxLength(500)],
@@ -322,6 +331,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       isActive: true,
       dataType: 'string'
     });
+  }
+
+  onRegexPresetChange(value: string): void {
+    this.fieldForm.patchValue({ regexPattern: value });
   }
 
   saveField(): void {
