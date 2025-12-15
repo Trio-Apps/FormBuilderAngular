@@ -41,7 +41,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
   loading = false;
   private routeSubscription?: Subscription;
   
-  // Tab Modal
+  // Tab Modal updated
   showTabModal = false;
   tabName = '';
   tabCode = '';
