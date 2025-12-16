@@ -12,10 +12,6 @@
       <button class="btn btn-primary" (click)="openAddFieldModal()" [disabled]="loading.fields || loading.fieldTypes">
         <i class="fas fa-plus"></i> Add New Field
       </button>
-
-      <button class="btn btn-secondary" (click)="loadFields()" [disabled]="loading.fields">
-        <i class="fas fa-sync" [class.fa-spin]="loading.fields"></i> Refresh
-      </button>
     </div>
   </div>
 
@@ -105,27 +101,29 @@
           </td>
 
           <td>
-            <div class="action-buttons">
-              <button class="btn-action btn-edit" (click)="openEditFieldModal(field)" title="Edit">
-                <i class="fas fa-edit"></i>
-                <span class="btn-text">Edit</span>
-              </button>
-
-              <button class="btn-action btn-duplicate" (click)="duplicateField(field)" title="Duplicate">
-                <i class="fas fa-copy"></i>
-                <span class="btn-text">Duplicate</span>
-              </button>
-
-              <button class="btn-action btn-toggle" (click)="toggleFieldStatus(field)"
-                [title]="field.isActive ? 'Deactivate' : 'Activate'">
-                <i [class]="field.isActive ? 'fas fa-toggle-on' : 'fas fa-toggle-off'"></i>
-                <span class="btn-text">{{field.isActive ? 'Deactivate' : 'Activate'}}</span>
-              </button>
-
-              <button class="btn-action btn-delete" (click)="deleteField(field.id!)" title="Delete">
-                <i class="fas fa-trash"></i>
-                <span class="btn-text">Delete</span>
-              </button>
+            <div class="d-flex justify-content-start gap-3 actions-cell">
+              <i
+                class="pi pi-pencil action-icon text-success"
+                pTooltip="Edit"
+                (click)="openEditFieldModal(field)"
+              ></i>
+              <i
+                class="pi pi-copy action-icon text-info"
+                pTooltip="Duplicate"
+                (click)="duplicateField(field)"
+              ></i>
+              <i
+                class="pi pi-power-off action-icon"
+                [class.text-warning]="field.isActive"
+                [class.text-secondary]="!field.isActive"
+                [pTooltip]="field.isActive ? 'Deactivate' : 'Activate'"
+                (click)="toggleFieldStatus(field)"
+              ></i>
+              <i
+                class="pi pi-trash action-icon text-danger"
+                pTooltip="Delete"
+                (click)="deleteField(field.id!)"
+              ></i>
             </div>
           </td>
         </tr>

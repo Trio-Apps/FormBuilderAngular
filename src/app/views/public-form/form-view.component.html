@@ -1,0 +1,222 @@
+<div class="form-viewer-container" *ngIf="!loading && !notFound; else stateTemplate">
+  <!-- Form Header -->
+  <div class="form-header">
+    <h1 class="form-title">{{ form?.formName }}</h1>
+    
+  </div>
+
+  <!-- Tabs Navigation (if multiple tabs) -->
+  <div class="tabs-navigation" *ngIf="tabs && tabs.length > 1">
+    <ul class="nav-tabs-list">
+      <li 
+        *ngFor="let tab of tabs; let i = index"
+        class="nav-tab-item"
+        [class.active]="i === activeTabIndex">
+        <button 
+          type="button"
+          class="nav-tab-button"
+          (click)="setActiveTab(i)">
+          {{ tab.tabName }}
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <!-- Form Content -->
+  <div class="form-content" *ngIf="tabs && tabs.length > 0">
+    <div 
+      class="tab-panel"
+      *ngFor="let tab of tabs; let i = index"
+      [class.active]="i === activeTabIndex"
+      [class.hidden]="i !== activeTabIndex">
+      
+      <div class="tab-section" *ngIf="tab.fields && tab.fields.length > 0">
+        
+        <!-- Field Display -->
+        <div class="form-field" *ngFor="let field of tab.fields">
+          
+          <!-- Field Label -->
+          <label class="field-label">
+            {{ field.fieldName }}
+            <span *ngIf="isRequired(field)" class="required-indicator">*</span>
+          </label>
+
+          <!-- Field Input (Google Forms style - preview only, empty answer) -->
+          <div class="field-input-wrapper">
+            <ng-container [ngSwitch]="getFieldType(field)">
+              
+              <!-- Text Input -->
+              <input
+                *ngSwitchCase="'text'"
+                type="text"
+                class="form-input"
+                [placeholder]="field.placeholder || 'Your answer'"
+              />
+
+              <!-- Email Input -->
+              <input
+                *ngSwitchCase="'email'"
+                type="email"
+                class="form-input"
+                [placeholder]="field.placeholder || 'Your answer'"
+              />
+
+              <!-- Number Input -->
+              <input
+                *ngSwitchCase="'number'"
+                type="number"
+                class="form-input"
+                [placeholder]="field.placeholder || 'Your answer'"
+                [min]="field.minValue"
+                [max]="field.maxValue"
+              />
+
+              <!-- Textarea -->
+              <textarea
+                *ngSwitchCase="'textarea'"
+                class="form-textarea"
+                rows="4"
+                [placeholder]="field.placeholder || 'Your answer'"
+              ></textarea>
+
+              <!-- Select / Dropdown -->
+              <select
+                *ngSwitchCase="'select'"
+                class="form-select"
+              >
+                <option value="" selected>
+                  {{ field.placeholder || 'Choose an option' }}
+                </option>
+                <option
+                  *ngFor="let opt of (field.fieldOptions || [])"
+                  [value]="opt.optionValue">
+                  {{ opt.optionText }}
+                </option>
+              </select>
+
+              <!-- Radio Buttons -->
+              <div *ngSwitchCase="'radio'" class="radio-group">
+                <div
+                  class="radio-option"
+                  *ngFor="let opt of (field.fieldOptions || [])">
+                  <input
+                    type="radio"
+                    [id]="'radio-' + field.id + '-' + opt.id"
+                    [name]="'radio-' + field.id"
+                    [value]="opt.optionValue"
+                  />
+                  <label [for]="'radio-' + field.id + '-' + opt.id" class="radio-label">
+                    {{ opt.optionText }}
+                  </label>
+                </div>
+                <p *ngIf="!field.fieldOptions || field.fieldOptions.length === 0" class="no-options">
+                  No options available
+                </p>
+              </div>
+
+              <!-- Checkbox (Multiple Selection) -->
+              <div *ngSwitchCase="'checkbox'" class="checkbox-group">
+                <div
+                  class="checkbox-option"
+                  *ngFor="let opt of (field.fieldOptions || [])">
+                  <input
+                    type="checkbox"
+                    [id]="'chk-' + field.id + '-' + opt.id"
+                    [value]="opt.optionValue"
+                  />
+                  <label [for]="'chk-' + field.id + '-' + opt.id" class="checkbox-label">
+                    {{ opt.optionText }}
+                  </label>
+                </div>
+                <p *ngIf="!field.fieldOptions || field.fieldOptions.length === 0" class="no-options">
+                  No options available
+                </p>
+              </div>
+
+              <!-- Date Picker -->
+              <input
+                *ngSwitchCase="'date'"
+                type="date"
+                class="form-input"
+              />
+
+              <!-- File Upload -->
+              <div *ngSwitchCase="'file'" class="file-upload-disabled">
+                <input
+                  type="file"
+                  class="form-input file-input"
+                />
+                <span class="file-upload-hint">File upload disabled (view only)</span>
+              </div>
+
+              <!-- Switch / Toggle -->
+              <div *ngSwitchCase="'switch'" class="switch-wrapper">
+                <label class="switch-label">
+                  <input
+                    type="checkbox"
+                    class="switch-input"
+                  />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <!-- Default: Text -->
+              <input
+                *ngSwitchDefault
+                type="text"
+                class="form-input"
+                [placeholder]="field.placeholder || 'Your answer'"
+              />
+
+            </ng-container>
+          </div>
+
+         
+
+        </div>
+      </div>
+
+      <!-- Empty Tab Message -->
+      <div class="empty-tab-message" *ngIf="!tab.fields || tab.fields.length === 0">
+        <p>No fields in this tab.</p>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Loading State -->
+<ng-template #stateTemplate>
+  <div class="state-container" *ngIf="loading">
+    <div class="loading-spinner"></div>
+    <p class="loading-text">Loading form...</p>
+  </div>
+
+  <!-- Not Found State -->
+  <div class="state-container" *ngIf="!loading && notFound">
+    <div class="not-found-icon">📄</div>
+    <h2 class="not-found-title">Form not found</h2>
+    <p class="not-found-message">
+      The form you are trying to access does not exist or is not available.
+    </p>
+    <div class="not-found-details" *ngIf="notFoundReason">
+      <p class="not-found-reason">
+        <strong>Reason:</strong> {{ notFoundReason }}
+      </p>
+    </div>
+    <div class="not-found-details">
+      <p class="not-found-code">
+        <strong>Form Code:</strong> <code>{{ formCode }}</code>
+      </p>
+    </div>
+    <div class="not-found-help">
+      <p>Please check:</p>
+      <ul>
+        <li>That the form code is correct</li>
+        <li>That the form is published and active</li>
+        <li>Check the browser console for more details</li>
+      </ul>
+    </div>
+  </div>
+</ng-template>

@@ -22,8 +22,9 @@ export class TabsService {
       return of([]);
     }
 
-    // نحاول المسار الذي يستخدم formId كـ query parameter أولاً
-    return this.http.get<any>(`${this.baseUrl}?formId=${formId}`).pipe(
+    // استخدام المسار الصحيح: /api/FormTabs/form/{formId}
+    // أو /api/FormTabs/by-form/{formId} حسب ما هو متوفر في الباك إند
+    return this.http.get<any>(`${this.baseUrl}/form/${formId}`).pipe(
       map((response: any) => {
         // في حالة أن الـ API ترجع كائن مغلف (ServiceResult أو مشابه)
         if (response && typeof response === 'object' && !Array.isArray(response)) {
@@ -33,9 +34,10 @@ export class TabsService {
         // في حالة أن الـ API ترجع مباشرة مصفوفة من FormTabDto
         return Array.isArray(response) ? response : [];
       }),
-      catchError(() => {
-        // إذا فشل، نجرب المسار البديل /form/{formId}
-        return this.http.get<any>(`${this.baseUrl}/form/${formId}`).pipe(
+      catchError((error) => {
+        console.warn(`Failed to get tabs for form ${formId}, trying alternative endpoint:`, error);
+        // محاولة المسار البديل /by-form/{formId}
+        return this.http.get<any>(`${this.baseUrl}/by-form/${formId}`).pipe(
           map((response: any) => {
             if (response && typeof response === 'object' && !Array.isArray(response)) {
               const data = response.data || response.items || response.result || [];
@@ -43,7 +45,10 @@ export class TabsService {
             }
             return Array.isArray(response) ? response : [];
           }),
-          catchError(() => of([]))
+          catchError(() => {
+            console.error(`Failed to get tabs for form ${formId} from all endpoints`);
+            return of([]);
+          })
         );
       })
     );

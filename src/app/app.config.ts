@@ -3,7 +3,6 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import {
   provideRouter,
   withEnabledBlockingInitialNavigation,
-  withHashLocation,
   withInMemoryScrolling,
   withRouterConfig,
   withViewTransitions
@@ -17,7 +16,8 @@ import { authInterceptor } from './auth/auth.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideRouter(routes,
+    provideRouter(
+      routes,
       withRouterConfig({
         onSameUrlNavigation: 'reload'
       }),
@@ -26,8 +26,7 @@ export const appConfig: ApplicationConfig = {
         anchorScrolling: 'enabled'
       }),
       withEnabledBlockingInitialNavigation(),
-      withViewTransitions(),
-      withHashLocation()
+      withViewTransitions()
     ),
     provideHttpClient(
       withInterceptors([authInterceptor])

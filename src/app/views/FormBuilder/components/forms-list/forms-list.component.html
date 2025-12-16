@@ -99,6 +99,12 @@
           </td>
           <td class="text-end">
             <div class="d-flex justify-content-end gap-3 actions-cell">
+              <!-- Copy public link -->
+              <i
+                class="pi pi-copy action-icon text-secondary"
+                pTooltip="Copy Public Link"
+                (click)="copyPublicLink(form)"
+              ></i>
               <i class="pi pi-pencil action-icon text-success" pTooltip="Edit" (click)="openFormModal(form)"></i>
               <i class="pi pi-th-large action-icon text-info" pTooltip="Manage Tabs" [routerLink]="['../tabs', form.id]"></i>
               <i class="pi pi-trash action-icon text-danger" pTooltip="Delete" (click)="deleteForm(form.id)"></i>

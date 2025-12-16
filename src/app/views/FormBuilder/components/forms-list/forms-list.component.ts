@@ -1,5 +1,5 @@
 
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -7,7 +7,7 @@ import { FormsService } from '../../services/forms.service';
 import { TabsService } from '../../services/tabs.service';
 import { FieldsService } from '../../services/fields.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
-import { FormBuilderDto } from '../../form-builder/models/form-builder-dto.model';
+import { FormBuilderDto, UpdateFormBuilderDto } from '../../form-builder/models/form-builder-dto.model';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map, filter, distinctUntilChanged } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
@@ -72,7 +72,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
     private fieldsService: FieldsService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
-    private router: Router
+    private router: Router,
+    private cdr: ChangeDetectorRef
   ) {
     // Bind window focus handler to preserve reference for cleanup
     this.windowFocusHandler = this.onWindowFocus.bind(this);
@@ -132,9 +133,12 @@ export class FormsListComponent implements OnInit, OnDestroy {
     this.forms = [];
     this.filteredForms = [];
     
+    console.log('[FormsList] Loading forms, page:', page);
+    
     this.formsService.getForms(page, this.itemsPerPage).subscribe({
       next: (paged) => {
         const forms = paged.items || [];
+        console.log('[FormsList] Forms loaded from API:', forms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
         this.totalItems = paged.totalCount || forms.length;
         this.totalPages = paged.totalPages || Math.max(1, Math.ceil(this.totalItems / this.itemsPerPage));
         this.itemsPerPage = paged.pageSize || this.itemsPerPage;
@@ -241,6 +245,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
         tabsCount
       };
     });
+
+    console.log('[FormsList] Updated forms with counts:', updatedForms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
 
     this.forms = updatedForms;
     this.filteredForms = [...updatedForms];
@@ -357,7 +363,12 @@ export class FormsListComponent implements OnInit, OnDestroy {
   }
 
   saveForm(): void {
-    if (!this.formName || !this.formCode) {
+    // Trim values before validation
+    const trimmedFormName = this.formName?.trim() || '';
+    const trimmedFormCode = this.formCode?.trim() || '';
+    const trimmedDescription = this.description?.trim() || '';
+
+    if (!trimmedFormName || !trimmedFormCode) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation',
@@ -369,33 +380,131 @@ export class FormsListComponent implements OnInit, OnDestroy {
     this.loading = true;
 
     if (this.editingForm) {
-      const updateDto = {
-        formName: this.formName,
-        formCode: this.formCode,
-        description: this.description,
+      // Ensure formCode is always included, even if empty
+      const updateDto: UpdateFormBuilderDto = {
+        formName: trimmedFormName,
+        formCode: trimmedFormCode, // Explicitly include formCode
+        description: trimmedDescription || undefined,
         isPublished: this.isPublished,
         isActive: this.isActive
       };
 
+      // Log the exact structure being sent
+      console.log('[FormsList] Updating form - Full Details:', {
+        id: this.editingForm.id,
+        updateDto: updateDto,
+        updateDtoStringified: JSON.stringify(updateDto),
+        oldFormCode: this.editingForm.formCode,
+        newFormCode: trimmedFormCode,
+        formCodeInDto: updateDto.formCode,
+        hasFormCode: 'formCode' in updateDto,
+        formCodeValue: updateDto.formCode
+      });
+
       this.formsService.updateForm(this.editingForm.id, updateDto).subscribe({
         next: () => {
-          this.loadForms();
+          console.log('[FormsList] Form update successful, reloading forms...');
+          
+          // Update local data immediately (optimistic update)
+          const formId = this.editingForm!.id;
+          const formIndex = this.forms.findIndex(f => f.id === formId);
+          
+          if (formIndex !== -1) {
+            const oldForm = { ...this.forms[formIndex] };
+            // Create new object to ensure change detection
+            this.forms[formIndex] = {
+              ...this.forms[formIndex],
+              formName: trimmedFormName,
+              formCode: trimmedFormCode,
+              description: trimmedDescription || undefined,
+              isPublished: this.isPublished,
+              isActive: this.isActive
+            };
+            console.log('[FormsList] Local form updated:', {
+              id: this.forms[formIndex].id,
+              oldFormCode: oldForm.formCode,
+              newFormCode: this.forms[formIndex].formCode
+            });
+            
+            // Update filtered forms as well
+            const filteredIndex = this.filteredForms.findIndex(f => f.id === formId);
+            if (filteredIndex !== -1) {
+              this.filteredForms[filteredIndex] = {
+                ...this.filteredForms[filteredIndex],
+                formName: trimmedFormName,
+                formCode: trimmedFormCode,
+                description: trimmedDescription || undefined,
+                isPublished: this.isPublished,
+                isActive: this.isActive
+              };
+              console.log('[FormsList] Filtered form updated:', {
+                id: this.filteredForms[filteredIndex].id,
+                newFormCode: this.filteredForms[filteredIndex].formCode
+              });
+            }
+            
+            // Update paginatedForms directly
+            const paginatedIndex = this.paginatedForms.findIndex(f => f.id === formId);
+            if (paginatedIndex !== -1) {
+              this.paginatedForms[paginatedIndex] = {
+                ...this.paginatedForms[paginatedIndex],
+                formName: trimmedFormName,
+                formCode: trimmedFormCode,
+                description: trimmedDescription || undefined,
+                isPublished: this.isPublished,
+                isActive: this.isActive
+              };
+              console.log('[FormsList] Paginated form updated:', {
+                id: this.paginatedForms[paginatedIndex].id,
+                newFormCode: this.paginatedForms[paginatedIndex].formCode
+              });
+            }
+            
+            // Re-apply search filter if active
+            if (this.searchTerm.trim()) {
+              this.filterForms();
+            } else {
+              this.updatePagination();
+            }
+            
+            // Force change detection immediately
+            this.cdr.detectChanges();
+            
+            console.log('[FormsList] After optimistic update, paginatedForms:', 
+              this.paginatedForms.map(f => ({ id: f.id, formCode: f.formCode })));
+          }
+          
+          this.loading = false;
           this.closeFormModal();
+          
+          // Reload from API after a short delay to ensure consistency
+          // This allows the UI to update immediately with optimistic update
+          setTimeout(() => {
+            console.log('[FormsList] Reloading forms from API after optimistic update...');
+            this.loadForms(this.currentPage);
+          }, 300);
           this.messageService.add({
             severity: 'success',
             summary: 'Success',
             detail: 'Form updated successfully'
           });
         },
-        error: () => {
+        error: (error) => {
+          console.error('[FormsList] Form update error:', error);
           this.loading = false;
+          const errorMessage = error?.error?.message || error?.message || 'Failed to update form';
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage
+          });
         }
       });
     } else {
       const createDto = {
-        formName: this.formName,
-        formCode: this.formCode,
-        description: this.description,
+        formName: trimmedFormName,
+        formCode: trimmedFormCode,
+        description: trimmedDescription || undefined,
         isPublished: this.isPublished,
         isActive: this.isActive
       };
@@ -467,6 +576,37 @@ export class FormsListComponent implements OnInit, OnDestroy {
 
   getActiveClass(isActive: boolean | undefined): string {
     return isActive !== false ? 'status-active' : 'status-inactive';
+  }
+
+  copyPublicLink(form: FormBuilderDto): void {
+    if (!form?.formCode) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Copy link',
+        detail: 'Form code is missing.'
+      });
+      return;
+    }
+
+    const baseUrl = window.location.origin;
+    const publicUrl = `${baseUrl}/forms/view/${encodeURIComponent(form.formCode)}`;
+
+    navigator.clipboard.writeText(publicUrl).then(
+      () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Link copied',
+          detail: 'Public form link copied to clipboard.'
+        });
+      },
+      () => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Copy failed',
+          detail: 'Unable to copy link. Please try again.'
+        });
+      }
+    );
   }
 }
 

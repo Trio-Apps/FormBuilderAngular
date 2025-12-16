@@ -23,6 +23,7 @@ export class FieldsService {
   
   // الحصول على الحقول حسب formBuilderId و tabId - معالجة response المغلف
   getFields(formBuilderId: number, tabId: number): Observable<FormFieldDto[]> {
+    // استخدام المسار الصحيح: /api/FormFields/tab/{tabId}
     return this.http.get<any>(`${this.fieldsUrl}/tab/${tabId}`).pipe(
       map((response: any) => {
         // إذا كان response مغلف في object يحتوي على data
@@ -33,12 +34,16 @@ export class FieldsService {
         // إذا كان response مباشرة array
         return Array.isArray(response) ? response : [];
       }),
-      catchError(() => of([]))
+      catchError((error) => {
+        console.warn(`Failed to get fields for tab ${tabId}:`, error);
+        return of([]);
+      })
     );
   }
 
   // بديل إذا كان API يحتاج formBuilderId - معالجة response المغلف
   getFieldsByTabId(tabId: number): Observable<FormFieldDto[]> {
+    // استخدام المسار الصحيح: /api/FormFields/tab/{tabId}
     return this.http.get<any>(`${this.fieldsUrl}/tab/${tabId}`).pipe(
       map((response: any) => {
         // إذا كان response مغلف في object يحتوي على data
@@ -49,7 +54,10 @@ export class FieldsService {
         // إذا كان response مباشرة array
         return Array.isArray(response) ? response : [];
       }),
-      catchError(() => of([]))
+      catchError((error) => {
+        console.warn(`Failed to get fields for tab ${tabId}:`, error);
+        return of([]);
+      })
     );
   }
 
@@ -80,6 +88,16 @@ export class FieldsService {
       }),
       catchError((error) => {
         console.error('Error creating field:', error);
+        // Log detailed error information
+        if (error.error) {
+          console.error('Error details:', {
+            status: error.status,
+            statusText: error.statusText,
+            message: error.error.message || error.error.title || error.message,
+            errors: error.error.errors || error.error,
+            dto: dto
+          });
+        }
         throw error;
       })
     );

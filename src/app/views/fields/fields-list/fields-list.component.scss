@@ -310,85 +310,41 @@
   }
 }
 
-// Action Buttons
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-
-  .btn-action {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 8px;
-    display: inline-flex;
+// Action Icons - Unified Design (same as Forms & Tabs)
+.actions-cell {
+  .action-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
     cursor: pointer;
-    transition: all 0.3s ease;
-    font-size: 13px;
-    font-weight: 600;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
-    i {
-      font-size: 14px;
-    }
-
-    .btn-text {
-      font-size: 12px;
-    }
+    font-size: 1rem;
 
     &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      background-color: #f3f4f6;
     }
 
-    &:active {
-      transform: translateY(0);
+    &.text-success:hover {
+      background-color: #ecfdf5;
     }
-  }
 
-  .btn-edit {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    color: white;
-    border: 1px solid #2563eb;
-
-    &:hover {
-      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    &.text-info:hover {
+      background-color: #ecfeff;
     }
-  }
 
-  .btn-duplicate {
-    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-    color: white;
-    border: 1px solid #7c3aed;
-
-    &:hover {
-      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+    &.text-warning:hover {
+      background-color: #fefce8;
     }
-  }
 
-  .btn-toggle {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white;
-    border: 1px solid #059669;
-
-    &:hover {
-      background: linear-gradient(135deg, #059669 0%, #047857 100%);
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    &.text-secondary:hover {
+      background-color: #f9fafb;
     }
-  }
 
-  .btn-delete {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-    color: white;
-    border: 1px solid #dc2626;
-
-    &:hover {
-      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    &.text-danger:hover {
+      background-color: #fef2f2;
     }
   }
 }

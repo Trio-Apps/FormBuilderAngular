@@ -8,6 +8,7 @@ import { FormFieldDto, FieldTypeDto, UpdateFormFieldDto, CreateFormFieldDto } fr
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { TooltipModule } from 'primeng/tooltip';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -18,7 +19,8 @@ import { Subscription } from 'rxjs';
     FormsModule,
     ReactiveFormsModule,
     ToastModule,
-    ConfirmDialogModule
+    ConfirmDialogModule,
+    TooltipModule
   ],
   templateUrl: './fields-list.component.html',
   styleUrls: ['./fields-list.component.scss'],
@@ -378,15 +380,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.fieldsService.updateField(this.editingField.id, updateDto).subscribe({
         next: (updatedField) => {
           this.loading.save = false;
+          
+          // Reload fields from API so changes appear immediately without page refresh
+          this.loadFields();
+
           this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field updated successfully' });
-
-          // Update the field in the array
-          const index = this.fields.findIndex(f => f.id === this.editingField?.id);
-          if (index !== -1 && updatedField) {
-            this.fields[index] = { ...this.fields[index], ...updatedField };
-            this.fields = this.sortFieldsByOrder([...this.fields]);
-          }
-
           this.closeFieldModal();
           this.cdr.detectChanges();
         },
@@ -402,42 +400,67 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         fieldName: fieldData.fieldName,
         fieldCode: fieldData.fieldCode.toUpperCase(),
         fieldOrder: Number(fieldData.fieldOrder || 1),
-        placeholder: fieldData.placeholder || '',
-        hintText: fieldData.hintText || '',
+        placeholder: fieldData.placeholder || undefined,
+        hintText: fieldData.hintText || undefined,
         isMandatory: Boolean(fieldData.isMandatory ?? true),
         isEditable: Boolean(fieldData.isEditable ?? true),
         isVisible: Boolean(fieldData.isVisible ?? true),
-        defaultValueJson: fieldData.defaultValue || fieldData.defaultValueJson || '',
+        defaultValueJson: fieldData.defaultValue || fieldData.defaultValueJson || undefined,
         dataType: fieldData.dataType || 'string',
-        regexPattern: fieldData.regexPattern || '',
-        validationMessage: fieldData.validationMessage || `Please enter a valid ${fieldData.fieldName}`,
+        regexPattern: fieldData.regexPattern || undefined,
+        validationMessage: fieldData.validationMessage || undefined,
         minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
           ? Number(fieldData.minValue) 
-          : 0,
+          : undefined,
         maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== '' 
           ? Number(fieldData.maxValue) 
-          : 0,
+          : undefined,
         maxLength: fieldData.maxLength ? Number(fieldData.maxLength) : undefined,
-        visibilityRuleJson: fieldData.visibilityRuleJson || '',
-        readOnlyRuleJson: fieldData.readOnlyRuleJson || '',
+        visibilityRuleJson: fieldData.visibilityRuleJson || undefined,
+        readOnlyRuleJson: fieldData.readOnlyRuleJson || undefined,
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
       };
 
       this.fieldsService.createField(createDto).subscribe({
         next: (newField) => {
           this.loading.save = false;
+          
+          // Reload fields from API so the new field appears immediately
+          this.loadFields();
+
           this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field created successfully' });
-
-          // Add new field to the array
-          this.fields = this.sortFieldsByOrder([...this.fields, newField]);
-
           this.closeFieldModal();
           this.cdr.detectChanges();
         },
-          error: () => {
-            this.loading.save = false;
-            this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to create field' });
+        error: (error) => {
+          this.loading.save = false;
+          let errorMessage = 'Failed to create field';
+          
+          // Extract detailed error message
+          if (error.error) {
+            if (error.error.errors) {
+              // Validation errors from ASP.NET Core
+              const validationErrors = Object.values(error.error.errors).flat() as string[];
+              errorMessage = `Validation errors: ${validationErrors.join(', ')}`;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            } else if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            }
+          } else if (error.message) {
+            errorMessage = error.message;
           }
+          
+          console.error('Field creation error:', error);
+          this.messageService.add({ 
+            severity: 'error', 
+            summary: 'Error', 
+            detail: errorMessage,
+            life: 5000
+          });
+        }
       });
     }
   }
@@ -543,14 +566,23 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
         this.fieldsService.updateField(field.id, updateDto).subscribe({
           next: (updatedField) => {
-            // Update field in array
+            // Update field in array without reloading
             const index = this.fields.findIndex(f => f.id === field.id);
             if (index !== -1) {
-              this.fields[index] = { ...this.fields[index], ...updatedField, isActive: newStatus };
-              this.fields = [...this.fields];
+              const existingField = this.fields[index];
+              this.fields[index] = {
+                ...existingField,
+                ...updatedField,
+                isActive: newStatus,
+                // Preserve fieldOptions
+                fieldOptions: updatedField.fieldOptions || existingField.fieldOptions || []
+              };
+              // Maintain sorted order
+              this.fields = this.sortFieldsByOrder([...this.fields]);
             }
 
             this.messageService.add({ severity: 'success', summary: 'Success', detail: `Field ${action}d successfully` });
+            this.cdr.detectChanges();
           },
           error: (error) => {
             console.error('Error updating field status:', error);
@@ -609,7 +641,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     if (control.errors['required']) return 'This field is required';
     if (control.errors['minlength']) return `Minimum length is ${control.errors['minlength'].requiredLength}`;
     if (control.errors['maxlength']) return `Maximum length is ${control.errors['maxlength'].requiredLength}`;
-    if (control.errors['pattern']) return 'Invalid format. Use only uppercase letters, numbers and underscores';
+    if (control.errors['pattern']) return 'Invalid format. Use only letters (uppercase or lowercase), numbers and underscores';
     if (control.errors['min']) return `Minimum value is ${control.errors['min'].min}`;
 
     return 'Invalid value';

@@ -62,28 +62,22 @@
               </td>
               <td>{{ tab.tabOrder }}</td>
               <td>
-                <div class="btn-group" role="group">
-                  <button pButton 
-                          type="button" 
-                          icon="pi pi-pencil" 
-                          pTooltip="Edit" 
-                          (click)="openTabModal(tab)"
-                          class="p-button-text p-button-sm p-button-success">
-                  </button>
-                  <button pButton 
-                          type="button" 
-                          icon="pi pi-list" 
-                          pTooltip="Manage Fields" 
-                          [routerLink]="['../../fields', tab.id]"
-                          class="p-button-text p-button-sm p-button-info">
-                  </button>
-                  <button pButton 
-                          type="button" 
-                          icon="pi pi-trash" 
-                          pTooltip="Delete" 
-                          (click)="deleteTab(tab.id)"
-                          class="p-button-text p-button-sm p-button-danger">
-                  </button>
+                <div class="d-flex justify-content-start gap-3 actions-cell">
+                  <i
+                    class="pi pi-pencil action-icon text-success"
+                    pTooltip="Edit"
+                    (click)="openTabModal(tab)"
+                  ></i>
+                  <i
+                    class="pi pi-list action-icon text-info"
+                    pTooltip="Manage Fields"
+                    (click)="navigateToFields(tab.id)"
+                  ></i>
+                  <i
+                    class="pi pi-trash action-icon text-danger"
+                    pTooltip="Delete"
+                    (click)="deleteTab(tab.id)"
+                  ></i>
                 </div>
               </td>
             </tr>

@@ -1,0 +1,761 @@
+// Form Viewer Container - Google Forms Style
+.form-viewer-container {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 16px 48px 16px;
+  background: #f0ebf8;
+  min-height: 100vh;
+}
+
+// Form Header - Google Forms Style
+.form-header {
+  margin-bottom: 12px;
+  padding: 24px 24px 16px 24px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 1px -1px rgba(0, 0, 0, 0.2), 0 1px 1px 0 rgba(0, 0, 0, 0.14), 0 1px 3px 0 rgba(0, 0, 0, 0.12);
+}
+
+.form-title {
+  font-size: 32px;
+  font-weight: 400;
+  color: #202124;
+  margin: 0 0 8px 0;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.form-description {
+  font-size: 14px;
+  color: #5f6368;
+  margin: 0;
+  line-height: 1.5;
+}
+
+// Tabs Navigation - Google Forms Style
+.tabs-navigation {
+  margin-bottom: 12px;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 2px 1px -1px rgba(0, 0, 0, 0.2), 0 1px 1px 0 rgba(0, 0, 0, 0.14), 0 1px 3px 0 rgba(0, 0, 0, 0.12);
+  border-bottom: none;
+}
+
+.nav-tabs-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.nav-tab-item {
+  margin: 0;
+  padding: 0;
+  flex: 1;
+}
+
+.nav-tab-button {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #5f6368;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  width: 100%;
+  text-align: center;
+  
+  &:hover {
+    color: #1a73e8;
+    background: rgba(26, 115, 232, 0.08);
+  }
+  
+  &:focus {
+    outline: none;
+    background: rgba(26, 115, 232, 0.12);
+  }
+}
+
+.nav-tab-item.active .nav-tab-button {
+  color: #1a73e8;
+  background: #e8f0fe;
+  font-weight: 600;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 3px;
+    background: #1a73e8;
+    border-radius: 2px 2px 0 0;
+  }
+}
+
+// Form Content - Google Forms Style
+.form-content {
+  margin-top: 12px;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 24px 24px 24px 24px;
+  box-shadow: 0 2px 1px -1px rgba(0, 0, 0, 0.2), 0 1px 1px 0 rgba(0, 0, 0, 0.14), 0 1px 3px 0 rgba(0, 0, 0, 0.12);
+}
+
+.tab-panel {
+  display: block;
+  
+  &.hidden {
+    display: none !important;
+  }
+  
+  &.active {
+    display: block !important;
+  }
+}
+
+.tab-section {
+  margin-bottom: 0;
+}
+
+// Form Fields - Google Forms Style
+.form-field {
+  margin-bottom: 24px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  transition: none;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.field-label {
+  display: block;
+  font-size: 16px;
+  font-weight: 400;
+  color: #202124;
+  margin-bottom: 8px;
+  line-height: 1.5;
+  letter-spacing: 0.2px;
+}
+
+.required-indicator {
+  color: #d93025;
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.field-input-wrapper {
+  margin-top: 8px;
+  min-height: 32px;
+  display: block;
+  width: 100%;
+}
+
+// Common Input Styles - Google Forms Style
+.form-input,
+.form-textarea,
+.form-select {
+  width: 100%;
+  padding: 8px 0;
+  font-size: 14px;
+  font-family: 'Roboto', 'Google Sans', Arial, sans-serif;
+  color: #202124;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 0;
+  box-sizing: border-box;
+  transition: border-bottom 0.2s ease;
+  display: block;
+  min-height: 24px;
+  
+  &::placeholder {
+    color: rgba(0, 0, 0, 0.38);
+    opacity: 1;
+  }
+  
+  &:focus {
+    outline: none;
+    border-bottom: 2px solid #673ab7;
+    padding-bottom: 7px;
+  }
+  
+  &:hover:not(:focus) {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.42);
+  }
+}
+
+.form-input,
+.form-select {
+  height: auto;
+  min-height: 32px;
+  padding: 8px 0;
+}
+
+.form-textarea {
+  min-height: 60px;
+  resize: vertical;
+  padding: 8px 0;
+  line-height: 1.5;
+  font-family: 'Roboto', 'Google Sans', Arial, sans-serif;
+}
+
+.form-select {
+  cursor: pointer;
+  padding: 8px 0;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right center;
+  padding-right: 24px;
+}
+
+// Radio Buttons - Google Forms Style
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  margin: 0;
+  accent-color: #673ab7;
+  
+  &:focus {
+    outline: 2px solid rgba(103, 58, 183, 0.2);
+    outline-offset: 2px;
+    border-radius: 50%;
+  }
+}
+
+.radio-label {
+  font-size: 14px;
+  color: #202124;
+  cursor: pointer;
+  margin: 0;
+  padding-left: 0;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+// Checkboxes - Google Forms Style
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  margin: 0;
+  accent-color: #673ab7;
+  
+  &:focus {
+    outline: 2px solid rgba(103, 58, 183, 0.2);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+.checkbox-label {
+  font-size: 14px;
+  color: #202124;
+  cursor: pointer;
+  margin: 0;
+  padding-left: 0;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+// File Upload Display
+.file-upload-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.file-icon {
+  font-size: 18px;
+}
+
+.file-status {
+  font-size: 12px;
+  color: #5f6368;
+  font-style: italic;
+}
+
+// Switch Display
+.switch-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.switch-status {
+  font-weight: 600;
+  font-size: 14px;
+  min-width: 40px;
+  
+  &.switch-on {
+    color: #137333;
+  }
+  
+  &.switch-off {
+    color: #5f6368;
+  }
+}
+
+.switch-visual {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  background-color: #dadce0;
+  border-radius: 24px;
+  transition: background-color 0.3s;
+  
+  &.switch-on {
+    background-color: #34a853;
+  }
+  
+  .switch-slider-visual {
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: transform 0.3s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+  
+  &.switch-on .switch-slider-visual {
+    transform: translateX(18px);
+  }
+}
+
+// Field Hint - Google Forms Style
+.field-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.54);
+  line-height: 1.4;
+  font-style: normal;
+  padding-left: 0;
+  font-weight: 400;
+}
+
+// Field Details Section
+.field-details {
+  margin-top: 16px;
+  border-top: 1px solid #e8eaed;
+  padding-top: 16px;
+}
+
+.field-details-header {
+  margin-bottom: 12px;
+}
+
+.field-details-toggle {
+  background: transparent;
+  border: none;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a73e8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  
+  &:hover {
+    color: #1557b0;
+    background: #e8f0fe;
+  }
+  
+  &:focus {
+    outline: 2px solid #1a73e8;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  
+  span {
+    font-size: 12px;
+    display: inline-block;
+    width: 16px;
+    transition: transform 0.2s ease;
+  }
+}
+
+.field-details-content {
+  margin-top: 16px;
+  padding: 24px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e8eaed;
+}
+
+.field-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.detail-section {
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #e8eaed;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s ease;
+  
+  &:hover {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.detail-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a73e8;
+  margin: 0 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e8f0fe;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  &::before {
+    content: '';
+    width: 4px;
+    height: 16px;
+    background: #1a73e8;
+    border-radius: 2px;
+  }
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f1f3f4;
+  
+  &:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+}
+
+.detail-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5f6368;
+  min-width: 140px;
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+
+.detail-value {
+  font-size: 14px;
+  color: #202124;
+  word-break: break-word;
+  flex: 1;
+  line-height: 1.5;
+  
+  &.code {
+    font-family: 'Courier New', monospace;
+    background: #f1f3f4;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    border: 1px solid #e8eaed;
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  
+  &.badge-yes {
+    background: #e6f4ea;
+    color: #137333;
+    border: 1px solid #c8e6d0;
+  }
+  
+  &.badge-no {
+    background: #fce8e6;
+    color: #c5221f;
+    border: 1px solid #f9cbc8;
+  }
+}
+
+// Field Options List
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.option-index {
+  font-weight: 600;
+  color: #5f6368;
+  min-width: 24px;
+}
+
+.option-text {
+  flex: 1;
+  color: #202124;
+}
+
+.option-value {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #5f6368;
+  background: #ffffff;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.option-order {
+  font-size: 11px;
+  color: #9aa0a6;
+}
+
+// Empty Tab Message
+.empty-tab-message {
+  text-align: center;
+  padding: 48px 24px;
+  color: #9aa0a6;
+  font-size: 14px;
+}
+
+.no-fields-message {
+  text-align: center;
+  padding: 32px 24px;
+  color: #5f6368;
+  font-size: 14px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px dashed #dadce0;
+  margin: 16px 0;
+}
+
+.no-options {
+  font-size: 12px;
+  color: #9aa0a6;
+  font-style: italic;
+  margin: 8px 0 0 0;
+}
+
+// Loading & Error States
+.state-container {
+  max-width: 600px;
+  margin: 100px auto;
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 24px;
+  border: 4px solid #e8eaed;
+  border-top-color: #1a73e8;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-size: 14px;
+  color: #5f6368;
+  margin: 0;
+}
+
+.not-found-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.not-found-title {
+  font-size: 24px;
+  font-weight: 400;
+  color: #202124;
+  margin: 0 0 8px 0;
+}
+
+.not-found-message {
+  font-size: 14px;
+  color: #5f6368;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+.not-found-details {
+  margin: 12px 0;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border-left: 3px solid #1a73e8;
+}
+
+.not-found-reason,
+.not-found-code {
+  font-size: 13px;
+  color: #202124;
+  margin: 8px 0;
+  line-height: 1.5;
+  
+  code {
+    background: #f1f3f4;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #c5221f;
+  }
+}
+
+.not-found-help {
+  margin-top: 20px;
+  padding: 16px;
+  background: #e8f0fe;
+  border-radius: 4px;
+  text-align: left;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+  
+  p {
+    font-size: 13px;
+    font-weight: 500;
+    color: #1a73e8;
+    margin: 0 0 8px 0;
+  }
+  
+  ul {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 12px;
+    color: #5f6368;
+    line-height: 1.6;
+    
+    li {
+      margin-bottom: 4px;
+    }
+  }
+}
+
+// Responsive Design - Google Forms Style
+@media (max-width: 768px) {
+  .form-viewer-container {
+    padding: 16px 8px 32px 8px;
+    max-width: 100%;
+  }
+  
+  .form-content {
+    padding: 16px;
+  }
+  
+  .form-header {
+    padding: 16px;
+  }
+  
+  .form-title {
+    font-size: 24px;
+  }
+  
+  .nav-tabs-list {
+    flex-wrap: wrap;
+  }
+  
+  .nav-tab-button {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+  
+  .form-field {
+    margin-bottom: 20px;
+  }
+  
+  .field-label {
+    font-size: 14px;
+  }
+}
+
+// Print Styles
+@media print {
+  .tabs-navigation,
+  .state-container {
+    display: none;
+  }
+  
+  .form-viewer-container {
+    max-width: 100%;
+    padding: 0;
+  }
+  
+  .tab-panel.hidden {
+    display: block;
+  }
+}

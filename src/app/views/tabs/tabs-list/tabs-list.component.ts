@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
@@ -51,6 +51,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     private tabsService: TabsService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService
@@ -213,6 +214,10 @@ export class TabsListComponent implements OnInit, OnDestroy {
         }
       });
     }
+  }
+
+  navigateToFields(tabId: number): void {
+    this.router.navigate(['../../fields', tabId], { relativeTo: this.route });
   }
 
   deleteTab(id: number): void {

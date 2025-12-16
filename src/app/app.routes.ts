@@ -6,8 +6,15 @@ export const routes: Routes = [
   // ===== المسارات العامة =====
   { 
     path: '', 
-    redirectTo: 'form-builder', 
+    redirectTo: 'dashboard', 
     pathMatch: 'full' 
+  },
+  
+  // ===== صفحة عرض الفورم العامة (بدون تسجيل دخول) =====
+  {
+    path: 'forms/view/:formCode',
+    loadComponent: () => import('./views/public-form/form-view.component')
+      .then(m => m.FormViewComponent)
   },
   
   // ===== الصفحات العامة (Login, Register, etc.) =====
@@ -25,7 +32,12 @@ export const routes: Routes = [
         .then(m => m.DefaultLayoutComponent),
     canActivate: [authGuard], // يمنع المستخدمين غير المسجلين
     children: [
-   
+      // ===== Dashboard =====
+      {
+        path: 'dashboard',
+        loadChildren: () => import('./views/dashboard/routes').then(m => m.routes)
+      },
+
       // ===== Form Builder System =====
       {
         path: 'form-builder',
