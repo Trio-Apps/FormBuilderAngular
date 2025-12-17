@@ -43,13 +43,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   fieldTypes: FieldTypeDto[] = [];
   filteredFieldTypes: FieldTypeDto[] = [];
   regexOptions = [
-    { label: 'No preset (custom)', value: '' },
-    { label: 'Email', value: '^[\\w.-]+@[\\w.-]+\\.[A-Za-z]{2,}$' },
-    { label: 'Phone (digits, +, -, spaces)', value: '^[0-9+\\-()\\s]{6,}$' },
-    { label: 'URL', value: '^(https?:\\/\\/)?([\\w-]+\\.)+[\\w-]{2,}(\\/\\S*)?$' },
-    { label: 'Digits only', value: '^\\d+$' },
-    { label: 'Letters only', value: '^[A-Za-z]+$' },
-    { label: 'Alphanumeric', value: '^[A-Za-z0-9]+$' }
+    { label: 'No preset (custom)', value: '', message: '' },
+    { label: 'Email', value: '^[\\w.-]+@[\\w.-]+\\.[A-Za-z]{2,}$', message: 'Please enter a valid email address' },
+    { label: 'Phone (digits, +, -, spaces)', value: '^[0-9+\\-()\\s]{6,}$', message: 'Please enter a valid phone number' },
+    { label: 'URL', value: '^(https?:\\/\\/)?([\\w-]+\\.)+[\\w-]{2,}(\\/\\S*)?$', message: 'Please enter a valid URL' },
+    { label: 'Digits only', value: '^\\d+$', message: 'Please enter digits only' },
+    { label: 'Letters only', value: '^[A-Za-z]+$', message: 'Please enter letters only' },
+    { label: 'Alphanumeric', value: '^[A-Za-z0-9]+$', message: 'Please enter alphanumeric characters only' }
   ];
 
   // Loading States
@@ -114,6 +114,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Watch fieldTypeId changes to show/hide options section
     this.fieldForm.get('fieldTypeId')?.valueChanges.subscribe(fieldTypeId => {
       this.onFieldTypeChange(fieldTypeId);
+    });
+
+    // Watch regexPattern changes to auto-update validation message
+    this.fieldForm.get('regexPattern')?.valueChanges.subscribe(pattern => {
+      this.onRegexPatternChange(pattern);
     });
   }
 
@@ -311,6 +316,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.editingField = field;
     this.showFieldModal = true;
 
+    const regexPattern = field.regexPattern || '';
+    let validationMessage = field.validationMessage || '';
+    
+    // Auto-set validation message if pattern matches a preset and message is empty
+    if (regexPattern && !validationMessage) {
+      const matchingOption = this.regexOptions.find(opt => opt.value === regexPattern);
+      if (matchingOption && matchingOption.message) {
+        validationMessage = matchingOption.message;
+      }
+    }
+
     this.fieldForm.patchValue({
       tabId: this.tabId,
       fieldTypeId: field.fieldTypeId || '',
@@ -325,11 +341,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       isActive: field.isActive !== false,
       defaultValue: field.defaultValueJson || '',
       defaultValueJson: field.defaultValueJson || '',
-      regexPattern: field.regexPattern || '',
-      validationMessage: field.validationMessage || '',
+      regexPattern: regexPattern,
+      validationMessage: validationMessage,
       minValue: field.minValue || null,
       maxValue: field.maxValue || null
-    });
+    }, { emitEvent: false }); // Prevent triggering change listeners during initialization
 
     // Load field options
     this.loadFieldOptions(field.id);
@@ -349,7 +365,37 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   onRegexPresetChange(value: string): void {
-    this.fieldForm.patchValue({ regexPattern: value });
+    const selectedOption = this.regexOptions.find(opt => opt.value === value);
+    if (selectedOption) {
+      this.fieldForm.patchValue({ 
+        regexPattern: selectedOption.value,
+        validationMessage: selectedOption.message || ''
+      }, { emitEvent: false }); // Prevent triggering regexPattern change listener
+    } else {
+      this.fieldForm.patchValue({ regexPattern: value }, { emitEvent: false });
+    }
+  }
+
+  onRegexPatternChange(pattern: string): void {
+    // Only auto-update if validation message is empty or matches a preset message
+    const currentMessage = this.fieldForm.get('validationMessage')?.value || '';
+    const matchingOption = this.regexOptions.find(opt => opt.value === pattern);
+    
+    // If pattern matches a preset and message is empty or matches the preset message, update it
+    if (matchingOption && matchingOption.message) {
+      if (!currentMessage || currentMessage === matchingOption.message || 
+          this.regexOptions.some(opt => opt.message === currentMessage)) {
+        this.fieldForm.patchValue({ 
+          validationMessage: matchingOption.message 
+        }, { emitEvent: false });
+      }
+    }
+  }
+
+  getSelectedRegexPreset(): string {
+    const currentPattern = this.fieldForm.get('regexPattern')?.value || '';
+    const matchingOption = this.regexOptions.find(opt => opt.value === currentPattern);
+    return matchingOption ? matchingOption.value : '';
   }
 
   saveField(): void {
@@ -540,6 +586,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   toggleFieldStatus(field: FormFieldDto): void {
+    console.log('[toggleFieldStatus] Called for field:', field.id, 'Current status:', field.isActive);
     const newStatus = !field.isActive;
     const action = newStatus ? 'activate' : 'deactivate';
 
@@ -548,40 +595,22 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       header: 'Confirm Status Change',
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
-        const updateDto: UpdateFormFieldDto = {
-          tabId: field.tabId,
-          fieldTypeId: field.fieldTypeId,
-          fieldName: field.fieldName,
-          fieldCode: field.fieldCode,
-          fieldOrder: field.fieldOrder,
-          placeholder: field.placeholder || '',
-          hintText: field.hintText || '',
-          isMandatory: field.isMandatory,
-          isEditable: field.isEditable,
-          isVisible: field.isVisible,
-          defaultValueJson: field.defaultValueJson || '',
-          regexPattern: field.regexPattern || '',
-          validationMessage: field.validationMessage || '',
-          minValue: field.minValue !== null && field.minValue !== undefined 
-            ? field.minValue 
-            : undefined,
-          maxValue: field.maxValue !== null && field.maxValue !== undefined 
-            ? field.maxValue 
-            : undefined
-        };
-
-        this.fieldsService.updateField(field.id, updateDto).subscribe({
+        console.log('[toggleFieldStatus] User confirmed, updating field status to:', newStatus);
+        
+        // Try using the dedicated status endpoint first
+        this.fieldsService.updateFieldStatus(field.id, newStatus).subscribe({
           next: (updatedField) => {
+            console.log('[toggleFieldStatus] Status updated successfully:', updatedField);
             // Update field in array without reloading
             const index = this.fields.findIndex(f => f.id === field.id);
             if (index !== -1) {
               const existingField = this.fields[index];
               this.fields[index] = {
                 ...existingField,
-                ...updatedField,
+                ...(updatedField || {}),
                 isActive: newStatus,
-                // Preserve fieldOptions
-                fieldOptions: updatedField.fieldOptions || existingField.fieldOptions || []
+                // Preserve fieldOptions - safely handle null updatedField
+                fieldOptions: (updatedField?.fieldOptions ?? existingField.fieldOptions) || []
               };
               // Maintain sorted order
               this.fields = this.sortFieldsByOrder([...this.fields]);
@@ -591,12 +620,64 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             this.cdr.detectChanges();
           },
           error: (error) => {
-            console.error('Error updating field status:', error);
-            const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || `Failed to ${action} field`;
-            this.messageService.add({ 
-              severity: 'error', 
-              summary: 'Error', 
-              detail: errorMessage 
+            console.error('[toggleFieldStatus] Error using status endpoint, trying full update:', error);
+            
+            // Fallback: use full update with isActive
+            const updateDto: UpdateFormFieldDto = {
+              tabId: field.tabId,
+              fieldTypeId: field.fieldTypeId,
+              fieldName: field.fieldName,
+              fieldCode: field.fieldCode,
+              fieldOrder: field.fieldOrder,
+              placeholder: field.placeholder || '',
+              hintText: field.hintText || '',
+              isMandatory: field.isMandatory,
+              isEditable: field.isEditable,
+              isVisible: field.isVisible,
+              isActive: newStatus,
+              defaultValueJson: field.defaultValueJson || '',
+              regexPattern: field.regexPattern || '',
+              validationMessage: field.validationMessage || '',
+              minValue: field.minValue !== null && field.minValue !== undefined 
+                ? field.minValue 
+                : undefined,
+              maxValue: field.maxValue !== null && field.maxValue !== undefined 
+                ? field.maxValue 
+                : undefined
+            };
+
+            console.log('[toggleFieldStatus] Sending full update DTO:', updateDto);
+
+            this.fieldsService.updateField(field.id, updateDto).subscribe({
+              next: (updatedField) => {
+                console.log('[toggleFieldStatus] Full update successful:', updatedField);
+                // Update field in array without reloading
+                const index = this.fields.findIndex(f => f.id === field.id);
+                if (index !== -1) {
+                  const existingField = this.fields[index];
+                  this.fields[index] = {
+                    ...existingField,
+                    ...(updatedField || {}),
+                    isActive: newStatus,
+                    // Preserve fieldOptions - safely handle null updatedField
+                    fieldOptions: (updatedField?.fieldOptions ?? existingField.fieldOptions) || []
+                  };
+                  // Maintain sorted order
+                  this.fields = this.sortFieldsByOrder([...this.fields]);
+                }
+
+                this.messageService.add({ severity: 'success', summary: 'Success', detail: `Field ${action}d successfully` });
+                this.cdr.detectChanges();
+              },
+              error: (error2) => {
+                console.error('[toggleFieldStatus] Error updating field:', error2);
+                const errorMessage = error2?.error?.message || error2?.error?.errorMessage || error2?.message || `Failed to ${action} field`;
+                this.messageService.add({ 
+                  severity: 'error', 
+                  summary: 'Error', 
+                  detail: errorMessage 
+                });
+              }
             });
           }
         });

@@ -179,11 +179,13 @@
                     <i class="pi pi-pencil"></i>
                   </button>
                   <button
+                    type="button"
                     class="action-btn"
                     [class.action-activate]="!fieldType.isActive"
                     [class.action-deactivate]="fieldType.isActive"
-                    (click)="toggleFieldTypeStatus(fieldType)"
+                    (click)="toggleFieldTypeStatus(fieldType); $event.stopPropagation()"
                     [title]="fieldType.isActive ? 'Deactivate' : 'Activate'"
+                    [disabled]="loading.fieldTypes"
                   >
                     <i class="pi" [class.pi-power-off]="fieldType.isActive" [class.pi-check]="!fieldType.isActive"></i>
                   </button>
@@ -276,8 +278,8 @@
             </div>
           </div>
 
-          <!-- Options Configuration -->
-          <div class="form-section">
+          <!-- Options Configuration - Only show for types that support options -->
+          <div class="form-section" *ngIf="supportsOptions()">
             <h3><i class="pi pi-cog"></i> Options Configuration</h3>
 
             <div class="form-row">
@@ -296,7 +298,13 @@
                   Allow Multiple Selection
                 </label>
               </div>
+            </div>
+          </div>
 
+          <!-- Active Status - Always visible -->
+          <div class="form-section">
+            <h3><i class="pi pi-info-circle"></i> Status</h3>
+            <div class="form-row">
               <div class="form-group checkbox-group">
                 <label class="checkbox-label">
                   <input type="checkbox" formControlName="isActive" id="isActive">

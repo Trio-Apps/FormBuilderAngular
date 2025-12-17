@@ -101,6 +101,7 @@ export interface UpdateFormFieldDto {
   isMandatory?: boolean | null; // Optional nullable bool
   isEditable?: boolean | null; // Optional nullable bool
   isVisible?: boolean | null; // Optional nullable bool
+  isActive?: boolean; // Optional bool for activating/deactivating field
   defaultValueJson?: string;
   maxLength?: number; // Optional int? in C#
   minValue?: number;

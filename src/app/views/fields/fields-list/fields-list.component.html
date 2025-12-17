@@ -366,7 +366,9 @@
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">Regex Pattern</label>
-              <select class="form-control mb-2" (change)="onRegexPresetChange($any($event.target)?.value || '')">
+              <select class="form-control mb-2" 
+                      [value]="getSelectedRegexPreset()"
+                      (change)="onRegexPresetChange($any($event.target)?.value || '')">
                 <option *ngFor="let opt of regexOptions" [value]="opt.value">{{ opt.label }}</option>
               </select>
               <input type="text" 

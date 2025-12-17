@@ -90,6 +90,11 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
       allowMultiple: [false],
       isActive: [true]
     });
+
+    // Watch for typeName changes to show/hide options section
+    this.fieldTypeForm.get('typeName')?.valueChanges.subscribe(typeName => {
+      this.onTypeNameChange(typeName);
+    });
   }
 
   ngOnInit(): void {
@@ -159,15 +164,20 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     this.editingFieldType = fieldType;
     this.showFieldTypeModal = true;
 
+    const typeName = fieldType.typeName || '';
+    const optionsSupportedTypes = ['Dropdown', 'Radio', 'Checkbox'];
+    const supportsOptions = optionsSupportedTypes.includes(typeName);
+
     this.fieldTypeForm.patchValue({
-      typeName: fieldType.typeName || '',
+      typeName: typeName,
       description: fieldType.description || '',
       dataType: fieldType.dataType || '',
       maxLength: fieldType.maxLength || null,
-      hasOptions: fieldType.hasOptions || false,
-      allowMultiple: fieldType.allowMultiple || false,
+      // Only set options if the type supports them, otherwise reset to false
+      hasOptions: supportsOptions ? (fieldType.hasOptions || false) : false,
+      allowMultiple: supportsOptions ? (fieldType.allowMultiple || false) : false,
       isActive: fieldType.isActive !== false
-    });
+    }, { emitEvent: false }); // Don't emit event to avoid triggering onTypeNameChange
   }
 
   closeFieldTypeModal(): void {
@@ -191,17 +201,32 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     const fieldTypeData = this.fieldTypeForm.value;
 
     if (this.editingFieldType) {
+      // Ensure ID is a number
+      const fieldTypeId = Number(this.editingFieldType.id);
+      if (isNaN(fieldTypeId)) {
+        this.loading.save = false;
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Invalid field type ID' });
+        return;
+      }
+
+      // Ensure typeName is provided (API might require it even though DTO shows optional)
+      if (!fieldTypeData.typeName || fieldTypeData.typeName.trim() === '') {
+        this.loading.save = false;
+        this.messageService.add({ severity: 'error', summary: 'Validation', detail: 'Type name is required' });
+        return;
+      }
+
       const updateDto: UpdateFieldTypeDto = {
-        typeName: fieldTypeData.typeName,
-        description: fieldTypeData.description || undefined,
-        dataType: fieldTypeData.dataType || undefined,
+        typeName: fieldTypeData.typeName.trim(),
+        description: fieldTypeData.description?.trim() || undefined,
+        dataType: fieldTypeData.dataType?.trim() || undefined,
         maxLength: fieldTypeData.maxLength ? Number(fieldTypeData.maxLength) : undefined,
         hasOptions: fieldTypeData.hasOptions || false,
         allowMultiple: fieldTypeData.allowMultiple || false,
         isActive: fieldTypeData.isActive !== false
       };
 
-      this.fieldTypesService.updateFieldType(this.editingFieldType.id, updateDto).subscribe({
+      this.fieldTypesService.updateFieldType(fieldTypeId, updateDto).subscribe({
         next: () => {
           this.loading.save = false;
           this.loadFieldTypes();
@@ -211,24 +236,101 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           this.loading.save = false;
+          console.error('Error updating field type:', error);
+          console.error('Error details:', {
+            status: error.status,
+            statusText: error.statusText,
+            error: error.error,
+            message: error.message,
+            url: error.url,
+            fieldTypeId: fieldTypeId,
+            updateDto: updateDto
+          });
+          
           let errorMessage = 'Failed to update field type';
-          if (error.error?.message) errorMessage = error.error.message;
-          this.messageService.add({ severity: 'error', summary: 'Error', detail: errorMessage });
+          
+          // Extract detailed error message from response (ASP.NET Core ProblemDetails format)
+          if (error.error) {
+            // Check for ASP.NET Core ProblemDetails format
+            if (error.error.detail) {
+              errorMessage = error.error.detail;
+            } else if (error.error.errors) {
+              // Validation errors from ASP.NET Core
+              const validationErrors = Object.values(error.error.errors).flat() as string[];
+              errorMessage = `Validation errors: ${validationErrors.join(', ')}`;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            } else if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            }
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+          
+          // Check for common HTTP status codes and provide context-specific messages
+          if (error.status === 400) {
+            // 400 Bad Request - usually means validation or business logic violation
+            if (!errorMessage || errorMessage === 'Failed to update field type') {
+              errorMessage = 'Invalid data provided. Please check all fields and try again.';
+            }
+          } else if (error.status === 404) {
+            errorMessage = 'Field type not found. It may have been deleted.';
+          } else if (error.status === 409) {
+            errorMessage = 'Cannot update field type. There may be a conflict with existing data.';
+          } else if (error.status === 500) {
+            errorMessage = errorMessage || 'Server error occurred. Please try again later.';
+          } else if (error.status === 0) {
+            errorMessage = 'Network error. Please check your connection and try again.';
+          }
+          
+          this.messageService.add({ 
+            severity: 'error', 
+            summary: 'Update Failed', 
+            detail: errorMessage,
+            life: 7000
+          });
         }
       });
     } else {
+      // Validate typeName is provided
+      if (!fieldTypeData.typeName || fieldTypeData.typeName.trim() === '') {
+        this.loading.save = false;
+        this.messageService.add({ severity: 'error', summary: 'Validation', detail: 'Type name is required' });
+        return;
+      }
+
+      // Build DTO, ensuring all required fields are present and properly formatted
       const createDto: CreateFieldTypeDto = {
-        typeName: fieldTypeData.typeName,
-        description: fieldTypeData.description || undefined,
-        dataType: fieldTypeData.dataType || undefined,
-        maxLength: fieldTypeData.maxLength ? Number(fieldTypeData.maxLength) : undefined,
-        hasOptions: fieldTypeData.hasOptions || false,
-        allowMultiple: fieldTypeData.allowMultiple || false,
-        isActive: fieldTypeData.isActive !== false
+        typeName: fieldTypeData.typeName.trim(),
+        hasOptions: Boolean(fieldTypeData.hasOptions),
+        allowMultiple: Boolean(fieldTypeData.allowMultiple),
+        isActive: fieldTypeData.isActive !== false && fieldTypeData.isActive !== null
       };
 
+      // Add optional fields only if they have values
+      if (fieldTypeData.description && fieldTypeData.description.trim()) {
+        createDto.description = fieldTypeData.description.trim();
+      }
+
+      if (fieldTypeData.dataType && fieldTypeData.dataType.trim()) {
+        createDto.dataType = fieldTypeData.dataType.trim();
+      }
+
+      if (fieldTypeData.maxLength !== null && fieldTypeData.maxLength !== undefined && fieldTypeData.maxLength !== '') {
+        const maxLengthNum = Number(fieldTypeData.maxLength);
+        if (!isNaN(maxLengthNum) && maxLengthNum > 0) {
+          createDto.maxLength = maxLengthNum;
+        }
+      }
+
+      console.log('[saveFieldType] Creating field type with DTO:', createDto);
+      console.log('[saveFieldType] DTO JSON:', JSON.stringify(createDto, null, 2));
+
       this.fieldTypesService.createFieldType(createDto).subscribe({
-        next: () => {
+        next: (createdFieldType) => {
+          console.log('[saveFieldType] Field type created successfully:', createdFieldType);
           this.loading.save = false;
           this.loadFieldTypes();
           this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field type created successfully' });
@@ -237,9 +339,96 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           this.loading.save = false;
+          console.error('[saveFieldType] Error creating field type:', error);
+          console.error('[saveFieldType] Error details:', {
+            status: error.status,
+            statusText: error.statusText,
+            error: error.error,
+            message: error.message,
+            url: error.url,
+            createDto: createDto
+          });
+
           let errorMessage = 'Failed to create field type';
-          if (error.error?.message) errorMessage = error.error.message;
-          this.messageService.add({ severity: 'error', summary: 'Error', detail: errorMessage });
+          let errorDetails: string[] = [];
+          
+          // Extract detailed error message from response (ASP.NET Core ProblemDetails format)
+          if (error.error) {
+            console.log('[saveFieldType] Full error.error object:', JSON.stringify(error.error, null, 2));
+            
+            // Check for ASP.NET Core ProblemDetails format with validation errors
+            if (error.error.errors && typeof error.error.errors === 'object') {
+              // Validation errors from ASP.NET Core - format: { "fieldName": ["error1", "error2"] }
+              const errors: { [key: string]: string[] } = error.error.errors;
+              errorDetails = [];
+              
+              for (const [field, messages] of Object.entries(errors)) {
+                if (Array.isArray(messages)) {
+                  messages.forEach(msg => {
+                    errorDetails.push(`${field}: ${msg}`);
+                  });
+                } else {
+                  errorDetails.push(`${field}: ${messages}`);
+                }
+              }
+              
+              if (errorDetails.length > 0) {
+                errorMessage = `Validation errors:\n${errorDetails.join('\n')}`;
+              }
+            } else if (error.error.detail) {
+              // ProblemDetails detail field
+              errorMessage = error.error.detail;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            } else if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.error) {
+              errorMessage = error.error.error;
+            }
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+
+          // Provide context-specific messages based on status code
+          if (error.status === 400) {
+            // 400 Bad Request - usually means validation or business logic violation
+            if (errorMessage === 'Failed to create field type' && errorDetails.length === 0) {
+              // Only show generic message if we couldn't extract specific errors
+              errorMessage = 'Invalid data provided. Please check all fields and try again.\n\nCheck the console for more details.';
+            }
+          } else if (error.status === 409) {
+            errorMessage = errorMessage || 'A field type with this name already exists.';
+          } else if (error.status === 500) {
+            errorMessage = errorMessage || 'Server error occurred. Please try again later.';
+          } else if (error.status === 0) {
+            errorMessage = 'Network error. Please check your connection and try again.';
+          }
+
+          // For validation errors, show a more detailed message
+          if (errorDetails.length > 0) {
+            // Show first error in toast, and log all errors to console
+            this.messageService.add({ 
+              severity: 'error', 
+              summary: 'Validation Failed', 
+              detail: errorDetails[0] + (errorDetails.length > 1 ? ` (+${errorDetails.length - 1} more - check console)` : ''),
+              life: 10000
+            });
+            
+            // Log all validation errors to console for debugging
+            console.error('[saveFieldType] All validation errors:');
+            errorDetails.forEach((err, index) => {
+              console.error(`  ${index + 1}. ${err}`);
+            });
+          } else {
+            this.messageService.add({ 
+              severity: 'error', 
+              summary: 'Create Failed', 
+              detail: errorMessage,
+              life: 7000
+            });
+          }
         }
       });
     }
@@ -329,25 +518,113 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
   }
 
   toggleFieldTypeStatus(fieldType: FieldTypeDto): void {
+    console.log('[toggleFieldTypeStatus] Called with fieldType:', fieldType);
+    
+    // Validate field type and ID
+    if (!fieldType || !fieldType.id) {
+      console.error('[toggleFieldTypeStatus] Invalid field type data:', fieldType);
+      this.messageService.add({ 
+        severity: 'error', 
+        summary: 'Error', 
+        detail: 'Invalid field type data' 
+      });
+      return;
+    }
+
     const newStatus = !fieldType.isActive;
     const action = newStatus ? 'activate' : 'deactivate';
+    console.log('[toggleFieldTypeStatus] Current status:', fieldType.isActive, 'New status:', newStatus);
 
     this.confirmationService.confirm({
       message: `Are you sure you want to ${action} the field type "${fieldType.typeName}"?`,
       header: 'Confirm Status Change',
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
-        this.fieldTypesService.toggleFieldTypeStatus(fieldType.id, newStatus).subscribe({
-          next: () => {
-            this.loadFieldTypes();
+        // Ensure ID is a number
+        const fieldTypeId = Number(fieldType.id);
+        if (isNaN(fieldTypeId) || fieldTypeId <= 0) {
+          this.messageService.add({ 
+            severity: 'error', 
+            summary: 'Error', 
+            detail: 'Invalid field type ID' 
+          });
+          return;
+        }
+
+        // Optimistically update UI
+        const originalStatus = fieldType.isActive;
+        fieldType.isActive = newStatus;
+        this.cdr.detectChanges();
+
+        this.fieldTypesService.toggleFieldTypeStatus(fieldTypeId, newStatus).subscribe({
+          next: (updatedFieldType) => {
+            // Update the field type in the array
+            const index = this.fieldTypes.findIndex(ft => ft.id === fieldTypeId);
+            if (index !== -1) {
+              if (updatedFieldType) {
+                this.fieldTypes[index] = { ...this.fieldTypes[index], ...updatedFieldType };
+              } else {
+                this.fieldTypes[index].isActive = newStatus;
+              }
+              this.filteredFieldTypes = [...this.fieldTypes];
+            }
+            
             this.messageService.add({ 
               severity: 'success', 
               summary: 'Success', 
               detail: `Field type ${action}d successfully` 
             });
+            this.cdr.detectChanges();
           },
-          error: () => {
-            this.messageService.add({ severity: 'error', summary: 'Error', detail: `Failed to ${action} field type` });
+          error: (error) => {
+            // Revert optimistic update on error
+            fieldType.isActive = originalStatus;
+            this.cdr.detectChanges();
+
+            console.error('Error toggling field type status:', error);
+            console.error('Error details:', {
+              status: error.status,
+              statusText: error.statusText,
+              error: error.error,
+              message: error.message,
+              url: error.url,
+              fieldTypeId: fieldTypeId
+            });
+
+            let errorMessage = `Failed to ${action} field type`;
+            
+            // Extract detailed error message
+            if (error.error) {
+              if (error.error.detail) {
+                errorMessage = error.error.detail;
+              } else if (error.error.message) {
+                errorMessage = error.error.message;
+              } else if (error.error.title) {
+                errorMessage = error.error.title;
+              } else if (typeof error.error === 'string') {
+                errorMessage = error.error;
+              }
+            } else if (error.message) {
+              errorMessage = error.message;
+            }
+
+            // Provide context-specific messages based on status code
+            if (error.status === 400) {
+              errorMessage = errorMessage || 'Invalid request. Please check the field type data.';
+            } else if (error.status === 404) {
+              errorMessage = 'Field type not found. It may have been deleted.';
+            } else if (error.status === 500) {
+              errorMessage = errorMessage || 'Server error occurred. Please try again later.';
+            } else if (error.status === 0) {
+              errorMessage = 'Network error. Please check your connection and try again.';
+            }
+
+            this.messageService.add({ 
+              severity: 'error', 
+              summary: 'Error', 
+              detail: errorMessage,
+              life: 5000
+            });
           }
         });
       }
@@ -382,5 +659,36 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     if (control.errors['minlength']) return `Minimum length is ${control.errors['minlength'].requiredLength}`;
     if (control.errors['maxlength']) return `Maximum length is ${control.errors['maxlength'].requiredLength}`;
     return 'Invalid value';
+  }
+
+  // Check if the selected field type supports options
+  supportsOptions(): boolean {
+    const typeName = this.fieldTypeForm.get('typeName')?.value;
+    if (!typeName) return false;
+    
+    // Field types that support options: Dropdown, Radio, Checkbox
+    const optionsSupportedTypes = ['Dropdown', 'Radio', 'Checkbox'];
+    return optionsSupportedTypes.includes(typeName);
+  }
+
+  // Handle type name change - reset options if type doesn't support them
+  onTypeNameChange(typeName: string | null): void {
+    if (!typeName) {
+      // Reset options when no type is selected
+      this.fieldTypeForm.patchValue({
+        hasOptions: false,
+        allowMultiple: false
+      }, { emitEvent: false });
+      return;
+    }
+
+    const optionsSupportedTypes = ['Dropdown', 'Radio', 'Checkbox'];
+    if (!optionsSupportedTypes.includes(typeName)) {
+      // Reset options for types that don't support them
+      this.fieldTypeForm.patchValue({
+        hasOptions: false,
+        allowMultiple: false
+      }, { emitEvent: false });
+    }
   }
 }
