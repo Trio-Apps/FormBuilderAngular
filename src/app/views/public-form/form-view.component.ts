@@ -260,22 +260,19 @@ export class FormViewComponent implements OnInit {
     const typeName = (field.fieldTypeName || ft?.typeName || '').toLowerCase().trim();
     const dataType = (ft?.dataType || '').toLowerCase().trim();
 
+    // Explicit mapping: Textbox => text input
+    if (typeName === 'textbox' || typeName.includes('text box')) {
+      return 'text';
+    }
+
     // 1) Types with options (select / radio / checkbox)
     if (ft?.hasOptions) {
-      // Multiple selection => checkbox group
-      if (ft.allowMultiple) {
+      // لو النوع اسمه يحتوي "checkbox" أو "check box" خليه مربعات اختيار
+      if (typeName.includes('checkbox') || typeName.includes('check box')) {
         return 'checkbox';
       }
 
-      // Single selection: try to distinguish radio vs dropdown by name
-      if (typeName.includes('radio')) {
-        return 'radio';
-      }
-      if (typeName.includes('dropdown') || typeName.includes('select') || typeName.includes('list')) {
-        return 'select';
-      }
-
-      // Fallback: treat any single‑select options field as dropdown
+      // أي نوع آخر فيه اختيارات (hasOptions = true) يكون Dropdown
       return 'select';
     }
 

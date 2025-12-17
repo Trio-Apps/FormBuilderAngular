@@ -226,7 +226,15 @@
                     {{getFieldErrorMessage('typeName')}}
                   </span>
                 </label>
-                <input type="text" id="typeName" formControlName="typeName" placeholder="e.g., Text, Number, Dropdown">
+                <select
+                  id="typeName"
+                  formControlName="typeName"
+                >
+                  <option value="" disabled selected>Select base field type</option>
+                  <option *ngFor="let option of baseTypeOptions" [value]="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
               </div>
 
               <div class="form-group" [class.invalid]="isFieldInvalid('dataType')">
@@ -236,7 +244,15 @@
                     {{getFieldErrorMessage('dataType')}}
                   </span>
                 </label>
-                <input type="text" id="dataType" formControlName="dataType" placeholder="e.g., string, number, boolean">
+                <select
+                  id="dataType"
+                  formControlName="dataType"
+                >
+                  <option value="" selected>Select data type</option>
+                  <option *ngFor="let dt of dataTypeOptions" [value]="dt.value">
+                    {{ dt.label }}
+                  </option>
+                </select>
               </div>
             </div>
 

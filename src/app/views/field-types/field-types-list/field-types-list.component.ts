@@ -47,6 +47,32 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
   // Search Filter
   searchTerm = '';
 
+  // Predefined base field type names to choose from
+  baseTypeOptions = [
+    { label: 'Textbox', value: 'Textbox' },
+    { label: 'Textarea', value: 'Textarea' },
+    { label: 'Number', value: 'Number' },
+    { label: 'Email', value: 'Email' },
+    { label: 'Date', value: 'Date' },
+    { label: 'File', value: 'File' },
+    { label: 'Checkbox', value: 'Checkbox' },
+    { label: 'Dropdown', value: 'Dropdown' },
+    { label: 'Radio', value: 'Radio' },
+    { label: 'Switch', value: 'Switch' }
+  ];
+
+  // Predefined data types to choose from
+  dataTypeOptions = [
+    { label: 'String', value: 'string' },
+    { label: 'Number (int)', value: 'int' },
+    { label: 'Number (decimal)', value: 'decimal' },
+    { label: 'Boolean', value: 'bool' },
+    { label: 'Date', value: 'date' },
+    { label: 'DateTime', value: 'datetime' },
+    { label: 'Email', value: 'email' },
+    { label: 'File', value: 'file' }
+  ];
+
   constructor(
     private fieldTypesService: FieldTypesService,
     private fb: FormBuilder,
