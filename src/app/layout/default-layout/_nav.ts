@@ -18,7 +18,8 @@ export const navItems: INavData[] = [
         name: 'Forms',
         url: '/form-builder/forms',
         iconComponent: { name: 'cil-description' }
-      }
+      },
+      
       // Tabs و Fields تحتاج IDs ديناميكية، فلا يمكن وضع رابط ثابت هنا
     ]
   },

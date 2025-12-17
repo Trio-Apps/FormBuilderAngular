@@ -100,7 +100,7 @@ export class FormViewComponent implements OnInit {
               ...tab,
               // Filter and sort fields (only active and visible ones)
               fields: (tab.fields || [])
-                .filter(field => field.isActive && field.isVisible)
+                .filter(field => field.isActive && (field.isVisible ?? true))
                 .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0))
                 .map(field => ({
                   ...field,
@@ -127,7 +127,6 @@ export class FormViewComponent implements OnInit {
                   id: f.id,
                   fieldName: f.fieldName,
                   fieldTypeName: f.fieldTypeName,
-                  dataType: f.dataType,
                   defaultValueJson: f.defaultValueJson,
                   placeholder: f.placeholder
                 }))
@@ -199,7 +198,7 @@ export class FormViewComponent implements OnInit {
             next: (fields: FormFieldDto[]) => {
               // Filter and sort fields (only active and visible ones)
               const filteredFields = (Array.isArray(fields) ? fields : [])
-                .filter(field => field.isActive && field.isVisible)
+                .filter(field => field.isActive && (field.isVisible ?? true))
                 .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0))
                 .map(field => ({
                   ...field,
@@ -256,47 +255,62 @@ export class FormViewComponent implements OnInit {
   // ===== Field Type Helpers =====
 
   getFieldType(field: FormFieldDto): string {
-    // Check fieldTypeName first (most reliable)
-    const typeName = (field.fieldTypeName || '').toLowerCase().trim();
-    const dataType = (field.dataType || '').toLowerCase().trim();
-    
-    // Also check fieldType.typeName if available
-    const fieldTypeName = field.fieldType?.typeName?.toLowerCase().trim() || '';
+    // Prefer explicit FieldType configuration if available
+    const ft = field.fieldType;
+    const typeName = (field.fieldTypeName || ft?.typeName || '').toLowerCase().trim();
+    const dataType = (ft?.dataType || '').toLowerCase().trim();
 
-    // Combine all type identifiers
-    const allTypes = [typeName, dataType, fieldTypeName].filter(t => t.length > 0);
-    const combinedType = allTypes.join(' ');
+    // 1) Types with options (select / radio / checkbox)
+    if (ft?.hasOptions) {
+      // Multiple selection => checkbox group
+      if (ft.allowMultiple) {
+        return 'checkbox';
+      }
 
-    // Check for email (must be checked before text)
-    if (combinedType.includes('email')) return 'email';
-    
-    // Check for number/numeric
-    if (combinedType.includes('number') || combinedType.includes('numeric')) return 'number';
-    
-    // Check for textarea (must be checked before text)
-    if (combinedType.includes('textarea') || (combinedType.includes('text') && combinedType.includes('area'))) {
+      // Single selection: try to distinguish radio vs dropdown by name
+      if (typeName.includes('radio')) {
+        return 'radio';
+      }
+      if (typeName.includes('dropdown') || typeName.includes('select') || typeName.includes('list')) {
+        return 'select';
+      }
+
+      // Fallback: treat any single‑select options field as dropdown
+      return 'select';
+    }
+
+    // 2) Non-options fields based on dataType / name
+    const combined = `${typeName} ${dataType}`.toLowerCase();
+
+    // Email first
+    if (combined.includes('email')) return 'email';
+
+    // Number
+    if (combined.includes('number') || combined.includes('numeric') || dataType === 'int' || dataType === 'decimal') {
+      return 'number';
+    }
+
+    // Date
+    if (combined.includes('date') || dataType === 'date' || dataType === 'datetime') {
+      return 'date';
+    }
+
+    // File
+    if (combined.includes('file') || dataType === 'file') {
+      return 'file';
+    }
+
+    // Switch / boolean
+    if (combined.includes('switch') || combined.includes('toggle') || dataType === 'bool' || dataType === 'boolean') {
+      return 'switch';
+    }
+
+    // Long text / textarea
+    if (combined.includes('textarea') || (combined.includes('text') && (ft?.maxLength || 0) > 255)) {
       return 'textarea';
     }
-    
-    // Check for select/dropdown
-    if (combinedType.includes('select') || combinedType.includes('dropdown')) return 'select';
-    
-    // Check for radio
-    if (combinedType.includes('radio')) return 'radio';
-    
-    // Check for checkbox
-    if (combinedType.includes('checkbox') || combinedType.includes('check')) return 'checkbox';
-    
-    // Check for date
-    if (combinedType.includes('date')) return 'date';
-    
-    // Check for file
-    if (combinedType.includes('file')) return 'file';
-    
-    // Check for switch/toggle
-    if (combinedType.includes('switch') || combinedType.includes('toggle')) return 'switch';
 
-    // Default to text
+    // Default to short text input
     return 'text';
   }
 

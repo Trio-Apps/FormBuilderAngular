@@ -1,363 +1,480 @@
-<!-- fields-list.component.html -->
-<div class="fields-management-container">
-  <!-- Header -->
-  <div class="header">
-    <h1>
-      <i class="fas fa-table"></i>
-      Fields Management
-      <span class="badge">{{fields.length}}</span>
-    </h1>
-
-    <div class="header-actions">
-      <button class="btn btn-primary" (click)="openAddFieldModal()" [disabled]="loading.fields || loading.fieldTypes">
-        <i class="fas fa-plus"></i> Add New Field
-      </button>
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/form-builder/forms" title="Back to Forms">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Fields Management</h1>
+          <p class="page-subtitle" *ngIf="tabName">Managing fields for: {{tabName}}</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadFields()" [disabled]="loading.fields" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-secondary" routerLink="/form-builder/field-types" title="Manage Field Types">
+          <i class="pi pi-tags"></i>
+          <span>Field Types</span>
+        </button>
+        <button class="btn-primary" (click)="openAddFieldModal()" [disabled]="loading.fields || loading.fieldTypes">
+          <i class="pi pi-plus"></i>
+          <span>New Field</span>
+        </button>
+      </div>
     </div>
   </div>
 
-  <!-- Loading State -->
-  <div *ngIf="loading.fields" class="loading-overlay">
-    <div class="spinner"></div>
-    <p>Loading fields...</p>
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Forms</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a [routerLink]="['/form-builder/tabs', formBuilderId]" class="breadcrumb-link">
+        <i class="pi pi-folder"></i>
+        <span>Tabs</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-table"></i>
+        <span>Fields</span>
+      </span>
+    </nav>
   </div>
 
-  <!-- Fields Table -->
-  <div class="table-responsive" *ngIf="!loading.fields">
-    <table class="fields-table">
-      <thead>
-        <tr>
-          <th>Order</th>
-          <th>Field Name</th>
-          <th>Field Code</th>
-          <th>Type</th>
-          <th>Mandatory</th>
-          <th>Editable</th>
-          <th>Visible</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <!-- No Fields Message -->
-        <tr *ngIf="fields.length === 0" class="no-data">
-          <td colspan="9">
-            <div class="empty-state">
-              <i class="fas fa-inbox"></i>
-              <h3>No Fields Found</h3>
-              <p>Get started by adding your first field.</p>
-              <button class="btn btn-primary" (click)="openAddFieldModal()">
-                <i class="fas fa-plus"></i> Add Field
-              </button>
-            </div>
-          </td>
-        </tr>
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading.fields">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-list"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ fields.length }}</div>
+          <div class="stat-label">Total Fields</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveFieldsCount() }}</div>
+          <div class="stat-label">Active Fields</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-info">
+          <i class="pi pi-tags"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ fieldTypes.length }}</div>
+          <div class="stat-label">Field Types</div>
+        </div>
+      </div>
+    </div>
 
-        <!-- Fields List -->
-        <tr *ngFor="let field of fields" [class.selected]="selectedField?.id === field.id">
-          <td class="order-cell">
-            <span class="order-badge">{{field.fieldOrder || '-'}}</span>
-          </td>
+    <!-- Fields Table Card -->
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-table"></i>
+          Fields List
+        </h3>
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input type="text" placeholder="Search fields..." class="search-input">
+          </div>
+        </div>
+      </div>
 
-          <td class="field-name-cell">
-            <div class="field-name">{{field.fieldName || '-'}}</div>
-            <div *ngIf="field.placeholder" class="field-placeholder">
-              <small>{{field.placeholder}}</small>
-            </div>
-            <div *ngIf="field.hintText" class="field-hint">
-              <small><i class="fas fa-info-circle"></i> {{field.hintText}}</small>
-            </div>
-          </td>
+      <!-- Loading State -->
+      <div *ngIf="loading.fields" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>Loading fields...</p>
+      </div>
 
-          <td>
-            <code class="field-code">{{field.fieldCode || '-'}}</code>
-          </td>
-
-          <td>
-            <span class="field-type">{{getFieldTypeName(field.fieldTypeId)}}</span>
-          </td>
-
-          <td>
-            <span class="mandatory-badge" [class.mandatory]="field.isMandatory">
-              {{field.isMandatory ? 'Yes' : 'No'}}
-            </span>
-          </td>
-
-          <td>
-            <span class="editable-badge" [class.editable]="field.isEditable">
-              {{field.isEditable !== false ? 'Yes' : 'No'}}
-            </span>
-          </td>
-
-          <td>
-            <span class="visible-badge" [class.visible]="field.isVisible">
-              {{field.isVisible !== false ? 'Yes' : 'No'}}
-            </span>
-          </td>
-
-          <td>
-            <span class="status-badge" [ngClass]="getFieldStatusClass(field)">
-              {{field.isActive ? 'Active' : 'Inactive'}}
-            </span>
-          </td>
-
-          <td>
-            <div class="d-flex justify-content-start gap-3 actions-cell">
-              <i
-                class="pi pi-pencil action-icon text-success"
-                pTooltip="Edit"
-                (click)="openEditFieldModal(field)"
-              ></i>
-              <i
-                class="pi pi-copy action-icon text-info"
-                pTooltip="Duplicate"
-                (click)="duplicateField(field)"
-              ></i>
-              <i
-                class="pi pi-power-off action-icon"
-                [class.text-warning]="field.isActive"
-                [class.text-secondary]="!field.isActive"
-                [pTooltip]="field.isActive ? 'Deactivate' : 'Activate'"
-                (click)="toggleFieldStatus(field)"
-              ></i>
-              <i
-                class="pi pi-trash action-icon text-danger"
-                pTooltip="Delete"
-                (click)="deleteField(field.id!)"
-              ></i>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Field Modal -->
-  <div *ngIf="showFieldModal" class="modal-overlay" (click)="closeFieldModal()">
-    <div class="modal-content" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h2>
-          <i class="fas" [class.fa-plus]="!editingField" [class.fa-edit]="!!editingField"></i>
-          {{editingField ? 'Edit Field' : 'Add New Field'}}
-        </h2>
-        <button class="btn-close" (click)="closeFieldModal()">
-          <i class="fas fa-times"></i>
+      <!-- Empty State -->
+      <div *ngIf="!loading.fields && fields.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-inbox"></i>
+        </div>
+        <h3>No Fields Found</h3>
+        <p>Start building your form by adding your first field</p>
+        <button class="btn-primary" (click)="openAddFieldModal()">
+          <i class="pi pi-plus"></i>
+          <span>Add First Field</span>
         </button>
       </div>
 
-      <form [formGroup]="fieldForm" (ngSubmit)="saveField()">
-        <div class="modal-body">
-
-          <!-- Basic Information -->
-          <div class="form-section">
-            <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
-
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('fieldName')">
-                <label for="fieldName">
-                  Field Name *
-                  <span *ngIf="isFieldInvalid('fieldName')" class="error-text">
-                    {{getFieldErrorMessage('fieldName')}}
-                  </span>
-                </label>
-                <input type="text" id="fieldName" formControlName="fieldName" placeholder="Enter field name">
-              </div>
-
-              <div class="form-group" [class.invalid]="isFieldInvalid('fieldCode')">
-                <label for="fieldCode">
-                  Field Code *
-                  <span *ngIf="isFieldInvalid('fieldCode')" class="error-text">
-                    {{getFieldErrorMessage('fieldCode')}}
-                  </span>
-                </label>
-                <input type="text" id="fieldCode" formControlName="fieldCode" placeholder="FIELD_CODE">
-                <small class="hint">Uppercase letters, numbers, and underscores only</small>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('fieldOrder')">
-                <label for="fieldOrder">
-                  Order *
-                  <span *ngIf="isFieldInvalid('fieldOrder')" class="error-text">
-                    {{getFieldErrorMessage('fieldOrder')}}
-                  </span>
-                </label>
-                <input type="number" id="fieldOrder" formControlName="fieldOrder" min="1">
-              </div>
-
-              <div class="form-group" [class.invalid]="isFieldInvalid('fieldTypeId')">
-                <label for="fieldTypeId">
-                  Field Type *
-                  <span *ngIf="isFieldInvalid('fieldTypeId')" class="error-text">
-                    {{getFieldErrorMessage('fieldTypeId')}}
-                  </span>
-                </label>
-                <div class="select-with-search">
-                  <input type="text" [(ngModel)]="searchTerm" [ngModelOptions]="{standalone: true}"
-                    (input)="filterFieldTypes()" placeholder="Search field types..." class="search-input">
-                  <select id="fieldTypeId" formControlName="fieldTypeId">
-                    <option value="" disabled selected>Select field type</option>
-                    <option *ngFor="let type of filteredFieldTypes" [value]="type.id">
-                      {{type.typeName}}
-                      <span *ngIf="type.description"> - {{type.description}}</span>
-                    </option>
-                  </select>
+      <!-- Fields Table -->
+      <div *ngIf="!loading.fields && fields.length > 0" class="table-wrapper">
+        <table class="fields-table">
+          <thead>
+            <tr>
+              <th class="col-order">#</th>
+              <th class="col-name">Field Name</th>
+              <th class="col-code">Code</th>
+              <th class="col-type">Type</th>
+              <th class="col-options">Options</th>
+              <th class="col-flags">Flags</th>
+              <th class="col-status">Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let field of fields; let i = index" [class.row-selected]="selectedField?.id === field.id">
+              <td class="col-order">
+                <span class="order-number">{{ field.fieldOrder || i + 1 }}</span>
+              </td>
+              <td class="col-name">
+                <div class="field-name-wrapper">
+                  <div class="field-name-main">{{ field.fieldName || '-' }}</div>
+                  <div class="field-name-meta" *ngIf="field.placeholder || field.hintText">
+                    <span *ngIf="field.placeholder" class="meta-item">
+                      <i class="pi pi-question-circle"></i> {{ field.placeholder }}
+                    </span>
+                    <span *ngIf="field.hintText" class="meta-item">
+                      <i class="pi pi-info-circle"></i> {{ field.hintText }}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Display Properties -->
-          <div class="form-section">
-            <h3><i class="fas fa-eye"></i> Display Properties</h3>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label for="placeholder">Placeholder Text</label>
-                <input type="text" id="placeholder" formControlName="placeholder" placeholder="Enter placeholder text">
-              </div>
-
-              <div class="form-group">
-                <label for="hintText">Hint Text</label>
-                <textarea id="hintText" formControlName="hintText" rows="2" placeholder="Enter hint text"></textarea>
-              </div>
-            </div>
-          </div>
-
-          <!-- Validation Rules -->
-          <div class="form-section">
-            <h3><i class="fas fa-check-circle"></i> Validation Rules</h3>
-
-            <div class="form-row">
-              <div class="form-group checkbox-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" formControlName="isMandatory" id="isMandatory">
-                  <span class="checkmark"></span>
-                  Mandatory Field
-                </label>
-              </div>
-
-              <div class="form-group">
-                <label for="validationMessage">Validation Message</label>
-                <input type="text" id="validationMessage" formControlName="validationMessage"
-                  placeholder="Custom validation message">
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label for="regexPattern">Regex Pattern</label>
-                <select class="regex-select" (change)="onRegexPresetChange($any($event.target)?.value || '')">
-                  <option *ngFor="let opt of regexOptions" [value]="opt.value">{{opt.label}}</option>
-                </select>
-                <input type="text" id="regexPattern" formControlName="regexPattern" placeholder="^[A-Za-z0-9]+$">
-                <small class="hint">اختر نمط جاهز أو اكتب نمطك المخصص</small>
-              </div>
-
-              <div class="form-group">
-                <label for="maxLength">Max Length</label>
-                <input type="number" id="maxLength" formControlName="maxLength" min="1"
-                  placeholder="Maximum characters">
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label for="minValue">Min Value</label>
-                <input type="number" id="minValue" formControlName="minValue" placeholder="Minimum value">
-              </div>
-
-              <div class="form-group">
-                <label for="maxValue">Max Value</label>
-                <input type="number" id="maxValue" formControlName="maxValue" placeholder="Maximum value">
-              </div>
-            </div>
-          </div>
-
-          <!-- Field Behavior -->
-          <div class="form-section">
-            <h3><i class="fas fa-cogs"></i> Field Behavior</h3>
-
-            <div class="form-row">
-              <div class="form-group checkbox-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" formControlName="isEditable" id="isEditable">
-                  <span class="checkmark"></span>
-                  Editable
-                </label>
-              </div>
-
-              <div class="form-group checkbox-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" formControlName="isVisible" id="isVisible">
-                  <span class="checkmark"></span>
-                  Visible
-                </label>
-              </div>
-
-              <div class="form-group checkbox-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" formControlName="isActive" id="isActive">
-                  <span class="checkmark"></span>
-                  Active
-                </label>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label for="defaultValue">Default Value</label>
-                <input type="text" id="defaultValue" formControlName="defaultValue" placeholder="Default value">
-              </div>
-
-              <div class="form-group">
-                <label for="dataType">Data Type</label>
-                <select id="dataType" formControlName="dataType">
-                  <option value="string">String</option>
-                  <option value="number">Number</option>
-                  <option value="boolean">Boolean</option>
-                  <option value="date">Date</option>
-                  <option value="array">Array</option>
-                  <option value="object">Object</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Advanced Rules -->
-          <div class="form-section">
-            <h3><i class="fas fa-code"></i> Advanced Rules (JSON)</h3>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label for="visibilityRuleJson">Visibility Rule JSON</label>
-                <textarea id="visibilityRuleJson" formControlName="visibilityRuleJson" rows="3"
-                  placeholder='{"condition": "value", "operator": "==", "target": true}'></textarea>
-              </div>
-
-              <div class="form-group">
-                <label for="readOnlyRuleJson">Read-Only Rule JSON</label>
-                <textarea id="readOnlyRuleJson" formControlName="readOnlyRuleJson" rows="3"
-                  placeholder='{"condition": "value", "operator": "!=", "target": ""}'></textarea>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="closeFieldModal()" [disabled]="loading.save">
-            Cancel
-          </button>
-
-          <button type="submit" class="btn btn-primary" [disabled]="fieldForm.invalid || loading.save">
-            <i class="fas" [class.fa-save]="editingField" [class.fa-plus]="!editingField"></i>
-            {{editingField ? 'Update Field' : 'Create Field'}}
-            <span *ngIf="loading.save" class="spinner-small"></span>
-          </button>
-        </div>
-      </form>
+              </td>
+              <td class="col-code">
+                <code class="code-badge">{{ field.fieldCode || '-' }}</code>
+              </td>
+              <td class="col-type">
+                <span class="type-badge">{{ getFieldTypeName(field.fieldTypeId) }}</span>
+              </td>
+              <td class="col-options">
+                <span class="options-count" *ngIf="field.fieldOptions && field.fieldOptions.length > 0">
+                  <i class="pi pi-list"></i>
+                  {{ field.fieldOptions.length }}
+                </span>
+                <span class="options-count empty" *ngIf="!field.fieldOptions || field.fieldOptions.length === 0">
+                  -
+                </span>
+              </td>
+              <td class="col-flags">
+                <div class="flags-group">
+                  <span class="flag-badge" [class.flag-yes]="field.isMandatory === true" [class.flag-no]="field.isMandatory !== true">
+                    <i class="pi" [class.pi-check]="field.isMandatory === true" [class.pi-times]="field.isMandatory !== true"></i>
+                    Mandatory
+                  </span>
+                  <span class="flag-badge" [class.flag-yes]="field.isEditable !== false" [class.flag-no]="field.isEditable === false">
+                    <i class="pi" [class.pi-check]="field.isEditable !== false" [class.pi-times]="field.isEditable === false"></i>
+                    Editable
+                  </span>
+                  <span class="flag-badge" [class.flag-yes]="field.isVisible !== false" [class.flag-no]="field.isVisible === false">
+                    <i class="pi" [class.pi-check]="field.isVisible !== false" [class.pi-times]="field.isVisible === false"></i>
+                    Visible
+                  </span>
+                </div>
+              </td>
+              <td class="col-status">
+                <span class="status-badge" [class.status-active]="field.isActive" [class.status-inactive]="!field.isActive">
+                  <i class="pi" [class.pi-check-circle]="field.isActive" [class.pi-times-circle]="!field.isActive"></i>
+                  {{ field.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <div class="actions-menu">
+                  <button class="action-btn action-edit" (click)="openEditFieldModal(field)" title="Edit">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button class="action-btn action-duplicate" (click)="duplicateField(field)" title="Duplicate">
+                    <i class="pi pi-copy"></i>
+                  </button>
+                  <button class="action-btn" 
+                          [class.action-activate]="!field.isActive"
+                          [class.action-deactivate]="field.isActive"
+                          (click)="toggleFieldStatus(field)"
+                          [title]="field.isActive ? 'Deactivate' : 'Activate'">
+                    <i class="pi" [class.pi-power-off]="field.isActive" [class.pi-check]="!field.isActive"></i>
+                  </button>
+                  <button class="action-btn action-delete" (click)="deleteField(field.id!)" title="Delete">
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
+
+  <!-- Add/Edit Field Modal -->
+  <p-dialog [(visible)]="showFieldModal" 
+            [modal]="true" 
+            [header]="editingField ? 'Edit Field' : 'Add New Field'" 
+            [style]="{width: '750px', maxWidth: '90vw'}"
+            [draggable]="false" 
+            [resizable]="false"
+            [closable]="true"
+            (onHide)="closeFieldModal()"
+            [styleClass]="'field-modal'">
+    
+    <form [formGroup]="fieldForm" (ngSubmit)="saveField()">
+      <div class="modal-form-content">
+        <!-- Basic Information Section -->
+        <div class="form-section">
+          <h4 class="section-title">
+            <i class="pi pi-info-circle"></i>
+            Basic Information
+          </h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Field Name <span class="required">*</span></label>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="fieldName"
+                     placeholder="Enter field name"
+                     [class.is-invalid]="isFieldInvalid('fieldName')">
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldName')">
+                {{ getFieldErrorMessage('fieldName') }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Field Code <span class="required">*</span></label>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="fieldCode"
+                     placeholder="FIELD_CODE"
+                     [class.is-invalid]="isFieldInvalid('fieldCode')">
+              <small class="form-hint">Uppercase letters, numbers, and underscores only</small>
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldCode')">
+                {{ getFieldErrorMessage('fieldCode') }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Field Order <span class="required">*</span></label>
+              <input type="number" 
+                     class="form-control" 
+                     formControlName="fieldOrder"
+                     min="1"
+                     placeholder="1"
+                     [class.is-invalid]="isFieldInvalid('fieldOrder')">
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldOrder')">
+                {{ getFieldErrorMessage('fieldOrder') }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Field Type <span class="required">*</span></label>
+              <select class="form-control" 
+                      formControlName="fieldTypeId"
+                      [class.is-invalid]="isFieldInvalid('fieldTypeId')">
+                <option value="" disabled selected>Select field type</option>
+                <option *ngFor="let type of filteredFieldTypes" [value]="type.id">
+                  {{ type.typeName }}
+                </option>
+              </select>
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldTypeId')">
+                {{ getFieldErrorMessage('fieldTypeId') }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Display Properties Section -->
+        <div class="form-section">
+          <h4 class="section-title">
+            <i class="pi pi-eye"></i>
+            Display Properties
+          </h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Placeholder</label>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="placeholder"
+                     placeholder="Enter placeholder text">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Hint Text</label>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="hintText"
+                     placeholder="Enter hint text">
+            </div>
+          </div>
+        </div>
+
+        <!-- Field Options Section -->
+        <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions">
+          <h4 class="section-title">
+            <i class="pi pi-list"></i>
+            Field Options
+          </h4>
+          <div class="field-options-list" formArrayName="fieldOptions">
+            <div *ngFor="let option of fieldOptionsFormArray.controls; let i = index" 
+                 [formGroupName]="i" 
+                 class="option-item">
+              <div class="option-row">
+                <div class="option-order">
+                  <span class="order-label">{{ i + 1 }}</span>
+                </div>
+                <div class="option-inputs">
+                  <input type="text" 
+                         class="form-control" 
+                         formControlName="optionValue" 
+                         placeholder="Option value"
+                         [class.is-invalid]="option.get('optionValue')?.invalid && (option.get('optionValue')?.dirty || option.get('optionValue')?.touched)">
+                  <input type="text" 
+                         class="form-control" 
+                         formControlName="optionText" 
+                         placeholder="Display text"
+                         [class.is-invalid]="option.get('optionText')?.invalid && (option.get('optionText')?.dirty || option.get('optionText')?.touched)">
+                </div>
+                <button type="button" 
+                        class="btn-remove-option" 
+                        (click)="removeFieldOption(i)" 
+                        [disabled]="fieldOptionsFormArray.length === 1"
+                        title="Remove option">
+                  <i class="pi pi-times"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <button type="button" 
+                  class="btn-add-option" 
+                  (click)="addFieldOption()">
+            <i class="pi pi-plus"></i>
+            <span>Add Option</span>
+          </button>
+        </div>
+
+        <!-- Validation Section -->
+        <div class="form-section">
+          <h4 class="section-title">
+            <i class="pi pi-shield"></i>
+            Validation Rules
+          </h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Regex Pattern</label>
+              <select class="form-control mb-2" (change)="onRegexPresetChange($any($event.target)?.value || '')">
+                <option *ngFor="let opt of regexOptions" [value]="opt.value">{{ opt.label }}</option>
+              </select>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="regexPattern" 
+                     placeholder="^[A-Za-z0-9]+$">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Validation Message</label>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="validationMessage"
+                     placeholder="Custom validation message">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Min Value</label>
+              <input type="number" 
+                     class="form-control" 
+                     formControlName="minValue"
+                     placeholder="Minimum value">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Max Value</label>
+              <input type="number" 
+                     class="form-control" 
+                     formControlName="maxValue"
+                     placeholder="Maximum value">
+            </div>
+          </div>
+        </div>
+
+        <!-- Field Behavior Section -->
+        <div class="form-section">
+          <h4 class="section-title">
+            <i class="pi pi-cog"></i>
+            Field Behavior
+          </h4>
+          <div class="switches-grid">
+            <div class="switch-item">
+              <label class="switch-label">
+                <input type="checkbox" 
+                       class="switch-input" 
+                       formControlName="isMandatory"
+                       id="isMandatory">
+                <span class="switch-slider"></span>
+                <span class="switch-text">Mandatory</span>
+              </label>
+            </div>
+            <div class="switch-item">
+              <label class="switch-label">
+                <input type="checkbox" 
+                       class="switch-input" 
+                       formControlName="isEditable"
+                       id="isEditable">
+                <span class="switch-slider"></span>
+                <span class="switch-text">Editable</span>
+              </label>
+            </div>
+            <div class="switch-item">
+              <label class="switch-label">
+                <input type="checkbox" 
+                       class="switch-input" 
+                       formControlName="isVisible"
+                       id="isVisible">
+                <span class="switch-slider"></span>
+                <span class="switch-text">Visible</span>
+              </label>
+            </div>
+            <div class="switch-item">
+              <label class="switch-label">
+                <input type="checkbox" 
+                       class="switch-input" 
+                       formControlName="isActive"
+                       id="isActive">
+                <span class="switch-slider"></span>
+                <span class="switch-text">Active</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-group mt-3">
+            <label class="form-label">Default Value</label>
+            <input type="text" 
+                   class="form-control" 
+                   formControlName="defaultValue"
+                   placeholder="Default value">
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button pButton 
+                type="button" 
+                label="Cancel" 
+                (click)="closeFieldModal()"
+                [disabled]="loading.save"
+                class="p-button-text">
+        </button>
+        <button pButton 
+                type="submit" 
+                [disabled]="fieldForm.invalid || loading.save"
+                class="p-button-primary">
+          <i *ngIf="loading.save" class="pi pi-spin pi-spinner mr-2"></i>
+          {{ editingField ? 'Update Field' : 'Create Field' }}
+        </button>
+      </div>
+    </form>
+  </p-dialog>
 </div>
+
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>

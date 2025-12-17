@@ -1,0 +1,234 @@
+<!-- field-options-list.component.html -->
+<div class="field-options-management-container">
+  <!-- Breadcrumb Navigation -->
+  <nav class="breadcrumb-nav">
+    <a routerLink="/form-builder/forms" class="breadcrumb-item">
+      <i class="fas fa-home"></i> Forms
+    </a>
+    <span class="breadcrumb-separator">/</span>
+    <span class="breadcrumb-item active">
+      <i class="fas fa-list"></i> Field Options
+    </span>
+  </nav>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <button class="btn-back" routerLink="/form-builder/forms" title="Back to Forms">
+        <i class="fas fa-arrow-left"></i>
+      </button>
+      <div class="header-title">
+        <h1>
+          <i class="fas fa-list"></i>
+          Field Options Management
+          <span class="badge">{{fieldOptions.length}}</span>
+        </h1>
+        <p class="header-subtitle">
+          Manage options for fields that support multiple choices (dropdown, radio, checkbox)
+        </p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="field-selector">
+        <label>Select Field ID:</label>
+        <input type="number" [(ngModel)]="selectedFieldId" (change)="onFieldChange()" 
+               placeholder="Enter Field ID" class="field-id-input" min="1">
+      </div>
+      <div class="search-box">
+        <input type="text" [(ngModel)]="searchTerm" (input)="filterFieldOptions()" 
+               placeholder="Search options..." class="search-input" [disabled]="!selectedFieldId">
+        <i class="fas fa-search search-icon"></i>
+      </div>
+      <button class="btn btn-primary" (click)="openAddFieldOptionModal()" 
+              [disabled]="loading.fieldOptions || !selectedFieldId">
+        <i class="fas fa-plus"></i> Add New Option
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading.fieldOptions" class="loading-overlay">
+    <div class="spinner"></div>
+    <p>Loading field options...</p>
+  </div>
+
+  <!-- Field Options Table -->
+  <div class="table-responsive" *ngIf="!loading.fieldOptions">
+    <div *ngIf="!selectedFieldId" class="no-field-selected">
+      <i class="fas fa-info-circle"></i>
+      <h3>Please Select a Field</h3>
+      <p>Enter a Field ID above to view and manage its options.</p>
+    </div>
+
+    <table class="field-options-table" *ngIf="selectedFieldId">
+      <thead>
+        <tr>
+          <th>Order</th>
+          <th>Option Value</th>
+          <th>Option Text</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- No Field Options Message -->
+        <tr *ngIf="filteredFieldOptions.length === 0" class="no-data">
+          <td colspan="5">
+            <div class="empty-state">
+              <i class="fas fa-inbox"></i>
+              <h3>No Field Options Found</h3>
+              <p>Get started by adding your first option for this field.</p>
+              <button class="btn btn-primary" (click)="openAddFieldOptionModal()">
+                <i class="fas fa-plus"></i> Add Option
+              </button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Field Options List -->
+        <tr *ngFor="let option of filteredFieldOptions">
+          <td class="order-cell">
+            <span class="order-badge">{{option.optionOrder || '-'}}</span>
+          </td>
+
+          <td>
+            <code class="option-value">{{option.optionValue || '-'}}</code>
+          </td>
+
+          <td class="option-text-cell">
+            <div class="option-text">{{option.optionText || '-'}}</div>
+          </td>
+
+          <td>
+            <span class="status-badge" [ngClass]="getFieldOptionStatusClass(option)">
+              {{option.isActive ? 'Active' : 'Inactive'}}
+            </span>
+          </td>
+
+          <td>
+            <div class="d-flex justify-content-start gap-3 actions-cell">
+              <i
+                class="pi pi-pencil action-icon text-success"
+                pTooltip="Edit"
+                (click)="openEditFieldOptionModal(option)"
+              ></i>
+              <i
+                class="pi pi-power-off action-icon"
+                [class.text-warning]="option.isActive"
+                [class.text-secondary]="!option.isActive"
+                [pTooltip]="option.isActive ? 'Deactivate' : 'Activate'"
+                (click)="toggleFieldOptionStatus(option)"
+              ></i>
+              <i
+                class="pi pi-trash action-icon text-danger"
+                pTooltip="Delete"
+                (click)="deleteFieldOption(option.id!)"
+                *ngIf="option.id"
+              ></i>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Field Option Modal -->
+  <div *ngIf="showFieldOptionModal" class="modal-overlay" (click)="closeFieldOptionModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>
+          <i class="fas" [class.fa-plus]="!editingFieldOption" [class.fa-edit]="!!editingFieldOption"></i>
+          {{editingFieldOption ? 'Edit Field Option' : 'Add New Field Option'}}
+        </h2>
+        <button class="btn-close" (click)="closeFieldOptionModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <form [formGroup]="fieldOptionForm" (ngSubmit)="saveFieldOption()">
+        <div class="modal-body">
+          <!-- Basic Information -->
+          <div class="form-section">
+            <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
+
+            <div class="form-row">
+              <div class="form-group" [class.invalid]="isFieldInvalid('fieldId')">
+                <label for="fieldId">
+                  Field ID *
+                  <span *ngIf="isFieldInvalid('fieldId')" class="error-text">
+                    {{getFieldErrorMessage('fieldId')}}
+                  </span>
+                </label>
+                <input type="number" id="fieldId" formControlName="fieldId" 
+                       [readonly]="!!selectedFieldId" min="1" placeholder="Field ID">
+              </div>
+
+              <div class="form-group" [class.invalid]="isFieldInvalid('optionOrder')">
+                <label for="optionOrder">
+                  Order *
+                  <span *ngIf="isFieldInvalid('optionOrder')" class="error-text">
+                    {{getFieldErrorMessage('optionOrder')}}
+                  </span>
+                </label>
+                <input type="number" id="optionOrder" formControlName="optionOrder" min="1" placeholder="Order">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" [class.invalid]="isFieldInvalid('optionValue')">
+                <label for="optionValue">
+                  Option Value *
+                  <span *ngIf="isFieldInvalid('optionValue')" class="error-text">
+                    {{getFieldErrorMessage('optionValue')}}
+                  </span>
+                </label>
+                <input type="text" id="optionValue" formControlName="optionValue" 
+                       placeholder="option_value" maxlength="100">
+                <small class="hint">The value stored in the database</small>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" [class.invalid]="isFieldInvalid('optionText')">
+                <label for="optionText">
+                  Option Text *
+                  <span *ngIf="isFieldInvalid('optionText')" class="error-text">
+                    {{getFieldErrorMessage('optionText')}}
+                  </span>
+                </label>
+                <input type="text" id="optionText" formControlName="optionText" 
+                       placeholder="Display Text" maxlength="200">
+                <small class="hint">The text displayed to users</small>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" formControlName="isActive" id="isActive">
+                  <span class="checkmark"></span>
+                  Active
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeFieldOptionModal()" [disabled]="loading.save">
+            Cancel
+          </button>
+
+          <button type="submit" class="btn btn-primary" [disabled]="fieldOptionForm.invalid || loading.save">
+            <i class="fas" [class.fa-save]="editingFieldOption" [class.fa-plus]="!editingFieldOption"></i>
+            {{editingFieldOption ? 'Update Option' : 'Create Option'}}
+            <span *ngIf="loading.save" class="spinner-small"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>

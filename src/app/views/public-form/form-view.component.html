@@ -51,6 +51,7 @@
                 type="text"
                 class="form-input"
                 [placeholder]="field.placeholder || 'Your answer'"
+                [value]="getDefaultValue(field)"
               />
 
               <!-- Email Input -->
@@ -59,6 +60,7 @@
                 type="email"
                 class="form-input"
                 [placeholder]="field.placeholder || 'Your answer'"
+                [value]="getDefaultValue(field)"
               />
 
               <!-- Number Input -->
@@ -69,6 +71,7 @@
                 [placeholder]="field.placeholder || 'Your answer'"
                 [min]="field.minValue"
                 [max]="field.maxValue"
+                [value]="getDefaultValue(field)"
               />
 
               <!-- Textarea -->
@@ -77,7 +80,7 @@
                 class="form-textarea"
                 rows="4"
                 [placeholder]="field.placeholder || 'Your answer'"
-              ></textarea>
+              >{{ getDefaultValue(field) }}</textarea>
 
               <!-- Select / Dropdown -->
               <select
@@ -89,7 +92,8 @@
                 </option>
                 <option
                   *ngFor="let opt of (field.fieldOptions || [])"
-                  [value]="opt.optionValue">
+                  [value]="opt.optionValue"
+                  [selected]="isOptionSelected(field, opt.optionValue)">
                   {{ opt.optionText }}
                 </option>
               </select>
@@ -104,6 +108,7 @@
                     [id]="'radio-' + field.id + '-' + opt.id"
                     [name]="'radio-' + field.id"
                     [value]="opt.optionValue"
+                    [checked]="isOptionSelected(field, opt.optionValue)"
                   />
                   <label [for]="'radio-' + field.id + '-' + opt.id" class="radio-label">
                     {{ opt.optionText }}
@@ -123,6 +128,7 @@
                     type="checkbox"
                     [id]="'chk-' + field.id + '-' + opt.id"
                     [value]="opt.optionValue"
+                    [checked]="isCheckboxSelected(field, opt.optionValue)"
                   />
                   <label [for]="'chk-' + field.id + '-' + opt.id" class="checkbox-label">
                     {{ opt.optionText }}
@@ -138,6 +144,7 @@
                 *ngSwitchCase="'date'"
                 type="date"
                 class="form-input"
+                [value]="getDefaultValue(field)"
               />
 
               <!-- File Upload -->
@@ -155,6 +162,7 @@
                   <input
                     type="checkbox"
                     class="switch-input"
+                    [checked]="isSwitchOn(field)"
                   />
                   <span class="switch-slider"></span>
                 </label>
@@ -166,6 +174,7 @@
                 type="text"
                 class="form-input"
                 [placeholder]="field.placeholder || 'Your answer'"
+                [value]="getDefaultValue(field)"
               />
 
             </ng-container>

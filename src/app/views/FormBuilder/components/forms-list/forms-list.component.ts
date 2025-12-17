@@ -275,6 +275,18 @@ export class FormsListComponent implements OnInit, OnDestroy {
     this.currentPage = 1;
     this.updatePagination();
   }
+
+  getTotalFormsCount(): number {
+    return this.totalItems || this.forms.length;
+  }
+
+  getPublishedFormsCount(): number {
+    return this.forms.filter(f => f.isPublished).length;
+  }
+
+  getActiveFormsCount(): number {
+    return this.forms.filter(f => f.isActive !== false).length;
+  }
   get currentItemEnd(): number {
     return Math.min(this.currentPage * this.itemsPerPage, this.totalItems);
   }

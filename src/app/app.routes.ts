@@ -70,7 +70,17 @@ export const routes: Routes = [
             path: 'fields/:tabId', 
             loadComponent: () => import('./views/fields/fields-list/fields-list.component')
               .then(m => m.FieldsListComponent) 
-          }
+          },
+          
+          // إدارة أنواع الحقول (Field Types)
+          { 
+            path: 'field-types', 
+            loadComponent: () => import('./views/field-types/field-types-list/field-types-list.component')
+              .then(m => m.FieldTypesListComponent) 
+          },
+          
+          // NOTE: Field options are now managed directly inside the Fields screen
+          // If you need a separate management screen again, you can add routes here.
         ]
       }
     ]

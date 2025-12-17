@@ -1,83 +1,177 @@
-<div class="container-fluid">
-  <!-- Header with Back Button -->
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <div class="d-flex align-items-center">
-      <button pButton 
-              type="button" 
-              icon="pi pi-arrow-left" 
-              class="p-button-text me-3"
-              routerLink="../forms">
-      </button>
-      <h2 class="mb-0">Tabs Management</h2>
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/form-builder/forms" title="Back to Forms">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Tabs Management</h1>
+          <p class="page-subtitle">
+            Managing tabs for form ID: {{ formId }}
+          </p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadTabs()" [disabled]="loading" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openTabModal()" [disabled]="loading">
+          <i class="pi pi-plus"></i>
+          <span>New Tab</span>
+        </button>
+      </div>
     </div>
-    <button pButton 
-            type="button" 
-            icon="pi pi-plus" 
-            label="Add Tab" 
-            (click)="openTabModal()"
-            class="p-button-primary">
-    </button>
   </div>
 
-  <!-- Loading -->
-  <div *ngIf="loading" class="text-center p-4">
-    <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
-    <p class="mt-2">Loading tabs...</p>
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Forms</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-folder"></i>
+        <span>Tabs</span>
+      </span>
+    </nav>
   </div>
 
-  <!-- Empty State -->
-  <div *ngIf="!loading && tabs.length === 0" class="text-center p-4">
-    <i class="pi pi-inbox" style="font-size: 3rem; color: #ccc;"></i>
-    <h4 class="mt-3">No Tabs Found</h4>
-    <p class="text-muted">Create your first tab to get started</p>
-    <button pButton 
-            type="button" 
-            icon="pi pi-plus" 
-            label="Create First Tab" 
-            (click)="openTabModal()"
-            class="p-button-primary mt-2">
-    </button>
-  </div>
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-folder"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ tabs.length }}</div>
+          <div class="stat-label">Total Tabs</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveTabsCount() }}</div>
+          <div class="stat-label">Active Tabs</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-info">
+          <i class="pi pi-list"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getTotalFieldsCount() }}</div>
+          <div class="stat-label">Total Fields</div>
+        </div>
+      </div>
+    </div>
 
-  <!-- Tabs Table -->
-  <div *ngIf="!loading && tabs.length > 0" class="card">
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-hover mb-0">
+    <!-- Tabs Table Card -->
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-folder"></i>
+          Tabs List
+        </h3>
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              placeholder="Search tabs..."
+              class="search-input"
+              [(ngModel)]="searchTerm"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>Loading tabs...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!loading && filteredTabs.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-inbox"></i>
+        </div>
+        <h3>No Tabs Found</h3>
+        <p>Create your first tab to get started</p>
+        <button class="btn-primary" (click)="openTabModal()">
+          <i class="pi pi-plus"></i>
+          <span>Add First Tab</span>
+        </button>
+      </div>
+
+      <!-- Tabs Table -->
+      <div *ngIf="!loading && filteredTabs.length > 0" class="table-wrapper">
+        <table class="fields-table">
           <thead>
             <tr>
-              <th>Tab Name</th>
-              <th>Tab Code</th>
-              <th>Order</th>
-              <th>Actions</th>
+              <th class="col-order">#</th>
+              <th class="col-name">Tab Name</th>
+              <th class="col-code">Code</th>
+              <th class="col-type">Order</th>
+              <th class="col-options">Fields</th>
+              <th class="col-status">Status</th>
+              <th class="col-actions">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let tab of tabs">
-              <td>
-                <strong>{{ tab.tabName }}</strong>
+            <tr *ngFor="let tab of filteredTabs; let i = index">
+              <td class="col-order">
+                <span class="order-number">{{ tab.tabOrder || i + 1 }}</span>
               </td>
-              <td>
-                <code class="bg-light p-1 rounded">{{ tab.tabCode || '-' }}</code>
+              <td class="col-name">
+                <div class="field-name-wrapper">
+                  <div class="field-name-main">{{ tab.tabName || '-' }}</div>
+                </div>
               </td>
-              <td>{{ tab.tabOrder }}</td>
-              <td>
-                <div class="d-flex justify-content-start gap-3 actions-cell">
-                  <i
-                    class="pi pi-pencil action-icon text-success"
-                    pTooltip="Edit"
-                    (click)="openTabModal(tab)"
-                  ></i>
-                  <i
-                    class="pi pi-list action-icon text-info"
-                    pTooltip="Manage Fields"
-                    (click)="navigateToFields(tab.id)"
-                  ></i>
-                  <i
-                    class="pi pi-trash action-icon text-danger"
-                    pTooltip="Delete"
-                    (click)="deleteTab(tab.id)"
-                  ></i>
+              <td class="col-code">
+                <code class="code-badge">{{ tab.tabCode || '-' }}</code>
+              </td>
+              <td class="col-type">
+                <span class="type-badge">
+                  {{ tab.tabOrder || '-' }}
+                </span>
+              </td>
+              <td class="col-options">
+                <span class="options-count" *ngIf="tab.fieldsCount && tab.fieldsCount > 0">
+                  <i class="pi pi-list"></i>
+                  {{ tab.fieldsCount }}
+                </span>
+                <span class="options-count empty" *ngIf="!tab.fieldsCount || tab.fieldsCount === 0">
+                  No fields
+                </span>
+              </td>
+              <td class="col-status">
+                <span class="status-badge" [class.status-active]="tab.isActive" [class.status-inactive]="!tab.isActive">
+                  <i class="pi" [class.pi-check-circle]="tab.isActive" [class.pi-times-circle]="!tab.isActive"></i>
+                  {{ tab.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <div class="actions-menu">
+                  <button class="action-btn action-edit" (click)="openTabModal(tab)" title="Edit">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button class="action-btn action-duplicate" (click)="navigateToFields(tab.id)" title="Manage Fields">
+                    <i class="pi pi-list"></i>
+                  </button>
+                  <button class="action-btn action-delete" (click)="deleteTab(tab.id)" title="Delete">
+                    <i class="pi pi-trash"></i>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -88,42 +182,49 @@
   </div>
 
   <!-- Add/Edit Tab Modal -->
-  <p-dialog [(visible)]="showTabModal" 
-            [modal]="true" 
-            [header]="editingTab ? 'Edit Tab' : 'Add Tab'" 
-            [style]="{width: '450px'}"
-            [draggable]="false" 
-            [resizable]="false"
-            (onHide)="closeTabModal()">
-    
+  <p-dialog
+    [(visible)]="showTabModal"
+    [modal]="true"
+    [header]="editingTab ? 'Edit Tab' : 'Add Tab'"
+    [style]="{ width: '450px' }"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="closeTabModal()"
+  >
     <form (ngSubmit)="saveTab()">
       <div class="mb-3">
         <label class="form-label">Tab Name *</label>
-        <input type="text" 
-               class="form-control" 
-               [(ngModel)]="tabName"
-               name="tabName"
-               required>
+        <input
+          type="text"
+          class="form-control"
+          [(ngModel)]="tabName"
+          name="tabName"
+          required
+        />
       </div>
-      
+
       <div class="mb-3">
         <label class="form-label">Tab Code *</label>
-        <input type="text" 
-               class="form-control" 
-               [(ngModel)]="tabCode"
-               name="tabCode"
-               required>
+        <input
+          type="text"
+          class="form-control"
+          [(ngModel)]="tabCode"
+          name="tabCode"
+          required
+        />
       </div>
-      
+
       <div class="mb-3">
         <label class="form-label">Tab Order</label>
-        <input type="number" 
-               class="form-control" 
-               [(ngModel)]="tabOrder"
-               name="tabOrder"
-               min="1">
+        <input
+          type="number"
+          class="form-control"
+          [(ngModel)]="tabOrder"
+          name="tabOrder"
+          min="1"
+        />
       </div>
-      
+
       <div class="mb-3">
         <label class="form-label d-block">Active Status</label>
         <div class="form-check form-switch">
@@ -132,25 +233,30 @@
             type="checkbox"
             id="isActive"
             [(ngModel)]="isActive"
-            name="isActive">
+            name="isActive"
+          />
           <label class="form-check-label" for="isActive">
             {{ isActive ? 'Active' : 'Inactive' }}
           </label>
         </div>
       </div>
-      
+
       <div class="d-flex justify-content-end gap-2 mt-4">
-        <button pButton 
-                type="button" 
-                label="Cancel" 
-                (click)="closeTabModal()"
-                class="p-button-text">
+        <button
+          pButton
+          type="button"
+          label="Cancel"
+          (click)="closeTabModal()"
+          class="p-button-text"
+        >
         </button>
-        
-        <button pButton 
-                type="submit" 
-                [disabled]="!tabName || !tabCode || loading"
-                class="p-button-primary">
+
+        <button
+          pButton
+          type="submit"
+          [disabled]="!tabName || !tabCode || loading"
+          class="p-button-primary"
+        >
           <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>
           Save
         </button>

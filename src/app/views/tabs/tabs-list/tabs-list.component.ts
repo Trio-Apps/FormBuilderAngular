@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
+import { FieldsService } from '../../FormBuilder/services/fields.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { FormTabDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { Subscription } from 'rxjs';
@@ -40,6 +41,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
   tabs: FormTabDto[] = [];
   loading = false;
   private routeSubscription?: Subscription;
+  searchTerm = '';
   
   // Tab Modal updated
   showTabModal = false;
@@ -53,6 +55,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private router: Router,
     private tabsService: TabsService,
+    private fieldsService: FieldsService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService
   ) {}
@@ -76,6 +79,17 @@ export class TabsListComponent implements OnInit, OnDestroy {
     }
   }
 
+  loadFieldsCountForTab(tabId: number, tab: FormTabDto): void {
+    this.fieldsService.getFieldsByTabId(tabId).subscribe({
+      next: (fields) => {
+        tab.fieldsCount = Array.isArray(fields) ? fields.length : 0;
+      },
+      error: () => {
+        tab.fieldsCount = 0;
+      }
+    });
+  }
+
   loadTabs(): void {
     if (!this.formId || isNaN(this.formId)) {
       this.loading = false;
@@ -94,6 +108,14 @@ export class TabsListComponent implements OnInit, OnDestroy {
         this.tabs = Array.isArray(tabs) ? tabs.filter(tab => 
           tab.formBuilderId === this.formId
         ) : [];
+        
+        // Load fields count for each tab
+        this.tabs.forEach(tab => {
+          if (tab.id) {
+            this.loadFieldsCountForTab(tab.id, tab);
+          }
+        });
+        
         this.loading = false;
       },
       error: () => {
@@ -105,6 +127,25 @@ export class TabsListComponent implements OnInit, OnDestroy {
         });
       }
     });
+  }
+
+  get filteredTabs(): FormTabDto[] {
+    if (!this.searchTerm.trim()) {
+      return this.tabs;
+    }
+    const term = this.searchTerm.toLowerCase();
+    return this.tabs.filter(tab =>
+      tab.tabName.toLowerCase().includes(term) ||
+      (tab.tabCode && tab.tabCode.toLowerCase().includes(term))
+    );
+  }
+
+  getActiveTabsCount(): number {
+    return this.tabs.filter(t => t.isActive).length;
+  }
+
+  getTotalFieldsCount(): number {
+    return this.tabs.reduce((sum, t) => sum + (t.fieldsCount || 0), 0);
   }
 
   openTabModal(tab?: FormTabDto): void {
