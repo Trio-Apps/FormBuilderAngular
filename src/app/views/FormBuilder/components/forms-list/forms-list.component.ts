@@ -87,6 +87,16 @@ export class FormsListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Force English language for admin panel by default
+    const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
+    if (adminLanguagePreference) {
+      // Use saved admin preference
+      this.translationService.setLanguage(adminLanguagePreference as 'en' | 'ar');
+    } else {
+      // Default to English for admin panel
+      this.translationService.setLanguage('en');
+      localStorage.setItem('adminLanguagePreference', 'en');
+    }
     this.loadForms();
     
     // Listen to router navigation events to refresh data when returning to this page
@@ -398,6 +408,15 @@ export class FormsListComponent implements OnInit, OnDestroy {
    */
   translateLabel(key: string): string {
     return this.translationService.translateForLanguage(key, this.currentInputLanguage);
+  }
+
+  /**
+   * Switch language for the admin panel
+   */
+  switchLanguage(lang: 'en' | 'ar'): void {
+    this.translationService.setLanguage(lang);
+    // Save admin language preference separately
+    localStorage.setItem('adminLanguagePreference', lang);
   }
 
   saveForm(): void {

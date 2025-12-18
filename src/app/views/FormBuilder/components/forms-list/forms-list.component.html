@@ -1,4 +1,22 @@
 <div class="fields-page-container">
+  <!-- Language Toggle Buttons -->
+  <div class="admin-language-toggle">
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'en'"
+      (click)="switchLanguage('en')">
+      English
+    </button>
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'ar'"
+      (click)="switchLanguage('ar')">
+      العربية
+    </button>
+  </div>
+
   <!-- Top Navigation Bar -->
   <div class="top-navbar">
     <div class="nav-content">

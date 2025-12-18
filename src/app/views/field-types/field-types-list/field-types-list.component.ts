@@ -49,7 +49,7 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
   // Search Filter
   searchTerm = '';
 
-  // Predefined base field type names to choose from
+  // Predefined base field type names to choose from (English)
   baseTypeOptions = [
     { label: 'Textbox', value: 'Textbox' },
     { label: 'Textarea', value: 'Textarea' },
@@ -61,6 +61,20 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     { label: 'Dropdown', value: 'Dropdown' },
     { label: 'Radio', value: 'Radio' },
     { label: 'Switch', value: 'Switch' }
+  ];
+
+  // Predefined base field type names in Arabic
+  baseTypeOptionsArabic = [
+    { label: 'مربع نص', value: 'Textbox' },
+    { label: 'منطقة نص', value: 'Textarea' },
+    { label: 'رقم', value: 'Number' },
+    { label: 'بريد إلكتروني', value: 'Email' },
+    { label: 'تاريخ', value: 'Date' },
+    { label: 'ملف', value: 'File' },
+    { label: 'مربع اختيار', value: 'Checkbox' },
+    { label: 'قائمة منسدلة', value: 'Dropdown' },
+    { label: 'زر اختيار', value: 'Radio' },
+    { label: 'مفتاح', value: 'Switch' }
   ];
 
   // Predefined data types to choose from
@@ -85,8 +99,8 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
   ) {
     // Initialize the form
     this.fieldTypeForm = this.fb.group({
-      typeName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
-      foreignTypeName: ['', [Validators.maxLength(100)]], // Arabic type name
+      typeName: ['', [Validators.minLength(2), Validators.maxLength(100)]], // Required only when English
+      foreignTypeName: ['', [Validators.maxLength(100)]], // Arabic type name - required when Arabic
       description: ['', Validators.maxLength(500)],
       dataType: ['', Validators.maxLength(50)],
       maxLength: [null],
@@ -175,9 +189,25 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     const optionsSupportedTypes = ['Dropdown', 'Radio', 'Checkbox'];
     const supportsOptions = optionsSupportedTypes.includes(typeName);
 
+    // When editing, if foreignTypeName exists, we need to find the corresponding value for the dropdown
+    let foreignTypeNameValue = '';
+    if (fieldType.foreignTypeName) {
+      // Check if foreignTypeName matches any Arabic label
+      const arabicOption = this.baseTypeOptionsArabic.find(opt => opt.label === fieldType.foreignTypeName);
+      if (arabicOption) {
+        foreignTypeNameValue = arabicOption.value; // Use the English value for the dropdown
+      } else {
+        // If foreignTypeName doesn't match any Arabic label, use typeName as fallback
+        foreignTypeNameValue = typeName;
+      }
+    } else {
+      // If no foreignTypeName, use typeName as the value
+      foreignTypeNameValue = typeName;
+    }
+
     this.fieldTypeForm.patchValue({
       typeName: typeName,
-      foreignTypeName: fieldType.foreignTypeName || '',
+      foreignTypeName: foreignTypeNameValue,
       description: fieldType.description || '',
       dataType: fieldType.dataType || '',
       maxLength: fieldType.maxLength || null,
@@ -201,6 +231,21 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
 
   setInputLanguage(lang: 'en' | 'ar'): void {
     this.currentInputLanguage = lang;
+    
+    // Update validators based on language
+    if (lang === 'en') {
+      // English: typeName is required
+      this.fieldTypeForm.get('typeName')?.setValidators([Validators.required, Validators.minLength(2), Validators.maxLength(100)]);
+      this.fieldTypeForm.get('foreignTypeName')?.clearValidators();
+    } else {
+      // Arabic: foreignTypeName is required
+      this.fieldTypeForm.get('foreignTypeName')?.setValidators([Validators.required, Validators.maxLength(100)]);
+      this.fieldTypeForm.get('typeName')?.clearValidators();
+    }
+    
+    // Update validation status
+    this.fieldTypeForm.get('typeName')?.updateValueAndValidity({ emitEvent: false });
+    this.fieldTypeForm.get('foreignTypeName')?.updateValueAndValidity({ emitEvent: false });
   }
 
   /**
@@ -211,6 +256,23 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
   }
 
   saveFieldType(): void {
+    // Validate based on current language
+    if (this.currentInputLanguage === 'en') {
+      // English: typeName is required
+      if (!this.fieldTypeForm.get('typeName')?.value || this.fieldTypeForm.get('typeName')?.value.trim() === '') {
+        this.markFormGroupTouched(this.fieldTypeForm);
+        this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Type name is required' });
+        return;
+      }
+    } else {
+      // Arabic: foreignTypeName is required
+      if (!this.fieldTypeForm.get('foreignTypeName')?.value || this.fieldTypeForm.get('foreignTypeName')?.value.trim() === '') {
+        this.markFormGroupTouched(this.fieldTypeForm);
+        this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Type name is required' });
+        return;
+      }
+    }
+
     if (this.fieldTypeForm.invalid) {
       this.markFormGroupTouched(this.fieldTypeForm);
       this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Please fill all required fields correctly' });
@@ -229,16 +291,48 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // Ensure typeName is provided (API might require it even though DTO shows optional)
-      if (!fieldTypeData.typeName || fieldTypeData.typeName.trim() === '') {
-        this.loading.save = false;
-        this.messageService.add({ severity: 'error', summary: 'Validation', detail: 'Type name is required' });
-        return;
+      // Ensure typeName or foreignTypeName is provided based on language
+      if (this.currentInputLanguage === 'en') {
+        if (!fieldTypeData.typeName || fieldTypeData.typeName.trim() === '') {
+          this.loading.save = false;
+          this.messageService.add({ severity: 'error', summary: 'Validation', detail: 'Type name is required' });
+          return;
+        }
+      } else {
+        if (!fieldTypeData.foreignTypeName || fieldTypeData.foreignTypeName.trim() === '') {
+          this.loading.save = false;
+          this.messageService.add({ severity: 'error', summary: 'Validation', detail: 'Type name is required' });
+          return;
+        }
+        // When Arabic is selected, also set typeName from the selected base type if available
+        // Otherwise, use the existing typeName from editingFieldType
+        if (!fieldTypeData.typeName && this.editingFieldType.typeName) {
+          fieldTypeData.typeName = this.editingFieldType.typeName;
+        }
+      }
+
+      // When editing, preserve typeName if Arabic is selected
+      let finalTypeName = fieldTypeData.typeName?.trim();
+      let finalForeignTypeName = fieldTypeData.foreignTypeName?.trim();
+      
+      if (this.currentInputLanguage === 'ar') {
+        // When Arabic is selected, foreignTypeName contains the selected value (which is the English typeName)
+        // We need to map it back to typeName and set foreignTypeName to the Arabic label
+        if (finalForeignTypeName) {
+          // Find the Arabic label for the selected value
+          const arabicOption = this.baseTypeOptionsArabic.find(opt => opt.value === finalForeignTypeName);
+          if (arabicOption) {
+            finalTypeName = arabicOption.value; // Store the English value in typeName
+            finalForeignTypeName = arabicOption.label; // Store the Arabic label in foreignTypeName
+          }
+        } else if (this.editingFieldType?.typeName) {
+          finalTypeName = this.editingFieldType.typeName;
+        }
       }
 
       const updateDto: UpdateFieldTypeDto = {
-        typeName: fieldTypeData.typeName.trim(),
-        foreignTypeName: fieldTypeData.foreignTypeName?.trim() || undefined,
+        typeName: finalTypeName || '',
+        foreignTypeName: finalForeignTypeName || undefined,
         description: fieldTypeData.description?.trim() || undefined,
         dataType: fieldTypeData.dataType?.trim() || undefined,
         maxLength: fieldTypeData.maxLength ? Number(fieldTypeData.maxLength) : undefined,
@@ -322,10 +416,38 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
         return;
       }
 
+      // Ensure typeName or foreignTypeName is provided based on language
+      let finalTypeName = fieldTypeData.typeName?.trim();
+      let finalForeignTypeName = fieldTypeData.foreignTypeName?.trim();
+      
+      if (this.currentInputLanguage === 'en') {
+        if (!finalTypeName || finalTypeName.trim() === '') {
+          this.loading.save = false;
+          this.messageService.add({ severity: 'error', summary: 'Validation', detail: 'Type name is required' });
+          return;
+        }
+      } else {
+        if (!finalForeignTypeName || finalForeignTypeName.trim() === '') {
+          this.loading.save = false;
+          this.messageService.add({ severity: 'error', summary: 'Validation', detail: 'Type name is required' });
+          return;
+        }
+        // When Arabic is selected, foreignTypeName contains the selected value (which is the English typeName)
+        // We need to map it back to typeName and set foreignTypeName to the Arabic label
+        const arabicOption = this.baseTypeOptionsArabic.find(opt => opt.value === finalForeignTypeName);
+        if (arabicOption) {
+          finalTypeName = arabicOption.value; // Store the English value in typeName
+          finalForeignTypeName = arabicOption.label; // Store the Arabic label in foreignTypeName
+        } else {
+          // Fallback to first option if not found
+          finalTypeName = this.baseTypeOptions[0]?.value || 'Textbox';
+        }
+      }
+
       // Build DTO, ensuring all required fields are present and properly formatted
       const createDto: CreateFieldTypeDto = {
-        typeName: fieldTypeData.typeName.trim(),
-        foreignTypeName: fieldTypeData.foreignTypeName?.trim() || undefined,
+        typeName: finalTypeName || '',
+        foreignTypeName: finalForeignTypeName || undefined,
         hasOptions: Boolean(fieldTypeData.hasOptions),
         allowMultiple: Boolean(fieldTypeData.allowMultiple),
         isActive: fieldTypeData.isActive !== false && fieldTypeData.isActive !== null

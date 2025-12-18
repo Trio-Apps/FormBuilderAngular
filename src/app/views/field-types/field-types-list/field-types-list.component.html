@@ -239,7 +239,8 @@
             <h3><i class="pi pi-info-circle"></i> Basic Information</h3>
 
             <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('typeName')">
+              <!-- English Type Name (Dropdown) -->
+              <div class="form-group" [class.invalid]="isFieldInvalid('typeName')" *ngIf="currentInputLanguage === 'en'">
                 <label for="typeName">
                   {{ translateLabel('fieldTypes.typeName') }} <span class="text-danger">*</span>
                   <span *ngIf="isFieldInvalid('typeName')" class="error-text">
@@ -257,17 +258,23 @@
                 </select>
               </div>
 
-              <!-- Arabic Type Name -->
-              <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
+              <!-- Arabic Type Name (Dropdown) -->
+              <div class="form-group" [class.invalid]="isFieldInvalid('foreignTypeName')" *ngIf="currentInputLanguage === 'ar'">
                 <label for="foreignTypeName">
-                  {{ translateLabel('fieldTypes.typeName') }}
+                  {{ translateLabel('fieldTypes.typeName') }} <span class="text-danger">*</span>
+                  <span *ngIf="isFieldInvalid('foreignTypeName')" class="error-text">
+                    {{getFieldErrorMessage('foreignTypeName')}}
+                  </span>
                 </label>
-                <input
-                  type="text"
+                <select
                   id="foreignTypeName"
                   formControlName="foreignTypeName"
-                  [placeholder]="translateLabel('fieldTypes.typeName')"
-                />
+                >
+                  <option value="" disabled selected>{{ translateLabel('fieldTypes.selectBaseFieldType') }}</option>
+                  <option *ngFor="let option of baseTypeOptionsArabic" [value]="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
               </div>
 
               <div class="form-group" [class.invalid]="isFieldInvalid('dataType')">

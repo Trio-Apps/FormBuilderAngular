@@ -7,19 +7,19 @@
           <i class="pi pi-arrow-left"></i>
         </button>
         <div class="nav-title-section">
-          <h1 class="page-title">Tabs Management</h1>
+          <h1 class="page-title">{{ translateLabel('tabs.title') }}</h1>
           <p class="page-subtitle">
-            Managing tabs for form ID: {{ formId }}
+            {{ translateLabel('tabs.subtitle') }} {{ formId }}
           </p>
         </div>
       </div>
       <div class="nav-right">
-        <button class="btn-icon" (click)="loadTabs()" [disabled]="loading" title="Refresh">
+        <button class="btn-icon" (click)="loadTabs()" [disabled]="loading" [title]="translateLabel('common.refresh')">
           <i class="pi pi-refresh"></i>
         </button>
         <button class="btn-primary" (click)="openTabModal()" [disabled]="loading">
           <i class="pi pi-plus"></i>
-          <span>New Tab</span>
+          <span>{{ translateLabel('tabs.newTab') }}</span>
         </button>
       </div>
     </div>
@@ -30,12 +30,12 @@
     <nav class="breadcrumb-nav">
       <a routerLink="/form-builder/forms" class="breadcrumb-link">
         <i class="pi pi-home"></i>
-        <span>Forms</span>
+        <span>{{ translateLabel('common.forms') }}</span>
       </a>
       <i class="pi pi-angle-right breadcrumb-separator"></i>
       <span class="breadcrumb-current">
         <i class="pi pi-folder"></i>
-        <span>Tabs</span>
+        <span>{{ translateLabel('common.tabs') }}</span>
       </span>
     </nav>
   </div>
@@ -50,7 +50,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ tabs.length }}</div>
-          <div class="stat-label">Total Tabs</div>
+          <div class="stat-label">{{ translateLabel('tabs.totalTabs') }}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -59,7 +59,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ getActiveTabsCount() }}</div>
-          <div class="stat-label">Active Tabs</div>
+          <div class="stat-label">{{ translateLabel('tabs.activeTabs') }}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -68,7 +68,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ getTotalFieldsCount() }}</div>
-          <div class="stat-label">Total Fields</div>
+          <div class="stat-label">{{ translateLabel('tabs.totalFields') }}</div>
         </div>
       </div>
     </div>
@@ -78,14 +78,14 @@
       <div class="table-header">
         <h3 class="table-title">
           <i class="pi pi-folder"></i>
-          Tabs List
+          {{ translateLabel('tabs.tabsList') }}
         </h3>
         <div class="table-actions">
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input
               type="text"
-              placeholder="Search tabs..."
+              [placeholder]="translateLabel('tabs.searchTabs')"
               class="search-input"
               [(ngModel)]="searchTerm"
             />
@@ -98,7 +98,7 @@
         <div class="spinner-wrapper">
           <i class="pi pi-spin pi-spinner"></i>
         </div>
-        <p>Loading tabs...</p>
+        <p>{{ translateLabel('tabs.loadingTabs') }}</p>
       </div>
 
       <!-- Empty State -->
@@ -106,11 +106,11 @@
         <div class="empty-icon">
           <i class="pi pi-inbox"></i>
         </div>
-        <h3>No Tabs Found</h3>
-        <p>Create your first tab to get started</p>
+        <h3>{{ translateLabel('tabs.noTabsFound') }}</h3>
+        <p>{{ translateLabel('tabs.getStarted') }}</p>
         <button class="btn-primary" (click)="openTabModal()">
           <i class="pi pi-plus"></i>
-          <span>Add First Tab</span>
+          <span>{{ translateLabel('tabs.addFirstTab') }}</span>
         </button>
       </div>
 
@@ -120,12 +120,12 @@
           <thead>
             <tr>
               <th class="col-order">#</th>
-              <th class="col-name">Tab Name</th>
-              <th class="col-code">Code</th>
-              <th class="col-type">Order</th>
-              <th class="col-options">Fields</th>
-              <th class="col-status">Status</th>
-              <th class="col-actions">Actions</th>
+              <th class="col-name">{{ translateLabel('tabs.tabName') }}</th>
+              <th class="col-code">{{ translateLabel('tabs.tabCode') }}</th>
+              <th class="col-type">{{ translateLabel('tabs.tabOrder') }}</th>
+              <th class="col-options">{{ translateLabel('common.fields') }}</th>
+              <th class="col-status">{{ translateLabel('common.status') }}</th>
+              <th class="col-actions">{{ translateLabel('common.actions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -157,24 +157,24 @@
                   {{ tab.fieldsCount }}
                 </span>
                 <span class="options-count empty" *ngIf="!tab.fieldsCount || tab.fieldsCount === 0">
-                  No fields
+                  {{ translateLabel('common.noData') }}
                 </span>
               </td>
               <td class="col-status">
                 <span class="status-badge" [class.status-active]="tab.isActive" [class.status-inactive]="!tab.isActive">
                   <i class="pi" [class.pi-check-circle]="tab.isActive" [class.pi-times-circle]="!tab.isActive"></i>
-                  {{ tab.isActive ? 'Active' : 'Inactive' }}
+                  {{ tab.isActive ? translateLabel('common.active') : translateLabel('common.inactive') }}
                 </span>
               </td>
               <td class="col-actions">
                 <div class="actions-menu">
-                  <button class="action-btn action-edit" (click)="openTabModal(tab)" title="Edit">
+                  <button class="action-btn action-edit" (click)="openTabModal(tab)" [title]="translateLabel('common.edit')">
                     <i class="pi pi-pencil"></i>
                   </button>
-                  <button class="action-btn action-duplicate" (click)="navigateToFields(tab.id)" title="Manage Fields">
+                  <button class="action-btn action-duplicate" (click)="navigateToFields(tab.id)" [title]="translateLabel('tabs.manageFields')">
                     <i class="pi pi-list"></i>
                   </button>
-                  <button class="action-btn action-delete" (click)="deleteTab(tab.id)" title="Delete">
+                  <button class="action-btn action-delete" (click)="deleteTab(tab.id)" [title]="translateLabel('common.delete')">
                     <i class="pi pi-trash"></i>
                   </button>
                 </div>
@@ -190,7 +190,7 @@
   <p-dialog
     [(visible)]="showTabModal"
     [modal]="true"
-    [header]="editingTab ? 'Edit Tab' : 'Add Tab'"
+    [header]="editingTab ? translateLabel('tabs.editTab') : translateLabel('tabs.addTab')"
     [style]="{ width: '450px' }"
     [draggable]="false"
     [resizable]="false"
@@ -243,29 +243,31 @@
       </div>
 
       <div class="mb-3">
-        <label class="form-label">Tab Code <span class="text-danger">*</span></label>
+        <label class="form-label">{{ translateLabel('tabs.tabCode') }} <span class="text-danger">*</span></label>
         <input
           type="text"
           class="form-control"
           [(ngModel)]="tabCode"
           name="tabCode"
           required
+          [placeholder]="translateLabel('tabs.enterTabCode')"
         />
       </div>
 
       <div class="mb-3">
-        <label class="form-label">Tab Order</label>
+        <label class="form-label">{{ translateLabel('tabs.tabOrder') }}</label>
         <input
           type="number"
           class="form-control"
           [(ngModel)]="tabOrder"
           name="tabOrder"
           min="1"
+          [placeholder]="translateLabel('tabs.tabOrder')"
         />
       </div>
 
       <div class="mb-3">
-        <label class="form-label d-block">Active Status</label>
+        <label class="form-label d-block">{{ translateLabel('common.status') }}</label>
         <div class="form-check form-switch">
           <input
             class="form-check-input"
@@ -275,7 +277,7 @@
             name="isActive"
           />
           <label class="form-check-label" for="isActive">
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ isActive ? translateLabel('common.active') : translateLabel('common.inactive') }}
           </label>
         </div>
       </div>
@@ -284,7 +286,7 @@
         <button
           pButton
           type="button"
-          label="Cancel"
+          [label]="translateLabel('common.cancel')"
           (click)="closeTabModal()"
           class="p-button-text"
         >
@@ -297,7 +299,7 @@
           class="p-button-primary"
         >
           <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>
-          Save
+          {{ translateLabel('common.save') }}
         </button>
       </div>
     </form>
