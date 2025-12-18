@@ -272,6 +272,23 @@ export class FormViewComponent implements OnInit {
         return 'checkbox';
       }
 
+      // لو النوع اسمه يحتوي "radio" خليه radio buttons (التحقق أولاً)
+      if (typeName.includes('radio')) {
+        return 'radio';
+      }
+
+      // التحقق من fieldTypeName مباشرة (قد يكون "Radio" بحروف كبيرة)
+      const fieldTypeNameLower = (field.fieldTypeName || '').toLowerCase();
+      if (fieldTypeNameLower.includes('radio')) {
+        return 'radio';
+      }
+
+      // إذا كان allowMultiple = false و hasOptions = true وليس select صراحة
+      // (Radio buttons تسمح باختيار واحد فقط، بينما Select قد يكون single أو multiple)
+      if (ft.allowMultiple === false && !typeName.includes('select') && !fieldTypeNameLower.includes('select')) {
+        return 'radio';
+      }
+
       // أي نوع آخر فيه اختيارات (hasOptions = true) يكون Dropdown
       return 'select';
     }

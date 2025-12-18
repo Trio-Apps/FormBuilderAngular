@@ -26,40 +26,46 @@
               </div>
               
               <!-- Username Input -->
-              <c-input-group class="mb-3">
-                <span cInputGroupText class="input-icon">
-                  <svg cIcon name="cil-user"></svg>
-                </span>
-                <input
-                  type="text"
-                  cFormControl
-                  class="form-input"
-                  placeholder="Username"
-                  [(ngModel)]="credentials.username"
-                  name="username"
-                  [disabled]="isLoading"
-                  required
-                  autocomplete="username"
-                />
-              </c-input-group>
+              <div class="mb-3">
+                <label class="form-label mb-1">Username <span class="text-danger">*</span></label>
+                <c-input-group>
+                  <span cInputGroupText class="input-icon">
+                    <svg cIcon name="cil-user"></svg>
+                  </span>
+                  <input
+                    type="text"
+                    cFormControl
+                    class="form-input"
+                    placeholder="Username"
+                    [(ngModel)]="credentials.username"
+                    name="username"
+                    [disabled]="isLoading"
+                    required
+                    autocomplete="username"
+                  />
+                </c-input-group>
+              </div>
               
               <!-- Password Input -->
-              <c-input-group class="mb-3">
-                <span cInputGroupText class="input-icon">
-                  <svg cIcon name="cil-lock-locked"></svg>
-                </span>
-                <input
-                  type="password"
-                  cFormControl
-                  class="form-input"
-                  placeholder="Password"
-                  [(ngModel)]="credentials.password"
-                  name="password"
-                  [disabled]="isLoading"
-                  required
-                  autocomplete="current-password"
-                />
-              </c-input-group>
+              <div class="mb-3">
+                <label class="form-label mb-1">Password <span class="text-danger">*</span></label>
+                <c-input-group>
+                  <span cInputGroupText class="input-icon">
+                    <svg cIcon name="cil-lock-locked"></svg>
+                  </span>
+                  <input
+                    type="password"
+                    cFormControl
+                    class="form-input"
+                    placeholder="Password"
+                    [(ngModel)]="credentials.password"
+                    name="password"
+                    [disabled]="isLoading"
+                    required
+                    autocomplete="current-password"
+                  />
+                </c-input-group>
+              </div>
               
               <!-- Remember Me and Forgot Password -->
               <div class="d-flex justify-content-between align-items-center mb-4">

@@ -7,13 +7,14 @@ import {
   CreateFieldOptionDto,
   UpdateFieldOptionDto
 } from '../form-builder/models/form-builder-dto.model';
+import { environment } from '../../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class FieldOptionsService {
 
-  private fieldOptionsUrl = 'https://localhost:7276/api/FieldOptions';
+  private fieldOptionsUrl = `${environment.apiUrl}/FieldOptions`;
 
   constructor(private http: HttpClient) {}
 

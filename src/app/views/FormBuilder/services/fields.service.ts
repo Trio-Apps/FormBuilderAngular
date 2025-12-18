@@ -8,14 +8,15 @@ import {
   UpdateFormFieldDto,
   FieldTypeDto
 } from '../form-builder/models/form-builder-dto.model';
+import { environment } from '../../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class FieldsService {
 
-  private fieldsUrl = 'https://localhost:7276/api/FormFields';
-  private fieldTypesUrl = 'https://localhost:7276/api/FieldTypes';
+  private fieldsUrl = `${environment.apiUrl}/FormFields`;
+  private fieldTypesUrl = `${environment.apiUrl}/FieldTypes`;
 
   constructor(private http: HttpClient) {}
 

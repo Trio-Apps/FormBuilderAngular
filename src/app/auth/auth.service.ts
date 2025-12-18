@@ -3,6 +3,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, tap, throwError, catchError } from 'rxjs';
 import { StorageService } from './storage.service';
+import { environment } from '../environments/environment';
 
 export interface LoginCredentials {
   username: string;
@@ -22,7 +23,7 @@ export interface LoginResponse {
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'https://localhost:7276/api/account';
+  private apiUrl = `${environment.apiUrl}/account`;
 
   constructor(
     private http: HttpClient,

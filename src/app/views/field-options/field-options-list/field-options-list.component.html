@@ -155,7 +155,7 @@
             <div class="form-row">
               <div class="form-group" [class.invalid]="isFieldInvalid('fieldId')">
                 <label for="fieldId">
-                  Field ID *
+                  Field ID <span class="text-danger">*</span>
                   <span *ngIf="isFieldInvalid('fieldId')" class="error-text">
                     {{getFieldErrorMessage('fieldId')}}
                   </span>
@@ -166,7 +166,7 @@
 
               <div class="form-group" [class.invalid]="isFieldInvalid('optionOrder')">
                 <label for="optionOrder">
-                  Order *
+                  Order <span class="text-danger">*</span>
                   <span *ngIf="isFieldInvalid('optionOrder')" class="error-text">
                     {{getFieldErrorMessage('optionOrder')}}
                   </span>
@@ -178,7 +178,7 @@
             <div class="form-row">
               <div class="form-group" [class.invalid]="isFieldInvalid('optionValue')">
                 <label for="optionValue">
-                  Option Value *
+                  Option Value <span class="text-danger">*</span>
                   <span *ngIf="isFieldInvalid('optionValue')" class="error-text">
                     {{getFieldErrorMessage('optionValue')}}
                   </span>
@@ -192,7 +192,7 @@
             <div class="form-row">
               <div class="form-group" [class.invalid]="isFieldInvalid('optionText')">
                 <label for="optionText">
-                  Option Text *
+                  Option Text <span class="text-danger">*</span>
                   <span *ngIf="isFieldInvalid('optionText')" class="error-text">
                     {{getFieldErrorMessage('optionText')}}
                   </span>

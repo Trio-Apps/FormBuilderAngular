@@ -223,7 +223,7 @@
             <div class="form-row">
               <div class="form-group" [class.invalid]="isFieldInvalid('typeName')">
                 <label for="typeName">
-                  Type Name *
+                  Type Name <span class="text-danger">*</span>
                   <span *ngIf="isFieldInvalid('typeName')" class="error-text">
                     {{getFieldErrorMessage('typeName')}}
                   </span>

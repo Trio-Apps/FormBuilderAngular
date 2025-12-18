@@ -7,13 +7,14 @@ import {
   CreateFormTabDto,
   UpdateFormTabDto
 } from '../form-builder/models/form-builder-dto.model';
+import { environment } from '../../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class TabsService {
 
-  private baseUrl = 'https://localhost:7276/api/FormTabs';
+  private baseUrl = `${environment.apiUrl}/FormTabs`;
 
   constructor(private http: HttpClient) {}
 

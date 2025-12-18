@@ -328,16 +328,22 @@
                   <span class="order-label">{{ i + 1 }}</span>
                 </div>
                 <div class="option-inputs">
-                  <input type="text" 
-                         class="form-control" 
-                         formControlName="optionValue" 
-                         placeholder="Option value"
-                         [class.is-invalid]="option.get('optionValue')?.invalid && (option.get('optionValue')?.dirty || option.get('optionValue')?.touched)">
-                  <input type="text" 
-                         class="form-control" 
-                         formControlName="optionText" 
-                         placeholder="Display text"
-                         [class.is-invalid]="option.get('optionText')?.invalid && (option.get('optionText')?.dirty || option.get('optionText')?.touched)">
+                  <div class="option-input-wrapper">
+                    <label class="option-label">Option Value <span class="text-danger">*</span></label>
+                    <input type="text" 
+                           class="form-control" 
+                           formControlName="optionValue" 
+                           placeholder="Option value"
+                           [class.is-invalid]="option.get('optionValue')?.invalid && (option.get('optionValue')?.dirty || option.get('optionValue')?.touched)">
+                  </div>
+                  <div class="option-input-wrapper">
+                    <label class="option-label">Option Text <span class="text-danger">*</span></label>
+                    <input type="text" 
+                           class="form-control" 
+                           formControlName="optionText" 
+                           placeholder="Display text"
+                           [class.is-invalid]="option.get('optionText')?.invalid && (option.get('optionText')?.dirty || option.get('optionText')?.touched)">
+                  </div>
                 </div>
                 <button type="button" 
                         class="btn-remove-option" 
