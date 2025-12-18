@@ -572,6 +572,50 @@
   }
 }
 
+// Language Tabs
+.language-tabs-container {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  margin-bottom: 16px;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+
+  .language-tab {
+    flex: 1;
+    padding: 12px 24px;
+    border: none;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+    position: relative;
+
+    &:first-child {
+      border-top-left-radius: 0;
+    }
+
+    &:last-child {
+      border-top-right-radius: 0;
+    }
+
+    &:hover {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    &.language-tab-active {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-bottom-color: #667eea;
+      font-weight: 600;
+    }
+  }
+}
+
 @media (max-width: 1024px) {
   .main-content {
     padding: 16px;

@@ -136,6 +136,11 @@
               <td class="col-name">
                 <div class="field-name-wrapper">
                   <div class="field-name-main">{{ tab.tabName || '-' }}</div>
+                  <div class="field-name-meta" *ngIf="tab.foreignTabName">
+                    <span class="meta-item">
+                      <i class="pi pi-language"></i> {{ tab.foreignTabName }}
+                    </span>
+                  </div>
                 </div>
               </td>
               <td class="col-code">
@@ -192,14 +197,48 @@
     (onHide)="closeTabModal()"
   >
     <form (ngSubmit)="saveTab()">
-      <div class="mb-3">
-        <label class="form-label">Tab Name <span class="text-danger">*</span></label>
+      <!-- Language Toggle Buttons -->
+      <div class="mb-3 d-flex gap-2">
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'en'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'en'"
+          (click)="setInputLanguage('en')">
+          English
+        </button>
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'ar'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'ar'"
+          (click)="setInputLanguage('ar')">
+          العربية
+        </button>
+      </div>
+
+      <!-- English Tab Name -->
+      <div class="mb-3" *ngIf="currentInputLanguage === 'en'">
+        <label class="form-label">{{ translateLabel('tabs.tabName') }} <span class="text-danger">*</span></label>
         <input
           type="text"
           class="form-control"
           [(ngModel)]="tabName"
           name="tabName"
           required
+          [placeholder]="translateLabel('tabs.enterTabName')"
+        />
+      </div>
+
+      <!-- Arabic Tab Name -->
+      <div class="mb-3" *ngIf="currentInputLanguage === 'ar'">
+        <label class="form-label">{{ translateLabel('tabs.tabName') }}</label>
+        <input
+          type="text"
+          class="form-control"
+          [(ngModel)]="foreignTabName"
+          name="foreignTabName"
+          [placeholder]="translateLabel('tabs.enterTabName')"
         />
       </div>
 

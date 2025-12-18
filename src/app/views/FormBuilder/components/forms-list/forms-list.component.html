@@ -3,21 +3,21 @@
   <div class="top-navbar">
     <div class="nav-content">
       <div class="nav-left">
-        <button class="nav-back-btn" routerLink="/dashboard" title="Back to Dashboard">
+        <button class="nav-back-btn" routerLink="/dashboard" [title]="'forms.backToDashboard' | translate">
           <i class="pi pi-arrow-left"></i>
         </button>
         <div class="nav-title-section">
-          <h1 class="page-title">Form Builder</h1>
-          <p class="page-subtitle">Manage all forms in the system</p>
+          <h1 class="page-title">{{ 'forms.title' | translate }}</h1>
+          <p class="page-subtitle">{{ 'forms.subtitle' | translate }}</p>
         </div>
       </div>
       <div class="nav-right">
-        <button class="btn-icon" (click)="loadForms()" [disabled]="loading" title="Refresh">
+        <button class="btn-icon" (click)="loadForms()" [disabled]="loading" [title]="'common.refresh' | translate">
           <i class="pi pi-refresh"></i>
         </button>
         <button class="btn-primary" (click)="openFormModal()" [disabled]="loading">
           <i class="pi pi-plus"></i>
-          <span>New Form</span>
+          <span>{{ 'forms.newForm' | translate }}</span>
         </button>
       </div>
     </div>
@@ -28,12 +28,12 @@
     <nav class="breadcrumb-nav">
       <a routerLink="/dashboard" class="breadcrumb-link">
         <i class="pi pi-home"></i>
-        <span>Dashboard</span>
+        <span>{{ 'common.dashboard' | translate }}</span>
       </a>
       <i class="pi pi-angle-right breadcrumb-separator"></i>
       <span class="breadcrumb-current">
         <i class="pi pi-file"></i>
-        <span>Forms</span>
+        <span>{{ 'common.forms' | translate }}</span>
       </span>
     </nav>
   </div>
@@ -48,7 +48,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ totalItems || forms.length }}</div>
-          <div class="stat-label">Total Forms</div>
+          <div class="stat-label">{{ 'forms.totalForms' | translate }}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -57,7 +57,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ getPublishedFormsCount() }}</div>
-          <div class="stat-label">Published Forms</div>
+          <div class="stat-label">{{ 'forms.publishedForms' | translate }}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -66,7 +66,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ getActiveFormsCount() }}</div>
-          <div class="stat-label">Active Forms</div>
+          <div class="stat-label">{{ 'forms.activeForms' | translate }}</div>
         </div>
       </div>
     </div>
@@ -76,21 +76,21 @@
       <div class="table-header">
         <h3 class="table-title">
           <i class="pi pi-table"></i>
-          Forms List
+          {{ 'forms.formsList' | translate }}
         </h3>
         <div class="table-actions">
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input
               type="text"
-              placeholder="Search forms..."
+              [placeholder]="'forms.searchForms' | translate"
               class="search-input"
               [(ngModel)]="searchTerm"
               (input)="filterForms()"
             />
           </div>
           <div class="results-count">
-            {{ filteredForms.length }} form(s) found
+            {{ filteredForms.length }} {{ 'forms.formsFound' | translate }}
           </div>
         </div>
       </div>
@@ -100,7 +100,7 @@
         <div class="spinner-wrapper">
           <i class="pi pi-spin pi-spinner"></i>
         </div>
-        <p>Loading forms...</p>
+        <p>{{ 'forms.loadingForms' | translate }}</p>
       </div>
 
       <!-- Empty State -->
@@ -108,11 +108,11 @@
         <div class="empty-icon">
           <i class="pi pi-file"></i>
         </div>
-        <h3>No Forms Found</h3>
-        <p>Get started by creating your first form.</p>
+        <h3>{{ 'forms.noFormsFound' | translate }}</h3>
+        <p>{{ 'forms.getStarted' | translate }}</p>
         <button class="btn-primary" (click)="openFormModal()">
           <i class="pi pi-plus"></i>
-          <span>Create Form</span>
+          <span>{{ 'forms.createForm' | translate }}</span>
         </button>
       </div>
 
@@ -122,11 +122,11 @@
           <ng-template pTemplate="header">
             <tr>
               <th style="width: 50px"></th>
-              <th pSortableColumn="formName">FORM NAME <p-sortIcon field="formName"></p-sortIcon></th>
-              <th pSortableColumn="formCode">FORM CODE <p-sortIcon field="formCode"></p-sortIcon></th>
-              <th>TABS</th>
-              <th>STATUS</th>
-              <th class="text-end">ACTIONS</th>
+              <th pSortableColumn="formName">{{ 'forms.formName' | translate }} <p-sortIcon field="formName"></p-sortIcon></th>
+              <th pSortableColumn="formCode">{{ 'forms.formCode' | translate }} <p-sortIcon field="formCode"></p-sortIcon></th>
+              <th>{{ 'common.tabs' | translate }}</th>
+              <th>{{ 'common.status' | translate }}</th>
+              <th class="text-end">{{ 'common.actions' | translate }}</th>
             </tr>
           </ng-template>
           <ng-template pTemplate="body" let-form>
@@ -137,22 +137,22 @@
               <td class="name-cell">
                 <div class="form-name">{{ form.formName }}</div>
                 <div class="form-description">
-                  {{ form.description || 'No description' }}
+                  {{ form.description || ('common.noData' | translate) }}
                 </div>
               </td>
               <td class="code-cell">
                 <span class="badge-code">{{ form.formCode }}</span>
               </td>
               <td class="tabs-cell">
-                <span class="badge-pill badge-tabs">{{ getTabsCount(form) }} tabs</span>
+                <span class="badge-pill badge-tabs">{{ getTabsCount(form) }} {{ 'common.tabs' | translate }}</span>
               </td>
               <td class="status-cell">
                 <div class="status-group">
                   <span class="status-badge" [ngClass]="getPublishedClass(form.isPublished)">
-                    {{ form.isPublished ? 'Published' : 'Draft' }}
+                    {{ form.isPublished ? ('common.published' | translate) : ('common.draft' | translate) }}
                   </span>
                   <span class="status-badge" [ngClass]="getActiveClass(form.isActive)">
-                    {{ form.isActive !== false ? 'Active' : 'Inactive' }}
+                    {{ form.isActive !== false ? ('common.active' | translate) : ('common.inactive' | translate) }}
                   </span>
                 </div>
               </td>
@@ -160,28 +160,28 @@
                 <div class="actions-menu">
                   <button
                     class="action-btn"
-                    title="Copy Public Link"
+                    [title]="'forms.copyPublicLink' | translate"
                     (click)="copyPublicLink(form)"
                   >
                     <i class="pi pi-copy"></i>
                   </button>
                   <button
                     class="action-btn action-edit"
-                    title="Edit"
+                    [title]="'common.edit' | translate"
                     (click)="openFormModal(form)"
                   >
                     <i class="pi pi-pencil"></i>
                   </button>
                   <button
                     class="action-btn action-duplicate"
-                    title="Manage Tabs"
+                    [title]="'forms.manageTabs' | translate"
                     [routerLink]="['../tabs', form.id]"
                   >
                     <i class="pi pi-th-large"></i>
                   </button>
                   <button
                     class="action-btn action-delete"
-                    title="Delete"
+                    [title]="'common.delete' | translate"
                     (click)="deleteForm(form.id)"
                   >
                     <i class="pi pi-trash"></i>
@@ -219,7 +219,7 @@
     <p-dialog
       [(visible)]="showFormModal"
       [modal]="true"
-      [header]="editingForm ? 'Edit Form' : 'Add New Form'"
+      [header]="(editingForm ? 'forms.editForm' : 'forms.addNewForm') | translate"
       [style]="{ width: '500px' }"
       [draggable]="false"
       [resizable]="false"
@@ -227,44 +227,88 @@
       (onHide)="closeFormModal()"
     >
       <form (ngSubmit)="saveForm()" #formForm="ngForm">
-        <div class="mb-4">
-          <label class="form-label text-muted small fw-bold">FORM NAME <span class="text-danger">*</span></label>
+        <!-- Language Toggle Tabs -->
+        <div class="language-tabs-container mb-3">
+          <button
+            type="button"
+            class="language-tab"
+            [class.language-tab-active]="currentInputLanguage === 'en'"
+            (click)="setInputLanguage('en')">
+            English
+          </button>
+          <button
+            type="button"
+            class="language-tab"
+            [class.language-tab-active]="currentInputLanguage === 'ar'"
+            (click)="setInputLanguage('ar')">
+            العربية
+          </button>
+        </div>
+
+        <!-- English Form Name -->
+        <div class="mb-4" *ngIf="currentInputLanguage === 'en'">
+          <label class="form-label text-muted small fw-bold">{{ translateLabel('forms.formName') }} <span class="text-danger">*</span></label>
           <input
             type="text"
             class="form-control"
             [(ngModel)]="formName"
             name="formName"
             required
-            placeholder="Enter form name"
+            [placeholder]="translateLabel('forms.enterFormName')"
+          />
+        </div>
+
+        <!-- Arabic Form Name -->
+        <div class="mb-4" *ngIf="currentInputLanguage === 'ar'">
+          <label class="form-label text-muted small fw-bold">{{ translateLabel('forms.formName') }}</label>
+          <input
+            type="text"
+            class="form-control"
+            [(ngModel)]="foreignFormName"
+            name="foreignFormName"
+            [placeholder]="translateLabel('forms.enterFormName')"
           />
         </div>
 
         <div class="mb-4">
-          <label class="form-label text-muted small fw-bold">FORM CODE <span class="text-danger">*</span></label>
+          <label class="form-label text-muted small fw-bold">{{ translateLabel('forms.formCode') }} <span class="text-danger">*</span></label>
           <input
             type="text"
             class="form-control"
             [(ngModel)]="formCode"
             name="formCode"
             required
-            placeholder="FORM_CODE"
+            [placeholder]="translateLabel('forms.formCode')"
           />
         </div>
 
-        <div class="mb-4">
-          <label class="form-label text-muted small fw-bold">DESCRIPTION</label>
+        <!-- English Description -->
+        <div class="mb-4" *ngIf="currentInputLanguage === 'en'">
+          <label class="form-label text-muted small fw-bold">{{ translateLabel('forms.description') }}</label>
           <textarea
             class="form-control"
             [(ngModel)]="description"
             name="description"
             rows="3"
-            placeholder="Enter description"
+            [placeholder]="translateLabel('forms.enterDescription')"
+          ></textarea>
+        </div>
+
+        <!-- Arabic Description -->
+        <div class="mb-4" *ngIf="currentInputLanguage === 'ar'">
+          <label class="form-label text-muted small fw-bold">{{ translateLabel('forms.description') }}</label>
+          <textarea
+            class="form-control"
+            [(ngModel)]="foreignDescription"
+            name="foreignDescription"
+            rows="3"
+            [placeholder]="translateLabel('forms.enterDescription')"
           ></textarea>
         </div>
 
         <div class="row mb-3 g-3">
           <div class="col-6">
-            <label class="form-label text-muted small fw-bold d-block">PUBLISHED STATUS</label>
+            <label class="form-label text-muted small fw-bold d-block">{{ translateLabel('forms.publishedStatus') }}</label>
             <div class="form-check form-switch">
               <input
                 class="form-check-input"
@@ -274,12 +318,12 @@
                 name="isPublished"
               />
               <label class="form-check-label" for="isPublished">
-                {{ isPublished ? 'Published' : 'Draft' }}
+                {{ isPublished ? translateLabel('common.published') : translateLabel('common.draft') }}
               </label>
             </div>
           </div>
           <div class="col-6">
-            <label class="form-label text-muted small fw-bold d-block">ACTIVE STATUS</label>
+            <label class="form-label text-muted small fw-bold d-block">{{ translateLabel('forms.activeStatus') }}</label>
             <div class="form-check form-switch">
               <input
                 class="form-check-input"
@@ -289,7 +333,7 @@
                 name="isActive"
               />
               <label class="form-check-label" for="isActive">
-                {{ isActive ? 'Active' : 'Inactive' }}
+                {{ isActive ? translateLabel('common.active') : translateLabel('common.inactive') }}
               </label>
             </div>
           </div>
@@ -299,7 +343,7 @@
           <button
             pButton
             type="button"
-            label="Cancel"
+            [label]="'common.cancel' | translate"
             (click)="closeFormModal()"
             class="p-button-text text-muted"
           >
@@ -307,7 +351,7 @@
           <button
             pButton
             type="submit"
-            [label]="loading ? 'Saving...' : 'Save'"
+            [label]="loading ? ('common.saving' | translate) : ('common.save' | translate)"
             [disabled]="!formName || !formCode || loading"
             class="p-button-primary px-4"
           >

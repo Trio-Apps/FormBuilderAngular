@@ -1,8 +1,26 @@
 <div class="form-viewer-container" *ngIf="!loading && !notFound; else stateTemplate">
+  <!-- Language Toggle Buttons -->
+  <div class="language-toggle-container">
+    <button
+      type="button"
+      class="language-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'en'"
+      (click)="switchLanguage('en')">
+      English
+    </button>
+    <button
+      type="button"
+      class="language-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'ar'"
+      (click)="switchLanguage('ar')">
+      العربية
+    </button>
+  </div>
+
   <!-- Form Header -->
   <div class="form-header">
-    <h1 class="form-title">{{ form?.formName }}</h1>
-    
+    <h1 class="form-title">{{ getFormName(form) }}</h1>
+    <p class="form-description" *ngIf="getFormDescription(form)">{{ getFormDescription(form) }}</p>
   </div>
 
   <!-- Tabs Navigation (if multiple tabs) -->
@@ -16,7 +34,7 @@
           type="button"
           class="nav-tab-button"
           (click)="setActiveTab(i)">
-          {{ tab.tabName }}
+          {{ getTabName(tab) }}
         </button>
       </li>
     </ul>
@@ -37,9 +55,14 @@
           
           <!-- Field Label -->
           <label class="field-label">
-            {{ field.fieldName }}
+            {{ getFieldLabel(field) }}
             <span *ngIf="isRequired(field)" class="required-indicator">*</span>
           </label>
+
+          <!-- Field Hint Text -->
+          <div class="field-hint" *ngIf="getFieldHintText(field)">
+            {{ getFieldHintText(field) }}
+          </div>
 
           <!-- Field Input (Google Forms style - preview only, empty answer) -->
           <div class="field-input-wrapper">
@@ -50,7 +73,7 @@
                 *ngSwitchCase="'text'"
                 type="text"
                 class="form-input"
-                [placeholder]="field.placeholder || 'Your answer'"
+                [placeholder]="getFieldPlaceholder(field)"
                 [value]="getDefaultValue(field)"
               />
 
@@ -59,7 +82,7 @@
                 *ngSwitchCase="'email'"
                 type="email"
                 class="form-input"
-                [placeholder]="field.placeholder || 'Your answer'"
+                [placeholder]="getFieldPlaceholder(field)"
                 [value]="getDefaultValue(field)"
               />
 
@@ -68,7 +91,7 @@
                 *ngSwitchCase="'number'"
                 type="number"
                 class="form-input"
-                [placeholder]="field.placeholder || 'Your answer'"
+                [placeholder]="getFieldPlaceholder(field)"
                 [min]="field.minValue"
                 [max]="field.maxValue"
                 [value]="getDefaultValue(field)"
@@ -79,7 +102,7 @@
                 *ngSwitchCase="'textarea'"
                 class="form-textarea"
                 rows="4"
-                [placeholder]="field.placeholder || 'Your answer'"
+                [placeholder]="getFieldPlaceholder(field)"
               >{{ getDefaultValue(field) }}</textarea>
 
               <!-- Select / Dropdown -->
@@ -87,14 +110,14 @@
                 *ngSwitchCase="'select'"
                 class="form-select"
               >
-                <option value="" selected>
-                  {{ field.placeholder || 'Choose an option' }}
+                <option value="" selected disabled>
+                  {{ getFieldPlaceholder(field) }}
                 </option>
                 <option
                   *ngFor="let opt of (field.fieldOptions || [])"
                   [value]="opt.optionValue"
                   [selected]="isOptionSelected(field, opt.optionValue)">
-                  {{ opt.optionText }}
+                  {{ getOptionText(opt) }}
                 </option>
               </select>
 
@@ -111,11 +134,11 @@
                     [checked]="isOptionSelected(field, opt.optionValue)"
                   />
                   <label [for]="'radio-' + field.id + '-' + opt.id" class="radio-label">
-                    {{ opt.optionText }}
+                    {{ getOptionText(opt) }}
                   </label>
                 </div>
                 <p *ngIf="!field.fieldOptions || field.fieldOptions.length === 0" class="no-options">
-                  No options available
+                  {{ translationService.translate('formView.noOptionsAvailable') }}
                 </p>
               </div>
 
@@ -131,11 +154,11 @@
                     [checked]="isCheckboxSelected(field, opt.optionValue)"
                   />
                   <label [for]="'chk-' + field.id + '-' + opt.id" class="checkbox-label">
-                    {{ opt.optionText }}
+                    {{ getOptionText(opt) }}
                   </label>
                 </div>
                 <p *ngIf="!field.fieldOptions || field.fieldOptions.length === 0" class="no-options">
-                  No options available
+                  {{ translationService.translate('formView.noOptionsAvailable') }}
                 </p>
               </div>
 
@@ -153,7 +176,9 @@
                   type="file"
                   class="form-input file-input"
                 />
-                <span class="file-upload-hint">File upload disabled (view only)</span>
+                <span class="file-upload-hint">
+                  {{ translationService.translate('formView.fileUploadDisabled') }}
+                </span>
               </div>
 
               <!-- Switch / Toggle -->
@@ -173,21 +198,25 @@
                 *ngSwitchDefault
                 type="text"
                 class="form-input"
-                [placeholder]="field.placeholder || 'Your answer'"
+                [placeholder]="getFieldPlaceholder(field)"
                 [value]="getDefaultValue(field)"
               />
 
             </ng-container>
           </div>
 
-         
+          <!-- Field Validation Message (for display purposes) -->
+          <div class="field-validation-message" *ngIf="getFieldValidationMessage(field)">
+            <i class="pi pi-info-circle"></i>
+            {{ getFieldValidationMessage(field) }}
+          </div>
 
         </div>
       </div>
 
       <!-- Empty Tab Message -->
       <div class="empty-tab-message" *ngIf="!tab.fields || tab.fields.length === 0">
-        <p>No fields in this tab.</p>
+        <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'لا توجد حقول في هذا التبويب.' : 'No fields in this tab.' }}</p>
       </div>
 
     </div>
@@ -199,32 +228,32 @@
 <ng-template #stateTemplate>
   <div class="state-container" *ngIf="loading">
     <div class="loading-spinner"></div>
-    <p class="loading-text">Loading form...</p>
+    <p class="loading-text">{{ translationService.translate('formView.loadingForm') }}</p>
   </div>
 
   <!-- Not Found State -->
   <div class="state-container" *ngIf="!loading && notFound">
     <div class="not-found-icon">📄</div>
-    <h2 class="not-found-title">Form not found</h2>
+    <h2 class="not-found-title">{{ translationService.translate('formView.formNotFound') }}</h2>
     <p class="not-found-message">
-      The form you are trying to access does not exist or is not available.
+      {{ translationService.translate('formView.formNotFoundMessage') }}
     </p>
     <div class="not-found-details" *ngIf="notFoundReason">
       <p class="not-found-reason">
-        <strong>Reason:</strong> {{ notFoundReason }}
+        <strong>{{ translationService.translate('formView.reason') }}:</strong> {{ notFoundReason }}
       </p>
     </div>
     <div class="not-found-details">
       <p class="not-found-code">
-        <strong>Form Code:</strong> <code>{{ formCode }}</code>
+        <strong>{{ translationService.translate('formView.formCode') }}:</strong> <code>{{ formCode }}</code>
       </p>
     </div>
     <div class="not-found-help">
-      <p>Please check:</p>
+      <p>{{ translationService.translate('formView.pleaseCheck') }}</p>
       <ul>
-        <li>That the form code is correct</li>
-        <li>That the form is published and active</li>
-        <li>Check the browser console for more details</li>
+        <li>{{ translationService.translate('formView.formCodeCorrect') }}</li>
+        <li>{{ translationService.translate('formView.formPublishedActive') }}</li>
+        <li>{{ translationService.translate('formView.checkConsole') }}</li>
       </ul>
     </div>
   </div>

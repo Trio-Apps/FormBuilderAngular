@@ -5,6 +5,7 @@ import { FormsService } from '../FormBuilder/services/forms.service';
 import { TabsService } from '../FormBuilder/services/tabs.service';
 import { FieldsService } from '../FormBuilder/services/fields.service';
 import { FormBuilderDto, FormTabDto, FormFieldDto } from '../FormBuilder/form-builder/models/form-builder-dto.model';
+import { TranslationService } from '../../core/services/translation.service';
 
 @Component({
   selector: 'app-form-view',
@@ -28,7 +29,8 @@ export class FormViewComponent implements OnInit {
     private route: ActivatedRoute,
     private formsService: FormsService,
     private tabsService: TabsService,
-    private fieldsService: FieldsService
+    private fieldsService: FieldsService,
+    public translationService: TranslationService
   ) {}
 
   ngOnInit(): void {
@@ -88,6 +90,13 @@ export class FormViewComponent implements OnInit {
         this.form = form;
         const apiTabs = form.tabs || [];
 
+        console.log('[FormView] Form data:', {
+          formName: form.formName,
+          foreignFormName: form.foreignFormName,
+          description: form.description,
+          foreignDescription: form.foreignDescription
+        });
+        console.log('[FormView] Current Language:', this.translationService.getCurrentLanguage());
         console.log('[FormView] Tabs found:', apiTabs.length);
         
         if (apiTabs && apiTabs.length > 0) {
@@ -115,20 +124,31 @@ export class FormViewComponent implements OnInit {
           console.log('[FormView] Form loaded successfully with', this.tabs.length, 'tabs');
           console.log('[FormView] Loading state:', this.loading);
           console.log('[FormView] NotFound state:', this.notFound);
-          console.log('[FormView] Form:', this.form);
-          console.log('[FormView] Tabs:', this.tabs);
+          
+          // Debug: Log multilingual data
           if (this.tabs.length > 0) {
             this.tabs.forEach((tab, index) => {
-              console.log(`[FormView] Tab ${index} (${tab.tabName}):`, {
+              console.log(`[FormView] Tab ${index} Multilingual Data:`, {
                 id: tab.id,
                 tabName: tab.tabName,
+                foreignTabName: tab.foreignTabName,
+                name_en: tab.name_en,
+                name_ar: tab.name_ar,
+                currentLanguage: this.translationService.getCurrentLanguage(),
+                displayedName: this.getTabName(tab),
                 fieldsCount: tab.fields?.length || 0,
                 fields: tab.fields?.map(f => ({
                   id: f.id,
                   fieldName: f.fieldName,
-                  fieldTypeName: f.fieldTypeName,
-                  defaultValueJson: f.defaultValueJson,
-                  placeholder: f.placeholder
+                  foreignFieldName: f.foreignFieldName,
+                  label_en: f.label_en,
+                  label_ar: f.label_ar,
+                  displayedLabel: this.getFieldLabel(f),
+                  placeholder: f.placeholder,
+                  foreignPlaceholder: f.foreignPlaceholder,
+                  placeholder_en: f.placeholder_en,
+                  placeholder_ar: f.placeholder_ar,
+                  displayedPlaceholder: this.getFieldPlaceholder(f)
                 }))
               });
             });
@@ -380,7 +400,10 @@ export class FormViewComponent implements OnInit {
       String(opt.optionValue) === String(selectedValue)
     );
     
-    return selectedOption ? selectedOption.optionText : '';
+    if (!selectedOption) return '';
+    
+    // Use multilingual option text
+    return this.getOptionText(selectedOption);
   }
 
   isOptionSelected(field: FormFieldDto, optionValue: any): boolean {
@@ -400,7 +423,7 @@ export class FormViewComponent implements OnInit {
       if (Array.isArray(parsed)) {
         const selectedOptions = field.fieldOptions
           .filter(opt => parsed.includes(opt.optionValue))
-          .map(opt => opt.optionText);
+          .map(opt => this.getOptionText(opt));
         return selectedOptions.length > 0 ? selectedOptions.join(', ') : '';
       }
     } catch {
@@ -408,7 +431,7 @@ export class FormViewComponent implements OnInit {
       const selectedOption = field.fieldOptions.find(opt => 
         String(opt.optionValue) === String(value)
       );
-      return selectedOption ? selectedOption.optionText : '';
+      return selectedOption ? this.getOptionText(selectedOption) : '';
     }
     
     return '';
@@ -469,6 +492,189 @@ export class FormViewComponent implements OnInit {
 
   trackByFieldId(index: number, field: FormFieldDto): any {
     return field.id || index;
+  }
+
+  /**
+   * Switch language for the form view
+   */
+  switchLanguage(lang: 'en' | 'ar'): void {
+    this.translationService.setLanguage(lang);
+  }
+
+  // ===== Multilingual Content Helpers =====
+
+  /**
+   * Get form name based on current language
+   * Priority: Foreign fields > Default fields
+   */
+  getFormName(form: FormBuilderDto | null): string {
+    if (!form) return '';
+    const lang = this.translationService.getCurrentLanguage();
+    
+    if (lang === 'ar') {
+      if (form.foreignFormName && form.foreignFormName.trim()) {
+        return form.foreignFormName;
+      }
+    }
+    
+    return form.formName || '';
+  }
+
+  /**
+   * Get form description based on current language
+   */
+  getFormDescription(form: FormBuilderDto | null): string {
+    if (!form) return '';
+    const lang = this.translationService.getCurrentLanguage();
+    
+    if (lang === 'ar') {
+      if (form.foreignDescription && form.foreignDescription.trim()) {
+        return form.foreignDescription;
+      }
+    }
+    
+    return form.description || '';
+  }
+
+  /**
+   * Get tab name based on current language
+   * Priority: Computed properties (name_ar/name_en) > Foreign fields > Default fields
+   */
+  getTabName(tab: FormTabDto): string {
+    if (!tab) return '';
+    const lang = this.translationService.getCurrentLanguage();
+    
+    // Debug log
+    if (lang === 'ar') {
+      // Try computed property first (from API)
+      if (tab.name_ar && tab.name_ar.trim()) {
+        return tab.name_ar;
+      }
+      // Try foreign field
+      if (tab.foreignTabName && tab.foreignTabName.trim()) {
+        return tab.foreignTabName;
+      }
+      // Fallback to English
+      return tab.tabName || '';
+    } else {
+      // English: Try computed property first
+      if (tab.name_en && tab.name_en.trim()) {
+        return tab.name_en;
+      }
+      // Fallback to default
+      return tab.tabName || '';
+    }
+  }
+
+  /**
+   * Get field label based on current language
+   * Priority: Computed properties (label_ar/label_en) > Foreign fields > Default fields
+   */
+  getFieldLabel(field: FormFieldDto): string {
+    if (!field) return '';
+    const lang = this.translationService.getCurrentLanguage();
+    
+    // Use computed properties if available (from API)
+    if (lang === 'ar') {
+      // Try computed property first
+      if (field.label_ar && field.label_ar.trim()) {
+        return field.label_ar;
+      }
+      // Try foreign field
+      if (field.foreignFieldName && field.foreignFieldName.trim()) {
+        return field.foreignFieldName;
+      }
+      // Fallback to English
+      return field.fieldName || '';
+    } else {
+      // English: Try computed property first
+      if (field.label_en && field.label_en.trim()) {
+        return field.label_en;
+      }
+      // Fallback to default
+      return field.fieldName || '';
+    }
+  }
+
+  /**
+   * Get field placeholder based on current language
+   * Priority: Computed properties (placeholder_ar/placeholder_en) > Foreign fields > Default fields
+   */
+  getFieldPlaceholder(field: FormFieldDto): string {
+    if (!field) {
+      return this.translationService.getCurrentLanguage() === 'ar' ? 'أدخل إجابتك' : 'Your answer';
+    }
+    
+    const lang = this.translationService.getCurrentLanguage();
+    const defaultPlaceholder = lang === 'ar' ? 'أدخل إجابتك' : 'Your answer';
+    
+    // Use computed properties if available (from API)
+    if (lang === 'ar') {
+      if (field.placeholder_ar && field.placeholder_ar.trim()) return field.placeholder_ar;
+      if (field.foreignPlaceholder && field.foreignPlaceholder.trim()) return field.foreignPlaceholder;
+    } else {
+      if (field.placeholder_en && field.placeholder_en.trim()) return field.placeholder_en;
+      if (field.placeholder && field.placeholder.trim()) return field.placeholder;
+    }
+    
+    return defaultPlaceholder;
+  }
+
+  /**
+   * Get field hint text based on current language
+   */
+  getFieldHintText(field: FormFieldDto): string {
+    const lang = this.translationService.getCurrentLanguage();
+    
+    if (lang === 'ar' && field.foreignHintText) {
+      return field.foreignHintText;
+    }
+    
+    return field.hintText || '';
+  }
+
+  /**
+   * Get field validation message based on current language
+   */
+  getFieldValidationMessage(field: FormFieldDto): string {
+    const lang = this.translationService.getCurrentLanguage();
+    
+    if (lang === 'ar' && field.foreignValidationMessage) {
+      return field.foreignValidationMessage;
+    }
+    
+    return field.validationMessage || '';
+  }
+
+  /**
+   * Get option text based on current language
+   */
+  getOptionText(option: any): string {
+    if (!option) return '';
+    const lang = this.translationService.getCurrentLanguage();
+    
+    if (lang === 'ar' && option.foreignOptionText && option.foreignOptionText.trim()) {
+      return option.foreignOptionText;
+    }
+    
+    return option.optionText || '';
+  }
+
+  /**
+   * Get field type name based on current language
+   */
+  getFieldTypeName(field: FormFieldDto): string {
+    if (!field.fieldType) return '';
+    const lang = this.translationService.getCurrentLanguage();
+    
+    if (lang === 'ar') {
+      if (field.fieldType.type_name_ar) return field.fieldType.type_name_ar;
+      if (field.fieldType.foreignTypeName) return field.fieldType.foreignTypeName;
+    } else {
+      if (field.fieldType.type_name_en) return field.fieldType.type_name_en;
+    }
+    
+    return field.fieldType.typeName || '';
   }
 }
 

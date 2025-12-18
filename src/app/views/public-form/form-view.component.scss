@@ -7,6 +7,50 @@
   min-height: 100vh;
 }
 
+// Language Toggle Buttons
+.language-toggle-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.language-btn {
+  padding: 8px 16px;
+  border: 1px solid #dadce0;
+  background: #ffffff;
+  color: #5f6368;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+
+  &:hover {
+    background: #f8f9fa;
+    box-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+  }
+
+  &.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ffffff;
+    border-color: #667eea;
+    box-shadow: 0 2px 4px 0 rgba(102, 126, 234, 0.4);
+
+    &:hover {
+      background: linear-gradient(135deg, #5568d3 0%, #653a8f 100%);
+      box-shadow: 0 3px 6px 0 rgba(102, 126, 234, 0.5);
+    }
+  }
+
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+  }
+}
+
 // Form Header - Google Forms Style
 .form-header {
   margin-bottom: 12px;
@@ -370,12 +414,29 @@ input[type="checkbox"] {
 // Field Hint - Google Forms Style
 .field-hint {
   margin-top: 4px;
+  margin-bottom: 8px;
   font-size: 12px;
   color: rgba(0, 0, 0, 0.54);
   line-height: 1.4;
   font-style: normal;
   padding-left: 0;
   font-weight: 400;
+}
+
+// Field Validation Message
+.field-validation-message {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.54);
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  
+  i {
+    font-size: 14px;
+    color: #5f6368;
+  }
 }
 
 // Field Details Section

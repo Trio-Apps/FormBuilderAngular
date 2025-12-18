@@ -7,6 +7,7 @@ import { delay, filter, map, tap } from 'rxjs/operators';
 import { ColorModeService } from '@coreui/angular';
 import { IconSetService } from '@coreui/icons-angular';
 import { iconSubset } from './icons/icon-subset';
+import { TranslationService } from './core/services/translation.service';
 
 @Component({
     selector: 'app-root',
@@ -23,6 +24,7 @@ export class AppComponent implements OnInit {
 
   readonly #colorModeService = inject(ColorModeService);
   readonly #iconSetService = inject(IconSetService);
+  readonly #translationService = inject(TranslationService);
 
   constructor() {
     this.#titleService.setTitle(this.title);
@@ -42,6 +44,7 @@ export class AppComponent implements OnInit {
       }
     });
 
+    // Handle theme query parameter
     this.#activatedRoute.queryParams
       .pipe(
         delay(1),
@@ -53,5 +56,22 @@ export class AppComponent implements OnInit {
         takeUntilDestroyed(this.#destroyRef)
       )
       .subscribe();
+
+    // Handle language query parameter (?lang=ar or ?lang=en)
+    this.#router.events.pipe(
+      filter(event => event instanceof NavigationEnd),
+      takeUntilDestroyed(this.#destroyRef)
+    ).subscribe(() => {
+      const queryParams = this.#activatedRoute.snapshot.queryParams;
+      if (queryParams['lang'] === 'ar' || queryParams['lang'] === 'en') {
+        this.#translationService.setLanguage(queryParams['lang']);
+      }
+    });
+
+    // Also check initial query params
+    const initialLang = this.#activatedRoute.snapshot.queryParams['lang'];
+    if (initialLang === 'ar' || initialLang === 'en') {
+      this.#translationService.setLanguage(initialLang);
+    }
   }
 }

@@ -216,6 +216,24 @@
 
       <form [formGroup]="fieldTypeForm" (ngSubmit)="saveFieldType()">
         <div class="modal-body">
+          <!-- Language Toggle Tabs -->
+          <div class="language-tabs-container mb-3">
+            <button
+              type="button"
+              class="language-tab"
+              [class.language-tab-active]="currentInputLanguage === 'en'"
+              (click)="setInputLanguage('en')">
+              English
+            </button>
+            <button
+              type="button"
+              class="language-tab"
+              [class.language-tab-active]="currentInputLanguage === 'ar'"
+              (click)="setInputLanguage('ar')">
+              العربية
+            </button>
+          </div>
+
           <!-- Basic Information -->
           <div class="form-section">
             <h3><i class="pi pi-info-circle"></i> Basic Information</h3>
@@ -223,7 +241,7 @@
             <div class="form-row">
               <div class="form-group" [class.invalid]="isFieldInvalid('typeName')">
                 <label for="typeName">
-                  Type Name <span class="text-danger">*</span>
+                  {{ translateLabel('fieldTypes.typeName') }} <span class="text-danger">*</span>
                   <span *ngIf="isFieldInvalid('typeName')" class="error-text">
                     {{getFieldErrorMessage('typeName')}}
                   </span>
@@ -232,11 +250,24 @@
                   id="typeName"
                   formControlName="typeName"
                 >
-                  <option value="" disabled selected>Select base field type</option>
+                  <option value="" disabled selected>{{ translateLabel('fieldTypes.selectBaseFieldType') }}</option>
                   <option *ngFor="let option of baseTypeOptions" [value]="option.value">
                     {{ option.label }}
                   </option>
                 </select>
+              </div>
+
+              <!-- Arabic Type Name -->
+              <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
+                <label for="foreignTypeName">
+                  {{ translateLabel('fieldTypes.typeName') }}
+                </label>
+                <input
+                  type="text"
+                  id="foreignTypeName"
+                  formControlName="foreignTypeName"
+                  [placeholder]="translateLabel('fieldTypes.typeName')"
+                />
               </div>
 
               <div class="form-group" [class.invalid]="isFieldInvalid('dataType')">

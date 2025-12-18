@@ -21,6 +21,7 @@ import {
 } from '@coreui/angular';
 
 import { AuthService } from '../../../auth/auth.service';
+import { TranslationService } from '../../../core/services/translation.service';
 
 @Component({
   selector: 'app-default-header',
@@ -44,6 +45,7 @@ import { AuthService } from '../../../auth/auth.service';
 })
 export class DefaultHeaderComponent extends HeaderComponent {
   readonly authService = inject(AuthService);
+  readonly translationService = inject(TranslationService);
   readonly colorModeService = inject(ColorModeService);
   readonly colorMode = this.colorModeService.colorMode;
 
@@ -53,10 +55,36 @@ export class DefaultHeaderComponent extends HeaderComponent {
     { name: 'auto', text: 'Auto', icon: 'cilContrast' }
   ];
 
+  readonly languages = [
+    { code: 'en', name: 'English', flag: '🇬🇧' },
+    { code: 'ar', name: 'العربية', flag: '🇸🇦' }
+  ];
+
+  readonly currentLanguage = computed(() => {
+    return this.translationService.getCurrentLanguage();
+  });
+
+  readonly currentLanguageFlag = computed(() => {
+    const lang = this.languages.find(l => l.code === this.currentLanguage());
+    return lang?.flag || '🌐';
+  });
+
   readonly icons = computed(() => {
     const currentMode = this.colorMode();
     return this.colorModes.find(mode => mode.name === currentMode)?.icon ?? 'cilSun';
   });
+
+  isCurrentLanguage(langCode: string): boolean {
+    return this.currentLanguage() === langCode;
+  }
+
+  changeLanguage(langCode: string): void {
+    if (langCode === 'ar' || langCode === 'en') {
+      this.translationService.setLanguage(langCode);
+      // Language will be applied automatically via TranslatePipe
+      // API requests will use the new language via languageInterceptor
+    }
+  }
 
   logout(): void {
     this.authService.logout();

@@ -3,8 +3,10 @@
 export interface FormBuilderDto {
   id: number;
   formName: string;
+  foreignFormName?: string; // Arabic form name
   formCode: string;
   description?: string;
+  foreignDescription?: string; // Arabic description
   isPublished?: boolean;
   isActive?: boolean;
   version?: number;
@@ -18,16 +20,20 @@ export interface FormBuilderDto {
 
 export interface CreateFormBuilderDto {
   formName: string;
+  foreignFormName?: string; // Arabic form name
   formCode: string;
   description?: string;
+  foreignDescription?: string; // Arabic description
   isPublished?: boolean;
   isActive?: boolean;
 }
 
 export interface UpdateFormBuilderDto {
   formName?: string;
+  foreignFormName?: string; // Arabic form name
   formCode?: string;
   description?: string;
+  foreignDescription?: string; // Arabic description
   isPublished?: boolean;
   isActive?: boolean;
 }
@@ -36,6 +42,7 @@ export interface FormTabDto {
   id: number;
   formBuilderId: number;
   tabName: string;
+  foreignTabName?: string; // Arabic tab name
   tabCode: string;
   tabOrder: number;
   isActive: boolean;
@@ -44,11 +51,17 @@ export interface FormTabDto {
   // Extra client-side/navigation data (قد لا تكون موجودة حرفيًا في الـ DTO في الباك إند)
   fields?: FormFieldDto[];
   fieldsCount?: number;
+  // Computed properties from API (for compatibility)
+  name_en?: string; // English name (from API)
+  name_ar?: string; // Arabic name (from API)
+  order?: number; // Display order (from API)
+  is_active?: boolean; // Status (from API)
 }
 
 export interface CreateFormTabDto {
   formBuilderId: number;
   tabName: string;
+  foreignTabName?: string; // Arabic tab name
   tabCode: string;
   tabOrder: number;
   isActive: boolean;
@@ -57,6 +70,7 @@ export interface CreateFormTabDto {
 
 export interface UpdateFormTabDto {
   tabName: string;
+  foreignTabName?: string; // Arabic tab name
   tabCode: string;
   tabOrder: number;
   isActive: boolean;
@@ -68,10 +82,13 @@ export interface FormFieldDto {
   fieldTypeId: number;
   fieldTypeName?: string;
   fieldName: string;
+  foreignFieldName?: string; // Arabic field name
   fieldCode: string;
   fieldOrder: number;
   placeholder?: string;
+  foreignPlaceholder?: string; // Arabic placeholder
   hintText: string; // Required in C# (non-nullable string)
+  foreignHintText?: string; // Arabic hint text
   isMandatory: boolean | null; // Required in C# but nullable bool
   isEditable: boolean | null; // Required in C# but nullable bool
   isVisible: boolean | null; // Required in C# but nullable bool
@@ -80,6 +97,7 @@ export interface FormFieldDto {
   maxValue?: number;
   regexPattern?: string;
   validationMessage?: string;
+  foreignValidationMessage?: string; // Arabic validation message
   createdDate: string; // Required in C# (DateTime)
   createdByUserId?: string;
   createdByUserName?: string;
@@ -88,16 +106,26 @@ export interface FormFieldDto {
   tab?: FormTabDto; // JsonIgnore in C#
   fieldType?: FieldTypeDto;
   fieldOptions: FieldOptionDto[]; // Required in C# (List with default)
+  // Computed properties from API (for compatibility)
+  label_en?: string; // English label (from API)
+  label_ar?: string; // Arabic label (from API)
+  placeholder_en?: string; // English placeholder (from API)
+  placeholder_ar?: string; // Arabic placeholder (from API)
+  type?: string; // Field type (from API)
+  is_required?: boolean; // Required status (from API)
 }
 
 export interface UpdateFormFieldDto {
   tabId: number; // Required
   fieldTypeId: number; // Required
   fieldName: string; // Required, StringLength(200)
+  foreignFieldName?: string; // Arabic field name
   fieldCode: string; // Required, StringLength(100)
   fieldOrder: number; // Required
   placeholder?: string;
+  foreignPlaceholder?: string; // Arabic placeholder
   hintText: string; // Required (non-nullable string in C#)
+  foreignHintText?: string; // Arabic hint text
   isMandatory?: boolean | null; // Optional nullable bool
   isEditable?: boolean | null; // Optional nullable bool
   isVisible?: boolean | null; // Optional nullable bool
@@ -108,21 +136,27 @@ export interface UpdateFormFieldDto {
   maxValue?: number;
   regexPattern?: string;
   validationMessage?: string;
+  foreignValidationMessage?: string; // Arabic validation message
 }
 
 export interface FieldTypeDto {
   id: number;
   typeName: string;
+  foreignTypeName?: string; // Arabic type name
   description?: string;
   dataType?: string;
   maxLength?: number;
   hasOptions: boolean;
   allowMultiple: boolean;
   isActive: boolean;
+  // Computed properties from API (for compatibility)
+  type_name_en?: string; // English type name (from API)
+  type_name_ar?: string; // Arabic type name (from API)
 }
 
 export interface CreateFieldTypeDto {
   typeName: string;
+  foreignTypeName?: string; // Arabic type name
   description?: string;
   dataType?: string;
   maxLength?: number;
@@ -133,6 +167,7 @@ export interface CreateFieldTypeDto {
 
 export interface UpdateFieldTypeDto {
   typeName?: string;
+  foreignTypeName?: string; // Arabic type name
   description?: string;
   dataType?: string;
   maxLength?: number;
@@ -146,6 +181,7 @@ export interface FieldOptionDto {
   fieldId?: number;
   optionValue: string;
   optionText: string;
+  foreignOptionText?: string; // Arabic option text
   optionOrder?: number;
   isActive?: boolean;
 }
@@ -154,6 +190,7 @@ export interface CreateFieldOptionDto {
   fieldId: number;
   optionValue: string;
   optionText: string;
+  foreignOptionText?: string; // Arabic option text
   optionOrder?: number;
   isActive?: boolean;
 }
@@ -161,6 +198,7 @@ export interface CreateFieldOptionDto {
 export interface UpdateFieldOptionDto {
   optionValue?: string;
   optionText?: string;
+  foreignOptionText?: string; // Arabic option text
   optionOrder?: number;
   isActive?: boolean;
 }
@@ -169,10 +207,13 @@ export interface CreateFormFieldDto {
   tabId: number; // Required
   fieldTypeId: number; // Required
   fieldName: string; // Required, StringLength(200)
+  foreignFieldName?: string; // Arabic field name
   fieldCode: string; // Required, StringLength(100)
   fieldOrder: number; // Required
   placeholder?: string;
+  foreignPlaceholder?: string; // Arabic placeholder
   hintText: string; // Required (non-nullable string in C#)
+  foreignHintText?: string; // Arabic hint text
   isMandatory?: boolean | null; // Optional with default = true in C#
   isEditable?: boolean | null; // Optional with default = true in C#
   isVisible?: boolean | null; // Optional with default = true in C#
@@ -181,5 +222,6 @@ export interface CreateFormFieldDto {
   maxValue?: number;
   regexPattern?: string;
   validationMessage?: string;
+  foreignValidationMessage?: string; // Arabic validation message
   createdByUserId?: string;
 }

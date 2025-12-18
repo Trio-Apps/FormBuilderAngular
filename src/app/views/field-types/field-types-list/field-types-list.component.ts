@@ -8,6 +8,7 @@ import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
+import { TranslationService } from '../../../core/services/translation.service';
 
 @Component({
   selector: 'app-field-types-list',
@@ -40,6 +41,7 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
   // Field Type Modal
   showFieldTypeModal = false;
   editingFieldType: FieldTypeDto | null = null;
+  currentInputLanguage: 'en' | 'ar' = 'en'; // Language toggle for input fields
 
   // Reactive Form
   fieldTypeForm: FormGroup;
@@ -78,11 +80,13 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
+    public translationService: TranslationService
   ) {
     // Initialize the form
     this.fieldTypeForm = this.fb.group({
       typeName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
+      foreignTypeName: ['', [Validators.maxLength(100)]], // Arabic type name
       description: ['', Validators.maxLength(500)],
       dataType: ['', Validators.maxLength(50)],
       maxLength: [null],
@@ -147,10 +151,12 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
 
   openAddFieldTypeModal(): void {
     this.editingFieldType = null;
+    this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.showFieldTypeModal = true;
 
     this.fieldTypeForm.reset({
       typeName: '',
+      foreignTypeName: '',
       description: '',
       dataType: '',
       maxLength: null,
@@ -162,6 +168,7 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
 
   openEditFieldTypeModal(fieldType: FieldTypeDto): void {
     this.editingFieldType = fieldType;
+    this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.showFieldTypeModal = true;
 
     const typeName = fieldType.typeName || '';
@@ -170,6 +177,7 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
 
     this.fieldTypeForm.patchValue({
       typeName: typeName,
+      foreignTypeName: fieldType.foreignTypeName || '',
       description: fieldType.description || '',
       dataType: fieldType.dataType || '',
       maxLength: fieldType.maxLength || null,
@@ -183,11 +191,23 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
   closeFieldTypeModal(): void {
     this.showFieldTypeModal = false;
     this.editingFieldType = null;
+    this.currentInputLanguage = 'en'; // Reset to English when closing modal
     this.fieldTypeForm.reset({
       hasOptions: false,
       allowMultiple: false,
       isActive: true
     });
+  }
+
+  setInputLanguage(lang: 'en' | 'ar'): void {
+    this.currentInputLanguage = lang;
+  }
+
+  /**
+   * Translate a key based on currentInputLanguage
+   */
+  translateLabel(key: string): string {
+    return this.translationService.translateForLanguage(key, this.currentInputLanguage);
   }
 
   saveFieldType(): void {
@@ -218,6 +238,7 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
 
       const updateDto: UpdateFieldTypeDto = {
         typeName: fieldTypeData.typeName.trim(),
+        foreignTypeName: fieldTypeData.foreignTypeName?.trim() || undefined,
         description: fieldTypeData.description?.trim() || undefined,
         dataType: fieldTypeData.dataType?.trim() || undefined,
         maxLength: fieldTypeData.maxLength ? Number(fieldTypeData.maxLength) : undefined,
@@ -304,6 +325,7 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
       // Build DTO, ensuring all required fields are present and properly formatted
       const createDto: CreateFieldTypeDto = {
         typeName: fieldTypeData.typeName.trim(),
+        foreignTypeName: fieldTypeData.foreignTypeName?.trim() || undefined,
         hasOptions: Boolean(fieldTypeData.hasOptions),
         allowMultiple: Boolean(fieldTypeData.allowMultiple),
         isActive: fieldTypeData.isActive !== false && fieldTypeData.isActive !== null

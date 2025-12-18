@@ -7,7 +7,7 @@ import { FormsService } from '../../services/forms.service';
 import { TabsService } from '../../services/tabs.service';
 import { FieldsService } from '../../services/fields.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
-import { FormBuilderDto, UpdateFormBuilderDto } from '../../form-builder/models/form-builder-dto.model';
+import { FormBuilderDto, UpdateFormBuilderDto, CreateFormBuilderDto } from '../../form-builder/models/form-builder-dto.model';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map, filter, distinctUntilChanged } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
@@ -21,6 +21,8 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { PaginatorModule } from 'primeng/paginator';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
+import { TranslationService } from '../../../../core/services/translation.service';
 
 @Component({
   selector: 'app-forms-list',
@@ -36,7 +38,8 @@ import { PaginatorModule } from 'primeng/paginator';
     ToastModule,
     ConfirmDialogModule,
     TooltipModule,
-    PaginatorModule
+    PaginatorModule,
+    TranslatePipe
   ],
   templateUrl: './forms-list.component.html',
   styleUrls: ['./forms-list.component.scss'],
@@ -53,11 +56,14 @@ export class FormsListComponent implements OnInit, OnDestroy {
   // Form Modal
   showFormModal = false;
   formName = '';
+  foreignFormName = ''; // Arabic form name
   formCode = '';
   description = '';
+  foreignDescription = ''; // Arabic description
   isPublished = false;
   isActive = true;
   editingForm: FormBuilderDto | null = null;
+  currentInputLanguage: 'en' | 'ar' = 'en'; // Language toggle for input fields
 
   // Pagination
   paginatedForms: FormBuilderDto[] = [];
@@ -73,7 +79,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private router: Router,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    public translationService: TranslationService
   ) {
     // Bind window focus handler to preserve reference for cleanup
     this.windowFocusHandler = this.onWindowFocus.bind(this);
@@ -349,18 +356,23 @@ export class FormsListComponent implements OnInit, OnDestroy {
     if (form) {
       this.editingForm = form;
       this.formName = form.formName;
+      this.foreignFormName = form.foreignFormName || '';
       this.formCode = form.formCode;
       this.description = form.description || '';
+      this.foreignDescription = form.foreignDescription || '';
       this.isPublished = form.isPublished ?? false;
       this.isActive = form.isActive !== false;
     } else {
       this.editingForm = null;
       this.formName = '';
+      this.foreignFormName = '';
       this.formCode = '';
       this.description = '';
+      this.foreignDescription = '';
       this.isPublished = false;
       this.isActive = true;
     }
+    this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.showFormModal = true;
   }
 
@@ -368,10 +380,24 @@ export class FormsListComponent implements OnInit, OnDestroy {
     this.showFormModal = false;
     this.editingForm = null;
     this.formName = '';
+    this.foreignFormName = '';
     this.formCode = '';
     this.description = '';
+    this.foreignDescription = '';
     this.isPublished = false;
     this.isActive = true;
+    this.currentInputLanguage = 'en'; // Reset to English when closing modal
+  }
+
+  setInputLanguage(lang: 'en' | 'ar'): void {
+    this.currentInputLanguage = lang;
+  }
+
+  /**
+   * Translate a key based on currentInputLanguage
+   */
+  translateLabel(key: string): string {
+    return this.translationService.translateForLanguage(key, this.currentInputLanguage);
   }
 
   saveForm(): void {
@@ -383,8 +409,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
     if (!trimmedFormName || !trimmedFormCode) {
       this.messageService.add({
         severity: 'warn',
-        summary: 'Validation',
-        detail: 'Form name and code are required'
+        summary: this.translationService.translate('common.validation'),
+        detail: this.translationService.translate('messages.validationFailed')
       });
       return;
     }
@@ -393,10 +419,15 @@ export class FormsListComponent implements OnInit, OnDestroy {
 
     if (this.editingForm) {
       // Ensure formCode is always included, even if empty
+      const trimmedForeignFormName = this.foreignFormName?.trim() || '';
+      const trimmedForeignDescription = this.foreignDescription?.trim() || '';
+      
       const updateDto: UpdateFormBuilderDto = {
         formName: trimmedFormName,
+        foreignFormName: trimmedForeignFormName || undefined,
         formCode: trimmedFormCode, // Explicitly include formCode
         description: trimmedDescription || undefined,
+        foreignDescription: trimmedForeignDescription || undefined,
         isPublished: this.isPublished,
         isActive: this.isActive
       };
@@ -427,8 +458,10 @@ export class FormsListComponent implements OnInit, OnDestroy {
             this.forms[formIndex] = {
               ...this.forms[formIndex],
               formName: trimmedFormName,
+              foreignFormName: trimmedForeignFormName || undefined,
               formCode: trimmedFormCode,
               description: trimmedDescription || undefined,
+              foreignDescription: trimmedForeignDescription || undefined,
               isPublished: this.isPublished,
               isActive: this.isActive
             };
@@ -444,8 +477,10 @@ export class FormsListComponent implements OnInit, OnDestroy {
               this.filteredForms[filteredIndex] = {
                 ...this.filteredForms[filteredIndex],
                 formName: trimmedFormName,
+                foreignFormName: trimmedForeignFormName || undefined,
                 formCode: trimmedFormCode,
                 description: trimmedDescription || undefined,
+                foreignDescription: trimmedForeignDescription || undefined,
                 isPublished: this.isPublished,
                 isActive: this.isActive
               };
@@ -461,8 +496,10 @@ export class FormsListComponent implements OnInit, OnDestroy {
               this.paginatedForms[paginatedIndex] = {
                 ...this.paginatedForms[paginatedIndex],
                 formName: trimmedFormName,
+                foreignFormName: trimmedForeignFormName || undefined,
                 formCode: trimmedFormCode,
                 description: trimmedDescription || undefined,
+                foreignDescription: trimmedForeignDescription || undefined,
                 isPublished: this.isPublished,
                 isActive: this.isActive
               };
@@ -513,10 +550,15 @@ export class FormsListComponent implements OnInit, OnDestroy {
         }
       });
     } else {
-      const createDto = {
+      const trimmedForeignFormName = this.foreignFormName?.trim() || '';
+      const trimmedForeignDescription = this.foreignDescription?.trim() || '';
+      
+      const createDto: CreateFormBuilderDto = {
         formName: trimmedFormName,
+        foreignFormName: trimmedForeignFormName || undefined,
         formCode: trimmedFormCode,
         description: trimmedDescription || undefined,
+        foreignDescription: trimmedForeignDescription || undefined,
         isPublished: this.isPublished,
         isActive: this.isActive
       };

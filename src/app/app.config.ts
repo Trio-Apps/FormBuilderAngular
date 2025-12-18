@@ -7,12 +7,13 @@ import {
   withRouterConfig,
   withViewTransitions
 } from '@angular/router';
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { provideHttpClient, withInterceptors, withFetch } from '@angular/common/http';
 
 import { DropdownModule, SidebarModule } from '@coreui/angular';
 import { IconSetService } from '@coreui/icons-angular';
 import { routes } from './app.routes';
 import { authInterceptor } from './auth/auth.interceptor';
+import { languageInterceptor } from './core/interceptors/language.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -29,7 +30,8 @@ export const appConfig: ApplicationConfig = {
       withViewTransitions()
     ),
     provideHttpClient(
-      withInterceptors([authInterceptor])
+      withFetch(),
+      withInterceptors([languageInterceptor, authInterceptor])
     ),
     importProvidersFrom(SidebarModule, DropdownModule),
     IconSetService,

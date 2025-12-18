@@ -139,7 +139,10 @@
               <td class="col-name">
                 <div class="field-name-wrapper">
                   <div class="field-name-main">{{ field.fieldName || '-' }}</div>
-                  <div class="field-name-meta" *ngIf="field.placeholder || field.hintText">
+                  <div class="field-name-meta" *ngIf="field.foreignFieldName || field.placeholder || field.hintText">
+                    <span *ngIf="field.foreignFieldName" class="meta-item">
+                      <i class="pi pi-language"></i> {{ field.foreignFieldName }}
+                    </span>
                     <span *ngIf="field.placeholder" class="meta-item">
                       <i class="pi pi-question-circle"></i> {{ field.placeholder }}
                     </span>
@@ -216,7 +219,7 @@
   <!-- Add/Edit Field Modal -->
   <p-dialog [(visible)]="showFieldModal" 
             [modal]="true" 
-            [header]="editingField ? 'Edit Field' : 'Add New Field'" 
+            [header]="editingField ? translationService.translate('fields.editField') : translationService.translate('fields.addField')" 
             [style]="{width: '750px', maxWidth: '90vw'}"
             [draggable]="false" 
             [resizable]="false"
@@ -226,31 +229,59 @@
     
     <form [formGroup]="fieldForm" (ngSubmit)="saveField()">
       <div class="modal-form-content">
+        <!-- Language Toggle Tabs -->
+        <div class="language-tabs-container">
+          <button
+            type="button"
+            class="language-tab"
+            [class.language-tab-active]="currentInputLanguage === 'en'"
+            (click)="setInputLanguage('en')">
+            English
+          </button>
+          <button
+            type="button"
+            class="language-tab"
+            [class.language-tab-active]="currentInputLanguage === 'ar'"
+            (click)="setInputLanguage('ar')">
+            العربية
+          </button>
+        </div>
+
         <!-- Basic Information Section -->
         <div class="form-section">
           <h4 class="section-title">
             <i class="pi pi-info-circle"></i>
-            Basic Information
+            {{ translationService.translate('fields.basicInformation') }}
           </h4>
           <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">Field Name <span class="required">*</span></label>
+            <!-- English Field Name -->
+            <div class="form-group" *ngIf="currentInputLanguage === 'en'">
+              <label class="form-label">{{ translateLabel('fields.fieldName') }} <span class="required">*</span></label>
               <input type="text" 
                      class="form-control" 
                      formControlName="fieldName"
-                     placeholder="Enter field name"
+                     [placeholder]="translateLabel('fields.enterFieldName')"
                      [class.is-invalid]="isFieldInvalid('fieldName')">
               <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldName')">
                 {{ getFieldErrorMessage('fieldName') }}
               </div>
             </div>
 
+            <!-- Arabic Field Name -->
+            <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
+              <label class="form-label">{{ translateLabel('fields.fieldName') }}</label>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="foreignFieldName"
+                     [placeholder]="translateLabel('fields.enterFieldName')">
+            </div>
+
             <div class="form-group">
-              <label class="form-label">Field Code <span class="required">*</span></label>
+              <label class="form-label">{{ translationService.translate('fields.fieldCode') }} <span class="required">*</span></label>
               <input type="text" 
                      class="form-control" 
                      formControlName="fieldCode"
-                     placeholder="FIELD_CODE"
+                     [placeholder]="translationService.translate('fields.enterFieldCode')"
                      [class.is-invalid]="isFieldInvalid('fieldCode')">
               <small class="form-hint">Uppercase letters, numbers, and underscores only</small>
               <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldCode')">
@@ -259,7 +290,7 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">Field Order <span class="required">*</span></label>
+              <label class="form-label">{{ translationService.translate('fields.fieldOrder') }} <span class="required">*</span></label>
               <input type="number" 
                      class="form-control" 
                      formControlName="fieldOrder"
@@ -272,11 +303,11 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">Field Type <span class="required">*</span></label>
+              <label class="form-label">{{ translationService.translate('fields.fieldType') }} <span class="required">*</span></label>
               <select class="form-control" 
                       formControlName="fieldTypeId"
                       [class.is-invalid]="isFieldInvalid('fieldTypeId')">
-                <option value="" disabled selected>Select field type</option>
+                <option value="" disabled selected>{{ translationService.translate('fields.selectFieldType') }}</option>
                 <option *ngFor="let type of filteredFieldTypes" [value]="type.id">
                   {{ type.typeName }}
                 </option>
@@ -292,23 +323,43 @@
         <div class="form-section">
           <h4 class="section-title">
             <i class="pi pi-eye"></i>
-            Display Properties
+            {{ translationService.translate('fields.displayProperties') }}
           </h4>
           <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">Placeholder</label>
+            <!-- English Placeholder -->
+            <div class="form-group" *ngIf="currentInputLanguage === 'en'">
+              <label class="form-label">{{ translationService.translate('fields.placeholder') }}</label>
               <input type="text" 
                      class="form-control" 
                      formControlName="placeholder"
-                     placeholder="Enter placeholder text">
+                     [placeholder]="translationService.translate('fields.enterPlaceholder')">
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Hint Text</label>
+            <!-- Arabic Placeholder -->
+            <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
+              <label class="form-label">{{ translationService.translate('fields.placeholder') }}</label>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="foreignPlaceholder"
+                     placeholder="أدخل نص placeholder بالعربية">
+            </div>
+
+            <!-- English Hint Text -->
+            <div class="form-group" *ngIf="currentInputLanguage === 'en'">
+              <label class="form-label">{{ translationService.translate('fields.hintText') }}</label>
               <input type="text" 
                      class="form-control" 
                      formControlName="hintText"
-                     placeholder="Enter hint text">
+                     [placeholder]="translationService.translate('fields.enterHintText')">
+            </div>
+
+            <!-- Arabic Hint Text -->
+            <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
+              <label class="form-label">{{ translateLabel('fields.hintText') }}</label>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="foreignHintText"
+                     [placeholder]="translateLabel('fields.enterHintText')">
             </div>
           </div>
         </div>
@@ -317,7 +368,7 @@
         <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions">
           <h4 class="section-title">
             <i class="pi pi-list"></i>
-            Field Options
+            {{ translationService.translate('fields.fieldOptions') }}
           </h4>
           <div class="field-options-list" formArrayName="fieldOptions">
             <div *ngFor="let option of fieldOptionsFormArray.controls; let i = index" 
@@ -329,20 +380,29 @@
                 </div>
                 <div class="option-inputs">
                   <div class="option-input-wrapper">
-                    <label class="option-label">Option Value <span class="text-danger">*</span></label>
+                    <label class="option-label">{{ translationService.translate('fields.optionValue') }} <span class="text-danger">*</span></label>
                     <input type="text" 
                            class="form-control" 
                            formControlName="optionValue" 
-                           placeholder="Option value"
+                           [placeholder]="translationService.translate('fieldOptions.enterOptionValue')"
                            [class.is-invalid]="option.get('optionValue')?.invalid && (option.get('optionValue')?.dirty || option.get('optionValue')?.touched)">
                   </div>
+                  <!-- English Option Text - Always visible -->
                   <div class="option-input-wrapper">
-                    <label class="option-label">Option Text <span class="text-danger">*</span></label>
+                    <label class="option-label">{{ translateLabel('fields.optionText') }} <span class="text-danger">*</span></label>
                     <input type="text" 
                            class="form-control" 
                            formControlName="optionText" 
-                           placeholder="Display text"
+                           [placeholder]="translateLabel('fieldOptions.enterOptionText')"
                            [class.is-invalid]="option.get('optionText')?.invalid && (option.get('optionText')?.dirty || option.get('optionText')?.touched)">
+                  </div>
+                  <!-- Arabic Option Text - Show when Arabic tab is selected -->
+                  <div class="option-input-wrapper" *ngIf="currentInputLanguage === 'ar'">
+                    <label class="option-label">{{ translateLabel('fields.optionText') }}</label>
+                    <input type="text" 
+                           class="form-control" 
+                           formControlName="foreignOptionText" 
+                           [placeholder]="translateLabel('fieldOptions.enterOptionText')">
                   </div>
                 </div>
                 <button type="button" 
@@ -359,7 +419,7 @@
                   class="btn-add-option" 
                   (click)="addFieldOption()">
             <i class="pi pi-plus"></i>
-            <span>Add Option</span>
+            <span>{{ translationService.translate('fields.addOption') }}</span>
           </button>
         </div>
 
@@ -367,11 +427,11 @@
         <div class="form-section">
           <h4 class="section-title">
             <i class="pi pi-shield"></i>
-            Validation Rules
+            {{ translationService.translate('fields.validationRules') }}
           </h4>
           <div class="form-grid">
             <div class="form-group">
-              <label class="form-label">Regex Pattern</label>
+              <label class="form-label">{{ translationService.translate('fields.regexPattern') }}</label>
               <select class="form-control mb-2" 
                       [value]="getSelectedRegexPreset()"
                       (change)="onRegexPresetChange($any($event.target)?.value || '')">
@@ -382,26 +442,36 @@
                      formControlName="regexPattern" 
                      placeholder="^[A-Za-z0-9]+$">
             </div>
-            <div class="form-group">
-              <label class="form-label">Validation Message</label>
+            <!-- English Validation Message -->
+            <div class="form-group" *ngIf="currentInputLanguage === 'en'">
+              <label class="form-label">{{ translationService.translate('fields.validationMessage') }}</label>
               <input type="text" 
                      class="form-control" 
                      formControlName="validationMessage"
-                     placeholder="Custom validation message">
+                     [placeholder]="translationService.translate('fields.customValidationMessage')">
+            </div>
+
+            <!-- Arabic Validation Message -->
+            <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
+              <label class="form-label">{{ translateLabel('fields.validationMessage') }}</label>
+              <input type="text" 
+                     class="form-control" 
+                     formControlName="foreignValidationMessage"
+                     [placeholder]="translateLabel('fields.validationMessage')">
             </div>
             <div class="form-group">
-              <label class="form-label">Min Value</label>
+              <label class="form-label">{{ translationService.translate('fields.minValue') }}</label>
               <input type="number" 
                      class="form-control" 
                      formControlName="minValue"
-                     placeholder="Minimum value">
+                     [placeholder]="translationService.translate('fields.minimumValue')">
             </div>
             <div class="form-group">
-              <label class="form-label">Max Value</label>
+              <label class="form-label">{{ translationService.translate('fields.maxValue') }}</label>
               <input type="number" 
                      class="form-control" 
                      formControlName="maxValue"
-                     placeholder="Maximum value">
+                     [placeholder]="translationService.translate('fields.maximumValue')">
             </div>
           </div>
         </div>
@@ -410,7 +480,7 @@
         <div class="form-section">
           <h4 class="section-title">
             <i class="pi pi-cog"></i>
-            Field Behavior
+            {{ translationService.translate('fields.fieldBehavior') }}
           </h4>
           <div class="switches-grid">
             <div class="switch-item">
@@ -420,7 +490,7 @@
                        formControlName="isMandatory"
                        id="isMandatory">
                 <span class="switch-slider"></span>
-                <span class="switch-text">Mandatory</span>
+                <span class="switch-text">{{ translationService.translate('fields.mandatory') }}</span>
               </label>
             </div>
             <div class="switch-item">
@@ -430,7 +500,7 @@
                        formControlName="isEditable"
                        id="isEditable">
                 <span class="switch-slider"></span>
-                <span class="switch-text">Editable</span>
+                <span class="switch-text">{{ translationService.translate('fields.editable') }}</span>
               </label>
             </div>
             <div class="switch-item">
@@ -440,7 +510,7 @@
                        formControlName="isVisible"
                        id="isVisible">
                 <span class="switch-slider"></span>
-                <span class="switch-text">Visible</span>
+                <span class="switch-text">{{ translationService.translate('fields.visible') }}</span>
               </label>
             </div>
             <div class="switch-item">
@@ -450,16 +520,16 @@
                        formControlName="isActive"
                        id="isActive">
                 <span class="switch-slider"></span>
-                <span class="switch-text">Active</span>
+                <span class="switch-text">{{ translationService.translate('fields.active') }}</span>
               </label>
             </div>
           </div>
           <div class="form-group mt-3">
-            <label class="form-label">Default Value</label>
+            <label class="form-label">{{ translationService.translate('fields.defaultValue') }}</label>
             <input type="text" 
                    class="form-control" 
                    formControlName="defaultValue"
-                   placeholder="Default value">
+                   [placeholder]="translationService.translate('fields.enterDefaultValue')">
           </div>
         </div>
       </div>
@@ -467,7 +537,7 @@
       <div class="modal-footer">
         <button pButton 
                 type="button" 
-                label="Cancel" 
+                [label]="translationService.translate('common.cancel')" 
                 (click)="closeFieldModal()"
                 [disabled]="loading.save"
                 class="p-button-text">
@@ -477,7 +547,7 @@
                 [disabled]="fieldForm.invalid || loading.save"
                 class="p-button-primary">
           <i *ngIf="loading.save" class="pi pi-spin pi-spinner mr-2"></i>
-          {{ editingField ? 'Update Field' : 'Create Field' }}
+          {{ editingField ? translationService.translate('fields.updateField') : translationService.translate('fields.createField') }}
         </button>
       </div>
     </form>

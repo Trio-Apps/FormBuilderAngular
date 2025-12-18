@@ -13,6 +13,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { DialogModule } from 'primeng/dialog';
 import { ButtonModule } from 'primeng/button';
 import { Subscription } from 'rxjs';
+import { TranslationService } from '../../../core/services/translation.service';
 
 @Component({
   selector: 'app-fields-list',
@@ -65,6 +66,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   showFieldSettingsModal = false;
   editingField: FormFieldDto | null = null;
   draggingFieldIndex: number | null = null;
+  currentInputLanguage: 'en' | 'ar' = 'en'; // Language toggle for input fields
 
   // Reactive Form
   fieldForm: FormGroup;
@@ -87,16 +89,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
+    public translationService: TranslationService
   ) {
     // Initialize the form
     this.fieldForm = this.fb.group({
       tabId: ['', Validators.required],
       fieldName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(200)]],
+      foreignFieldName: ['', [Validators.maxLength(200)]], // Arabic field name
       fieldCode: ['', [Validators.required, Validators.pattern('^[A-Za-z_][A-Za-z0-9_]*$'), Validators.maxLength(100)]],
       fieldTypeId: ['', Validators.required],
       placeholder: ['', Validators.maxLength(200)],
+      foreignPlaceholder: ['', Validators.maxLength(200)], // Arabic placeholder
       hintText: ['', Validators.maxLength(500)],
+      foreignHintText: ['', Validators.maxLength(500)], // Arabic hint text
       fieldOrder: [1, [Validators.required, Validators.min(1)]],
       isMandatory: [true],
       isEditable: [true],
@@ -106,6 +112,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       defaultValueJson: [''],
       regexPattern: [''],
       validationMessage: ['', Validators.maxLength(500)],
+      foreignValidationMessage: ['', Validators.maxLength(500)], // Arabic validation message
       minValue: [null],
       maxValue: [null],
       fieldOptions: this.fb.array([])
@@ -275,6 +282,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   openAddFieldModal(): void {
     this.editingField = null;
+    this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.showFieldModal = true;
 
     let nextOrder = 1;
@@ -289,10 +297,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       tabId: this.tabId,
       fieldTypeId: defaultFieldTypeId,
       fieldName: '',
+      foreignFieldName: '',
       fieldCode: '',
       fieldOrder: nextOrder,
       placeholder: '',
+      foreignPlaceholder: '',
       hintText: '',
+      foreignHintText: '',
       isMandatory: true,
       isEditable: true,
       isVisible: true,
@@ -301,6 +312,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       defaultValueJson: '',
       regexPattern: '',
       validationMessage: '',
+      foreignValidationMessage: '',
       minValue: null,
       maxValue: null
     });
@@ -314,6 +326,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   openEditFieldModal(field: FormFieldDto): void {
     this.editingField = field;
+    this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.showFieldModal = true;
 
     const regexPattern = field.regexPattern || '';
@@ -331,10 +344,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       tabId: this.tabId,
       fieldTypeId: field.fieldTypeId || '',
       fieldName: field.fieldName || '',
+      foreignFieldName: field.foreignFieldName || '',
       fieldCode: field.fieldCode || '',
       fieldOrder: field.fieldOrder || 1,
       placeholder: field.placeholder || '',
+      foreignPlaceholder: field.foreignPlaceholder || '',
       hintText: field.hintText || '',
+      foreignHintText: field.foreignHintText || '',
       isMandatory: field.isMandatory !== false,
       isEditable: field.isEditable !== false,
       isVisible: field.isVisible !== false,
@@ -343,6 +359,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       defaultValueJson: field.defaultValueJson || '',
       regexPattern: regexPattern,
       validationMessage: validationMessage,
+      foreignValidationMessage: field.foreignValidationMessage || '',
       minValue: field.minValue || null,
       maxValue: field.maxValue || null
     }, { emitEvent: false }); // Prevent triggering change listeners during initialization
@@ -355,6 +372,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.showFieldModal = false;
     this.editingField = null;
     this.selectedField = null;
+    this.currentInputLanguage = 'en'; // Reset to English when closing modal
     this.fieldForm.reset({
       isMandatory: false,
       isEditable: true,
@@ -362,6 +380,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       fieldOrder: 1,
       isActive: true
     });
+  }
+
+  setInputLanguage(lang: 'en' | 'ar'): void {
+    this.currentInputLanguage = lang;
+  }
+
+  /**
+   * Translate a key based on currentInputLanguage
+   */
+  translateLabel(key: string): string {
+    return this.translationService.translateForLanguage(key, this.currentInputLanguage);
   }
 
   onRegexPresetChange(value: string): void {
@@ -413,16 +442,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         tabId: this.tabId,
         fieldTypeId: Number(fieldData.fieldTypeId),
         fieldName: fieldData.fieldName,
+        foreignFieldName: fieldData.foreignFieldName || undefined,
         fieldCode: fieldData.fieldCode,
         fieldOrder: Number(fieldData.fieldOrder || 1),
         placeholder: fieldData.placeholder || '',
+        foreignPlaceholder: fieldData.foreignPlaceholder || undefined,
         hintText: fieldData.hintText || '',
+        foreignHintText: fieldData.foreignHintText || undefined,
+        defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || '',
+        regexPattern: fieldData.regexPattern || '',
+        validationMessage: fieldData.validationMessage || undefined,
+        foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
         isMandatory: fieldData.isMandatory ?? null,
         isEditable: fieldData.isEditable ?? null,
         isVisible: fieldData.isVisible ?? null,
-        defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || '',
-        regexPattern: fieldData.regexPattern || '',
-        validationMessage: fieldData.validationMessage || '',
         minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
           ? Number(fieldData.minValue) 
           : undefined,
@@ -460,16 +493,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         tabId: this.tabId,
         fieldTypeId: Number(fieldData.fieldTypeId),
         fieldName: fieldData.fieldName,
+        foreignFieldName: fieldData.foreignFieldName || undefined,
         fieldCode: fieldData.fieldCode.toUpperCase(),
         fieldOrder: Number(fieldData.fieldOrder || 1),
         placeholder: fieldData.placeholder || undefined,
+        foreignPlaceholder: fieldData.foreignPlaceholder || undefined,
         hintText: fieldData.hintText || '',
+        foreignHintText: fieldData.foreignHintText || undefined,
         isMandatory: fieldData.isMandatory ?? true,
         isEditable: fieldData.isEditable ?? true,
         isVisible: fieldData.isVisible ?? true,
         defaultValueJson: fieldData.defaultValue || fieldData.defaultValueJson || undefined,
         regexPattern: fieldData.regexPattern || undefined,
         validationMessage: fieldData.validationMessage || undefined,
+        foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
         minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
           ? Number(fieldData.minValue) 
           : undefined,
@@ -783,6 +820,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       id: [null],
       optionValue: ['', Validators.required],
       optionText: ['', Validators.required],
+      foreignOptionText: ['', Validators.maxLength(200)], // Arabic option text
       optionOrder: [optionsArray.length + 1],
       isActive: [true]
     });
@@ -816,6 +854,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             id: [option.id],
             optionValue: [option.optionValue, Validators.required],
             optionText: [option.optionText, Validators.required],
+            foreignOptionText: [option.foreignOptionText || '', Validators.maxLength(200)],
             optionOrder: [option.optionOrder || optionsArray.length + 1],
             isActive: [option.isActive !== false]
           });
@@ -861,6 +900,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             opt.id ? this.fieldOptionsService.updateFieldOption(opt.id, {
               optionValue: opt.optionValue,
               optionText: opt.optionText,
+              foreignOptionText: opt.foreignOptionText || undefined,
               optionOrder: opt.optionOrder,
               isActive: opt.isActive
             }).toPromise() : Promise.resolve()
@@ -873,6 +913,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 fieldId: fieldId,
                 optionValue: opt.optionValue,
                 optionText: opt.optionText,
+                foreignOptionText: opt.foreignOptionText || undefined,
                 optionOrder: opt.optionOrder || 1,
                 isActive: opt.isActive !== false
               }));
@@ -906,6 +947,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           fieldId: fieldId,
           optionValue: opt.optionValue,
           optionText: opt.optionText,
+          foreignOptionText: opt.foreignOptionText || undefined,
           optionOrder: opt.optionOrder || 1,
           isActive: opt.isActive !== false
         }));
@@ -1237,10 +1279,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       tabId: this.tabId,
       fieldTypeId: field.fieldTypeId || '',
       fieldName: field.fieldName || '',
+      foreignFieldName: field.foreignFieldName || '',
       fieldCode: field.fieldCode || '',
       fieldOrder: field.fieldOrder || 1,
       placeholder: field.placeholder || '',
+      foreignPlaceholder: field.foreignPlaceholder || '',
       hintText: field.hintText || '',
+      foreignHintText: field.foreignHintText || '',
       isMandatory: field.isMandatory !== false,
       isEditable: field.isEditable !== false,
       isVisible: field.isVisible !== false,
@@ -1249,6 +1294,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       defaultValueJson: field.defaultValueJson || '',
       regexPattern: field.regexPattern || '',
       validationMessage: field.validationMessage || '',
+      foreignValidationMessage: field.foreignValidationMessage || '',
       minValue: field.minValue || null,
       maxValue: field.maxValue || null
     });
@@ -1278,16 +1324,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       tabId: this.tabId,
       fieldTypeId: Number(fieldData.fieldTypeId),
       fieldName: fieldData.fieldName,
+      foreignFieldName: fieldData.foreignFieldName || undefined,
       fieldCode: fieldData.fieldCode,
       fieldOrder: Number(fieldData.fieldOrder || 1),
       placeholder: fieldData.placeholder || '',
+      foreignPlaceholder: fieldData.foreignPlaceholder || undefined,
       hintText: fieldData.hintText || '',
+      foreignHintText: fieldData.foreignHintText || undefined,
       isMandatory: fieldData.isMandatory ?? null,
       isEditable: fieldData.isEditable ?? null,
       isVisible: fieldData.isVisible ?? null,
       defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || '',
       regexPattern: fieldData.regexPattern || '',
-      validationMessage: fieldData.validationMessage || '',
+      validationMessage: fieldData.validationMessage || undefined,
+      foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
       minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
         ? Number(fieldData.minValue) 
         : undefined,

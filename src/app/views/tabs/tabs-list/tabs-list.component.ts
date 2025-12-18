@@ -7,6 +7,7 @@ import { FieldsService } from '../../FormBuilder/services/fields.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { FormTabDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { Subscription } from 'rxjs';
+import { TranslationService } from '../../../core/services/translation.service';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -46,10 +47,12 @@ export class TabsListComponent implements OnInit, OnDestroy {
   // Tab Modal updated
   showTabModal = false;
   tabName = '';
+  foreignTabName = ''; // Arabic tab name
   tabCode = '';
   tabOrder = 1;
   isActive = true;
   editingTab: FormTabDto | null = null;
+  currentInputLanguage: 'en' | 'ar' = 'en'; // Language toggle for input fields
 
   constructor(
     private route: ActivatedRoute,
@@ -57,7 +60,8 @@ export class TabsListComponent implements OnInit, OnDestroy {
     private tabsService: TabsService,
     private fieldsService: FieldsService,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
+    public translationService: TranslationService
   ) {}
 
   ngOnInit(): void {
@@ -149,15 +153,18 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
   openTabModal(tab?: FormTabDto): void {
+    this.currentInputLanguage = 'en'; // Reset to English when opening modal
     if (tab) {
       this.editingTab = tab;
       this.tabName = tab.tabName;
+      this.foreignTabName = tab.foreignTabName || '';
       this.tabCode = tab.tabCode || '';
       this.tabOrder = tab.tabOrder || 1;
       this.isActive = tab.isActive !== false;
     } else {
       this.editingTab = null;
       this.tabName = '';
+      this.foreignTabName = '';
       this.tabCode = '';
       this.tabOrder = this.tabs.length + 1;
       this.isActive = true;
@@ -165,10 +172,22 @@ export class TabsListComponent implements OnInit, OnDestroy {
     this.showTabModal = true;
   }
 
+  setInputLanguage(lang: 'en' | 'ar'): void {
+    this.currentInputLanguage = lang;
+  }
+
+  /**
+   * Translate a key based on currentInputLanguage
+   */
+  translateLabel(key: string): string {
+    return this.translationService.translateForLanguage(key, this.currentInputLanguage);
+  }
+
   closeTabModal(): void {
     this.showTabModal = false;
     this.editingTab = null;
     this.tabName = '';
+    this.foreignTabName = '';
     this.tabCode = '';
     this.tabOrder = 1;
     this.isActive = true;
@@ -198,6 +217,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
     if (this.editingTab) {
       const updateDto = {
         tabName: this.tabName,
+        foreignTabName: this.foreignTabName || undefined,
         tabCode: this.tabCode,
         tabOrder: this.tabOrder,
         isActive: this.isActive
@@ -228,6 +248,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
       const createDto = {
         formBuilderId: this.formId,
         tabName: this.tabName,
+        foreignTabName: this.foreignTabName || undefined,
         tabCode: this.tabCode,
         tabOrder: this.tabOrder,
         isActive: this.isActive
