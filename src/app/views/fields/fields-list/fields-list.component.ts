@@ -5,7 +5,9 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Va
 import { FieldsService } from '../../FormBuilder/services/fields.service';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FieldOptionsService } from '../../FormBuilder/services/field-options.service';
+import { GridService } from '../../FormBuilder/services/grid.service';
 import { FormFieldDto, FieldTypeDto, UpdateFormFieldDto, CreateFormFieldDto, FieldOptionDto, CreateFieldOptionDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { FormGridDto } from '../../FormBuilder/form-builder/models/grid-dto.model';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -77,6 +79,30 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   // Selected Field for Context Actions
   selectedField: FormFieldDto | null = null;
 
+  // Grid Selection (for Grid field type)
+  availableGrids: FormGridDto[] = [];
+  selectedGridId: number | null = null;
+
+  // File Extensions Options
+  availableFileExtensions = [
+    { value: 'pdf', label: 'PDF', labelAr: 'PDF', mimeType: 'application/pdf' },
+    { value: 'doc', label: 'DOC', labelAr: 'DOC', mimeType: 'application/msword' },
+    { value: 'docx', label: 'DOCX', labelAr: 'DOCX', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+    { value: 'xls', label: 'XLS', labelAr: 'XLS', mimeType: 'application/vnd.ms-excel' },
+    { value: 'xlsx', label: 'XLSX', labelAr: 'XLSX', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    { value: 'jpg', label: 'JPG', labelAr: 'JPG', mimeType: 'image/jpeg' },
+    { value: 'jpeg', label: 'JPEG', labelAr: 'JPEG', mimeType: 'image/jpeg' },
+    { value: 'png', label: 'PNG', labelAr: 'PNG', mimeType: 'image/png' },
+    { value: 'gif', label: 'GIF', labelAr: 'GIF', mimeType: 'image/gif' },
+    { value: 'txt', label: 'TXT', labelAr: 'TXT', mimeType: 'text/plain' },
+    { value: 'csv', label: 'CSV', labelAr: 'CSV', mimeType: 'text/csv' },
+    { value: 'zip', label: 'ZIP', labelAr: 'ZIP', mimeType: 'application/zip' },
+    { value: 'rar', label: 'RAR', labelAr: 'RAR', mimeType: 'application/x-rar-compressed' }
+  ];
+  selectedFileExtensions: string[] = [];
+  customFileExtensions: string[] = []; // Custom extensions added by admin
+  newCustomExtension: string = ''; // Input for new custom extension
+
   // Subscriptions
   private routeSub!: Subscription;
   private parentRouteSub?: Subscription;
@@ -86,6 +112,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     private fieldsService: FieldsService,
     private tabsService: TabsService,
     private fieldOptionsService: FieldOptionsService,
+    private gridService: GridService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
@@ -121,6 +148,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Watch fieldTypeId changes to show/hide options section
     this.fieldForm.get('fieldTypeId')?.valueChanges.subscribe(fieldTypeId => {
       this.onFieldTypeChange(fieldTypeId);
+      // Load file extensions when file type is selected
+      if (this.isFileFieldType()) {
+        this.loadFileExtensionsFromForm();
+      } else {
+        this.selectedFileExtensions = [];
+      }
     });
 
     // Watch regexPattern changes to auto-update validation message
@@ -283,6 +316,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   openAddFieldModal(): void {
     this.editingField = null;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
+    this.selectedFileExtensions = []; // Reset file extensions
+    this.customFileExtensions = []; // Reset custom extensions
+    this.newCustomExtension = ''; // Reset input
+    this.selectedGridId = null; // Reset grid selection
+    this.availableGrids = []; // Reset grids list
     this.showFieldModal = true;
 
     let nextOrder = 1;
@@ -340,6 +378,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       }
     }
 
+    // Set selected grid ID if field has gridId
+    if (field.gridId) {
+      this.selectedGridId = field.gridId;
+    } else {
+      this.selectedGridId = null;
+    }
+
     this.fieldForm.patchValue({
       tabId: this.tabId,
       fieldTypeId: field.fieldTypeId || '',
@@ -363,6 +408,36 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       minValue: field.minValue || null,
       maxValue: field.maxValue || null
     }, { emitEvent: false }); // Prevent triggering change listeners during initialization
+
+    // Load grids if grid type
+    if (this.isGridFieldType(field.fieldTypeId)) {
+      this.loadAvailableGrids();
+    } else {
+      this.availableGrids = [];
+      this.selectedGridId = null;
+    }
+
+    // Set selected grid ID if field has gridId
+    if (field.gridId) {
+      this.selectedGridId = field.gridId;
+    } else {
+      this.selectedGridId = null;
+    }
+
+    // Load grids if grid type
+    if (this.isGridFieldType(field.fieldTypeId)) {
+      this.loadAvailableGrids();
+    } else {
+      this.availableGrids = [];
+      this.selectedGridId = null;
+    }
+
+    // Load file extensions if file type
+    if (this.isFileFieldType()) {
+      this.loadFileExtensionsFromForm();
+    } else {
+      this.selectedFileExtensions = [];
+    }
 
     // Load field options
     this.loadFieldOptions(field.id);
@@ -434,6 +509,23 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Validate Grid selection for Grid field type
+    if (this.isGridFieldType(this.fieldForm.get('fieldTypeId')?.value)) {
+      if (!this.selectedGridId) {
+        this.messageService.add({ 
+          severity: 'warn', 
+          summary: 'Validation', 
+          detail: 'Please select a Grid for Grid field type' 
+        });
+        return;
+      }
+    }
+
+    // Save file extensions to form if file type is selected
+    if (this.isFileFieldType()) {
+      this.saveFileExtensionsToForm();
+    }
+
     this.loading.save = true;
     const fieldData = this.fieldForm.value;
 
@@ -456,6 +548,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         isMandatory: fieldData.isMandatory ?? null,
         isEditable: fieldData.isEditable ?? null,
         isVisible: fieldData.isVisible ?? null,
+        gridId: this.isGridFieldType(fieldData.fieldTypeId) ? this.selectedGridId || undefined : undefined,
         minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
           ? Number(fieldData.minValue) 
           : undefined,
@@ -507,6 +600,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         regexPattern: fieldData.regexPattern || undefined,
         validationMessage: fieldData.validationMessage || undefined,
         foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
+        gridId: this.isGridFieldType(fieldData.fieldTypeId) ? this.selectedGridId || undefined : undefined,
         minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
           ? Number(fieldData.minValue) 
           : undefined,
@@ -794,10 +888,21 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       while (optionsArray.length !== 0) {
         optionsArray.removeAt(0);
       }
+      this.selectedGridId = null;
+      this.availableGrids = [];
       return;
     }
 
     const selectedFieldType = this.fieldTypes.find(t => t.id === normalizedId);
+    
+    // Check if it's a Grid field type
+    if (this.isGridFieldType(normalizedId)) {
+      this.loadAvailableGrids();
+    } else {
+      this.selectedGridId = null;
+      this.availableGrids = [];
+    }
+
     if (!selectedFieldType?.hasOptions) {
       // Clear options if field type doesn't support options
       const optionsArray = this.fieldOptionsFormArray;
@@ -807,11 +912,202 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Check if field type is Grid
+   */
+  isGridFieldType(fieldTypeId: number | string): boolean {
+    const normalizedId = Number(fieldTypeId);
+    if (!normalizedId) return false;
+    const type = this.fieldTypes.find(t => t.id === normalizedId);
+    return type?.typeName?.toLowerCase() === 'grid';
+  }
+
+  /**
+   * Load available grids for the current tab
+   */
+  loadAvailableGrids(): void {
+    if (!this.tabId) {
+      this.availableGrids = [];
+      return;
+    }
+
+    this.gridService.getGridsByTabId(this.tabId).subscribe({
+      next: (response) => {
+        this.availableGrids = response.data || [];
+        // If editing and field has gridId, set it
+        if (this.editingField && this.editingField.gridId) {
+          this.selectedGridId = this.editingField.gridId;
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.availableGrids = [];
+        this.selectedGridId = null;
+      }
+    });
+  }
+
   getSelectedFieldType(): FieldTypeDto | undefined {
     const rawFieldTypeId = this.fieldForm.get('fieldTypeId')?.value;
     const fieldTypeId = Number(rawFieldTypeId);
     if (!fieldTypeId) return undefined;
     return this.fieldTypes.find(t => t.id === fieldTypeId);
+  }
+
+  /**
+   * Check if selected field type is File
+   */
+  isFileFieldType(): boolean {
+    const selectedType = this.getSelectedFieldType();
+    if (!selectedType) return false;
+    const typeName = (selectedType.typeName || '').toLowerCase().trim();
+    return typeName === 'file' || typeName.includes('file');
+  }
+
+  /**
+   * Toggle file extension selection
+   */
+  toggleFileExtension(extension: string): void {
+    const index = this.selectedFileExtensions.indexOf(extension);
+    if (index > -1) {
+      this.selectedFileExtensions.splice(index, 1);
+    } else {
+      this.selectedFileExtensions.push(extension);
+    }
+    this.saveFileExtensionsToForm();
+  }
+
+  /**
+   * Check if extension is selected
+   */
+  isExtensionSelected(extension: string): boolean {
+    return this.selectedFileExtensions.includes(extension);
+  }
+
+  /**
+   * Save selected extensions to form's defaultValueJson
+   */
+  saveFileExtensionsToForm(): void {
+    const allExtensions = [...this.selectedFileExtensions, ...this.customFileExtensions];
+    const fileConfig = {
+      allowedExtensions: allExtensions,
+      customExtensions: this.customFileExtensions,
+      allowedMimeTypes: this.selectedFileExtensions.map(ext => {
+        const extInfo = this.availableFileExtensions.find(e => e.value === ext);
+        return extInfo ? extInfo.mimeType : '';
+      }).filter(mime => mime !== '')
+    };
+    this.fieldForm.patchValue({
+      defaultValueJson: JSON.stringify(fileConfig)
+    });
+  }
+
+  /**
+   * Load file extensions from form's defaultValueJson
+   */
+  loadFileExtensionsFromForm(): void {
+    const defaultValueJson = this.fieldForm.get('defaultValueJson')?.value;
+    if (defaultValueJson) {
+      try {
+        const fileConfig = JSON.parse(defaultValueJson);
+        if (fileConfig.allowedExtensions && Array.isArray(fileConfig.allowedExtensions)) {
+          // Separate predefined and custom extensions
+          const allExtensions = fileConfig.allowedExtensions;
+          this.selectedFileExtensions = allExtensions.filter((ext: string) => 
+            this.availableFileExtensions.some(e => e.value === ext)
+          );
+          this.customFileExtensions = allExtensions.filter((ext: string) => 
+            !this.availableFileExtensions.some(e => e.value === ext)
+          );
+        }
+        // Also load customExtensions if exists (for backward compatibility)
+        if (fileConfig.customExtensions && Array.isArray(fileConfig.customExtensions)) {
+          this.customFileExtensions = fileConfig.customExtensions;
+        }
+      } catch (e) {
+        // Not a valid JSON, ignore
+      }
+    } else {
+      this.selectedFileExtensions = [];
+      this.customFileExtensions = [];
+    }
+  }
+
+  /**
+   * Get extension label based on current language
+   */
+  getExtensionLabel(extension: { value: string; label: string; labelAr: string }): string {
+    return this.currentInputLanguage === 'ar' ? extension.labelAr : extension.label;
+  }
+
+  /**
+   * Get accepted file types string for input accept attribute
+   */
+  getAcceptedFileTypes(): string {
+    const allExtensions = [...this.selectedFileExtensions, ...this.customFileExtensions];
+    if (allExtensions.length === 0) {
+      return '*'; // Accept all if no restrictions
+    }
+    const mimeTypes = this.selectedFileExtensions.map(ext => {
+      const extInfo = this.availableFileExtensions.find(e => e.value === ext);
+      return extInfo ? extInfo.mimeType : '';
+    }).filter(mime => mime !== '');
+    
+    const customExts = this.customFileExtensions.map(ext => `.${ext.toLowerCase()}`);
+    
+    return [...mimeTypes, ...customExts].join(',');
+  }
+
+  /**
+   * Add custom file extension
+   */
+  addCustomExtension(): void {
+    const ext = this.newCustomExtension.trim().toLowerCase().replace(/^\./, ''); // Remove leading dot if exists
+    if (!ext) {
+      return;
+    }
+    
+    // Validate extension (alphanumeric and some special chars)
+    if (!/^[a-z0-9]+$/i.test(ext)) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Invalid Extension',
+        detail: 'Extension must contain only letters and numbers'
+      });
+      return;
+    }
+    
+    // Check if already exists
+    if (this.customFileExtensions.includes(ext) || this.selectedFileExtensions.includes(ext)) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Already Exists',
+        detail: 'This extension is already added'
+      });
+      return;
+    }
+    
+    this.customFileExtensions.push(ext);
+    this.newCustomExtension = '';
+    this.saveFileExtensionsToForm();
+  }
+
+  /**
+   * Remove custom file extension
+   */
+  removeCustomExtension(ext: string): void {
+    const index = this.customFileExtensions.indexOf(ext);
+    if (index > -1) {
+      this.customFileExtensions.splice(index, 1);
+      this.saveFileExtensionsToForm();
+    }
+  }
+
+  /**
+   * Check if custom extension is selected
+   */
+  isCustomExtensionSelected(ext: string): boolean {
+    return this.customFileExtensions.includes(ext);
   }
 
   addFieldOption(): void {

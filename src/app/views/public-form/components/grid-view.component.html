@@ -1,0 +1,180 @@
+<div class="grid-view-wrapper">
+  <!-- Loading State -->
+  <div *ngIf="loading" class="grid-loading">
+    <i class="pi pi-spin pi-spinner"></i>
+    <span>{{ translationService.translate('formView.loading') || 'Loading...' }}</span>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error && !loading" class="grid-error">
+    <i class="pi pi-exclamation-triangle"></i>
+    <span>{{ error }}</span>
+  </div>
+
+  <!-- Grid Content -->
+  <div *ngIf="!loading && !error && grid && columns.length > 0" class="grid-content">
+    <!-- Grid Header -->
+    <div class="grid-header">
+      <h4 class="grid-title">
+        <i class="pi pi-table" style="font-size: 1.125rem; color: #667eea;"></i>
+        {{ getGridTitle() }}
+      </h4>
+      <button 
+        type="button" 
+        class="btn-add-row"
+        (click)="addRow()"
+        [disabled]="saving">
+        <i class="pi pi-plus"></i>
+        <span>{{ translationService.translate('formView.addRow') || 'Add Row' }}</span>
+      </button>
+    </div>
+
+    <!-- Grid Table -->
+    <div class="grid-table-wrapper">
+      <table class="grid-table">
+        <!-- Table Header -->
+        <thead>
+          <tr>
+            <th class="col-index">#</th>
+            <th 
+              *ngFor="let column of columns" 
+              class="col-data"
+              [class.required]="isColumnRequired(column)">
+              {{ getColumnLabel(column) }}
+              <span *ngIf="isColumnRequired(column)" class="required-indicator">*</span>
+            </th>
+            <th class="col-actions">
+              <i class="pi pi-cog" style="font-size: 0.75rem;"></i>
+            </th>
+          </tr>
+        </thead>
+
+        <!-- Table Body -->
+        <tbody>
+          <tr *ngFor="let row of rows; let i = index" class="grid-row">
+            <!-- Row Index -->
+            <td class="col-index">{{ i + 1 }}</td>
+
+            <!-- Row Cells -->
+            <td *ngFor="let column of columns" class="col-data" [class.has-error]="hasError(row.rowIndex, column.id)">
+              <ng-container [ngSwitch]="getInputType(column)">
+                <!-- Text/Email/Number Input -->
+                <input
+                  *ngSwitchCase="'text'"
+                  type="text"
+                  class="grid-input"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [placeholder]="column.defaultValue || ''"
+                  [required]="isColumnRequired(column)"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+                <input
+                  *ngSwitchCase="'email'"
+                  type="email"
+                  class="grid-input"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [placeholder]="column.defaultValue || ''"
+                  [required]="isColumnRequired(column)"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+                <input
+                  *ngSwitchCase="'number'"
+                  type="number"
+                  class="grid-input"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [placeholder]="column.defaultValue || ''"
+                  [required]="isColumnRequired(column)"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+                <input
+                  *ngSwitchCase="'date'"
+                  type="date"
+                  class="grid-input"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [required]="isColumnRequired(column)"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+
+                <!-- Select Dropdown -->
+                <select
+                  *ngSwitchDefault
+                  class="grid-select"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (change)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [required]="isColumnRequired(column)">
+                  <option value="">{{ translationService.translate('formView.selectOption') || 'Select...' }}</option>
+                  <option
+                    *ngFor="let option of getColumnOptions(column)"
+                    [value]="option.optionValue">
+                    {{ getOptionText(option) }}
+                  </option>
+                </select>
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+              </ng-container>
+            </td>
+
+            <!-- Actions Column -->
+            <td class="col-actions">
+              <button
+                type="button"
+                class="btn-remove-row"
+                (click)="removeRow(row.rowIndex)"
+                [disabled]="saving"
+                [title]="translationService.translate('formView.removeRow') || 'Remove Row'">
+                <i class="pi pi-trash"></i>
+              </button>
+            </td>
+          </tr>
+
+          <!-- Empty State -->
+          <tr *ngIf="rows.length === 0" class="empty-row">
+            <td [attr.colspan]="columns.length + 2" class="empty-message">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
+                <i class="pi pi-inbox" style="font-size: 2.5rem; color: #9ca3af; opacity: 0.5;"></i>
+                <span>{{ translationService.translate('formView.noRows') || 'No rows added yet. Click "Add Row" to start.' }}</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Save Button -->
+    <div class="grid-footer" *ngIf="submissionId > 0">
+      <button
+        type="button"
+        class="btn-save-grid"
+        (click)="saveGridData()"
+        [disabled]="saving || rows.length === 0">
+        <i class="pi" [class.pi-spin]="saving" [class.pi-spinner]="saving" [class.pi-save]="!saving"></i>
+        {{ saving ? (translationService.translate('formView.saving') || 'Saving...') : (translationService.translate('formView.save') || 'Save Grid') }}
+      </button>
+    </div>
+  </div>
+
+  <!-- No Grid Configuration -->
+  <div *ngIf="!loading && !error && (!grid || columns.length === 0)" class="grid-empty">
+    <i class="pi pi-info-circle"></i>
+    <span>{{ translationService.translate('formView.gridNotConfigured') || 'Grid is not configured yet.' }}</span>
+  </div>
+</div>
+

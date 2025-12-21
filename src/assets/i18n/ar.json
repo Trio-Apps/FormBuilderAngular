@@ -126,7 +126,15 @@
     "createField": "إنشاء حقل",
     "customValidationMessage": "رسالة تحقق مخصصة",
     "minimumValue": "القيمة الدنيا",
-    "maximumValue": "القيمة العليا"
+    "maximumValue": "القيمة العليا",
+    "fileUpload": "رفع الملف",
+    "fileUploadInfo": "هذا الحقل يسمح للمستخدمين برفع الملفات. سيظهر حقل رفع الملف في النموذج العام.",
+    "selectFile": "اختر ملف",
+    "fileUploadHint": "سيتمكن المستخدمون من رفع الملفات عند ملء هذا النموذج",
+    "allowedFileExtensions": "امتدادات الملفات المسموحة",
+    "selectAllowedExtensions": "اختر امتدادات الملفات التي يمكن للمستخدمين رفعها",
+    "addCustomExtension": "إضافة امتداد مخصص",
+    "enterExtension": "أدخل الامتداد (مثال: mp4, avi)"
   },
   "fieldTypes": {
     "title": "إدارة أنواع الحقول",

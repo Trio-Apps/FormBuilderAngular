@@ -72,6 +72,27 @@ export const routes: Routes = [
               .then(m => m.FieldsListComponent) 
           },
           
+          // إدارة الجداول (Grids) لتبويب معين (مثال: form-builder/grids/10)
+          { 
+            path: 'grids/:tabId', 
+            loadComponent: () => import('./views/grids/grids-list/grids-list.component')
+              .then(m => m.GridsListComponent) 
+          },
+          
+          // إدارة أعمدة Grid (مثال: form-builder/grids/10/columns/5)
+          { 
+            path: 'grids/:tabId/columns/:gridId', 
+            loadComponent: () => import('./views/grids/grid-columns-list/grid-columns-list.component')
+              .then(m => m.GridColumnsListComponent) 
+          },
+          
+          // إدارة Grid Rows (مثال: form-builder/grids/10/rows/5)
+          { 
+            path: 'grids/:tabId/rows/:gridId', 
+            loadComponent: () => import('./views/grids/grid-rows-list/grid-rows-list.component')
+              .then(m => m.GridRowsListComponent) 
+          },
+          
           // إدارة أنواع الحقول (Field Types)
           { 
             path: 'field-types', 

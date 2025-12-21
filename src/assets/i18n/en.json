@@ -126,7 +126,15 @@
     "createField": "Create Field",
     "customValidationMessage": "Custom validation message",
     "minimumValue": "Minimum value",
-    "maximumValue": "Maximum value"
+    "maximumValue": "Maximum value",
+    "fileUpload": "File Upload",
+    "fileUploadInfo": "This field allows users to upload files. The file input will appear in the public form view.",
+    "selectFile": "Select file",
+    "fileUploadHint": "Users will be able to upload files when filling out this form",
+    "allowedFileExtensions": "Allowed File Extensions",
+    "selectAllowedExtensions": "Select the file extensions that users can upload",
+    "addCustomExtension": "Add Custom Extension",
+    "enterExtension": "Enter extension (e.g., mp4, avi)"
   },
   "fieldTypes": {
     "title": "Field Types Management",

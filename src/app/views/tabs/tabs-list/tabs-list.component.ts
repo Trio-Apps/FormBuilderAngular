@@ -282,6 +282,19 @@ export class TabsListComponent implements OnInit, OnDestroy {
     this.router.navigate(['../../fields', tabId], { relativeTo: this.route });
   }
 
+  navigateToGrids(tabId?: number): void {
+    const targetTabId = tabId || this.tabs[0]?.id;
+    if (targetTabId) {
+      this.router.navigate(['../../grids', targetTabId], { relativeTo: this.route });
+    } else {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Please select a tab first'
+      });
+    }
+  }
+
   deleteTab(id: number): void {
     const tabToDelete = this.tabs.find(t => t.id === id);
     if (!tabToDelete) return;

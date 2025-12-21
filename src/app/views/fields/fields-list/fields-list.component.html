@@ -364,6 +364,139 @@
           </div>
         </div>
 
+        <!-- Grid Selection Section (when Field Type is Grid) -->
+        <div class="form-section" *ngIf="isGridFieldType(fieldForm.get('fieldTypeId')?.value)">
+          <h4 class="section-title">
+            <i class="pi pi-table"></i>
+            {{ translateLabel('fields.gridSelection') || 'Grid Selection' }}
+          </h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">
+                {{ translateLabel('fields.selectGrid') || 'Select Grid' }} 
+                <span class="required">*</span>
+              </label>
+              <select 
+                class="form-control" 
+                [(ngModel)]="selectedGridId"
+                [ngModelOptions]="{standalone: true}"
+                [class.is-invalid]="isGridFieldType(fieldForm.get('fieldTypeId')?.value) && !selectedGridId">
+                <option value="">{{ translateLabel('fields.selectGrid') || '-- Select Grid --' }}</option>
+                <option *ngFor="let grid of availableGrids" [value]="grid.id">
+                  {{ grid.gridName }} ({{ grid.gridCode }})
+                </option>
+              </select>
+              <div class="invalid-feedback" *ngIf="isGridFieldType(fieldForm.get('fieldTypeId')?.value) && !selectedGridId">
+                {{ translateLabel('fields.gridRequired') || 'Please select a Grid' }}
+              </div>
+              <small class="form-text text-muted" *ngIf="availableGrids.length === 0 && isGridFieldType(fieldForm.get('fieldTypeId')?.value)">
+                {{ translateLabel('fields.noGridsAvailable') || 'No grids available for this tab. Please create a grid first.' }}
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <!-- File Upload Section (when Field Type is File) -->
+        <div class="form-section" *ngIf="isFileFieldType()">
+          <h4 class="section-title">
+            <i class="pi pi-file"></i>
+            {{ translateLabel('fields.fileUpload') }}
+          </h4>
+          <div class="file-upload-preview">
+            <div class="file-upload-info">
+              <i class="pi pi-info-circle"></i>
+              <span>{{ translateLabel('fields.fileUploadInfo') }}</span>
+            </div>
+            
+            <!-- Allowed File Extensions -->
+            <div class="file-extensions-section">
+              <label class="extensions-label">
+                <i class="pi pi-filter"></i>
+                {{ translateLabel('fields.allowedFileExtensions') }}
+              </label>
+              
+              <!-- Predefined Extensions -->
+              <div class="extensions-grid">
+                <div 
+                  *ngFor="let ext of availableFileExtensions" 
+                  class="extension-item"
+                  [class.selected]="isExtensionSelected(ext.value)"
+                  (click)="toggleFileExtension(ext.value)">
+                  <input
+                    type="checkbox"
+                    [checked]="isExtensionSelected(ext.value)"
+                    (change)="toggleFileExtension(ext.value)"
+                    [id]="'ext-' + ext.value"
+                  />
+                  <label [for]="'ext-' + ext.value" class="extension-label">
+                    <span class="extension-value">.{{ ext.value.toUpperCase() }}</span>
+                    <span class="extension-name">{{ getExtensionLabel(ext) }}</span>
+                  </label>
+                </div>
+              </div>
+              
+              <!-- Custom Extensions -->
+              <div class="custom-extensions-section">
+                <label class="custom-extensions-label">
+                  <i class="pi pi-plus-circle"></i>
+                  {{ translateLabel('fields.addCustomExtension') }}
+                </label>
+                <div class="add-custom-extension">
+                  <input
+                    type="text"
+                    class="form-control custom-extension-input"
+                    [(ngModel)]="newCustomExtension"
+                    [placeholder]="translateLabel('fields.enterExtension')"
+                    (keyup.enter)="addCustomExtension()"
+                    maxlength="10"
+                  />
+                  <button
+                    type="button"
+                    class="btn-add-extension"
+                    (click)="addCustomExtension()"
+                    [disabled]="!newCustomExtension.trim()">
+                    <i class="pi pi-plus"></i>
+                    {{ translateLabel('common.add') }}
+                  </button>
+                </div>
+                
+                <!-- Custom Extensions List -->
+                <div class="custom-extensions-list" *ngIf="customFileExtensions.length > 0">
+                  <div 
+                    *ngFor="let ext of customFileExtensions" 
+                    class="custom-extension-item">
+                    <span class="custom-extension-value">.{{ ext.toUpperCase() }}</span>
+                    <button
+                      type="button"
+                      class="btn-remove-custom-extension"
+                      (click)="removeCustomExtension(ext)"
+                      [title]="translateLabel('common.delete')">
+                      <i class="pi pi-times"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <small class="form-text text-muted">
+                {{ translateLabel('fields.selectAllowedExtensions') }}
+              </small>
+            </div>
+            
+            <div class="file-input-preview">
+              <input
+                type="file"
+                class="form-control file-input-preview"
+                disabled
+                [placeholder]="translateLabel('fields.selectFile')"
+                [accept]="getAcceptedFileTypes()"
+              />
+              <small class="form-text text-muted">
+                {{ translateLabel('fields.fileUploadHint') }}
+              </small>
+            </div>
+          </div>
+        </div>
+
         <!-- Field Options Section -->
         <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions">
           <h4 class="section-title">

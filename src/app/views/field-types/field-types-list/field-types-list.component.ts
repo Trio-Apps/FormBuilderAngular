@@ -60,7 +60,8 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     { label: 'Checkbox', value: 'Checkbox' },
     { label: 'Dropdown', value: 'Dropdown' },
     { label: 'Radio', value: 'Radio' },
-    { label: 'Switch', value: 'Switch' }
+    { label: 'Switch', value: 'Switch' },
+    { label: 'Grid', value: 'Grid' }
   ];
 
   // Predefined base field type names in Arabic
@@ -74,7 +75,8 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     { label: 'مربع اختيار', value: 'Checkbox' },
     { label: 'قائمة منسدلة', value: 'Dropdown' },
     { label: 'زر اختيار', value: 'Radio' },
-    { label: 'مفتاح', value: 'Switch' }
+    { label: 'مفتاح', value: 'Switch' },
+    { label: 'جدول', value: 'Grid' }
   ];
 
   // Predefined data types to choose from

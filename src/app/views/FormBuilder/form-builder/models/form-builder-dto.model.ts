@@ -98,6 +98,7 @@ export interface FormFieldDto {
   regexPattern?: string;
   validationMessage?: string;
   foreignValidationMessage?: string; // Arabic validation message
+  gridId?: number; // Grid ID for Grid field type
   createdDate: string; // Required in C# (DateTime)
   createdByUserId?: string;
   createdByUserName?: string;
@@ -137,6 +138,7 @@ export interface UpdateFormFieldDto {
   regexPattern?: string;
   validationMessage?: string;
   foreignValidationMessage?: string; // Arabic validation message
+  gridId?: number; // Grid ID for Grid field type
 }
 
 export interface FieldTypeDto {
@@ -223,5 +225,6 @@ export interface CreateFormFieldDto {
   regexPattern?: string;
   validationMessage?: string;
   foreignValidationMessage?: string; // Arabic validation message
+  gridId?: number; // Grid ID for Grid field type
   createdByUserId?: string;
 }

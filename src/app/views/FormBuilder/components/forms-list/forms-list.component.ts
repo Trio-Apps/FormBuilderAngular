@@ -150,12 +150,14 @@ export class FormsListComponent implements OnInit, OnDestroy {
     this.forms = [];
     this.filteredForms = [];
     
-    console.log('[FormsList] Loading forms, page:', page);
+    // Removed console.log to reduce console noise in production
+    // console.log('[FormsList] Loading forms, page:', page);
     
     this.formsService.getForms(page, this.itemsPerPage).subscribe({
       next: (paged) => {
         const forms = paged.items || [];
-        console.log('[FormsList] Forms loaded from API:', forms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
+        // Removed console.log to reduce console noise in production
+        // console.log('[FormsList] Forms loaded from API:', forms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
         this.totalItems = paged.totalCount || forms.length;
         this.totalPages = paged.totalPages || Math.max(1, Math.ceil(this.totalItems / this.itemsPerPage));
         this.itemsPerPage = paged.pageSize || this.itemsPerPage;
@@ -263,7 +265,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
       };
     });
 
-    console.log('[FormsList] Updated forms with counts:', updatedForms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
+    // Removed console.log to reduce console noise in production
+    // console.log('[FormsList] Updated forms with counts:', updatedForms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
 
     this.forms = updatedForms;
     this.filteredForms = [...updatedForms];

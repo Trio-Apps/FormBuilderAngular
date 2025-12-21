@@ -17,6 +17,10 @@
         <button class="btn-icon" (click)="loadTabs()" [disabled]="loading" [title]="translateLabel('common.refresh')">
           <i class="pi pi-refresh"></i>
         </button>
+        <button class="btn-secondary" (click)="navigateToGrids()" [disabled]="loading" [title]="translateLabel('tabs.manageGrids') || 'Manage Grids'">
+          <i class="pi pi-table"></i>
+          <span>{{ translateLabel('tabs.manageGrids') || 'Manage Grids' }}</span>
+        </button>
         <button class="btn-primary" (click)="openTabModal()" [disabled]="loading">
           <i class="pi pi-plus"></i>
           <span>{{ translateLabel('tabs.newTab') }}</span>
@@ -173,6 +177,9 @@
                   </button>
                   <button class="action-btn action-duplicate" (click)="navigateToFields(tab.id)" [title]="translateLabel('tabs.manageFields')">
                     <i class="pi pi-list"></i>
+                  </button>
+                  <button class="action-btn action-table" (click)="navigateToGrids(tab.id)" [title]="translateLabel('tabs.manageGrids') || 'Manage Grids'">
+                    <i class="pi pi-table"></i>
                   </button>
                   <button class="action-btn action-delete" (click)="deleteTab(tab.id)" [title]="translateLabel('common.delete')">
                     <i class="pi pi-trash"></i>

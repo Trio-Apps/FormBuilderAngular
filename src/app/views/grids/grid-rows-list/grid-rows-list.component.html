@@ -1,0 +1,408 @@
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" [routerLink]="['/form-builder/grids', tabId]" [title]="translateLabel('common.back') || 'Back to Grids'">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">{{ translateLabel('grids.rows.title') || 'Manage Grid Rows' }}</h1>
+          <p class="page-subtitle">
+            {{ grid?.gridName || 'Grid' }} - {{ translateLabel('grids.rows.subtitle') || 'Rows Data' }}
+          </p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadRows()" [disabled]="loading || !selectedSubmissionId" [title]="translateLabel('common.refresh') || 'Refresh'">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openAddRowModal()" [disabled]="loading || !selectedSubmissionId">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.rows.newRow') || 'New Row' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>{{ translateLabel('common.forms') || 'Forms' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a [routerLink]="['/form-builder/tabs', formBuilderId]" class="breadcrumb-link">
+        <i class="pi pi-folder"></i>
+        <span>{{ translateLabel('common.tabs') || 'Tabs' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a [routerLink]="['/form-builder/grids', tabId]" class="breadcrumb-link">
+        <i class="pi pi-table"></i>
+        <span>{{ translateLabel('common.grids') || 'Grids' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-bars"></i>
+        <span>{{ translateLabel('grids.rows.title') || 'Rows' }}</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Submission Selection -->
+    <div class="selection-card" *ngIf="!loading">
+      <div class="selection-header">
+        <h4 class="selection-title">
+          <i class="pi pi-filter"></i>
+          <span *ngIf="translationService.getCurrentLanguage() === 'ar'">اختر الإرسال (Submission)</span>
+          <span *ngIf="translationService.getCurrentLanguage() !== 'ar'">Select Submission</span>
+        </h4>
+      </div>
+      <div class="selection-body">
+        <div class="form-group">
+          <label class="form-label">
+            <ng-container *ngIf="translationService.getCurrentLanguage() === 'ar'">
+              رقم الإرسال (Submission ID)
+            </ng-container>
+            <ng-container *ngIf="translationService.getCurrentLanguage() !== 'ar'">
+              Submission ID
+            </ng-container>
+            <span class="text-danger">*</span>
+          </label>
+          
+          <!-- Dropdown if submissions are available -->
+          <select
+            *ngIf="submissions.length > 0"
+            class="form-control"
+            [(ngModel)]="selectedSubmissionId"
+            (ngModelChange)="onSubmissionChange()"
+            [disabled]="loadingSubmissions">
+            <option [value]="null">
+              <ng-container *ngIf="translationService.getCurrentLanguage() === 'ar'">-- اختر إرسال --</ng-container>
+              <ng-container *ngIf="translationService.getCurrentLanguage() !== 'ar'">-- Choose Submission --</ng-container>
+            </option>
+            <option *ngFor="let submission of submissions" [value]="submission.id">
+              {{ submission.displayText }}
+            </option>
+          </select>
+
+          <!-- Manual input if no submissions found or as fallback -->
+          <div *ngIf="submissions.length === 0" class="input-with-button">
+            <input
+              type="number"
+              class="form-control"
+              [(ngModel)]="selectedSubmissionId"
+              (ngModelChange)="onSubmissionChange()"
+              [placeholder]="translationService.getCurrentLanguage() === 'ar' ? 'أدخل رقم الإرسال (مثال: 1، 2، 3...)' : 'Enter Submission ID (e.g., 1, 2, 3...)'"
+              min="1"
+            />
+            <button
+              type="button"
+              class="btn-refresh-submissions"
+              (click)="loadAvailableSubmissions()"
+              [disabled]="loadingSubmissions"
+              [title]="translationService.getCurrentLanguage() === 'ar' ? 'تحميل الإرسالات المتاحة' : 'Load Available Submissions'">
+              <i class="pi" [class.pi-spin]="loadingSubmissions" [class.pi-spinner]="loadingSubmissions" [class.pi-refresh]="!loadingSubmissions"></i>
+            </button>
+          </div>
+
+          <small class="form-text text-muted">
+            <span *ngIf="submissions.length > 0">
+              <i class="pi pi-info-circle" style="margin-right: 4px;"></i>
+              <span *ngIf="translationService.getCurrentLanguage() === 'ar'">
+                <strong>ما هو Submission ID؟</strong> هو رقم فريد لكل إرسال (form submission) في النظام. اختر إرسال من القائمة أعلاه لعرض وإدارة صفوف الجدول الخاصة به.
+              </span>
+              <span *ngIf="translationService.getCurrentLanguage() !== 'ar'">
+                <strong>What is Submission ID?</strong> It's a unique number for each form submission in the system. Choose a submission from the list above to view and manage its grid rows.
+              </span>
+            </span>
+            <span *ngIf="submissions.length === 0">
+              <i class="pi pi-info-circle" style="margin-right: 4px;"></i>
+              <span *ngIf="translationService.getCurrentLanguage() === 'ar'">
+                <strong>ما هو Submission ID؟</strong> هو رقم فريد لكل إرسال في النظام. يمكنك العثور عليه من قائمة الإرسالات (Submissions List)، أو اضغط على زر التحديث (🔄) لتحميل الإرسالات المتاحة تلقائياً.
+              </span>
+              <span *ngIf="translationService.getCurrentLanguage() !== 'ar'">
+                <strong>What is Submission ID?</strong> It's a unique number for each form submission. You can find it from the Submissions List, or click the refresh button (🔄) to automatically load available submissions.
+              </span>
+            </span>
+          </small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading && selectedSubmissionId && rows.length > 0">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-bars"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ rows.length }}</div>
+          <div class="stat-label">{{ translateLabel('grids.rows.totalRows') || 'Total Rows' }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveRowsCount() }}</div>
+          <div class="stat-label">{{ translateLabel('grids.rows.activeRows') || 'Active Rows' }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-info">
+          <i class="pi pi-table"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ columns.length }}</div>
+          <div class="stat-label">{{ translateLabel('grids.rows.totalColumns') || 'Total Columns' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rows Table Card -->
+    <div class="table-card" *ngIf="selectedSubmissionId">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-bars"></i>
+          {{ translateLabel('grids.rows.rowsList') || 'Rows List' }}
+        </h3>
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              [placeholder]="translateLabel('grids.rows.searchRows') || 'Search rows...'"
+              class="search-input"
+              [(ngModel)]="searchTerm"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>{{ translateLabel('grids.rows.loadingRows') || 'Loading rows...' }}</p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!loading && (!selectedSubmissionId || filteredRows.length === 0)" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-inbox"></i>
+        </div>
+        <h3 *ngIf="!selectedSubmissionId">
+          {{ translateLabel('grids.rows.selectSubmissionFirst') || 'Please select a submission ID' }}
+        </h3>
+        <h3 *ngIf="selectedSubmissionId && filteredRows.length === 0">
+          {{ translateLabel('grids.rows.noRowsFound') || 'No rows found' }}
+        </h3>
+        <p *ngIf="!selectedSubmissionId">
+          {{ translateLabel('grids.rows.selectSubmissionHint') || 'Enter a submission ID to view its grid rows' }}
+        </p>
+        <p *ngIf="selectedSubmissionId && filteredRows.length === 0">
+          {{ translateLabel('grids.rows.getStarted') || 'Get started by creating your first row' }}
+        </p>
+        <button *ngIf="selectedSubmissionId && filteredRows.length === 0" class="btn-primary" (click)="openAddRowModal()">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.rows.addFirstRow') || 'Add First Row' }}</span>
+        </button>
+      </div>
+
+      <!-- Rows Table -->
+      <div class="table-wrapper" *ngIf="!loading && selectedSubmissionId && filteredRows.length > 0">
+        <table class="fields-table">
+          <thead>
+            <tr>
+              <th class="col-order">#</th>
+              <th *ngFor="let column of columns" class="col-data">
+                {{ getColumnLabel(column) }}
+              </th>
+              <th class="col-status">{{ translateLabel('common.status') || 'Status' }}</th>
+              <th class="col-actions">{{ translateLabel('common.actions') || 'Actions' }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of filteredRows; let i = index">
+              <td class="col-order">
+                <span class="order-number">{{ row.rowIndex || i + 1 }}</span>
+              </td>
+              <td *ngFor="let column of columns" class="col-data">
+                <span class="cell-value" [title]="getCellValue(row, column.id) || '-'">
+                  {{ getCellValue(row, column.id) || '-' }}
+                </span>
+              </td>
+              <td class="col-status">
+                <span class="status-badge" [class.status-active]="row.isActive" [class.status-inactive]="!row.isActive">
+                  <i class="pi" [class.pi-check-circle]="row.isActive" [class.pi-times-circle]="!row.isActive"></i>
+                  {{ row.isActive ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <div class="actions-menu">
+                  <button class="action-btn action-edit" (click)="openEditRowModal(row)" [title]="translateLabel('common.edit') || 'Edit'">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button class="action-btn action-delete" (click)="deleteRow(row)" [title]="translateLabel('common.delete') || 'Delete'">
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Row Modal -->
+  <p-dialog
+    [(visible)]="showRowModal"
+    [modal]="true"
+    [header]="editingRow ? (translateLabel('grids.rows.editRow') || 'Edit Row') : (translateLabel('grids.rows.addRow') || 'Add Row')"
+    [style]="{ width: '600px' }"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="closeRowModal()"
+  >
+    <form [formGroup]="rowForm" (ngSubmit)="saveRow()">
+      <!-- Language Toggle Buttons -->
+      <div class="mb-3 d-flex gap-2">
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'en'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'en'"
+          (click)="setInputLanguage('en')">
+          English
+        </button>
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'ar'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'ar'"
+          (click)="setInputLanguage('ar')">
+          العربية
+        </button>
+      </div>
+
+      <!-- Row Index -->
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.rows.rowIndex') || 'Row Index' }}</label>
+        <input
+          type="number"
+          class="form-control"
+          formControlName="rowIndex"
+          min="0"
+        />
+      </div>
+
+      <!-- Cells (Columns) -->
+      <div class="mb-3" *ngFor="let cellControl of cellsFormArray.controls; let i = index">
+        <div [formGroup]="getCellFormControl(i)">
+          <label class="form-label">
+            {{ getColumnLabel(getColumnForCell(i)) }}
+            <span *ngIf="getColumnForCell(i).isRequired" class="text-danger">*</span>
+          </label>
+          <ng-container [ngSwitch]="getInputType(getColumnForCell(i))">
+            <!-- Text Input -->
+            <input
+              *ngSwitchCase="'text'"
+              type="text"
+              class="form-control"
+              formControlName="cellValue"
+              [class.is-invalid]="getCellFormControl(i).get('cellValue')?.invalid && getCellFormControl(i).get('cellValue')?.touched"
+            />
+            <!-- Email Input -->
+            <input
+              *ngSwitchCase="'email'"
+              type="email"
+              class="form-control"
+              formControlName="cellValue"
+              [class.is-invalid]="getCellFormControl(i).get('cellValue')?.invalid && getCellFormControl(i).get('cellValue')?.touched"
+            />
+            <!-- Number Input -->
+            <input
+              *ngSwitchCase="'number'"
+              type="number"
+              class="form-control"
+              formControlName="cellValue"
+              [class.is-invalid]="getCellFormControl(i).get('cellValue')?.invalid && getCellFormControl(i).get('cellValue')?.touched"
+            />
+            <!-- Date Input -->
+            <input
+              *ngSwitchCase="'date'"
+              type="date"
+              class="form-control"
+              formControlName="cellValue"
+              [class.is-invalid]="getCellFormControl(i).get('cellValue')?.invalid && getCellFormControl(i).get('cellValue')?.touched"
+            />
+            <!-- Select Dropdown -->
+            <select
+              *ngSwitchDefault
+              class="form-control"
+              formControlName="cellValue"
+              [class.is-invalid]="getCellFormControl(i).get('cellValue')?.invalid && getCellFormControl(i).get('cellValue')?.touched">
+              <option value="">{{ translateLabel('common.select') || 'Select...' }}</option>
+              <option
+                *ngFor="let option of getColumnOptions(getColumnForCell(i))"
+                [value]="option.optionValue">
+                {{ getOptionText(option) }}
+              </option>
+            </select>
+          </ng-container>
+          <div class="invalid-feedback" *ngIf="getCellFormControl(i).get('cellValue')?.invalid && getCellFormControl(i).get('cellValue')?.touched">
+            {{ translateLabel('common.fieldRequired') || 'This field is required' }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Status Toggle -->
+      <div class="mb-3">
+        <label class="form-label d-block">{{ translateLabel('common.status') || 'Status' }}</label>
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="isActive"
+            formControlName="isActive"
+          />
+          <label class="form-check-label" for="isActive">
+            {{ rowForm.get('isActive')?.value ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
+          </label>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button
+          pButton
+          type="button"
+          [label]="translateLabel('common.cancel') || 'Cancel'"
+          (click)="closeRowModal()"
+          class="p-button-text"
+        >
+        </button>
+
+        <button
+          pButton
+          type="submit"
+          [disabled]="rowForm.invalid || loading"
+          class="p-button-primary"
+        >
+          <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>
+          {{ translateLabel('common.save') || 'Save' }}
+        </button>
+      </div>
+    </form>
+  </p-dialog>
+</div>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

@@ -1,17 +1,22 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, HostListener, ViewChildren, QueryList } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { FormsService } from '../FormBuilder/services/forms.service';
 import { TabsService } from '../FormBuilder/services/tabs.service';
 import { FieldsService } from '../FormBuilder/services/fields.service';
+import { FileUploadService, FormSubmissionAttachmentDto } from '../FormBuilder/services/file-upload.service';
 import { FormBuilderDto, FormTabDto, FormFieldDto } from '../FormBuilder/form-builder/models/form-builder-dto.model';
 import { TranslationService } from '../../core/services/translation.service';
+import { environment } from '../../environments/environment';
+import { catchError, of, forkJoin, Observable } from 'rxjs';
+import { GridViewComponent } from './components/grid-view.component';
 
 @Component({
   selector: 'app-form-view',
   standalone: true,
   imports: [
-    CommonModule
+    CommonModule,
+    GridViewComponent
   ],
   templateUrl: './form-view.component.html',
   styleUrls: ['./form-view.component.scss']
@@ -24,12 +29,30 @@ export class FormViewComponent implements OnInit {
   notFound = false;
   notFoundReason: string = '';
   activeTabIndex = 0;
+  showLanguageDropdown = false;
+  
+  // File upload state
+  uploadingFiles: { [fieldId: number]: boolean } = {};
+  uploadProgress: { [fieldId: number]: number } = {}; // Upload progress percentage
+  uploadedFiles: { [fieldId: number]: FormSubmissionAttachmentDto[] } = {};
+  submissionId: number = 0; // Will be set when form is submitted
+  fileUploadErrors: { [fieldId: number]: string } = {}; // File upload error messages
+  filePreviewUrls: { [attachmentId: number]: string } = {}; // File preview URLs for images/PDFs
+  showPreviewModal: boolean = false;
+  previewFile: FormSubmissionAttachmentDto | null = null;
+  
+  // Grid components reference
+  @ViewChildren(GridViewComponent) gridViewComponents!: QueryList<GridViewComponent>;
+  
+  // Default allowed file types (matching backend validation)
+  private readonly DEFAULT_ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx', 'doc', 'docx'];
 
   constructor(
     private route: ActivatedRoute,
     private formsService: FormsService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
+    public fileUploadService: FileUploadService,
     public translationService: TranslationService
   ) {}
 
@@ -43,6 +66,56 @@ export class FormViewComponent implements OnInit {
         this.notFound = true;
       }
     });
+    
+    // Check for submissionId in query params (for draft/edit mode)
+    this.route.queryParams.subscribe(params => {
+      if (params['submissionId']) {
+        this.submissionId = +params['submissionId'];
+      }
+    });
+  }
+  
+  /**
+   * Save all grid data (called from form submission)
+   */
+  saveAllGridsData(): Observable<any[]> {
+    const gridComponents = this.gridViewComponents?.toArray() || [];
+    if (gridComponents.length === 0) {
+      return of([]);
+    }
+    
+    const saveObservables = gridComponents
+      .filter(grid => grid.hasGridData() && grid.submissionId > 0)
+      .map(grid => grid.saveGridData());
+    
+    if (saveObservables.length === 0) {
+      return of([]);
+    }
+    
+    return forkJoin(saveObservables);
+  }
+  
+  /**
+   * Validate all grids before submission
+   */
+  validateAllGrids(): { isValid: boolean; errors: string[] } {
+    const gridComponents = this.gridViewComponents?.toArray() || [];
+    const errors: string[] = [];
+    
+    gridComponents.forEach((grid, index) => {
+      if (grid.hasGridData()) {
+        // Check if grid is valid
+        if (!grid.isGridValid()) {
+          const gridName = grid.getGridTitle();
+          errors.push(`Grid "${gridName}" has validation errors. Please fill all required fields.`);
+        }
+      }
+    });
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
   }
 
   // ===== Form Loading =====
@@ -89,6 +162,16 @@ export class FormViewComponent implements OnInit {
 
         this.form = form;
         const apiTabs = form.tabs || [];
+        
+        // Initialize submission ID
+        // Note: In a real scenario, you should create a submission record first
+        // For now, we don't set submissionId until a file is actually uploaded
+        // This prevents unnecessary API calls to load non-existent files
+        this.submissionId = 0; // Will be set when first file is uploaded or when submission is created
+        
+        // TODO: Create a submission record when form is first loaded
+        // This ensures files are properly linked to a submission
+        // Example: this.createSubmission(form.id).subscribe(submission => { this.submissionId = submission.id; });
 
         console.log('[FormView] Form data:', {
           formName: form.formName,
@@ -119,6 +202,23 @@ export class FormViewComponent implements OnInit {
                     .sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0))
                 }))
             }));
+          
+          // Initialize uploaded files arrays for file fields (don't load yet if no submissionId)
+          this.tabs.forEach(tab => {
+            tab.fields?.forEach(field => {
+              if (this.getFieldType(field) === 'file' && field.id) {
+                // Initialize empty array
+                if (!this.uploadedFiles[field.id]) {
+                  this.uploadedFiles[field.id] = [];
+                }
+              }
+            });
+          });
+          
+          // Don't load files on initial form load - files will be loaded after first upload
+          // or when submissionId is available from a saved submission
+          // This prevents unnecessary 404 errors when no files have been uploaded yet
+          
           this.activeTabIndex = 0;
           this.loading = false;
           console.log('[FormView] Form loaded successfully with', this.tabs.length, 'tabs');
@@ -234,9 +334,19 @@ export class FormViewComponent implements OnInit {
               });
               remaining--;
               if (remaining === 0) {
-                this.tabs = tabsWithFields.sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
-                this.activeTabIndex = 0;
-                this.loading = false;
+              this.tabs = tabsWithFields.sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
+              this.activeTabIndex = 0;
+              this.loading = false;
+              // Initialize uploaded files arrays (don't load yet - files will be loaded after first upload)
+              this.tabs.forEach(tab => {
+                tab.fields?.forEach(field => {
+                  if (this.getFieldType(field) === 'file' && field.id) {
+                    if (!this.uploadedFiles[field.id]) {
+                      this.uploadedFiles[field.id] = [];
+                    }
+                  }
+                });
+              });
               }
             },
             error: () => {
@@ -279,6 +389,11 @@ export class FormViewComponent implements OnInit {
     const ft = field.fieldType;
     const typeName = (field.fieldTypeName || ft?.typeName || '').toLowerCase().trim();
     const dataType = (ft?.dataType || '').toLowerCase().trim();
+
+    // Check for Grid type first
+    if (typeName === 'grid') {
+      return 'grid';
+    }
 
     // Explicit mapping: Textbox => text input
     if (typeName === 'textbox' || typeName.includes('text box')) {
@@ -332,6 +447,11 @@ export class FormViewComponent implements OnInit {
     // File
     if (combined.includes('file') || dataType === 'file') {
       return 'file';
+    }
+
+    // Grid / Line Items Grid
+    if (combined.includes('grid') || typeName.includes('grid') || typeName.includes('line items') || typeName.includes('lineitems')) {
+      return 'grid';
     }
 
     // Switch / boolean
@@ -499,6 +619,653 @@ export class FormViewComponent implements OnInit {
    */
   switchLanguage(lang: 'en' | 'ar'): void {
     this.translationService.setLanguage(lang);
+    this.showLanguageDropdown = false;
+  }
+
+  /**
+   * Close dropdown when clicking outside
+   */
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.language-dropdown-wrapper')) {
+      this.showLanguageDropdown = false;
+    }
+  }
+
+  /**
+   * Handle file selection (supports single or multiple files)
+   */
+  onFileSelected(event: Event, field: FormFieldDto): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0 || !field.id) {
+      return;
+    }
+
+    const files = Array.from(input.files);
+    const fieldType = field.fieldType;
+    const allowMultiple = fieldType?.allowMultiple || false;
+    
+    // If single file upload, take first file only
+    const filesToUpload = allowMultiple ? files : [files[0]];
+    
+    // Validate all files
+    const invalidFiles: string[] = [];
+    for (const file of filesToUpload) {
+      // Validate file extension
+      if (!this.isFileExtensionAllowed(file, field)) {
+        invalidFiles.push(file.name);
+        continue;
+      }
+      
+      // Validate file size
+      const maxSize = this.getMaxFileSize(field);
+      if (maxSize > 0 && file.size > maxSize) {
+        invalidFiles.push(`${file.name} (${this.formatFileSize(file.size)})`);
+        continue;
+      }
+    }
+    
+    if (invalidFiles.length > 0) {
+      const currentLang = this.translationService.getCurrentLanguage();
+      const allowedExts = this.getAllowedExtensions(field);
+      const maxSize = this.getMaxFileSize(field);
+      
+      let errorMsg = '';
+      if (invalidFiles.length === filesToUpload.length) {
+        // All files invalid
+        if (allowedExts.length > 0) {
+          // Match backend error message format
+          const allowedTypes = currentLang === 'ar'
+            ? 'PDF، الصور (JPG، PNG)، Excel (XLS، XLSX)، Word (DOC، DOCX)'
+            : 'PDF, Images (JPG, PNG), Excel (XLS, XLSX), Word (DOC, DOCX)';
+          
+          errorMsg = currentLang === 'ar'
+            ? `نوع الملف غير مسموح. الأنواع المسموحة: ${allowedTypes}${maxSize > 0 ? `. الحجم الأقصى: ${this.formatFileSize(maxSize)}` : ''}`
+            : `File type not allowed. Allowed types: ${allowedTypes}${maxSize > 0 ? `. Max size: ${this.formatFileSize(maxSize)}` : ''}`;
+        } else {
+          errorMsg = currentLang === 'ar'
+            ? `الملفات غير صالحة${maxSize > 0 ? `. الحجم الأقصى: ${this.formatFileSize(maxSize)}` : ''}`
+            : `Invalid files${maxSize > 0 ? `. Max size: ${this.formatFileSize(maxSize)}` : ''}`;
+        }
+      } else {
+        errorMsg = currentLang === 'ar'
+          ? `بعض الملفات غير صالحة: ${invalidFiles.join(', ')}`
+          : `Some files are invalid: ${invalidFiles.join(', ')}`;
+      }
+      
+      this.fileUploadErrors[field.id] = errorMsg;
+      input.value = '';
+      return;
+    }
+    
+    // Clear any previous errors
+    this.fileUploadErrors[field.id] = '';
+    
+    // Upload files
+    if (allowMultiple && filesToUpload.length > 1) {
+      this.uploadMultipleFiles(filesToUpload, field);
+    } else {
+      this.uploadFile(filesToUpload[0], field);
+    }
+  }
+
+  /**
+   * Upload file to server
+   */
+  uploadFile(file: File, field: FormFieldDto): void {
+    if (!field.id) {
+      console.error('[FormView] Field ID is missing');
+      const currentLang = this.translationService.getCurrentLanguage();
+      this.fileUploadErrors[field.id!] = currentLang === 'ar'
+        ? 'معرف الحقل مفقود'
+        : 'Field ID is missing';
+      return;
+    }
+    
+    // Note: submissionId will be set from the upload response
+    // For now, we allow upload even if submissionId is 0 (backend should handle creating submission)
+    // The submissionId will be updated from the response after successful upload
+
+    this.uploadingFiles[field.id] = true;
+    this.uploadProgress[field.id] = 0;
+    this.fileUploadErrors[field.id] = '';
+
+    // If submissionId is not set, use form ID as fallback (backend should handle this)
+    const submissionIdToUse = this.submissionId || this.form?.id || 0;
+    
+    // Simulate progress (since HttpClient doesn't provide upload progress by default)
+    // In a real scenario, you might want to use HttpEventType.UploadProgress
+    const progressInterval = setInterval(() => {
+      if (this.uploadProgress[field.id] < 90) {
+        this.uploadProgress[field.id] += 10;
+      }
+    }, 200);
+    
+    this.fileUploadService.uploadFile(
+      file,
+      submissionIdToUse,
+      field.id,
+      field.fieldCode || ''
+    ).subscribe({
+      next: (response) => {
+        clearInterval(progressInterval);
+        this.uploadProgress[field.id!] = 100;
+        setTimeout(() => {
+          this.uploadingFiles[field.id!] = false;
+          this.uploadProgress[field.id!] = 0;
+        }, 500);
+        
+        // Update submissionId from response if available
+        if (response.data?.submissionId && !this.submissionId) {
+          this.submissionId = response.data.submissionId;
+        }
+        
+        // Add to uploaded files list
+        if (!this.uploadedFiles[field.id!]) {
+          this.uploadedFiles[field.id!] = [];
+        }
+        if (response.data) {
+          this.uploadedFiles[field.id!].push(response.data);
+          // Generate preview URL for images and PDFs
+          this.generatePreviewUrl(response.data);
+        }
+        
+        // Reset file input
+        const fileInput = document.getElementById(`file-${field.id}`) as HTMLInputElement;
+        if (fileInput) {
+          fileInput.value = '';
+        }
+      },
+      error: (error) => {
+        clearInterval(progressInterval);
+        this.uploadingFiles[field.id!] = false;
+        this.uploadProgress[field.id!] = 0;
+        const currentLang = this.translationService.getCurrentLanguage();
+        
+        // Extract error message from response if available
+        let errorMessage = currentLang === 'ar'
+          ? 'فشل رفع الملف. يرجى المحاولة مرة أخرى.'
+          : 'Failed to upload file. Please try again.';
+        
+        if (error?.error?.message) {
+          errorMessage = error.error.message;
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+        
+        this.fileUploadErrors[field.id!] = errorMessage;
+        console.error('Error uploading file:', error);
+      }
+    });
+  }
+
+  /**
+   * Upload multiple files to server
+   */
+  uploadMultipleFiles(files: File[], field: FormFieldDto): void {
+    if (!field.id) {
+      console.error('[FormView] Field ID is missing');
+      const currentLang = this.translationService.getCurrentLanguage();
+      this.fileUploadErrors[field.id!] = currentLang === 'ar'
+        ? 'معرف الحقل مفقود'
+        : 'Field ID is missing';
+      return;
+    }
+    
+    // Note: submissionId will be set from the upload response
+    // For now, we allow upload even if submissionId is 0 (backend should handle creating submission)
+    // The submissionId will be updated from the response after successful upload
+
+    this.uploadingFiles[field.id] = true;
+    this.uploadProgress[field.id] = 0;
+    this.fileUploadErrors[field.id] = '';
+
+    // If submissionId is not set, use form ID as fallback (backend should handle this)
+    const submissionIdToUse = this.submissionId || this.form?.id || 0;
+    
+    // Simulate progress for multiple files
+    const progressInterval = setInterval(() => {
+      if (this.uploadProgress[field.id] < 90) {
+        this.uploadProgress[field.id] += 10;
+      }
+    }, 200);
+    
+    this.fileUploadService.uploadMultipleFiles(
+      files,
+      submissionIdToUse,
+      field.id,
+      field.fieldCode || ''
+    ).subscribe({
+      next: (response) => {
+        clearInterval(progressInterval);
+        this.uploadProgress[field.id!] = 100;
+        setTimeout(() => {
+          this.uploadingFiles[field.id!] = false;
+          this.uploadProgress[field.id!] = 0;
+        }, 500);
+        
+        // Update submissionId from response if available
+        if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+          const firstAttachment = response.data[0];
+          if (firstAttachment.submissionId && !this.submissionId) {
+            this.submissionId = firstAttachment.submissionId;
+          }
+        }
+        
+        // Add to uploaded files list
+        if (!this.uploadedFiles[field.id!]) {
+          this.uploadedFiles[field.id!] = [];
+        }
+        if (response.data && Array.isArray(response.data)) {
+          response.data.forEach(attachment => {
+            this.uploadedFiles[field.id!].push(attachment);
+            // Generate preview URL for images and PDFs
+            this.generatePreviewUrl(attachment);
+          });
+        }
+        
+        // Reset file input
+        const fileInput = document.getElementById(`file-${field.id}`) as HTMLInputElement;
+        if (fileInput) {
+          fileInput.value = '';
+        }
+      },
+      error: (error) => {
+        clearInterval(progressInterval);
+        this.uploadingFiles[field.id!] = false;
+        this.uploadProgress[field.id!] = 0;
+        const currentLang = this.translationService.getCurrentLanguage();
+        
+        // Extract error message from response if available
+        let errorMessage = currentLang === 'ar'
+          ? 'فشل رفع الملفات. يرجى المحاولة مرة أخرى.'
+          : 'Failed to upload files. Please try again.';
+        
+        if (error?.error?.message) {
+          errorMessage = error.error.message;
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+        
+        this.fileUploadErrors[field.id!] = errorMessage;
+        console.error('Error uploading files:', error);
+      }
+    });
+  }
+
+  /**
+   * Remove uploaded file
+   */
+  removeFile(fieldId: number, attachmentId: number): void {
+    this.fileUploadService.deleteAttachment(attachmentId).subscribe({
+      next: () => {
+        // Remove from uploaded files list
+        if (this.uploadedFiles[fieldId]) {
+          this.uploadedFiles[fieldId] = this.uploadedFiles[fieldId].filter(
+            file => file.id !== attachmentId
+          );
+        }
+      },
+      error: (error) => {
+        console.error('Error deleting file:', error);
+      }
+    });
+  }
+
+  /**
+   * Format file size
+   */
+  formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  }
+
+  /**
+   * Get allowed file extensions from field's defaultValueJson
+   * If no config is found, returns default allowed extensions (matching backend)
+   */
+  getAllowedExtensions(field: FormFieldDto): string[] {
+    if (!field) {
+      return this.DEFAULT_ALLOWED_EXTENSIONS;
+    }
+
+    // Debug logging
+    console.log('[FormView] getAllowedExtensions for field:', {
+      fieldId: field.id,
+      fieldCode: field.fieldCode,
+      fieldType: field.fieldTypeName,
+      defaultValueJson: field.defaultValueJson
+    });
+
+    if (!field.defaultValueJson || field.defaultValueJson.trim() === '') {
+      console.log('[FormView] No defaultValueJson found, using default extensions');
+      return this.DEFAULT_ALLOWED_EXTENSIONS; // Use default extensions matching backend
+    }
+
+    try {
+      const fileConfig = JSON.parse(field.defaultValueJson);
+      console.log('[FormView] Parsed fileConfig:', fileConfig);
+      
+      // Check for allowedExtensions array
+      if (fileConfig.allowedExtensions && Array.isArray(fileConfig.allowedExtensions) && fileConfig.allowedExtensions.length > 0) {
+        const extensions = fileConfig.allowedExtensions
+          .map((ext: string) => String(ext).toLowerCase().trim())
+          .filter((ext: string) => ext.length > 0);
+        console.log('[FormView] Found allowedExtensions:', extensions);
+        return extensions;
+      }
+      
+      // Also check for customExtensions (backward compatibility)
+      if (fileConfig.customExtensions && Array.isArray(fileConfig.customExtensions) && fileConfig.customExtensions.length > 0) {
+        const extensions = fileConfig.customExtensions
+          .map((ext: string) => String(ext).toLowerCase().trim())
+          .filter((ext: string) => ext.length > 0);
+        console.log('[FormView] Found customExtensions:', extensions);
+        return extensions;
+      }
+      
+      console.log('[FormView] No valid extensions found in config, using default');
+    } catch (e) {
+      // Not a valid JSON, log for debugging
+      console.warn('[FormView] Failed to parse defaultValueJson as JSON:', {
+        error: e,
+        defaultValueJson: field.defaultValueJson,
+        fieldId: field.id,
+        fieldCode: field.fieldCode
+      });
+    }
+
+    return this.DEFAULT_ALLOWED_EXTENSIONS; // Use default extensions if config is invalid
+  }
+
+  /**
+   * Get accepted file types string for input accept attribute
+   */
+  getAcceptedFileTypes(field: FormFieldDto): string {
+    const allowedExtensions = this.getAllowedExtensions(field);
+    if (allowedExtensions.length === 0) {
+      return '*'; // Accept all if no restrictions
+    }
+
+    // Map extensions to MIME types and file extensions
+    const mimeTypeMap: { [key: string]: string } = {
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls': 'application/vnd.ms-excel',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'txt': 'text/plain',
+      'csv': 'text/csv',
+      'zip': 'application/zip',
+      'rar': 'application/x-rar-compressed'
+    };
+
+    const mimeTypes: string[] = [];
+    const extensions: string[] = [];
+
+    allowedExtensions.forEach(ext => {
+      const mimeType = mimeTypeMap[ext.toLowerCase()];
+      if (mimeType) {
+        mimeTypes.push(mimeType);
+      }
+      extensions.push(`.${ext.toLowerCase()}`);
+    });
+
+    return [...mimeTypes, ...extensions].join(',');
+  }
+
+  /**
+   * Check if file extension is allowed
+   */
+  isFileExtensionAllowed(file: File, field: FormFieldDto): boolean {
+    const allowedExtensions = this.getAllowedExtensions(field);
+    
+    // Always validate against allowed extensions (default or configured)
+    if (allowedExtensions.length === 0) {
+      return false; // No extensions allowed
+    }
+
+    // Get file extension
+    const fileName = file.name.toLowerCase();
+    const lastDot = fileName.lastIndexOf('.');
+    if (lastDot === -1) {
+      return false; // No extension
+    }
+
+    const fileExtension = fileName.substring(lastDot + 1).toLowerCase();
+    return allowedExtensions.includes(fileExtension);
+  }
+
+  /**
+   * Get file upload error message for a field
+   */
+  getFileUploadError(fieldId: number | undefined): string {
+    if (!fieldId) return '';
+    return this.fileUploadErrors[fieldId] || '';
+  }
+
+  /**
+   * Get upload progress percentage for a field
+   */
+  getUploadProgress(fieldId: number | undefined): number {
+    if (!fieldId) return 0;
+    return this.uploadProgress[fieldId] || 0;
+  }
+
+  /**
+   * Format allowed extensions for display
+   */
+  formatAllowedExtensions(extensions: string[]): string {
+    if (extensions.length === 0) return '';
+    return extensions.map(ext => `.${ext.toUpperCase()}`).join(', ');
+  }
+
+  /**
+   * Get max file size from field configuration or environment
+   */
+  getMaxFileSize(field: FormFieldDto): number {
+    // Check if maxValue is set in field (could be used for file size in KB)
+    if (field.maxValue && field.maxValue > 0) {
+      return field.maxValue * 1024; // Convert KB to bytes
+    }
+    
+    // Use default from environment
+    return environment.media?.maxFileSize || 10485760; // 10MB default
+  }
+
+  /**
+   * Check if file is an image
+   */
+  isImageFile(attachment: FormSubmissionAttachmentDto): boolean {
+    const contentType = attachment.contentType?.toLowerCase() || '';
+    const fileName = attachment.fileName?.toLowerCase() || '';
+    return contentType.startsWith('image/') || 
+           /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
+  }
+
+  /**
+   * Check if file is a PDF
+   */
+  isPdfFile(attachment: FormSubmissionAttachmentDto): boolean {
+    const contentType = attachment.contentType?.toLowerCase() || '';
+    const fileName = attachment.fileName?.toLowerCase() || '';
+    return contentType === 'application/pdf' || fileName.endsWith('.pdf');
+  }
+
+  /**
+   * Check if file can be previewed
+   */
+  canPreviewFile(attachment: FormSubmissionAttachmentDto): boolean {
+    return this.isImageFile(attachment) || this.isPdfFile(attachment);
+  }
+
+  /**
+   * Generate preview URL for file
+   */
+  generatePreviewUrl(attachment: FormSubmissionAttachmentDto): void {
+    if (!attachment.id || !this.canPreviewFile(attachment)) {
+      return;
+    }
+    
+    // Use download URL as preview URL
+    this.filePreviewUrls[attachment.id] = this.fileUploadService.getDownloadUrl(attachment.id);
+  }
+
+  /**
+   * Get preview URL for attachment
+   */
+  getPreviewUrl(attachment: FormSubmissionAttachmentDto): string | null {
+    if (!attachment.id) return null;
+    return this.filePreviewUrls[attachment.id] || this.fileUploadService.getDownloadUrl(attachment.id);
+  }
+
+  /**
+   * Open file preview modal
+   */
+  openPreview(attachment: FormSubmissionAttachmentDto): void {
+    if (this.canPreviewFile(attachment)) {
+      this.previewFile = attachment;
+      this.showPreviewModal = true;
+    }
+  }
+
+  /**
+   * Close preview modal
+   */
+  closePreview(): void {
+    this.showPreviewModal = false;
+    this.previewFile = null;
+  }
+
+  /**
+   * Get file type icon class
+   */
+  getFileIcon(attachment: FormSubmissionAttachmentDto): string {
+    if (this.isImageFile(attachment)) {
+      return 'pi-image';
+    } else if (this.isPdfFile(attachment)) {
+      return 'pi-file-pdf';
+    } else if (attachment.contentType?.includes('word') || /\.(doc|docx)$/i.test(attachment.fileName || '')) {
+      return 'pi-file-word';
+    } else if (attachment.contentType?.includes('excel') || attachment.contentType?.includes('spreadsheet') || /\.(xls|xlsx)$/i.test(attachment.fileName || '')) {
+      return 'pi-file-excel';
+    } else {
+      return 'pi-file';
+    }
+  }
+
+  /**
+   * Load uploaded files for a field
+   * Note: This method requires a valid submissionId to work properly
+   * This method should only be called after a file has been uploaded (when submissionId is available)
+   * IMPORTANT: This method will NOT make any HTTP request if submissionId is 0 or invalid
+   */
+  loadFieldFiles(fieldId: number): void {
+    if (!fieldId) return;
+    
+    // CRITICAL: Only try to load files if we have a valid submissionId
+    // If submissionId is 0, null, undefined, or invalid, skip loading completely (no HTTP request)
+    // This prevents 404 errors when the form is first loaded
+    const hasValidSubmissionId = this.submissionId && 
+                                  this.submissionId !== 0 && 
+                                  this.submissionId !== null && 
+                                  this.submissionId !== undefined &&
+                                  !isNaN(this.submissionId) &&
+                                  Number(this.submissionId) > 0;
+    
+    // DEBUG: Uncomment to see why loadFieldFiles is being called
+    // console.log('[FormView] loadFieldFiles called', {
+    //   fieldId,
+    //   submissionId: this.submissionId,
+    //   hasValidSubmissionId,
+    //   type: typeof this.submissionId
+    // });
+    
+    if (!hasValidSubmissionId) {
+      // Silently skip - this is expected behavior when no files have been uploaded yet
+      // Initialize empty array to prevent UI issues
+      if (!this.uploadedFiles[fieldId]) {
+        this.uploadedFiles[fieldId] = [];
+      }
+      return; // Exit early - NO HTTP REQUEST will be made
+    }
+    
+    // Only make HTTP request if we have a valid submissionId
+    // Pass submissionId to service to prevent HTTP request if it's 0 or invalid
+    // The service will also check submissionId before making HTTP request
+    // Use catchError to handle errors gracefully without breaking the UI
+    this.fileUploadService.getFieldAttachments(fieldId, this.submissionId).pipe(
+      catchError((error) => {
+        // Silently handle all errors - don't log to console to avoid cluttering
+        // 404 is normal when no files have been uploaded yet for this field
+        // Other errors are also handled gracefully
+        this.uploadedFiles[fieldId] = [];
+        return of({ statusCode: 200, message: 'No files found', data: [] });
+      })
+    ).subscribe({
+      next: (response) => {
+        if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
+          this.uploadedFiles[fieldId] = response.data;
+          // Generate preview URLs for all loaded files
+          response.data.forEach(attachment => {
+            this.generatePreviewUrl(attachment);
+          });
+          // Only log success, not errors
+          // console.log('[FormView] Loaded', response.data.length, 'files for field:', fieldId);
+        } else {
+          // No files found, initialize empty array
+          if (!this.uploadedFiles[fieldId]) {
+            this.uploadedFiles[fieldId] = [];
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Load all uploaded files for file fields in the form
+   * Note: This method should only be called after a file has been uploaded (when submissionId is available)
+   * It should NOT be called on initial form load to prevent 404 errors
+   */
+  loadAllFieldFiles(): void {
+    if (!this.tabs || this.tabs.length === 0) return;
+    
+    // CRITICAL: Only load files if we have a valid submissionId
+    // Check for valid submissionId (not 0, null, undefined, or NaN)
+    const hasValidSubmissionId = this.submissionId && 
+                                  this.submissionId !== 0 && 
+                                  this.submissionId !== null && 
+                                  this.submissionId !== undefined &&
+                                  !isNaN(this.submissionId);
+    
+    if (!hasValidSubmissionId) {
+      // Silently skip - this is expected behavior when no files have been uploaded yet
+      return;
+    }
+    
+    this.tabs.forEach(tab => {
+      if (tab.fields && tab.fields.length > 0) {
+        tab.fields.forEach(field => {
+          // Only load files for file type fields
+          if (this.getFieldType(field) === 'file' && field.id) {
+            // Initialize empty array if not exists
+            if (!this.uploadedFiles[field.id]) {
+              this.uploadedFiles[field.id] = [];
+            }
+            // loadFieldFiles will check submissionId again, but we check here too for safety
+            this.loadFieldFiles(field.id);
+          }
+        });
+      }
+    });
   }
 
   // ===== Multilingual Content Helpers =====

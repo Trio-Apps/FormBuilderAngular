@@ -1,0 +1,438 @@
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" [routerLink]="['/form-builder/grids', tabId]" [title]="translateLabel('common.back') || 'Back to Grids'">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">{{ translateLabel('grids.columns.title') || 'Manage Grid Columns' }}</h1>
+          <p class="page-subtitle">
+            {{ grid?.gridName || 'Grid' }} - {{ translateLabel('grids.columns.subtitle') || 'Columns' }}
+          </p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadColumns()" [disabled]="loading" [title]="translateLabel('common.refresh') || 'Refresh'">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openColumnModal()" [disabled]="loading">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.columns.newColumn') || 'New Column' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>{{ translateLabel('common.forms') || 'Forms' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a [routerLink]="['/form-builder/tabs', formBuilderId]" class="breadcrumb-link">
+        <i class="pi pi-folder"></i>
+        <span>{{ translateLabel('common.tabs') || 'Tabs' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a [routerLink]="['/form-builder/grids', tabId]" class="breadcrumb-link">
+        <i class="pi pi-table"></i>
+        <span>{{ translateLabel('common.grids') || 'Grids' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-list"></i>
+        <span>{{ translateLabel('grids.columns.title') || 'Columns' }}</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-list"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ columns.length }}</div>
+          <div class="stat-label">{{ translateLabel('grids.columns.totalColumns') || 'Total Columns' }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveColumnsCount() }}</div>
+          <div class="stat-label">{{ translateLabel('grids.columns.activeColumns') || 'Active Columns' }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-info">
+          <i class="pi pi-asterisk"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getRequiredColumnsCount() }}</div>
+          <div class="stat-label">{{ translateLabel('grids.columns.requiredColumns') || 'Required Columns' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Columns Table Card -->
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-list"></i>
+          {{ translateLabel('grids.columns.columnsList') || 'Columns List' }}
+        </h3>
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              [placeholder]="translateLabel('grids.columns.searchColumns') || 'Search columns...'"
+              class="search-input"
+              [(ngModel)]="searchTerm"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>{{ translateLabel('grids.columns.loadingColumns') || 'Loading columns...' }}</p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!loading && filteredColumns.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-inbox"></i>
+        </div>
+        <h3>{{ translateLabel('grids.columns.noColumnsFound') || 'No columns found' }}</h3>
+        <p>{{ translateLabel('grids.columns.getStarted') || 'Get started by creating your first column' }}</p>
+        <button class="btn-primary" (click)="openColumnModal()">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.columns.addFirstColumn') || 'Add First Column' }}</span>
+        </button>
+      </div>
+
+      <!-- Columns Table -->
+      <div *ngIf="!loading && filteredColumns.length > 0" class="table-wrapper">
+        <table class="fields-table">
+          <thead>
+            <tr>
+              <th class="col-order">#</th>
+              <th class="col-name">{{ translateLabel('grids.columns.columnName') || 'Column Name' }}</th>
+              <th class="col-code">{{ translateLabel('grids.columns.columnCode') || 'Column Code' }}</th>
+              <th class="col-type">{{ translateLabel('grids.columns.fieldType') || 'Field Type' }}</th>
+              <th class="col-type">{{ translateLabel('grids.columns.dataType') || 'Data Type' }}</th>
+              <th class="col-required">{{ translateLabel('common.required') || 'Required' }}</th>
+              <th class="col-status">{{ translateLabel('common.status') || 'Status' }}</th>
+              <th class="col-actions">{{ translateLabel('common.actions') || 'Actions' }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let column of filteredColumns; let i = index">
+              <td class="col-order">
+                <span class="order-number">{{ column.columnOrder || i + 1 }}</span>
+              </td>
+              <td class="col-name">
+                <div class="field-name-wrapper">
+                  <div class="field-name-main">{{ column.columnName || '-' }}</div>
+                  <div class="field-name-meta" *ngIf="column.foreignColumnName">
+                    <span class="meta-item">
+                      <i class="pi pi-language"></i> {{ column.foreignColumnName }}
+                    </span>
+                  </div>
+                </div>
+              </td>
+              <td class="col-code">
+                <code class="code-badge">{{ column.columnCode || '-' }}</code>
+              </td>
+              <td class="col-type">
+                <span class="type-badge">
+                  {{ getFieldTypeName(column.fieldTypeId) }}
+                </span>
+              </td>
+              <td class="col-type">
+                <span class="type-badge">
+                  {{ getDataTypeLabel(column.dataType || 'text') }}
+                </span>
+              </td>
+              <td class="col-required">
+                <span class="required-badge" [class.required-yes]="column.isRequired" [class.required-no]="!column.isRequired">
+                  <i class="pi" [class.pi-check]="column.isRequired" [class.pi-times]="!column.isRequired"></i>
+                  {{ column.isRequired ? (translateLabel('common.yes') || 'Yes') : (translateLabel('common.no') || 'No') }}
+                </span>
+              </td>
+              <td class="col-status">
+                <span class="status-badge" [class.status-active]="column.isActive" [class.status-inactive]="!column.isActive">
+                  <i class="pi" [class.pi-check-circle]="column.isActive" [class.pi-times-circle]="!column.isActive"></i>
+                  {{ column.isActive ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <div class="actions-menu">
+                  <button class="action-btn action-edit" (click)="openColumnModal(column)" [title]="translateLabel('common.edit') || 'Edit'">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button class="action-btn action-delete" (click)="deleteColumn(column.id)" [title]="translateLabel('common.delete') || 'Delete'">
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Column Modal -->
+  <p-dialog
+    [(visible)]="showColumnModal"
+    [modal]="true"
+    [header]="editingColumn ? (translateLabel('grids.columns.editColumn') || 'Edit Column') : (translateLabel('grids.columns.addColumn') || 'Add Column')"
+    [style]="{ width: '500px' }"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="closeColumnModal()"
+  >
+    <form [formGroup]="columnForm" (ngSubmit)="saveColumn()">
+      <!-- Language Toggle Buttons -->
+      <div class="mb-3 d-flex gap-2">
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'en'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'en'"
+          (click)="setInputLanguage('en')">
+          English
+        </button>
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'ar'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'ar'"
+          (click)="setInputLanguage('ar')">
+          العربية
+        </button>
+      </div>
+
+      <!-- Field Type -->
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.columns.fieldType') || 'Field Type' }} <span class="text-danger">*</span></label>
+        <select
+          class="form-control"
+          formControlName="fieldTypeId"
+          [class.is-invalid]="columnForm.get('fieldTypeId')?.invalid && columnForm.get('fieldTypeId')?.touched">
+          <option value="">{{ translateLabel('grids.columns.selectFieldType') || 'Select Field Type' }}</option>
+          <option *ngFor="let fieldType of fieldTypes" [value]="fieldType.id">
+            {{ fieldType.typeName }}
+          </option>
+        </select>
+        <div class="invalid-feedback" *ngIf="columnForm.get('fieldTypeId')?.invalid && columnForm.get('fieldTypeId')?.touched">
+          {{ translateLabel('grids.columns.fieldTypeRequired') || 'Field Type is required' }}
+        </div>
+      </div>
+
+      <!-- English Column Name -->
+      <div class="mb-3" *ngIf="currentInputLanguage === 'en'">
+        <label class="form-label">{{ translateLabel('grids.columns.columnName') || 'Column Name' }} <span class="text-danger">*</span></label>
+        <input
+          type="text"
+          class="form-control"
+          formControlName="columnName"
+          [class.is-invalid]="columnForm.get('columnName')?.invalid && columnForm.get('columnName')?.touched"
+          [placeholder]="translateLabel('grids.columns.enterColumnName') || 'Enter column name'"
+        />
+        <div class="invalid-feedback" *ngIf="columnForm.get('columnName')?.invalid && columnForm.get('columnName')?.touched">
+          {{ translateLabel('fields.fieldNameRequired') || 'Column name is required' }}
+        </div>
+      </div>
+
+      <!-- Arabic Column Name -->
+      <div class="mb-3" *ngIf="currentInputLanguage === 'ar'">
+        <label class="form-label">{{ translateLabel('grids.columns.columnName') || 'Column Name' }}</label>
+        <input
+          type="text"
+          class="form-control"
+          formControlName="foreignColumnName"
+          [placeholder]="translateLabel('grids.columns.enterColumnName') || 'Enter column name'"
+        />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.columns.columnCode') || 'Column Code' }} <span class="text-danger">*</span></label>
+        <input
+          type="text"
+          class="form-control"
+          formControlName="columnCode"
+          [class.is-invalid]="columnForm.get('columnCode')?.invalid && columnForm.get('columnCode')?.touched"
+          [placeholder]="translateLabel('grids.columns.enterColumnCode') || 'Enter column code'"
+        />
+        <div class="invalid-feedback" *ngIf="columnForm.get('columnCode')?.invalid && columnForm.get('columnCode')?.touched">
+          {{ translateLabel('fields.fieldCodeInvalid') || 'Invalid format. Use only letters, numbers and underscores' }}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.columns.dataType') || 'Data Type' }} <span class="text-danger">*</span></label>
+        <select class="form-control" formControlName="dataType">
+          <option *ngFor="let type of dataTypes" [value]="type.value">
+            {{ currentInputLanguage === 'ar' ? type.labelAr : type.label }}
+          </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.columns.columnOrder') || 'Column Order' }}</label>
+        <input
+          type="number"
+          class="form-control"
+          formControlName="columnOrder"
+          min="1"
+          [placeholder]="translateLabel('grids.columns.columnOrder') || 'Column Order'"
+        />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.columns.defaultValue') || 'Default Value' }}</label>
+        <input
+          type="text"
+          class="form-control"
+          formControlName="defaultValue"
+          [placeholder]="translateLabel('grids.columns.enterDefaultValue') || 'Enter default value'"
+        />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label d-block">{{ translateLabel('common.required') || 'Required' }}</label>
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="isRequired"
+            formControlName="isRequired"
+          />
+          <label class="form-check-label" for="isRequired">
+            {{ columnForm.get('isRequired')?.value ? (translateLabel('common.yes') || 'Yes') : (translateLabel('common.no') || 'No') }}
+          </label>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label d-block">{{ translateLabel('common.status') || 'Status' }}</label>
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="isActive"
+            formControlName="isActive"
+          />
+          <label class="form-check-label" for="isActive">
+            {{ columnForm.get('isActive')?.value ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
+          </label>
+        </div>
+      </div>
+
+      <!-- Column Options Section (for Select type) -->
+      <div class="mb-3" *ngIf="showOptionsSection">
+        <div class="form-section-header">
+          <h5 class="section-title">
+            <i class="pi pi-list"></i>
+            {{ translateLabel('grids.columns.columnOptions') || 'Column Options' }}
+          </h5>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            (click)="addColumnOption()">
+            <i class="pi pi-plus"></i>
+            {{ translateLabel('grids.columns.addOption') || 'Add Option' }}
+          </button>
+        </div>
+
+        <div class="options-list" *ngIf="columnOptionsFormArray.length > 0">
+          <div
+            *ngFor="let option of columnOptionsFormArray.controls; let i = index"
+            class="option-item"
+            [formGroup]="$any(option)">
+            <div class="option-row">
+              <div class="option-order">{{ i + 1 }}</div>
+              <div class="option-inputs">
+                <div class="row">
+                  <div class="col-md-4" *ngIf="currentInputLanguage === 'en'">
+                    <input
+                      type="text"
+                      class="form-control form-control-sm"
+                      formControlName="optionValue"
+                      [placeholder]="translateLabel('grids.columns.optionValue') || 'Option Value'"
+                    />
+                  </div>
+                  <div class="col-md-4" *ngIf="currentInputLanguage === 'en'">
+                    <input
+                      type="text"
+                      class="form-control form-control-sm"
+                      formControlName="optionText"
+                      [placeholder]="translateLabel('grids.columns.optionText') || 'Option Text'"
+                    />
+                  </div>
+                  <div class="col-md-4" *ngIf="currentInputLanguage === 'ar'">
+                    <input
+                      type="text"
+                      class="form-control form-control-sm"
+                      formControlName="foreignOptionText"
+                      [placeholder]="translateLabel('grids.columns.optionText') || 'Option Text (Arabic)'"
+                    />
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="btn btn-sm btn-danger"
+                (click)="removeColumnOption(i)"
+                [disabled]="columnOptionsFormArray.length === 1">
+                <i class="pi pi-trash"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="alert alert-info" *ngIf="columnOptionsFormArray.length === 0">
+          {{ translateLabel('grids.columns.noOptions') || 'No options added. Click "Add Option" to add options.' }}
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button
+          pButton
+          type="button"
+          [label]="translateLabel('common.cancel') || 'Cancel'"
+          (click)="closeColumnModal()"
+          class="p-button-text"
+        >
+        </button>
+
+        <button
+          pButton
+          type="submit"
+          [disabled]="columnForm.invalid || loading"
+          class="p-button-primary"
+        >
+          <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>
+          {{ translateLabel('common.save') || 'Save' }}
+        </button>
+      </div>
+    </form>
+  </p-dialog>
+</div>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

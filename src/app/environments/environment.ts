@@ -108,6 +108,7 @@ export const environment = {
       { id: 10, name: 'Password', code: 'password', icon: 'pi pi-lock' },
       { id: 11, name: 'File', code: 'file', icon: 'pi pi-file' },
       { id: 12, name: 'Image', code: 'image', icon: 'pi pi-image' },
+      { id: 13, name: 'Grid', code: 'grid', icon: 'pi pi-table' },
     ],
     
     validationRules: [

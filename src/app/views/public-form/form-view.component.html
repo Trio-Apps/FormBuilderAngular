@@ -1,20 +1,37 @@
 <div class="form-viewer-container" *ngIf="!loading && !notFound; else stateTemplate">
-  <!-- Language Toggle Buttons -->
-  <div class="language-toggle-container">
-    <button
-      type="button"
-      class="language-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'en'"
-      (click)="switchLanguage('en')">
-      English
-    </button>
-    <button
-      type="button"
-      class="language-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'ar'"
-      (click)="switchLanguage('ar')">
-      العربية
-    </button>
+  <!-- Language Dropdown Button -->
+  <div class="language-dropdown-container">
+    <div class="language-dropdown-wrapper">
+      <button
+        type="button"
+        class="language-sphere-btn"
+        (click)="showLanguageDropdown = !showLanguageDropdown"
+        [attr.aria-expanded]="showLanguageDropdown">
+        <span class="language-icon">🌐</span>
+        <span class="language-text">{{ translationService.getCurrentLanguage() === 'ar' ? 'العربية' : 'English' }}</span>
+        <i class="pi pi-chevron-down" [class.rotated]="showLanguageDropdown"></i>
+      </button>
+      <div class="language-dropdown-menu" *ngIf="showLanguageDropdown">
+        <button
+          type="button"
+          class="language-option"
+          [class.active]="translationService.getCurrentLanguage() === 'en'"
+          (click)="switchLanguage('en')">
+          <span class="language-flag">🇬🇧</span>
+          <span>English</span>
+          <i class="pi pi-check" *ngIf="translationService.getCurrentLanguage() === 'en'"></i>
+        </button>
+        <button
+          type="button"
+          class="language-option"
+          [class.active]="translationService.getCurrentLanguage() === 'ar'"
+          (click)="switchLanguage('ar')">
+          <span class="language-flag">🇸🇦</span>
+          <span>العربية</span>
+          <i class="pi pi-check" *ngIf="translationService.getCurrentLanguage() === 'ar'"></i>
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Form Header -->
@@ -40,7 +57,6 @@
     </ul>
   </div>
 
-  <!-- Form Content -->
   <div class="form-content" *ngIf="tabs && tabs.length > 0">
     <div 
       class="tab-panel"
@@ -171,14 +187,129 @@
               />
 
               <!-- File Upload -->
-              <div *ngSwitchCase="'file'" class="file-upload-disabled">
-                <input
-                  type="file"
-                  class="form-input file-input"
-                />
-                <span class="file-upload-hint">
-                  {{ translationService.translate('formView.fileUploadDisabled') }}
-                </span>
+              <div *ngSwitchCase="'file'" class="file-upload-wrapper">
+                <!-- Allowed Extensions Info - Show before file input -->
+                <div class="allowed-extensions-info" *ngIf="getAllowedExtensions(field).length > 0">
+                  <i class="pi pi-info-circle"></i>
+                  <span>
+                    {{ translationService.getCurrentLanguage() === 'ar' ? 'الامتدادات المسموحة:' : 'Allowed extensions:' }}
+                    <strong>{{ formatAllowedExtensions(getAllowedExtensions(field)) }}</strong>
+                  </span>
+                </div>
+                
+                <div class="file-upload-area">
+                  <input
+                    type="file"
+                    [id]="'file-' + field.id"
+                    class="file-input-hidden"
+                    (change)="onFileSelected($event, field)"
+                    [disabled]="uploadingFiles[field.id!]"
+                    [multiple]="field.fieldType?.allowMultiple || false"
+                    [accept]="getAcceptedFileTypes(field)"
+                  />
+                  <label [for]="'file-' + field.id" class="file-upload-label" [class.uploading]="uploadingFiles[field.id!]">
+                    <i class="pi pi-cloud-upload"></i>
+                    <span *ngIf="!uploadingFiles[field.id!]">
+                      {{ (field.fieldType?.allowMultiple ? (translationService.getCurrentLanguage() === 'ar' ? 'اختر ملفات للرفع' : 'Choose files to upload') : (translationService.getCurrentLanguage() === 'ar' ? 'اختر ملف للرفع' : 'Choose file to upload')) }}
+                    </span>
+                    <span *ngIf="uploadingFiles[field.id!]">
+                      {{ translationService.getCurrentLanguage() === 'ar' ? 'جاري الرفع...' : 'Uploading...' }}
+                    </span>
+                  </label>
+                  
+                  <!-- Upload Progress Bar -->
+                  <div class="upload-progress-container" *ngIf="uploadingFiles[field.id!]">
+                    <div class="upload-progress-bar">
+                      <div 
+                        class="upload-progress-fill" 
+                        [style.width.%]="getUploadProgress(field.id!)">
+                      </div>
+                    </div>
+                    <div class="upload-progress-text">
+                      {{ getUploadProgress(field.id!) }}%
+                    </div>
+                  </div>
+                  
+                  <div class="file-size-info" *ngIf="getMaxFileSize(field) > 0">
+                    <small>
+                      {{ translationService.getCurrentLanguage() === 'ar' ? 'الحجم الأقصى:' : 'Max size:' }}
+                      <strong>{{ formatFileSize(getMaxFileSize(field)) }}</strong>
+                    </small>
+                  </div>
+                </div>
+                
+                <!-- File Upload Error -->
+                <div class="file-upload-error" *ngIf="getFileUploadError(field.id!)">
+                  <i class="pi pi-exclamation-triangle"></i>
+                  <span>{{ getFileUploadError(field.id!) }}</span>
+                </div>
+                
+                <!-- Uploaded Files List -->
+                <div class="uploaded-files-list" *ngIf="uploadedFiles[field.id!] && uploadedFiles[field.id!].length > 0">
+                  <div class="uploaded-file-item" *ngFor="let attachment of uploadedFiles[field.id!]">
+                    <!-- File Preview Thumbnail (for images) -->
+                    <div class="file-preview-thumbnail" *ngIf="isImageFile(attachment) && getPreviewUrl(attachment)">
+                      <img [src]="getPreviewUrl(attachment)" [alt]="attachment.fileName" (click)="openPreview(attachment)" />
+                    </div>
+                    
+                    <!-- File Icon -->
+                    <div class="file-icon" [class.has-preview]="canPreviewFile(attachment)" (click)="canPreviewFile(attachment) && openPreview(attachment)">
+                      <i [class]="getFileIcon(attachment)"></i>
+                    </div>
+                    
+                    <!-- File Info -->
+                    <div class="file-info">
+                      <span class="file-name" [title]="attachment.fileName">{{ attachment.fileName }}</span>
+                      <span class="file-size">{{ formatFileSize(attachment.fileSize) }}</span>
+                    </div>
+                    
+                    <!-- File Actions -->
+                    <div class="file-actions">
+                      <button 
+                        type="button" 
+                        class="preview-btn" 
+                        *ngIf="canPreviewFile(attachment)"
+                        (click)="openPreview(attachment)"
+                        [title]="translationService.getCurrentLanguage() === 'ar' ? 'معاينة' : 'Preview'">
+                        <i class="pi pi-eye"></i>
+                      </button>
+                      <a 
+                        [href]="fileUploadService.getDownloadUrl(attachment.id!)" 
+                        target="_blank" 
+                        class="download-link"
+                        [title]="translationService.getCurrentLanguage() === 'ar' ? 'تحميل' : 'Download'">
+                        <i class="pi pi-download"></i>
+                      </a>
+                      <button 
+                        type="button" 
+                        class="remove-file-btn" 
+                        (click)="removeFile(field.id!, attachment.id!)"
+                        [title]="translationService.getCurrentLanguage() === 'ar' ? 'حذف' : 'Remove'">
+                        <i class="pi pi-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- File Preview Modal -->
+                <div class="preview-modal-overlay" *ngIf="showPreviewModal && previewFile" (click)="closePreview()">
+                  <div class="preview-modal-content" (click)="$event.stopPropagation()">
+                    <button type="button" class="close-preview-btn" (click)="closePreview()">
+                      <i class="pi pi-times"></i>
+                    </button>
+                    <div class="preview-container">
+                      <img *ngIf="isImageFile(previewFile)" [src]="getPreviewUrl(previewFile!)" [alt]="previewFile!.fileName" />
+                      <iframe *ngIf="isPdfFile(previewFile)" [src]="getPreviewUrl(previewFile!)" frameborder="0"></iframe>
+                    </div>
+                    <div class="preview-footer">
+                      <span class="preview-file-name">{{ previewFile!.fileName }}</span>
+                      <a [href]="fileUploadService.getDownloadUrl(previewFile!.id!)" target="_blank" class="download-link">
+                        <i class="pi pi-download"></i>
+                        {{ translationService.getCurrentLanguage() === 'ar' ? 'تحميل' : 'Download' }}
+                      </a>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <!-- Switch / Toggle -->
@@ -192,6 +323,14 @@
                   <span class="switch-slider"></span>
                 </label>
               </div>
+
+              <!-- Grid (Line Items Grid) -->
+              <app-grid-view
+                *ngSwitchCase="'grid'"
+                [field]="field"
+                [submissionId]="submissionId"
+                [formBuilderId]="form?.id || 0">
+              </app-grid-view>
 
               <!-- Default: Text -->
               <input

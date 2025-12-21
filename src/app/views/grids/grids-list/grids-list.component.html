@@ -1,0 +1,319 @@
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" [routerLink]="['/form-builder/tabs', formBuilderId]" [title]="translateLabel('common.back') || 'Back to Tabs'">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">{{ translateLabel('grids.title') || 'Manage Grids' }}</h1>
+          <p class="page-subtitle">
+            {{ translateLabel('grids.subtitle') || 'Tab' }}: {{ tabName || tabId }}
+          </p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadGrids()" [disabled]="loading" [title]="translateLabel('common.refresh') || 'Refresh'">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openGridModal()" [disabled]="loading">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.newGrid') || 'New Grid' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>{{ translateLabel('common.forms') || 'Forms' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a [routerLink]="['/form-builder/tabs', formBuilderId]" class="breadcrumb-link">
+        <i class="pi pi-folder"></i>
+        <span>{{ translateLabel('common.tabs') || 'Tabs' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-table"></i>
+        <span>{{ translateLabel('common.grids') || 'Grids' }}</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-table"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ grids.length }}</div>
+          <div class="stat-label">{{ translateLabel('grids.totalGrids') || 'Total Grids' }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveGridsCount() }}</div>
+          <div class="stat-label">{{ translateLabel('grids.activeGrids') || 'Active Grids' }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-info">
+          <i class="pi pi-list"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getTotalColumnsCount() }}</div>
+          <div class="stat-label">{{ translateLabel('grids.totalColumns') || 'Total Columns' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grids Table Card -->
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-table"></i>
+          {{ translateLabel('grids.gridsList') || 'Grids List' }}
+        </h3>
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              [placeholder]="translateLabel('grids.searchGrids') || 'Search grids...'"
+              class="search-input"
+              [(ngModel)]="searchTerm"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>{{ translateLabel('grids.loadingGrids') || 'Loading grids...' }}</p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!loading && filteredGrids.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-inbox"></i>
+        </div>
+        <h3>{{ translateLabel('grids.noGridsFound') || 'No grids found' }}</h3>
+        <p>{{ translateLabel('grids.getStarted') || 'Get started by creating your first grid' }}</p>
+        <button class="btn-primary" (click)="openGridModal()">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.addFirstGrid') || 'Add First Grid' }}</span>
+        </button>
+      </div>
+
+      <!-- Grids Table -->
+      <div *ngIf="!loading && filteredGrids.length > 0" class="table-wrapper">
+        <table class="fields-table">
+          <thead>
+            <tr>
+              <th class="col-order">#</th>
+              <th class="col-name">{{ translateLabel('grids.gridName') || 'Grid Name' }}</th>
+              <th class="col-code">{{ translateLabel('grids.gridCode') || 'Grid Code' }}</th>
+              <th class="col-type">{{ translateLabel('grids.gridOrder') || 'Order' }}</th>
+              <th class="col-options">{{ translateLabel('common.columns') || 'Columns' }}</th>
+              <th class="col-status">{{ translateLabel('common.status') || 'Status' }}</th>
+              <th class="col-actions">{{ translateLabel('common.actions') || 'Actions' }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let grid of filteredGrids; let i = index">
+              <td class="col-order">
+                <span class="order-number">{{ grid.gridOrder || i + 1 }}</span>
+              </td>
+              <td class="col-name">
+                <div class="field-name-wrapper">
+                  <div class="field-name-main">{{ grid.gridName || '-' }}</div>
+                  <div class="field-name-meta" *ngIf="grid.foreignGridName">
+                    <span class="meta-item">
+                      <i class="pi pi-language"></i> {{ grid.foreignGridName }}
+                    </span>
+                  </div>
+                </div>
+              </td>
+              <td class="col-code">
+                <code class="code-badge">{{ grid.gridCode || '-' }}</code>
+              </td>
+              <td class="col-type">
+                <span class="type-badge">
+                  {{ grid.gridOrder || '-' }}
+                </span>
+              </td>
+              <td class="col-options">
+                <span class="options-count" *ngIf="grid.columns && grid.columns.length > 0">
+                  <i class="pi pi-list"></i>
+                  {{ grid.columns.length }}
+                </span>
+                <span class="options-count empty" *ngIf="!grid.columns || grid.columns.length === 0">
+                  {{ translateLabel('common.noData') || 'No Data' }}
+                </span>
+              </td>
+              <td class="col-status">
+                <span class="status-badge" [class.status-active]="grid.isActive" [class.status-inactive]="!grid.isActive">
+                  <i class="pi" [class.pi-check-circle]="grid.isActive" [class.pi-times-circle]="!grid.isActive"></i>
+                  {{ grid.isActive ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <div class="actions-menu">
+                  <button class="action-btn action-edit" (click)="openGridModal(grid)" [title]="translateLabel('common.edit') || 'Edit'">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button class="action-btn action-duplicate" (click)="navigateToGridColumns(grid.id)" [title]="translateLabel('grids.manageColumns') || 'Manage Columns'">
+                    <i class="pi pi-list"></i>
+                  </button>
+                  <button class="action-btn action-table" (click)="navigateToGridRows(grid.id)" [title]="translateLabel('grids.manageRows') || 'Manage Rows'">
+                    <i class="pi pi-bars"></i>
+                  </button>
+                  <button class="action-btn action-delete" (click)="deleteGrid(grid.id)" [title]="translateLabel('common.delete') || 'Delete'">
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Grid Modal -->
+  <p-dialog
+    [(visible)]="showGridModal"
+    [modal]="true"
+    [header]="editingGrid ? (translateLabel('grids.editGrid') || 'Edit Grid') : (translateLabel('grids.addGrid') || 'Add Grid')"
+    [style]="{ width: '450px' }"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="closeGridModal()"
+  >
+    <form (ngSubmit)="saveGrid()">
+      <!-- Language Toggle Buttons -->
+      <div class="mb-3 d-flex gap-2">
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'en'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'en'"
+          (click)="setInputLanguage('en')">
+          English
+        </button>
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'ar'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'ar'"
+          (click)="setInputLanguage('ar')">
+          العربية
+        </button>
+      </div>
+
+      <!-- English Grid Name -->
+      <div class="mb-3" *ngIf="currentInputLanguage === 'en'">
+        <label class="form-label">{{ translateLabel('grids.gridName') || 'Grid Name' }} <span class="text-danger">*</span></label>
+        <input
+          type="text"
+          class="form-control"
+          [(ngModel)]="gridName"
+          name="gridName"
+          required
+          [placeholder]="translateLabel('grids.enterGridName') || 'Enter grid name'"
+        />
+      </div>
+
+      <!-- Arabic Grid Name -->
+      <div class="mb-3" *ngIf="currentInputLanguage === 'ar'">
+        <label class="form-label">{{ translateLabel('grids.gridName') || 'Grid Name' }}</label>
+        <input
+          type="text"
+          class="form-control"
+          [(ngModel)]="foreignGridName"
+          name="foreignGridName"
+          [placeholder]="translateLabel('grids.enterGridName') || 'Enter grid name'"
+        />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.gridCode') || 'Grid Code' }} <span class="text-danger">*</span></label>
+        <input
+          type="text"
+          class="form-control"
+          [(ngModel)]="gridCode"
+          name="gridCode"
+          required
+          [placeholder]="translateLabel('grids.enterGridCode') || 'Enter grid code'"
+        />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.gridOrder') || 'Grid Order' }}</label>
+        <input
+          type="number"
+          class="form-control"
+          [(ngModel)]="gridOrder"
+          name="gridOrder"
+          min="1"
+          [placeholder]="translateLabel('grids.gridOrder') || 'Grid Order'"
+        />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label d-block">{{ translateLabel('common.status') || 'Status' }}</label>
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="isActive"
+            [(ngModel)]="isActive"
+            name="isActive"
+          />
+          <label class="form-check-label" for="isActive">
+            {{ isActive ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
+          </label>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button
+          pButton
+          type="button"
+          [label]="translateLabel('common.cancel') || 'Cancel'"
+          (click)="closeGridModal()"
+          class="p-button-text"
+        >
+        </button>
+
+        <button
+          pButton
+          type="submit"
+          [disabled]="!gridName || !gridCode || loading"
+          class="p-button-primary"
+        >
+          <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>
+          {{ translateLabel('common.save') || 'Save' }}
+        </button>
+      </div>
+    </form>
+  </p-dialog>
+</div>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

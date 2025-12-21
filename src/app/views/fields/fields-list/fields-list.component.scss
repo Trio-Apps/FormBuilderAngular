@@ -1178,3 +1178,252 @@
     }
   }
 }
+
+// File Upload Preview Section
+.file-upload-preview {
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  margin-top: 12px;
+}
+
+.file-upload-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #e3f2fd;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  color: #1976d2;
+  font-size: 14px;
+
+  i {
+    font-size: 18px;
+  }
+}
+
+.file-input-preview {
+  .file-input-preview {
+    padding: 12px;
+    border: 2px dashed #dadce0;
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  .form-text {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #5f6368;
+  }
+}
+
+// File Extensions Section
+.file-extensions-section {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.extensions-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #111827;
+  font-size: 14px;
+  margin-bottom: 12px;
+
+  i {
+    font-size: 16px;
+    color: #667eea;
+  }
+}
+
+.extensions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.extension-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: #667eea;
+    background: #f0ebf8;
+  }
+
+  &.selected {
+    border-color: #667eea;
+    background: #f0ebf8;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  input[type="checkbox"] {
+    margin-right: 8px;
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+  }
+
+  .extension-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    flex: 1;
+    margin: 0;
+  }
+
+  .extension-value {
+    font-weight: 600;
+    color: #667eea;
+    font-size: 13px;
+  }
+
+  .extension-name {
+    font-size: 12px;
+    color: #6b7280;
+  }
+}
+
+// Custom Extensions Section
+.custom-extensions-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #e5e7eb;
+}
+
+.custom-extensions-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #111827;
+  font-size: 14px;
+  margin-bottom: 12px;
+
+  i {
+    font-size: 16px;
+    color: #10b981;
+  }
+}
+
+.add-custom-extension {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.custom-extension-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+
+  &:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  &::placeholder {
+    color: #9ca3af;
+  }
+}
+
+.btn-add-extension {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    transform: translateY(-2px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  i {
+    font-size: 14px;
+  }
+}
+
+.custom-extensions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.custom-extension-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #ecfdf5;
+  border: 2px solid #10b981;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.custom-extension-value {
+  color: #059669;
+}
+
+.btn-remove-custom-extension {
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #ef4444;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background: #fee2e2;
+    color: #dc2626;
+  }
+
+  i {
+    font-size: 12px;
+  }
+}

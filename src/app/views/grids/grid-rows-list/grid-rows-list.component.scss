@@ -6,8 +6,7 @@
   background: #f5f7fa;
 }
 
-// Reuse the same layout and table styles as Fields Management
-// (copied from fields-list.component.scss for a unified design)
+// Reuse the same layout and table styles as Tabs Management
 
 .top-navbar {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -105,35 +104,6 @@
     }
   }
 
-  .btn-secondary {
-    background: rgba(255, 255, 255, 0.15);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-
-    &:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.25);
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    }
-
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    i {
-      font-size: 16px;
-    }
-  }
-
   .btn-primary {
     background: white;
     color: #667eea;
@@ -214,6 +184,121 @@
   max-width: 100%;
   margin: 0 auto;
   padding: 24px;
+}
+
+.selection-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
+
+  .selection-header {
+    margin-bottom: 16px;
+
+    .selection-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #111827;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      i {
+        color: #667eea;
+      }
+    }
+  }
+
+  .selection-body {
+    .form-group {
+      margin-bottom: 0;
+
+      .form-label {
+        display: block;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 8px;
+        font-size: 14px;
+
+        .text-danger {
+          color: #ef4444;
+        }
+      }
+
+      .form-control {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.2s ease;
+
+        &:focus {
+          outline: none;
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+      }
+
+      .form-text {
+        display: block;
+        margin-top: 6px;
+        font-size: 12px;
+        color: #6b7280;
+      }
+
+      .input-with-button {
+        display: flex;
+        gap: 8px;
+        align-items: stretch;
+
+        .form-control {
+          flex: 1;
+        }
+
+        .btn-refresh-submissions {
+          background: #667eea;
+          color: white;
+          border: none;
+          padding: 10px 16px;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 44px;
+
+          &:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-1px);
+          }
+
+          &:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+          }
+
+          i {
+            font-size: 16px;
+          }
+        }
+      }
+
+      select.form-control {
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667eea' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        background-size: 12px;
+        padding-right: 36px;
+      }
+    }
+  }
 }
 
 .stats-row {
@@ -376,6 +461,35 @@
     color: #6b7280;
     margin-bottom: 24px;
   }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    i {
+      font-size: 16px;
+    }
+  }
 }
 
 .table-wrapper {
@@ -459,6 +573,26 @@
     font-size: 12px;
     font-family: 'Courier New', monospace;
     border: 1px solid #e5e7eb;
+  }
+}
+
+.col-data {
+  min-width: 150px;
+  
+  .cell-value {
+    display: block;
+    color: #111827;
+    font-size: 14px;
+    word-break: break-word;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    
+    &:hover {
+      white-space: normal;
+      word-break: break-all;
+    }
   }
 }
 
@@ -576,16 +710,6 @@
       }
     }
 
-    &.action-table {
-      color: #7c3aed;
-      border-color: #7c3aed;
-
-      &:hover {
-        background: #7c3aed;
-        color: white;
-      }
-    }
-
     &.action-delete {
       color: #ef4444;
       border-color: #ef4444;
@@ -629,3 +753,74 @@
     width: 100% !important;
   }
 }
+
+// Column Options Section
+.form-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+
+  .section-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i {
+      color: #667eea;
+    }
+  }
+}
+
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.option-item {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1rem;
+
+  .option-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+
+    .option-order {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      background: #667eea;
+      color: white;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .option-inputs {
+      flex: 1;
+
+      .form-control-sm {
+        font-size: 0.875rem;
+      }
+    }
+
+    .btn-danger {
+      flex-shrink: 0;
+    }
+  }
+}
+
