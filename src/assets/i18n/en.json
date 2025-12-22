@@ -134,7 +134,13 @@
     "allowedFileExtensions": "Allowed File Extensions",
     "selectAllowedExtensions": "Select the file extensions that users can upload",
     "addCustomExtension": "Add Custom Extension",
-    "enterExtension": "Enter extension (e.g., mp4, avi)"
+    "enterExtension": "Enter extension (e.g., mp4, avi)",
+    "apiUrl": "API URL",
+    "httpMethod": "HTTP Method",
+    "requestBody": "Request Body (JSON)",
+    "previewOptions": "Preview Options",
+    "selectLookupTable": "Select Lookup Table",
+    "selectTable": "Select Table"
   },
   "fieldTypes": {
     "title": "Field Types Management",

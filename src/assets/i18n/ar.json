@@ -134,7 +134,13 @@
     "allowedFileExtensions": "امتدادات الملفات المسموحة",
     "selectAllowedExtensions": "اختر امتدادات الملفات التي يمكن للمستخدمين رفعها",
     "addCustomExtension": "إضافة امتداد مخصص",
-    "enterExtension": "أدخل الامتداد (مثال: mp4, avi)"
+    "enterExtension": "أدخل الامتداد (مثال: mp4, avi)",
+    "apiUrl": "رابط API",
+    "httpMethod": "طريقة HTTP",
+    "requestBody": "نص الطلب (JSON)",
+    "previewOptions": "معاينة الخيارات",
+    "selectLookupTable": "اختر جدول البحث",
+    "selectTable": "اختر الجدول"
   },
   "fieldTypes": {
     "title": "إدارة أنواع الحقول",

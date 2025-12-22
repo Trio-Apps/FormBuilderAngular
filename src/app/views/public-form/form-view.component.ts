@@ -5,7 +5,8 @@ import { FormsService } from '../FormBuilder/services/forms.service';
 import { TabsService } from '../FormBuilder/services/tabs.service';
 import { FieldsService } from '../FormBuilder/services/fields.service';
 import { FileUploadService, FormSubmissionAttachmentDto } from '../FormBuilder/services/file-upload.service';
-import { FormBuilderDto, FormTabDto, FormFieldDto } from '../FormBuilder/form-builder/models/form-builder-dto.model';
+import { FieldDataSourceService } from '../FormBuilder/services/field-data-source.service';
+import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse } from '../FormBuilder/form-builder/models/form-builder-dto.model';
 import { TranslationService } from '../../core/services/translation.service';
 import { environment } from '../../environments/environment';
 import { catchError, of, forkJoin, Observable } from 'rxjs';
@@ -41,6 +42,10 @@ export class FormViewComponent implements OnInit {
   showPreviewModal: boolean = false;
   previewFile: FormSubmissionAttachmentDto | null = null;
   
+  // Field DataSource state
+  fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
+  loadingFieldOptions: { [fieldId: number]: boolean } = {}; // Loading state for each field
+  
   // Grid components reference
   @ViewChildren(GridViewComponent) gridViewComponents!: QueryList<GridViewComponent>;
   
@@ -52,6 +57,7 @@ export class FormViewComponent implements OnInit {
     private formsService: FormsService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
+    private fieldDataSourceService: FieldDataSourceService,
     public fileUploadService: FileUploadService,
     public translationService: TranslationService
   ) {}
@@ -212,6 +218,12 @@ export class FormViewComponent implements OnInit {
                   this.uploadedFiles[field.id] = [];
                 }
               }
+              
+              // Load field options from DataSource if field has options type
+              const fieldType = this.getFieldType(field);
+              if (['select', 'radio', 'checkbox'].includes(fieldType)) {
+                this.loadFieldOptionsFromDataSource(field);
+              }
             });
           });
           
@@ -345,6 +357,12 @@ export class FormViewComponent implements OnInit {
                       this.uploadedFiles[field.id] = [];
                     }
                   }
+                  
+                  // Load field options from DataSource if field has options type
+                  const fieldType = this.getFieldType(field);
+                  if (['select', 'radio', 'checkbox'].includes(fieldType)) {
+                    this.loadFieldOptionsFromDataSource(field);
+                  }
                 });
               });
               }
@@ -380,6 +398,76 @@ export class FormViewComponent implements OnInit {
     this.notFound = true;
     this.notFoundReason = reason;
     console.log('[FormView] Form not found. Reason:', reason);
+  }
+
+  // ===== Field DataSource Helpers =====
+
+  /**
+   * Load field options from DataSource if available
+   * This method checks if a field has an active DataSource and loads options from it
+   */
+  loadFieldOptionsFromDataSource(field: FormFieldDto, context?: Record<string, any>): void {
+    if (!field.id) return;
+
+    // Check if field has options type (select, radio, checkbox)
+    const fieldType = this.getFieldType(field);
+    if (!['select', 'radio', 'checkbox'].includes(fieldType)) {
+      return;
+    }
+
+    // Set loading state
+    this.loadingFieldOptions[field.id] = true;
+
+    // Load options from DataSource
+    this.fieldDataSourceService.getFieldOptions(field.id, context).subscribe({
+      next: (options: FieldOptionResponse[]) => {
+        if (options && options.length > 0) {
+          this.fieldDataSourceOptions[field.id] = options;
+          console.log(`[FormView] Loaded ${options.length} options from DataSource for field ${field.id}`);
+        } else {
+          // If no options from DataSource, use static options from field.fieldOptions
+          this.fieldDataSourceOptions[field.id] = [];
+          console.log(`[FormView] No options from DataSource for field ${field.id}, using static options`);
+        }
+        this.loadingFieldOptions[field.id] = false;
+      },
+      error: (error) => {
+        console.error(`[FormView] Error loading options from DataSource for field ${field.id}:`, error);
+        // Fallback to static options on error
+        this.fieldDataSourceOptions[field.id] = [];
+        this.loadingFieldOptions[field.id] = false;
+      }
+    });
+  }
+
+  /**
+   * Get field options (from DataSource or static fieldOptions)
+   */
+  getFieldOptions(field: FormFieldDto): any[] {
+    if (!field.id) {
+      return field.fieldOptions || [];
+    }
+
+    // If options are loaded from DataSource, use them
+    if (this.fieldDataSourceOptions[field.id] && this.fieldDataSourceOptions[field.id].length > 0) {
+      // Convert FieldOptionResponse to FieldOptionDto format for compatibility
+      return this.fieldDataSourceOptions[field.id].map(opt => ({
+        optionValue: String(opt.value),
+        optionText: opt.text,
+        foreignOptionText: opt.text, // DataSource doesn't provide separate Arabic text
+        isActive: true
+      }));
+    }
+
+    // Otherwise, use static options from field.fieldOptions
+    return field.fieldOptions || [];
+  }
+
+  /**
+   * Check if field is loading options from DataSource
+   */
+  isLoadingFieldOptions(field: FormFieldDto): boolean {
+    return field.id ? (this.loadingFieldOptions[field.id] || false) : false;
   }
 
   // ===== Field Type Helpers =====
@@ -512,11 +600,12 @@ export class FormViewComponent implements OnInit {
 
   getSelectedOptionText(field: FormFieldDto): string {
     const selectedValue = this.getDefaultValue(field);
-    if (!selectedValue || !field.fieldOptions) {
+    const options = this.getFieldOptions(field);
+    if (!selectedValue || !options || options.length === 0) {
       return '';
     }
     
-    const selectedOption = field.fieldOptions.find(opt => 
+    const selectedOption = options.find(opt => 
       String(opt.optionValue) === String(selectedValue)
     );
     
@@ -533,7 +622,8 @@ export class FormViewComponent implements OnInit {
 
   getSelectedCheckboxValues(field: FormFieldDto): string {
     const value = this.getDefaultValue(field);
-    if (!value || !field.fieldOptions) {
+    const options = this.getFieldOptions(field);
+    if (!value || !options || options.length === 0) {
       return '';
     }
     
@@ -541,14 +631,14 @@ export class FormViewComponent implements OnInit {
       // Try to parse as JSON array
       const parsed = JSON.parse(value);
       if (Array.isArray(parsed)) {
-        const selectedOptions = field.fieldOptions
+        const selectedOptions = options
           .filter(opt => parsed.includes(opt.optionValue))
           .map(opt => this.getOptionText(opt));
         return selectedOptions.length > 0 ? selectedOptions.join(', ') : '';
       }
     } catch {
       // If not JSON, treat as single value
-      const selectedOption = field.fieldOptions.find(opt => 
+      const selectedOption = options.find(opt => 
         String(opt.optionValue) === String(value)
       );
       return selectedOption ? this.getOptionText(selectedOption) : '';
@@ -559,7 +649,8 @@ export class FormViewComponent implements OnInit {
 
   isCheckboxSelected(field: FormFieldDto, optionValue: any): boolean {
     const value = this.getDefaultValue(field);
-    if (!value || !field.fieldOptions) {
+    const options = this.getFieldOptions(field);
+    if (!value || !options || options.length === 0) {
       return false;
     }
     
@@ -1415,11 +1506,18 @@ export class FormViewComponent implements OnInit {
 
   /**
    * Get option text based on current language
+   * Supports both FieldOptionDto and FieldOptionResponse
    */
   getOptionText(option: any): string {
     if (!option) return '';
-    const lang = this.translationService.getCurrentLanguage();
     
+    // Handle FieldOptionResponse (from DataSource)
+    if (option.text !== undefined) {
+      return option.text || '';
+    }
+    
+    // Handle FieldOptionDto (static options)
+    const lang = this.translationService.getCurrentLanguage();
     if (lang === 'ar' && option.foreignOptionText && option.foreignOptionText.trim()) {
       return option.foreignOptionText;
     }

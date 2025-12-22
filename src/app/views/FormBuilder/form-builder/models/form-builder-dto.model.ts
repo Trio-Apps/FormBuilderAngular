@@ -228,3 +228,66 @@ export interface CreateFormFieldDto {
   gridId?: number; // Grid ID for Grid field type
   createdByUserId?: string;
 }
+
+// ==================== Field Data Source Interfaces ====================
+
+export interface FieldDataSource {
+  id?: number;
+  fieldId: number;
+  sourceType: string; // 'Static' | 'Api' | 'LookupTable' | 'Custom'
+  apiUrl?: string | null;
+  httpMethod?: string | null; // 'GET' | 'POST'
+  requestBodyJson?: string | null;
+  valuePath?: string | null;
+  textPath?: string | null;
+  isActive: boolean;
+}
+
+export interface CreateFieldDataSourceDto {
+  fieldId: number; // Required
+  sourceType: string; // Required: 'Static' | 'Api' | 'LookupTable' | 'Custom'
+  apiUrl?: string | null; // Optional, max 500 chars
+  httpMethod?: string | null; // Optional, max 10 chars ('GET' | 'POST')
+  requestBodyJson?: string | null; // Optional
+  valuePath?: string | null; // Optional, max 200 chars
+  textPath?: string | null; // Optional, max 200 chars
+  isActive?: boolean; // Default: true
+}
+
+export interface UpdateFieldDataSourceDto {
+  sourceType: string; // Required
+  apiUrl?: string | null;
+  httpMethod?: string | null;
+  requestBodyJson?: string | null;
+  valuePath?: string | null;
+  textPath?: string | null;
+  isActive: boolean; // Required
+}
+
+export interface FieldOptionResponse {
+  value: string | number;
+  text: string;
+}
+
+export interface GetFieldOptionsRequestDto {
+  fieldId: number;
+  context?: Record<string, any> | null;
+  requestBodyJson?: string | null; // For API sources only
+}
+
+export interface PreviewDataSourceRequestDto {
+  fieldId: number;
+  sourceType: string; // 'Api' | 'LookupTable' | 'Custom'
+  apiUrl?: string;
+  httpMethod?: string;
+  requestBodyJson?: string;
+  valuePath?: string;
+  textPath?: string;
+}
+
+export interface ApiResponse<T> {
+  success?: boolean;
+  data?: T;
+  message?: string;
+  errors?: any;
+}

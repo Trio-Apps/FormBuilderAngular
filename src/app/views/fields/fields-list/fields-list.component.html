@@ -497,8 +497,8 @@
           </div>
         </div>
 
-        <!-- Field Options Section -->
-        <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions">
+        <!-- Field Options Section (Only for Static) -->
+        <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions && dataSourceType === 'Static'">
           <h4 class="section-title">
             <i class="pi pi-list"></i>
             {{ translateLabel('fields.fieldOptions') }}
@@ -554,6 +554,338 @@
             <i class="pi pi-plus"></i>
             <span>{{ translateLabel('fields.addOption') }}</span>
           </button>
+        </div>
+
+        <!-- Field DataSource Section -->
+        <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions">
+          <h4 class="section-title">
+            <i class="pi pi-database"></i>
+            {{ translateLabel('fields.dataSource') || 'Data Source' }}
+          </h4>
+          
+          <div class="form-grid">
+            <!-- Data Source Type Selection (3 Options) -->
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label class="form-label">{{ translateLabel('fields.dataSourceType') || 'How to load options?' }} <span class="required">*</span></label>
+              
+              <!-- Radio Buttons for 3 Options -->
+              <div class="data-source-options" style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
+                <!-- Option 1: Static -->
+                <label class="data-source-option" 
+                       [class.selected]="dataSourceType === 'Static'"
+                       style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                       [style.border-color]="dataSourceType === 'Static' ? '#667eea' : '#e5e7eb'"
+                       [style.background]="dataSourceType === 'Static' ? '#f0ebf8' : '#f9fafb'">
+                  <input 
+                    type="radio" 
+                    name="dataSourceType"
+                    value="Static"
+                    [(ngModel)]="dataSourceType"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onDataSourceTypeChange()"
+                    style="width: 20px; height: 20px; cursor: pointer;"
+                  />
+                  <i class="pi pi-list" style="font-size: 20px; color: #667eea;"></i>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Static Options</div>
+                    <div style="font-size: 12px; color: #6b7280;">Enter options manually in Field Options section above</div>
+                  </div>
+                </label>
+
+                <!-- Option 2: Database Tables -->
+                <label class="data-source-option" 
+                       [class.selected]="dataSourceType === 'LookupTable'"
+                       style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                       [style.border-color]="dataSourceType === 'LookupTable' ? '#667eea' : '#e5e7eb'"
+                       [style.background]="dataSourceType === 'LookupTable' ? '#f0ebf8' : '#f9fafb'">
+                  <input 
+                    type="radio" 
+                    name="dataSourceType"
+                    value="LookupTable"
+                    [(ngModel)]="dataSourceType"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onDataSourceTypeChange()"
+                    style="width: 20px; height: 20px; cursor: pointer;"
+                  />
+                  <i class="pi pi-table" style="font-size: 20px; color: #667eea;"></i>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Database Table</div>
+                    <div style="font-size: 12px; color: #6b7280;">Load options from database table (id, name)</div>
+                  </div>
+                </label>
+
+                <!-- Option 3: API Link -->
+                <label class="data-source-option" 
+                       [class.selected]="dataSourceType === 'Api'"
+                       style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                       [style.border-color]="dataSourceType === 'Api' ? '#667eea' : '#e5e7eb'"
+                       [style.background]="dataSourceType === 'Api' ? '#f0ebf8' : '#f9fafb'">
+                  <input 
+                    type="radio" 
+                    name="dataSourceType"
+                    value="Api"
+                    [(ngModel)]="dataSourceType"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onDataSourceTypeChange()"
+                    style="width: 20px; height: 20px; cursor: pointer;"
+                  />
+                  <i class="pi pi-link" style="font-size: 20px; color: #667eea;"></i>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">API Link</div>
+                    <div style="font-size: 12px; color: #6b7280;">Load options from API endpoint (id, name)</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Database Table Selection -->
+            <div class="form-group" *ngIf="dataSourceType === 'LookupTable'" style="grid-column: 1 / -1;">
+              <label class="form-label">
+                <i class="pi pi-table" style="margin-right: 6px; color: #667eea;"></i>
+                {{ translateLabel('fields.selectTable') || 'Select Table' }} <span class="required">*</span>
+              </label>
+              <select 
+                class="form-control" 
+                [(ngModel)]="lookupTableConfig.table"
+                [ngModelOptions]="{standalone: true}"
+                (change)="onTableSelected()">
+                <option value="">{{ translateLabel('fields.selectLookupTable') || '-- Select Table --' }}</option>
+                <option *ngFor="let table of availableLookupTables" [value]="table">{{ table }}</option>
+              </select>
+              <small class="form-text text-muted" *ngIf="availableLookupTables.length === 0" style="color: #f59e0b; margin-top: 6px; display: block;">
+                <i class="pi pi-exclamation-triangle"></i> No tables available. Loading...
+              </small>
+            </div>
+
+            <!-- API URL -->
+            <div class="form-group" *ngIf="dataSourceType === 'Api'" style="grid-column: 1 / -1;">
+              <!-- HTTP Method Selection -->
+              <label class="form-label" style="margin-bottom: 8px;">
+                <i class="pi pi-cog" style="margin-right: 6px; color: #667eea;"></i>
+                {{ translateLabel('fields.httpMethod') || 'HTTP Method' }} <span class="required">*</span>
+              </label>
+              <div class="http-method-tabs" style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <button
+                  type="button"
+                  class="method-tab"
+                  [class.active]="dataSourceConfig.httpMethod === 'GET'"
+                  (click)="dataSourceConfig.httpMethod = 'GET'"
+                  style="flex: 1; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                  <i class="pi pi-download" style="font-size: 14px;"></i>
+                  <span>GET</span>
+                </button>
+                <button
+                  type="button"
+                  class="method-tab"
+                  [class.active]="dataSourceConfig.httpMethod === 'POST'"
+                  (click)="dataSourceConfig.httpMethod = 'POST'"
+                  style="flex: 1; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                  <i class="pi pi-upload" style="font-size: 14px;"></i>
+                  <span>POST</span>
+                </button>
+              </div>
+              
+              <!-- API URL Input -->
+              <label class="form-label" style="margin-top: 16px;">
+                <i class="pi pi-link" style="margin-right: 6px; color: #667eea;"></i>
+                {{ translateLabel('fields.apiUrl') || 'API URL' }} <span class="required">*</span>
+              </label>
+              <input 
+                type="text" 
+                class="form-control" 
+                [(ngModel)]="dataSourceConfig.apiUrl"
+                [ngModelOptions]="{standalone: true}"
+                [placeholder]="getApiUrlPlaceholder()">
+              
+              <!-- Request Body (for POST only) -->
+              <div *ngIf="dataSourceConfig.httpMethod === 'POST'" style="margin-top: 16px;">
+                <label class="form-label">
+                  <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
+                  {{ translateLabel('fields.requestBody') || 'Request Body (JSON)' }}
+                </label>
+                <textarea
+                  class="form-control"
+                  rows="4"
+                  [(ngModel)]="dataSourceConfig.requestBodyJson"
+                  [ngModelOptions]="{standalone: true}"
+                  placeholder='Enter JSON body, e.g. filter: active'
+                  style="font-family: 'Courier New', monospace; font-size: 13px;">
+                </textarea>
+                <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                  Optional: Enter JSON body for POST requests. Example: <code>{{ '{' }}"filter": "active"{{ '}' }}</code>
+                </small>
+              </div>
+
+            </div>
+
+            <!-- Preview Options Display (id, name) -->
+            <div class="form-group" *ngIf="(dataSourceType === 'LookupTable' && lookupTableConfig.table) || (dataSourceType === 'Api' && dataSourceConfig.apiUrl)" style="grid-column: 1 / -1;">
+              <label class="form-label">
+                <i class="pi pi-eye" style="margin-right: 6px; color: #667eea;"></i>
+                {{ translateLabel('fields.previewOptions') || 'Preview Options' }}
+                <button 
+                  type="button" 
+                  class="btn-preview-small"
+                  (click)="previewDataSource()"
+                  [disabled]="loadingPreview"
+                  style="margin-left: 12px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">
+                  <i class="pi" [class.pi-spin]="loadingPreview" [class.pi-spinner]="loadingPreview" [class.pi-refresh]="!loadingPreview"></i>
+                  {{ loadingPreview ? 'Loading...' : 'Refresh' }}
+                </button>
+                <button 
+                  type="button" 
+                  class="btn-preview-small"
+                  (click)="testApiResponse()"
+                  [disabled]="loadingPreview"
+                  style="margin-left: 8px; padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;"
+                  title="Test API to see raw response structure">
+                  <i class="pi pi-code"></i>
+                  Test API
+                </button>
+                <button 
+                  type="button" 
+                  class="btn-preview-small"
+                  (click)="toggleApiDebugInfo()"
+                  style="margin-left: 8px; padding: 6px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;"
+                  title="Toggle debug information">
+                  <i class="pi" [class.pi-eye-slash]="showApiDebugInfo" [class.pi-eye]="!showApiDebugInfo"></i>
+                  {{ showApiDebugInfo ? 'Hide' : 'Show' }} Debug
+                </button>
+              </label>
+              
+              <!-- Preview Results -->
+              <div class="preview-options-list" *ngIf="previewOptions.length > 0">
+                <div class="preview-header" style="margin-bottom: 12px;">
+                  <span class="preview-count" style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; font-weight: 500;">
+                    <i class="pi pi-check-circle"></i>
+                    {{ previewOptions.length }} {{ previewOptions.length === 1 ? 'option' : 'options' }} found
+                  </span>
+                </div>
+                <div class="preview-dropdown-container">
+                  <label class="form-label" style="margin-bottom: 8px; font-weight: 500; color: #374151;">
+                    Preview Dropdown:
+                  </label>
+                  <select 
+                    class="form-control preview-select"
+                    style="width: 100%; padding: 10px 12px; font-size: 14px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer;"
+                    [(ngModel)]="selectedPreviewOption"
+                    [ngModelOptions]="{standalone: true}">
+                    <option [value]="null">
+                      -- Select an option ({{ previewOptions.length }} available) --
+                    </option>
+                    <option 
+                      *ngFor="let opt of previewOptions; let i = index" 
+                      [value]="opt.value">
+                      {{ opt.text }}
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 8px; display: block; color: #6b7280; font-size: 12px;">
+                    <i class="pi pi-info-circle"></i> 
+                    This is a preview of how the dropdown will appear with {{ previewOptions.length }} options.
+                  </small>
+                </div>
+              </div>
+              
+              <div *ngIf="previewOptions.length === 0 && !loadingPreview" style="padding: 16px; text-align: center; color: #6b7280; font-style: italic;">
+                No options found. Click Refresh to load.
+              </div>
+
+              <!-- API Debug Information -->
+              <div *ngIf="showApiDebugInfo" style="margin-top: 16px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h5 style="margin: 0; color: #374151; font-size: 14px; font-weight: 600;">
+                    <i class="pi pi-bug" style="margin-right: 6px; color: #667eea;"></i>
+                    API Debug Information
+                  </h5>
+                  <button 
+                    type="button"
+                    (click)="toggleApiDebugInfo()"
+                    style="background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px;">
+                    <i class="pi pi-times"></i>
+                  </button>
+                </div>
+
+                <!-- Error Display -->
+                <div *ngIf="apiDebugError" style="padding: 12px; background: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px; margin-bottom: 12px;">
+                  <div style="color: #991b1b; font-weight: 600; margin-bottom: 4px;">
+                    <i class="pi pi-exclamation-triangle" style="margin-right: 6px;"></i>
+                    Error
+                  </div>
+                  <div style="color: #7f1d1d; font-size: 13px;">{{ apiDebugError }}</div>
+                </div>
+
+                <!-- Raw Response Display -->
+                <div *ngIf="rawApiResponse && !apiDebugError">
+                  <div style="margin-bottom: 12px;">
+                    <div style="color: #374151; font-weight: 600; margin-bottom: 8px; font-size: 13px;">
+                      Raw API Response Structure:
+                    </div>
+                    <pre style="background: #1f2937; color: #f9fafb; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; max-height: 300px; overflow-y: auto; margin: 0;">{{ rawApiResponse | json }}</pre>
+                  </div>
+
+                  <!-- Suggested Paths -->
+                  <div *ngIf="getSuggestedPaths()" style="padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 4px; margin-top: 12px;">
+                    <div style="color: #1e40af; font-weight: 600; margin-bottom: 8px; font-size: 13px;">
+                      <i class="pi pi-lightbulb" style="margin-right: 6px;"></i>
+                      Suggested Paths (based on API response):
+                    </div>
+                    <div style="color: #1e3a8a; font-size: 13px; margin-bottom: 8px;">
+                      <strong>Value Path:</strong> <code style="background: #dbeafe; padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.valuePath }}</code><br>
+                      <strong>Text Path:</strong> <code style="background: #dbeafe; padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.textPath }}</code>
+                    </div>
+                    <button 
+                      type="button"
+                      (click)="applySuggestedPaths()"
+                      style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                      <i class="pi pi-check" style="margin-right: 4px;"></i>
+                      Apply Suggested Paths
+                    </button>
+                  </div>
+
+                  <!-- Structure Analysis -->
+                  <div style="margin-top: 12px; padding: 12px; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 4px;">
+                    <div style="color: #166534; font-weight: 600; margin-bottom: 8px; font-size: 13px;">
+                      <i class="pi pi-info-circle" style="margin-right: 6px;"></i>
+                      Response Analysis:
+                    </div>
+                    <div style="color: #14532d; font-size: 12px; line-height: 1.6;">
+                      <div *ngIf="Array.isArray(rawApiResponse)">
+                        ✓ Response is a direct array<br>
+                        ✓ First item keys: <code>{{ Object.keys(rawApiResponse[0] || {}).join(', ') }}</code>
+                      </div>
+                      <div *ngIf="rawApiResponse.data && Array.isArray(rawApiResponse.data)">
+                        ✓ Response is wrapped in <code>data</code> property<br>
+                        ✓ First item keys: <code>{{ Object.keys(rawApiResponse.data[0] || {}).join(', ') }}</code>
+                      </div>
+                      <div *ngIf="rawApiResponse.results && Array.isArray(rawApiResponse.results)">
+                        ✓ Response is wrapped in <code>results</code> property<br>
+                        ✓ First item keys: <code>{{ Object.keys(rawApiResponse.results[0] || {}).join(', ') }}</code>
+                      </div>
+                      <div *ngIf="rawApiResponse.items && Array.isArray(rawApiResponse.items)">
+                        ✓ Response is wrapped in <code>items</code> property<br>
+                        ✓ First item keys: <code>{{ Object.keys(rawApiResponse.items[0] || {}).join(', ') }}</code>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Instructions -->
+                <div *ngIf="!rawApiResponse && !apiDebugError" style="padding: 12px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px; margin-top: 12px;">
+                  <div style="color: #92400e; font-weight: 600; margin-bottom: 4px; font-size: 13px;">
+                    <i class="pi pi-question-circle" style="margin-right: 6px;"></i>
+                    How to use:
+                  </div>
+                  <div style="color: #78350f; font-size: 12px; line-height: 1.6;">
+                    1. Click "Test API" to fetch the raw response<br>
+                    2. Review the response structure above<br>
+                    3. Update Value Path and Text Path to match your API's property names<br>
+                    4. Use suggested paths if available, or manually enter the correct paths
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
 
         <!-- Validation Section -->

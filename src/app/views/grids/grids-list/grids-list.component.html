@@ -7,7 +7,7 @@
           <i class="pi pi-arrow-left"></i>
         </button>
         <div class="nav-title-section">
-          <h1 class="page-title">{{ translateLabel('grids.title') || 'Manage Grids' }}</h1>
+          <h1 class="page-title">Manage Grids</h1>
           <p class="page-subtitle">
             {{ translateLabel('grids.subtitle') || 'Tab' }}: {{ tabName || tabId }}
           </p>
@@ -19,7 +19,7 @@
         </button>
         <button class="btn-primary" (click)="openGridModal()" [disabled]="loading">
           <i class="pi pi-plus"></i>
-          <span>{{ translateLabel('grids.newGrid') || 'New Grid' }}</span>
+          <span>New Grid</span>
         </button>
       </div>
     </div>
@@ -115,7 +115,7 @@
         <p>{{ translateLabel('grids.getStarted') || 'Get started by creating your first grid' }}</p>
         <button class="btn-primary" (click)="openGridModal()">
           <i class="pi pi-plus"></i>
-          <span>{{ translateLabel('grids.addFirstGrid') || 'Add First Grid' }}</span>
+          <span>add grid</span>
         </button>
       </div>
 
