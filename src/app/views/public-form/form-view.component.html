@@ -67,7 +67,7 @@
       <div class="tab-section" *ngIf="tab.fields && tab.fields.length > 0">
         
         <!-- Field Display -->
-        <div class="form-field" *ngFor="let field of tab.fields">
+        <div class="form-field" *ngFor="let field of tab.fields" [style.display]="isFieldVisible(field) ? 'block' : 'none'">
           
           <!-- Field Label -->
           <label class="field-label">
@@ -91,6 +91,8 @@
                 class="form-input"
                 [placeholder]="getFieldPlaceholder(field)"
                 [value]="getDefaultValue(field)"
+                [disabled]="!isFieldEditable(field)"
+                (input)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
               />
 
               <!-- Email Input -->
@@ -100,6 +102,8 @@
                 class="form-input"
                 [placeholder]="getFieldPlaceholder(field)"
                 [value]="getDefaultValue(field)"
+                [disabled]="!isFieldEditable(field)"
+                (input)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
               />
 
               <!-- Number Input -->
@@ -111,6 +115,8 @@
                 [min]="field.minValue"
                 [max]="field.maxValue"
                 [value]="getDefaultValue(field)"
+                [disabled]="!isFieldEditable(field)"
+                (input)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
               />
 
               <!-- Textarea -->
@@ -119,13 +125,16 @@
                 class="form-textarea"
                 rows="4"
                 [placeholder]="getFieldPlaceholder(field)"
+                [disabled]="!isFieldEditable(field)"
+                (input)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
               >{{ getDefaultValue(field) }}</textarea>
 
               <!-- Select / Dropdown -->
               <select
                 *ngSwitchCase="'select'"
                 class="form-select"
-                [disabled]="isLoadingFieldOptions(field)"
+                [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
+                (change)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
               >
                 <option value="" selected disabled>
                   {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') : getFieldPlaceholder(field) }}
@@ -152,7 +161,8 @@
                     [name]="'radio-' + field.id"
                     [value]="opt.optionValue"
                     [checked]="isOptionSelected(field, opt.optionValue)"
-                    [disabled]="isLoadingFieldOptions(field)"
+                    [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
+                    (change)="onFieldValueChange(field.fieldCode, opt.optionValue)"
                   />
                   <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
                     {{ getOptionText(opt) }}
@@ -176,13 +186,14 @@
                     [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
                     [value]="opt.optionValue"
                     [checked]="isCheckboxSelected(field, opt.optionValue)"
-                    [disabled]="isLoadingFieldOptions(field)"
+                    [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
+                    (change)="onCheckboxChange(field, opt.optionValue, $event)"
                   />
                   <label [for]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)" class="checkbox-label">
                     {{ getOptionText(opt) }}
                   </label>
                 </div>
-                <p *ngIf="!field.fieldOptions || field.fieldOptions.length === 0" class="no-options">
+                <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)" class="no-options">
                   {{ translationService.translate('formView.noOptionsAvailable') }}
                 </p>
               </div>
@@ -193,6 +204,8 @@
                 type="date"
                 class="form-input"
                 [value]="getDefaultValue(field)"
+                [disabled]="!isFieldEditable(field)"
+                (change)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
               />
 
               <!-- File Upload -->

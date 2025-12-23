@@ -229,7 +229,18 @@ export class FieldDataSourceService {
         return response.data || [];
       }),
       catchError((error) => {
-        console.error(`Error fetching field options for field ${fieldId}:`, error);
+        console.error(`[FieldDataSourceService] Error fetching field options for field ${fieldId}:`, error);
+        
+        // Log backend error details if available
+        if (error?.error) {
+          if (error.error.message) {
+            console.error(`[FieldDataSourceService] Backend error message:`, error.error.message);
+          }
+          if (error.error.error) {
+            console.error(`[FieldDataSourceService] Backend error details:`, error.error.error);
+          }
+        }
+        
         return of([]);
       })
     );

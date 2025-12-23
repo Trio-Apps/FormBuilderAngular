@@ -697,6 +697,27 @@
                 [ngModelOptions]="{standalone: true}"
                 [placeholder]="getApiUrlPlaceholder()">
               
+              <!-- Available Properties Display -->
+              <div *ngIf="availableProperties.length > 0" style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <i class="pi pi-info-circle" style="color: #10b981; font-size: 16px;"></i>
+                  <span style="font-weight: 600; color: #166534; font-size: 13px;">Available Properties:</span>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                  <span 
+                    *ngFor="let prop of availableProperties" 
+                    style="display: inline-block; padding: 4px 10px; background: white; border: 1px solid #86efac; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; color: #166534; cursor: pointer;"
+                    [title]="'Click to use as ' + (prop.toLowerCase().includes('id') || prop.toLowerCase() === 'value' ? 'Value Path' : 'Text Path')"
+                    (click)="applyPropertyAsPath(prop)">
+                    {{ prop }}
+                  </span>
+                </div>
+                <small style="display: block; margin-top: 8px; color: #166534; font-size: 11px;">
+                  <i class="pi pi-lightbulb" style="margin-right: 4px;"></i>
+                  Click on a property to use it as Value Path or Text Path
+                </small>
+              </div>
+              
               <!-- Request Body (for POST only) -->
               <div *ngIf="dataSourceConfig.httpMethod === 'POST'" style="margin-top: 16px;">
                 <label class="form-label">
@@ -716,6 +737,59 @@
                 </small>
               </div>
 
+              <!-- Value Path & Text Path Configuration -->
+              <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
+                    Value Path
+                  </label>
+                  <select 
+                    class="form-control" 
+                    [(ngModel)]="dataSourceConfig.valuePath"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onValuePathBlur()"
+                    [disabled]="availableProperties.length === 0"
+                    style="font-family: 'Courier New', monospace; font-size: 13px;">
+                    <option value="">-- Select Value Path --</option>
+                    <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
+                    <option *ngIf="dataSourceConfig.valuePath && !availableProperties.includes(dataSourceConfig.valuePath)" [value]="dataSourceConfig.valuePath">
+                      {{ dataSourceConfig.valuePath }} (current)
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;" *ngIf="availableProperties.length > 0">
+                    Select value field from available properties
+                  </small>
+                  <small class="form-text text-warning" style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;" *ngIf="availableProperties.length === 0">
+                    <i class="pi pi-info-circle"></i> Click "Test API" first to load available properties
+                  </small>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
+                    Text Path
+                  </label>
+                  <select 
+                    class="form-control" 
+                    [(ngModel)]="dataSourceConfig.textPath"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onTextPathBlur()"
+                    [disabled]="availableProperties.length === 0"
+                    style="font-family: 'Courier New', monospace; font-size: 13px;">
+                    <option value="">-- Select Text Path --</option>
+                    <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
+                    <option *ngIf="dataSourceConfig.textPath && !availableProperties.includes(dataSourceConfig.textPath)" [value]="dataSourceConfig.textPath">
+                      {{ dataSourceConfig.textPath }} (current)
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;" *ngIf="availableProperties.length > 0">
+                    Select text field from available properties
+                  </small>
+                  <small class="form-text text-warning" style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;" *ngIf="availableProperties.length === 0">
+                    <i class="pi pi-info-circle"></i> Click "Test API" first to load available properties
+                  </small>
+                </div>
+              </div>
             </div>
 
             <!-- Preview Options Display (id, name) -->
@@ -824,19 +898,21 @@
                   </div>
 
                   <!-- Suggested Paths -->
-                  <div *ngIf="getSuggestedPaths()" style="padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 4px; margin-top: 12px;">
-                    <div style="color: #1e40af; font-weight: 600; margin-bottom: 8px; font-size: 13px;">
-                      <i class="pi pi-lightbulb" style="margin-right: 6px;"></i>
+                  <div *ngIf="getSuggestedPaths()" [style.background]="hasSuggestedPaths ? '#fef3c7' : '#eff6ff'" [style.border-left-color]="hasSuggestedPaths ? '#f59e0b' : '#3b82f6'" style="padding: 12px; border-left: 4px solid; border-radius: 4px; margin-top: 12px;">
+                    <div [style.color]="hasSuggestedPaths ? '#92400e' : '#1e40af'" style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">
+                      <i class="pi" [ngClass]="hasSuggestedPaths ? 'pi-exclamation-triangle' : 'pi-lightbulb'" style="margin-right: 6px;"></i>
+                      <span *ngIf="hasSuggestedPaths" style="font-weight: 700;">⚠️ Path Mismatch Detected - </span>
                       Suggested Paths (based on API response):
                     </div>
-                    <div style="color: #1e3a8a; font-size: 13px; margin-bottom: 8px;">
-                      <strong>Value Path:</strong> <code style="background: #dbeafe; padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.valuePath }}</code><br>
-                      <strong>Text Path:</strong> <code style="background: #dbeafe; padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.textPath }}</code>
+                    <div [style.color]="hasSuggestedPaths ? '#78350f' : '#1e3a8a'" style="font-size: 13px; margin-bottom: 8px;">
+                      <strong>Value Path:</strong> <code [style.background]="hasSuggestedPaths ? '#fde68a' : '#dbeafe'" style="padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.valuePath }}</code><br>
+                      <strong>Text Path:</strong> <code [style.background]="hasSuggestedPaths ? '#fde68a' : '#dbeafe'" style="padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.textPath }}</code>
                     </div>
                     <button 
                       type="button"
                       (click)="applySuggestedPaths()"
-                      style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                      [style.background]="hasSuggestedPaths ? '#f59e0b' : '#3b82f6'"
+                      style="padding: 6px 12px; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;">
                       <i class="pi pi-check" style="margin-right: 4px;"></i>
                       Apply Suggested Paths
                     </button>

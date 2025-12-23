@@ -6,7 +6,7 @@ import { TabsService } from '../FormBuilder/services/tabs.service';
 import { FieldsService } from '../FormBuilder/services/fields.service';
 import { FileUploadService, FormSubmissionAttachmentDto } from '../FormBuilder/services/file-upload.service';
 import { FieldDataSourceService } from '../FormBuilder/services/field-data-source.service';
-import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse } from '../FormBuilder/form-builder/models/form-builder-dto.model';
+import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse, FormRule, RuleCondition, FieldCondition, RuleAction } from '../FormBuilder/form-builder/models/form-builder-dto.model';
 import { TranslationService } from '../../core/services/translation.service';
 import { environment } from '../../environments/environment';
 import { catchError, of, forkJoin, Observable } from 'rxjs';
@@ -45,6 +45,19 @@ export class FormViewComponent implements OnInit {
   // Field DataSource state
   fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
   loadingFieldOptions: { [fieldId: number]: boolean } = {}; // Loading state for each field
+  private _loggedFieldOptions: { [fieldId: number]: boolean } = {}; // Track logged fields to avoid console spam
+  private _loggedFieldNoOptions: { [fieldId: number]: boolean } = {}; // Track logged "no options" warnings
+  
+  // Form Rules state - Dynamic field states based on rules
+  dynamicFieldStates: {
+    [fieldCode: string]: {
+      isVisible?: boolean;
+      isRequired?: boolean;
+      isReadOnly?: boolean;
+      value?: any;
+    }
+  } = {};
+  fieldValues: { [fieldCode: string]: any } = {}; // Track field values for rule evaluation
   
   // Grid components reference
   @ViewChildren(GridViewComponent) gridViewComponents!: QueryList<GridViewComponent>;
@@ -200,13 +213,39 @@ export class FormViewComponent implements OnInit {
               fields: (tab.fields || [])
                 .filter(field => field.isActive && (field.isVisible ?? true))
                 .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0))
-                .map(field => ({
-                  ...field,
-                  // Filter and sort field options (only active ones)
-                  fieldOptions: (field.fieldOptions || [])
-                    .filter(opt => opt?.isActive !== false)
-                    .sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0))
-                }))
+                .map(field => {
+                  const originalOptions = field.fieldOptions || [];
+                  // Filter options - include all options if none are active, otherwise filter by isActive
+                  const hasActiveOptions = originalOptions.some(opt => opt?.isActive !== false);
+                  const filteredOptions = hasActiveOptions
+                    ? originalOptions.filter(opt => opt?.isActive !== false)
+                    : originalOptions; // If no active options, show all (for debugging)
+                  
+                  const sortedOptions = filteredOptions.sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0));
+                  
+                  // Log options for debugging (only once per field)
+                  if (['select', 'radio', 'checkbox'].includes(this.getFieldType(field)) && !this._loggedFieldOptions[field.id]) {
+                    console.log(`[FormView] Field ${field.id} (${field.fieldCode || 'no-code'}) - Options loaded:`, {
+                      originalCount: originalOptions.length,
+                      filteredCount: sortedOptions.length,
+                      hasActiveOptions: hasActiveOptions,
+                      sampleOptions: sortedOptions.slice(0, 3).map(opt => ({
+                        optionValue: opt?.optionValue,
+                        optionText: opt?.optionText,
+                        isActive: opt?.isActive
+                      }))
+                    });
+                    
+                    if (sortedOptions.length === 0) {
+                      console.warn(`[FormView] WARNING: Field ${field.id} (${field.fieldCode || 'no-code'}) has NO options after filtering!`);
+                    }
+                  }
+                  
+                  return {
+                    ...field,
+                    fieldOptions: filteredOptions
+                  };
+                })
             }));
           
           // Initialize uploaded files arrays for file fields (don't load yet if no submissionId)
@@ -233,6 +272,10 @@ export class FormViewComponent implements OnInit {
           
           this.activeTabIndex = 0;
           this.loading = false;
+          
+          // Initialize form rules after form is loaded
+          this.initializeFormRules();
+          
           console.log('[FormView] Form loaded successfully with', this.tabs.length, 'tabs');
           console.log('[FormView] Loading state:', this.loading);
           console.log('[FormView] NotFound state:', this.notFound);
@@ -405,6 +448,7 @@ export class FormViewComponent implements OnInit {
   /**
    * Load field options from DataSource if available
    * This method checks if a field has an active DataSource and loads options from it
+   * Only loads from API/LookupTable, not from Static (Static options are already in field.fieldOptions)
    */
   loadFieldOptionsFromDataSource(field: FormFieldDto, context?: Record<string, any>): void {
     if (!field.id) return;
@@ -415,29 +459,177 @@ export class FormViewComponent implements OnInit {
       return;
     }
 
-    // Set loading state
-    this.loadingFieldOptions[field.id] = true;
+    // Check if field has a DataSource configuration
+    const dataSource = field.fieldDataSource;
+    if (!dataSource || !dataSource.isActive) {
+      // No DataSource or inactive - use static options from field.fieldOptions
+      console.log(`[FormView] Field ${field.id} has no active DataSource, using static options`);
+      this.fieldDataSourceOptions[field.id] = [];
+      return;
+    }
 
-    // Load options from DataSource
-    this.fieldDataSourceService.getFieldOptions(field.id, context).subscribe({
-      next: (options: FieldOptionResponse[]) => {
-        if (options && options.length > 0) {
-          this.fieldDataSourceOptions[field.id] = options;
-          console.log(`[FormView] Loaded ${options.length} options from DataSource for field ${field.id}`);
-        } else {
-          // If no options from DataSource, use static options from field.fieldOptions
+    // Only load from API/LookupTable, not Static
+    // Static options are already included in field.fieldOptions from the form schema
+    if (dataSource.sourceType === 'Static') {
+      console.log(`[FormView] Field ${field.id} has Static DataSource, using field.fieldOptions`);
+      this.fieldDataSourceOptions[field.id] = [];
+      return;
+    }
+
+    // For Api or LookupTable, load options dynamically
+    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable') {
+      // Set loading state
+      this.loadingFieldOptions[field.id] = true;
+
+      // Load options from DataSource API
+      this.fieldDataSourceService.getFieldOptions(field.id, context).subscribe({
+        next: (options: FieldOptionResponse[]) => {
+          if (options && options.length > 0) {
+            this.fieldDataSourceOptions[field.id] = options;
+            console.log(`[FormView] Loaded ${options.length} options from ${dataSource.sourceType} DataSource for field ${field.id}`);
+            console.log(`[FormView] DataSource config:`, {
+              sourceType: dataSource.sourceType,
+              apiUrl: dataSource.apiUrl,
+              valuePath: dataSource.valuePath,
+              textPath: dataSource.textPath
+            });
+            // Log first few options for debugging
+            if (options.length > 0) {
+              // Log the raw option structure
+              console.log(`[FormView] Raw first option (full structure):`, JSON.stringify(options[0], null, 2));
+              
+              const sampleOptions = options.slice(0, 3).map(opt => ({ 
+                value: opt.value, 
+                text: opt.text,
+                valueType: typeof opt.value,
+                textType: typeof opt.text,
+                isTextEmpty: !opt.text || String(opt.text).trim() === '',
+                isValueEmpty: !opt.value || String(opt.value).trim() === '',
+                allKeys: Object.keys(opt || {})
+              }));
+              console.log(`[FormView] Sample options (first 3):`, sampleOptions);
+              
+              // Check if all options have empty text
+              const allEmptyText = options.every(opt => !opt.text || String(opt.text).trim() === '');
+              const allEmptyValue = options.every(opt => !opt.value || String(opt.value).trim() === '');
+              
+              if (allEmptyText || allEmptyValue) {
+                console.error(`[FormView] ERROR: Options have empty data!`);
+                console.error(`[FormView] - All options have empty text: ${allEmptyText}`);
+                console.error(`[FormView] - All options have empty value: ${allEmptyValue}`);
+                console.error(`[FormView] - Current valuePath: "${dataSource.valuePath}"`);
+                console.error(`[FormView] - Current textPath: "${dataSource.textPath}"`);
+                console.error(`[FormView] - API URL: "${dataSource.apiUrl}"`);
+                console.error(`[FormView] This indicates the backend cannot extract data using the configured paths.`);
+                console.error(`[FormView] Please verify the paths match your API response structure.`);
+              }
+            }
+          } else {
+            // If no options from DataSource, fallback to static options
+            this.fieldDataSourceOptions[field.id] = [];
+            console.warn(`[FormView] No options from ${dataSource.sourceType} DataSource for field ${field.id}, using static options`);
+          }
+          this.loadingFieldOptions[field.id] = false;
+        },
+        error: (error) => {
+          console.error(`[FormView] Error loading options from ${dataSource.sourceType} DataSource for field ${field.id}:`, error);
+          
+          // Extract error message from backend response
+          let backendErrorMessage = '';
+          let backendErrorDetails: any = null;
+          
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              backendErrorMessage = error.error;
+            } else if (error.error.message) {
+              backendErrorMessage = error.error.message;
+              backendErrorDetails = error.error;
+            } else if (error.error.error) {
+              backendErrorMessage = error.error.error;
+            }
+          }
+          
+          console.error(`[FormView] Error details:`, {
+            status: error?.status,
+            statusText: error?.statusText,
+            message: error?.message,
+            url: error?.url,
+            backendMessage: backendErrorMessage,
+            backendDetails: backendErrorDetails
+          });
+          
+          // Log DataSource configuration for debugging
+          console.error(`[FormView] DataSource configuration:`, {
+            sourceType: dataSource.sourceType,
+            apiUrl: dataSource.apiUrl,
+            valuePath: dataSource.valuePath,
+            textPath: dataSource.textPath,
+            httpMethod: dataSource.httpMethod
+          });
+          
+          // Provide helpful error message based on status code and source type
+          if (error?.status === 500) {
+            console.error(`[FormView] Backend server error (500) for ${dataSource.sourceType} DataSource.`);
+            
+            if (dataSource.sourceType === 'LookupTable') {
+              console.error(`[FormView] LookupTable-specific troubleshooting:`);
+              
+              // Display backend error message if available (includes available tables/columns)
+              if (backendErrorMessage) {
+                console.error(`[FormView] Backend error message:`, backendErrorMessage);
+              }
+              
+              console.error(`[FormView] 1. Verify the table exists in the database`);
+              console.error(`[FormView] 2. Check if valueColumn "${dataSource.valuePath}" exists in the table`);
+              console.error(`[FormView] 3. Check if textColumn "${dataSource.textPath}" exists in the table`);
+              console.error(`[FormView] 4. Ensure the table has data (rows)`);
+              console.error(`[FormView] 5. Verify database connection is working`);
+              console.error(`[FormView] 6. Check backend logs for detailed error messages`);
+              
+              // If backend provides available tables/columns, log them
+              if (backendErrorDetails?.availableTables) {
+                console.error(`[FormView] Available tables:`, backendErrorDetails.availableTables);
+              }
+              if (backendErrorDetails?.availableColumns) {
+                console.error(`[FormView] Available columns:`, backendErrorDetails.availableColumns);
+              }
+            } else if (dataSource.sourceType === 'Api') {
+              console.error(`[FormView] API-specific troubleshooting:`);
+              console.error(`[FormView] 1. The API endpoint "${dataSource.apiUrl}" might be invalid or unreachable`);
+              console.error(`[FormView] 2. The valuePath "${dataSource.valuePath}" might not match the API response structure`);
+              console.error(`[FormView] 3. The textPath "${dataSource.textPath}" might not match the API response structure`);
+              console.error(`[FormView] 4. The backend might have an internal error processing the request`);
+              console.error(`[FormView] 5. Check backend logs for more details`);
+            } else {
+              console.error(`[FormView] General troubleshooting:`);
+              console.error(`[FormView] 1. Check backend logs for detailed error messages`);
+              console.error(`[FormView] 2. Verify DataSource configuration is correct`);
+              console.error(`[FormView] 3. Ensure backend service is running properly`);
+            }
+          } else if (error?.status === 404) {
+            console.error(`[FormView] DataSource endpoint not found (404).`);
+            if (dataSource.sourceType === 'LookupTable') {
+              console.error(`[FormView] The table "${dataSource.apiUrl}" might not exist or the endpoint is incorrect.`);
+            } else {
+              console.error(`[FormView] Check if the field has a valid DataSource configuration.`);
+            }
+          } else if (error?.status === 400) {
+            console.error(`[FormView] Bad request (400). The DataSource configuration might be invalid.`);
+            if (dataSource.sourceType === 'LookupTable') {
+              console.error(`[FormView] Check if valueColumn "${dataSource.valuePath}" and textColumn "${dataSource.textPath}" are correct.`);
+            }
+          }
+          
+          // Fallback to static options on error
           this.fieldDataSourceOptions[field.id] = [];
-          console.log(`[FormView] No options from DataSource for field ${field.id}, using static options`);
+          this.loadingFieldOptions[field.id] = false;
         }
-        this.loadingFieldOptions[field.id] = false;
-      },
-      error: (error) => {
-        console.error(`[FormView] Error loading options from DataSource for field ${field.id}:`, error);
-        // Fallback to static options on error
-        this.fieldDataSourceOptions[field.id] = [];
-        this.loadingFieldOptions[field.id] = false;
-      }
-    });
+      });
+    } else {
+      // Unknown source type, use static options
+      console.warn(`[FormView] Field ${field.id} has unknown DataSource type: ${dataSource.sourceType}, using static options`);
+      this.fieldDataSourceOptions[field.id] = [];
+    }
   }
 
   /**
@@ -450,17 +642,175 @@ export class FormViewComponent implements OnInit {
 
     // If options are loaded from DataSource, use them
     if (this.fieldDataSourceOptions[field.id] && this.fieldDataSourceOptions[field.id].length > 0) {
+      // Only log once per field to avoid console spam
+      if (!this._loggedFieldOptions[field.id]) {
+        console.log(`[FormView] Field ${field.id} (${field.fieldCode || 'no-code'}) - returning ${this.fieldDataSourceOptions[field.id].length} DataSource options`);
+        this._loggedFieldOptions[field.id] = true;
+      }
       // Convert FieldOptionResponse to FieldOptionDto format for compatibility
-      return this.fieldDataSourceOptions[field.id].map(opt => ({
-        optionValue: String(opt.value),
-        optionText: opt.text,
-        foreignOptionText: opt.text, // DataSource doesn't provide separate Arabic text
-        isActive: true
-      }));
+      return this.fieldDataSourceOptions[field.id]
+        .filter(opt => opt !== null && opt !== undefined) // Filter out null/undefined options
+        .map((opt, index) => {
+          // Try to extract text and value from the option
+          // Use 'any' to handle dynamic properties that might exist in the response
+          const optAny = opt as any;
+          let text = '';
+          let value = '';
+          
+          // Check for text property (case-insensitive)
+          if (opt.text !== undefined && opt.text !== null) {
+            text = String(opt.text).trim();
+          } else if (optAny.Text !== undefined && optAny.Text !== null) {
+            text = String(optAny.Text).trim();
+          } else if (optAny.label !== undefined && optAny.label !== null) {
+            text = String(optAny.label).trim();
+          } else if (optAny.name !== undefined && optAny.name !== null) {
+            text = String(optAny.name).trim();
+          }
+          
+          // Check for value property (case-insensitive)
+          if (opt.value !== undefined && opt.value !== null) {
+            value = String(opt.value);
+          } else if (optAny.Value !== undefined && optAny.Value !== null) {
+            value = String(optAny.Value);
+          } else if (optAny.id !== undefined && optAny.id !== null) {
+            value = String(optAny.id);
+          } else if (optAny.Id !== undefined && optAny.Id !== null) {
+            value = String(optAny.Id);
+          }
+          
+          // If still no value, try to use the first property that looks like an ID
+          if (!value && optAny) {
+            const keys = Object.keys(optAny);
+            const idKey = keys.find(k => 
+              k.toLowerCase() === 'id' || 
+              k.toLowerCase() === 'value' ||
+              k.toLowerCase() === 'key'
+            );
+            if (idKey && optAny[idKey] !== undefined && optAny[idKey] !== null) {
+              value = String(optAny[idKey]);
+            }
+          }
+          
+          // If still no text, try to use the first string property that's not value/id
+          if (!text && optAny) {
+            const keys = Object.keys(optAny);
+            const textKey = keys.find(k => {
+              const kLower = k.toLowerCase();
+              return kLower !== 'id' && 
+                     kLower !== 'value' && 
+                     kLower !== 'key' &&
+                     typeof optAny[k] === 'string' &&
+                     String(optAny[k]).trim() !== '';
+            });
+            if (textKey) {
+              text = String(optAny[textKey]).trim();
+            }
+          }
+          
+          // Priority: text > value > index-based fallback
+          let displayText = text;
+          if (!displayText && value) {
+            displayText = value;
+          } else if (!displayText && !value) {
+            // Last resort: use index (but this shouldn't happen if backend is working correctly)
+            displayText = `Option ${index + 1}`;
+            console.warn(`[FormView] Option at index ${index} has no text or value, using fallback: "${displayText}"`, {
+              option: opt,
+              availableKeys: Object.keys(opt || {}),
+              optionString: JSON.stringify(opt)
+            });
+          }
+          
+          return {
+            optionValue: value || String(index),
+            optionText: displayText,
+            foreignOptionText: displayText, // DataSource doesn't provide separate Arabic text
+            isActive: true
+          };
+        });
     }
 
     // Otherwise, use static options from field.fieldOptions
-    return field.fieldOptions || [];
+    const staticOptions = field.fieldOptions || [];
+    
+    // Only log once per field to avoid console spam
+    if (!this._loggedFieldOptions[field.id]) {
+      console.log(`[FormView] Field ${field.id} (${field.fieldCode || 'no-code'}) - using ${staticOptions.length} static options`);
+      this._loggedFieldOptions[field.id] = true;
+    }
+    
+    if (staticOptions.length === 0 && !this._loggedFieldNoOptions[field.id]) {
+      console.warn(`[FormView] ⚠️ Field ${field.id} (${field.fieldCode || 'no-code'}) has NO static options!`);
+      console.warn(`[FormView] Field details:`, {
+        id: field.id,
+        fieldCode: field.fieldCode,
+        fieldName: field.fieldName,
+        fieldType: this.getFieldType(field),
+        fieldOptions: field.fieldOptions,
+        fieldOptionsLength: field.fieldOptions?.length || 0,
+        fieldDataSource: field.fieldDataSource ? {
+          id: field.fieldDataSource.id,
+          sourceType: field.fieldDataSource.sourceType,
+          isActive: field.fieldDataSource.isActive,
+          apiUrl: field.fieldDataSource.apiUrl,
+          valuePath: field.fieldDataSource.valuePath,
+          textPath: field.fieldDataSource.textPath
+        } : null,
+        dataSourceOptionsLoaded: this.fieldDataSourceOptions[field.id]?.length || 0
+      });
+      
+      // Check if DataSource failed to load
+      if (field.fieldDataSource && field.fieldDataSource.isActive) {
+        console.warn(`[FormView] Field has active DataSource but no options were loaded.`);
+        console.warn(`[FormView] Possible causes:`);
+        console.warn(`[FormView] 1. DataSource failed to load (check error messages above)`);
+        console.warn(`[FormView] 2. DataSource returned empty results`);
+        console.warn(`[FormView] 3. No static options were configured as fallback`);
+        console.warn(`[FormView] SOLUTION: Add static options in Field Options section or fix DataSource configuration.`);
+      } else {
+        console.warn(`[FormView] Field has no DataSource or DataSource is inactive.`);
+        console.warn(`[FormView] SOLUTION: Add static options in Field Options section.`);
+      }
+      
+      this._loggedFieldNoOptions[field.id] = true;
+    }
+    
+    // Ensure static options also have proper text
+    const processedOptions = staticOptions
+      .filter(opt => opt !== null && opt !== undefined)
+      .map((opt, index) => {
+        // Create a copy to avoid mutating the original
+        const option = { ...opt };
+        
+        // Ensure optionText is never undefined
+        if (!option.optionText || String(option.optionText).trim() === '') {
+          if (option.optionValue && String(option.optionValue).trim() !== '') {
+            option.optionText = String(option.optionValue);
+          } else if (option.foreignOptionText && String(option.foreignOptionText).trim() !== '') {
+            option.optionText = String(option.foreignOptionText);
+          } else {
+            option.optionText = `Option ${index + 1}`;
+          }
+        }
+        
+        // Ensure optionValue is never undefined
+        if (!option.optionValue || String(option.optionValue).trim() === '') {
+          option.optionValue = String(index);
+        }
+        
+        return option;
+      });
+    
+    // Only log processed options once per field to avoid console spam
+    if (!this._loggedFieldOptions[field.id] && processedOptions.length > 0) {
+      console.log(`[FormView] Field ${field.id} - processed ${processedOptions.length} static options:`, processedOptions.slice(0, 3).map(opt => ({
+        optionValue: opt.optionValue,
+        optionText: opt.optionText
+      })));
+    }
+    
+    return processedOptions;
   }
 
   /**
@@ -556,8 +906,289 @@ export class FormViewComponent implements OnInit {
     return 'text';
   }
 
+  // ===== Form Rules Evaluation =====
+
+  /**
+   * Initialize form rules after form is loaded
+   */
+  private initializeFormRules(): void {
+    // Reset dynamic states
+    this.resetDynamicFieldStates();
+    
+    // Evaluate rules with initial values
+    this.evaluateFormRules();
+  }
+
+  /**
+   * Evaluate all form rules and apply actions
+   * Called whenever field values change
+   */
+  evaluateFormRules(): void {
+    if (!this.form || !this.form.formRules || this.form.formRules.length === 0) {
+      return;
+    }
+
+    // Sort rules by priority (higher priority first)
+    const sortedRules = [...this.form.formRules]
+      .filter(rule => rule.isActive)
+      .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+    // Reset dynamic states to base field states
+    this.resetDynamicFieldStates();
+
+    // Evaluate each rule
+    for (const rule of sortedRules) {
+      if (this.evaluateCondition(rule.condition)) {
+        this.applyActions(rule.actions);
+      }
+    }
+
+    console.log('[FormView] Form rules evaluated, dynamic states:', this.dynamicFieldStates);
+  }
+
+  /**
+   * Reset dynamic field states to base field configuration
+   */
+  private resetDynamicFieldStates(): void {
+    this.dynamicFieldStates = {};
+    if (this.tabs) {
+      this.tabs.forEach(tab => {
+        tab.fields?.forEach(field => {
+          this.dynamicFieldStates[field.fieldCode] = {
+            isVisible: field.isVisible ?? true,
+            isRequired: field.isMandatory ?? false,
+            isReadOnly: field.isEditable === false,
+            value: undefined
+          };
+        });
+      });
+    }
+  }
+
+  /**
+   * Evaluate a rule condition
+   */
+  private evaluateCondition(condition: RuleCondition): boolean {
+    if (!condition || !condition.conditions || condition.conditions.length === 0) {
+      return true; // Empty condition is always true
+    }
+
+    const results = condition.conditions.map(cond => this.evaluateFieldCondition(cond));
+
+    // Apply operator (And/Or)
+    if (condition.operator === 'Or') {
+      return results.some(r => r === true);
+    } else {
+      // Default to And
+      return results.every(r => r === true);
+    }
+  }
+
+  /**
+   * Evaluate a single field condition
+   */
+  private evaluateFieldCondition(condition: FieldCondition): boolean {
+    const fieldValue = this.fieldValues[condition.fieldCode];
+    const conditionValue = condition.value;
+
+    switch (condition.operator) {
+      case 'Equals':
+        return this.compareValues(fieldValue, conditionValue, '===');
+      case 'NotEquals':
+        return !this.compareValues(fieldValue, conditionValue, '===');
+      case 'Contains':
+        return String(fieldValue || '').toLowerCase().includes(String(conditionValue || '').toLowerCase());
+      case 'GreaterThan':
+        return Number(fieldValue) > Number(conditionValue);
+      case 'LessThan':
+        return Number(fieldValue) < Number(conditionValue);
+      case 'IsEmpty':
+        return !fieldValue || String(fieldValue).trim() === '';
+      case 'IsNotEmpty':
+        return fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== '';
+      case 'In':
+        const inArray = Array.isArray(conditionValue) ? conditionValue : [conditionValue];
+        return inArray.includes(fieldValue);
+      case 'NotIn':
+        const notInArray = Array.isArray(conditionValue) ? conditionValue : [conditionValue];
+        return !notInArray.includes(fieldValue);
+      default:
+        console.warn(`[FormView] Unknown condition operator: ${condition.operator}`);
+        return false;
+    }
+  }
+
+  /**
+   * Compare two values with type conversion
+   */
+  private compareValues(value1: any, value2: any, operator: '===' | '=='): boolean {
+    // Try type conversion for numbers and booleans
+    const v1 = this.convertValue(value1);
+    const v2 = this.convertValue(value2);
+
+    if (operator === '===') {
+      return v1 === v2;
+    } else {
+      return v1 == v2; // eslint-disable-line eqeqeq
+    }
+  }
+
+  /**
+   * Convert value to appropriate type (number, boolean, or string)
+   */
+  private convertValue(value: any): any {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    // Try boolean
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+
+    // Try number
+    const num = Number(value);
+    if (!isNaN(num) && String(value).trim() === String(num)) {
+      return num;
+    }
+
+    // Return as string
+    return String(value);
+  }
+
+  /**
+   * Apply rule actions
+   */
+  private applyActions(actions: RuleAction[]): void {
+    if (!actions || actions.length === 0) {
+      return;
+    }
+
+    for (const action of actions) {
+      const state = this.dynamicFieldStates[action.fieldCode];
+      if (!state) {
+        // Field not found, skip
+        continue;
+      }
+
+      switch (action.actionType) {
+        case 'Show':
+          state.isVisible = true;
+          break;
+        case 'Hide':
+          state.isVisible = false;
+          break;
+        case 'SetRequired':
+          state.isRequired = true;
+          break;
+        case 'SetOptional':
+          state.isRequired = false;
+          break;
+        case 'SetReadOnly':
+          state.isReadOnly = true;
+          break;
+        case 'SetEditable':
+          state.isReadOnly = false;
+          break;
+        case 'SetValue':
+          if (action.value !== undefined) {
+            state.value = action.value;
+            this.fieldValues[action.fieldCode] = action.value;
+          }
+          break;
+        case 'SetDefaultValue':
+          if (action.value !== undefined && this.fieldValues[action.fieldCode] === undefined) {
+            state.value = action.value;
+            this.fieldValues[action.fieldCode] = action.value;
+          }
+          break;
+      }
+    }
+  }
+
+  /**
+   * Track field value changes for rule evaluation
+   */
+  onFieldValueChange(fieldCode: string, value: any): void {
+    this.fieldValues[fieldCode] = value;
+    // Re-evaluate rules when any field value changes
+    this.evaluateFormRules();
+  }
+
+  /**
+   * Handle checkbox change (multiple values)
+   */
+  onCheckboxChange(field: FormFieldDto, optionValue: any, event: Event): void {
+    const isChecked = (event.target as HTMLInputElement).checked;
+    const currentValue = this.fieldValues[field.fieldCode] || this.getDefaultValue(field);
+    
+    try {
+      let selectedValues: any[] = [];
+      
+      // Try to parse current value as JSON array
+      if (currentValue && typeof currentValue === 'string') {
+        try {
+          const parsed = JSON.parse(currentValue);
+          if (Array.isArray(parsed)) {
+            selectedValues = [...parsed];
+          }
+        } catch {
+          // Not JSON, treat as single value
+          if (currentValue) {
+            selectedValues = [currentValue];
+          }
+        }
+      } else if (Array.isArray(currentValue)) {
+        selectedValues = [...currentValue];
+      }
+      
+      // Add or remove the option value
+      if (isChecked) {
+        if (!selectedValues.includes(optionValue)) {
+          selectedValues.push(optionValue);
+        }
+      } else {
+        selectedValues = selectedValues.filter(v => v !== optionValue);
+      }
+      
+      // Update field value
+      const newValue = selectedValues.length > 0 ? JSON.stringify(selectedValues) : '';
+      this.onFieldValueChange(field.fieldCode, newValue);
+    } catch (error) {
+      console.error(`[FormView] Error handling checkbox change for field ${field.fieldCode}:`, error);
+    }
+  }
+
+  /**
+   * Check if field is required (base + dynamic rules)
+   */
   isRequired(field: FormFieldDto): boolean {
+    const dynamicState = this.dynamicFieldStates[field.fieldCode];
+    if (dynamicState && dynamicState.isRequired !== undefined) {
+      return dynamicState.isRequired;
+    }
     return field.isMandatory === true;
+  }
+
+  /**
+   * Check if field is visible (base + dynamic rules)
+   */
+  isFieldVisible(field: FormFieldDto): boolean {
+    const dynamicState = this.dynamicFieldStates[field.fieldCode];
+    if (dynamicState && dynamicState.isVisible !== undefined) {
+      return dynamicState.isVisible;
+    }
+    return field.isVisible ?? true;
+  }
+
+  /**
+   * Check if field is editable (base + dynamic rules)
+   */
+  isFieldEditable(field: FormFieldDto): boolean {
+    const dynamicState = this.dynamicFieldStates[field.fieldCode];
+    if (dynamicState && dynamicState.isReadOnly !== undefined) {
+      return !dynamicState.isReadOnly;
+    }
+    return field.isEditable !== false;
   }
 
   getDefaultValue(field: FormFieldDto): string {
@@ -1507,22 +2138,120 @@ export class FormViewComponent implements OnInit {
   /**
    * Get option text based on current language
    * Supports both FieldOptionDto and FieldOptionResponse
+   * Handles JSON strings in text field
    */
   getOptionText(option: any): string {
     if (!option) return '';
     
-    // Handle FieldOptionResponse (from DataSource)
-    if (option.text !== undefined) {
-      return option.text || '';
+    // Helper function to parse JSON string and extract readable text
+    const parseJsonText = (text: string): string => {
+      if (!text || typeof text !== 'string') return text;
+      
+      const trimmed = text.trim();
+      // Check if it's a JSON string (starts with { or [)
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          
+          // If it's an object, try to extract readable text
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            // Try common name patterns: first + last, name, title + first + last, etc.
+            if (parsed.first && parsed.last) {
+              const parts: string[] = [];
+              if (parsed.title) parts.push(String(parsed.title));
+              if (parsed.first) parts.push(String(parsed.first));
+              if (parsed.last) parts.push(String(parsed.last));
+              return parts.join(' ');
+            }
+            
+            // Try name property
+            if (parsed.name) {
+              return String(parsed.name);
+            }
+            
+            // Try text or label properties
+            if (parsed.text) {
+              return String(parsed.text);
+            }
+            if (parsed.label) {
+              return String(parsed.label);
+            }
+            
+            // Try title property
+            if (parsed.title) {
+              return String(parsed.title);
+            }
+            
+            // Try to find first string property
+            const keys = Object.keys(parsed);
+            for (const key of keys) {
+              const value = parsed[key];
+              if (typeof value === 'string' && value.trim() !== '') {
+                return value.trim();
+              }
+            }
+            
+            // If nothing found, return stringified version (but formatted)
+            return JSON.stringify(parsed);
+          }
+          
+          // If it's an array, return first element or stringified
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return String(parsed[0]);
+          }
+          
+          return trimmed;
+        } catch (e) {
+          // If parsing fails, return original text
+          return trimmed;
+        }
+      }
+      
+      return trimmed;
+    };
+    
+    // Handle FieldOptionResponse (from DataSource) - check for text property first
+    if ('text' in option) {
+      let text = option.text !== undefined && option.text !== null ? String(option.text).trim() : '';
+      
+      // Parse JSON strings if present
+      if (text) {
+        text = parseJsonText(text);
+      }
+      
+      // If text is empty, try to use value as fallback
+      if (!text && 'value' in option && option.value !== undefined && option.value !== null) {
+        const valueText = String(option.value).trim();
+        return parseJsonText(valueText);
+      }
+      
+      return text || '';
     }
     
     // Handle FieldOptionDto (static options)
     const lang = this.translationService.getCurrentLanguage();
-    if (lang === 'ar' && option.foreignOptionText && option.foreignOptionText.trim()) {
-      return option.foreignOptionText;
+    if (lang === 'ar' && option.foreignOptionText && String(option.foreignOptionText).trim()) {
+      return parseJsonText(String(option.foreignOptionText).trim());
     }
     
-    return option.optionText || '';
+    let optionText = option.optionText !== undefined && option.optionText !== null 
+      ? String(option.optionText).trim() 
+      : '';
+    
+    // Parse JSON strings if present
+    if (optionText) {
+      optionText = parseJsonText(optionText);
+    }
+    
+    // If optionText is empty, try to use optionValue as fallback
+    if (!optionText && option.optionValue !== undefined && option.optionValue !== null) {
+      const valueText = String(option.optionValue).trim();
+      return parseJsonText(valueText);
+    }
+    
+    // Final fallback - return empty string instead of undefined
+    return optionText || '';
   }
 
   /**

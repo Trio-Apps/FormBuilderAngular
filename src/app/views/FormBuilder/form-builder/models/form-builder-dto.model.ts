@@ -16,6 +16,7 @@ export interface FormBuilderDto {
   tabs?: FormTabDto[];
   fieldsCount?: number;
   tabsCount?: number;
+  formRules?: FormRule[]; // ✅ Form Rules for dynamic behavior
 }
 
 export interface CreateFormBuilderDto {
@@ -107,6 +108,7 @@ export interface FormFieldDto {
   tab?: FormTabDto; // JsonIgnore in C#
   fieldType?: FieldTypeDto;
   fieldOptions: FieldOptionDto[]; // Required in C# (List with default)
+  fieldDataSource?: FieldDataSource; // ✅ Data Source configuration for dynamic options
   // Computed properties from API (for compatibility)
   label_en?: string; // English label (from API)
   label_ar?: string; // Arabic label (from API)
@@ -290,4 +292,92 @@ export interface ApiResponse<T> {
   data?: T;
   message?: string;
   errors?: any;
+}
+
+// ==================== Form Rules Interfaces ====================
+
+/**
+ * Form Rule - Controls dynamic form behavior based on field values
+ */
+export interface FormRule {
+  id?: number;
+  formId: number;
+  ruleName: string;
+  ruleType: FormRuleType; // 'Visibility' | 'Mandatory' | 'ReadOnly' | 'Custom'
+  condition: RuleCondition;
+  actions: RuleAction[];
+  isActive: boolean;
+  priority?: number; // Higher priority rules are evaluated first
+  description?: string;
+}
+
+/**
+ * Rule Types
+ */
+export type FormRuleType = 'Visibility' | 'Mandatory' | 'ReadOnly' | 'Custom';
+
+/**
+ * Rule Condition - Defines when the rule should be triggered
+ */
+export interface RuleCondition {
+  operator: ConditionOperator; // 'And' | 'Or'
+  conditions: FieldCondition[];
+}
+
+/**
+ * Condition Operators
+ */
+export type ConditionOperator = 'And' | 'Or';
+
+/**
+ * Field Condition - Single condition on a field value
+ */
+export interface FieldCondition {
+  fieldCode: string; // Field code to check
+  operator: FieldOperator; // 'Equals' | 'NotEquals' | 'Contains' | 'GreaterThan' | 'LessThan' | 'IsEmpty' | 'IsNotEmpty'
+  value?: any; // Value to compare (optional for IsEmpty/IsNotEmpty)
+  valueType?: 'string' | 'number' | 'boolean' | 'date'; // Type of the value
+}
+
+/**
+ * Field Operators
+ */
+export type FieldOperator = 'Equals' | 'NotEquals' | 'Contains' | 'GreaterThan' | 'LessThan' | 'IsEmpty' | 'IsNotEmpty' | 'In' | 'NotIn';
+
+/**
+ * Rule Action - What happens when condition is met
+ */
+export interface RuleAction {
+  fieldCode: string; // Target field code
+  actionType: ActionType; // 'Show' | 'Hide' | 'SetRequired' | 'SetOptional' | 'SetReadOnly' | 'SetEditable' | 'SetValue' | 'SetDefaultValue'
+  value?: any; // Optional value for SetValue/SetDefaultValue
+}
+
+/**
+ * Action Types
+ */
+export type ActionType = 'Show' | 'Hide' | 'SetRequired' | 'SetOptional' | 'SetReadOnly' | 'SetEditable' | 'SetValue' | 'SetDefaultValue';
+
+/**
+ * DTOs for Create/Update
+ */
+export interface CreateFormRuleDto {
+  formId: number;
+  ruleName: string;
+  ruleType: FormRuleType;
+  condition: RuleCondition;
+  actions: RuleAction[];
+  isActive?: boolean;
+  priority?: number;
+  description?: string;
+}
+
+export interface UpdateFormRuleDto {
+  ruleName?: string;
+  ruleType?: FormRuleType;
+  condition?: RuleCondition;
+  actions?: RuleAction[];
+  isActive?: boolean;
+  priority?: number;
+  description?: string;
 }

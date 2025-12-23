@@ -135,6 +135,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   showApiDebugInfo: boolean = false;
   rawApiResponse: any = null;
   apiDebugError: string | null = null;
+  availableProperties: string[] = []; // Available properties from API response
+  hasSuggestedPaths: boolean = false; // Flag to indicate if suggested paths are available
   
   // Expose Array, Object, and Math to template
   Array = Array;
@@ -1899,6 +1901,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.previewOptions = [];
     this.availableLookupTables = [];
     this.availableColumns = [];
+    this.availableProperties = []; // Reset available properties
+    this.hasSuggestedPaths = false; // Reset suggested paths flag
+    this.rawApiResponse = null;
+    this.apiDebugError = null;
   }
 
   /**
@@ -2013,6 +2019,47 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Extract available properties from raw API response
+   */
+  extractAvailableProperties(): void {
+    this.availableProperties = [];
+    this.hasSuggestedPaths = false; // Reset suggested paths flag
+    
+    if (!this.rawApiResponse) return;
+
+    try {
+      let dataArray: any[] = [];
+      
+      // Check if it's a direct array
+      if (Array.isArray(this.rawApiResponse)) {
+        dataArray = this.rawApiResponse;
+      }
+      // Check if it's wrapped in data
+      else if (this.rawApiResponse.data && Array.isArray(this.rawApiResponse.data)) {
+        dataArray = this.rawApiResponse.data;
+      }
+      // Check if it's wrapped in results
+      else if (this.rawApiResponse.results && Array.isArray(this.rawApiResponse.results)) {
+        dataArray = this.rawApiResponse.results;
+      }
+      // Check if it's wrapped in items
+      else if (this.rawApiResponse.items && Array.isArray(this.rawApiResponse.items)) {
+        dataArray = this.rawApiResponse.items;
+      }
+      
+      if (dataArray.length > 0) {
+        const firstItem = dataArray[0];
+        const keys = Object.keys(firstItem);
+        this.availableProperties = keys.sort();
+        console.log('[FieldsList] Available properties:', this.availableProperties);
+      }
+    } catch (e) {
+      console.error('[FieldsList] Error extracting available properties:', e);
+      this.availableProperties = [];
+    }
+  }
+
+  /**
    * Extract available columns from raw API response
    */
   extractColumnsFromRawResponse(): void {
@@ -2082,6 +2129,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.loadingPreview = true;
     this.rawApiResponse = null;
     this.apiDebugError = null;
+    this.hasSuggestedPaths = false; // Reset suggested paths flag
     this.showApiDebugInfo = true;
 
     const method = (this.dataSourceConfig.httpMethod || 'GET').toUpperCase();
@@ -2132,6 +2180,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.loadingPreview = false;
         console.log('[FieldsList] Raw API Response:', data);
         
+        // Extract available properties
+        this.extractAvailableProperties();
+        
         // Extract columns if LookupTable type
         if (this.dataSourceType === 'LookupTable') {
           this.extractColumnsFromRawResponse();
@@ -2140,20 +2191,42 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'success',
           summary: 'API Test Success',
-          detail: 'API response received. Check the debug panel below to see the structure.',
+          detail: 'API response received. Check available properties below.',
           life: 5000
         });
         this.cdr.detectChanges();
       })
       .catch(error => {
         this.loadingPreview = false;
-        this.apiDebugError = error.message || 'Failed to fetch API response';
+        let errorMsg = error.message || 'Failed to fetch API response';
+        
+        // Detect network/DNS errors and provide helpful messages
+        const errorMsgLower = errorMsg.toLowerCase();
+        if (errorMsgLower.includes('no such host') ||
+            errorMsgLower.includes('host is known') ||
+            errorMsgLower.includes('failed to resolve') ||
+            errorMsgLower.includes('dns') ||
+            errorMsgLower.includes('network') ||
+            errorMsgLower.includes('connection') ||
+            errorMsgLower.includes('timeout') ||
+            errorMsgLower.includes('refused') ||
+            errorMsgLower.includes('fetch')) {
+          errorMsg = `Network error: ${errorMsg}\n\n` +
+                    `Possible causes:\n` +
+                    `• DNS resolution failure\n` +
+                    `• Network connectivity issue\n` +
+                    `• Firewall or proxy blocking\n` +
+                    `• API server might be down\n\n` +
+                    `Please verify the API URL is correct and accessible.`;
+        }
+        
+        this.apiDebugError = errorMsg;
         console.error('[FieldsList] API Test Error:', error);
         this.messageService.add({
           severity: 'error',
           summary: 'API Test Failed',
-          detail: this.apiDebugError || 'Failed to fetch API response',
-          life: 5000
+          detail: errorMsg,
+          life: 8000
         });
         this.cdr.detectChanges();
       });
@@ -2167,6 +2240,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     if (!this.showApiDebugInfo) {
       this.rawApiResponse = null;
       this.apiDebugError = null;
+      // Keep availableProperties visible even when debug panel is closed
     }
   }
 
@@ -2210,16 +2284,61 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           k === 'ID'
         ) || keys[0];
 
-        // Find potential text path (usually name, Name, text, Text, label, Label, etc.)
-        const textKey = keys.find(k => 
+        // Find potential text path with improved logic
+        // Priority order: name > firstname/lastname > username > email > text > label > title > other text-like fields
+        let textKey = keys.find(k => 
           k.toLowerCase() === 'name' || 
-          k.toLowerCase() === 'text' ||
-          k.toLowerCase() === 'label' ||
-          k.toLowerCase() === 'title' ||
-          k === 'Name' ||
-          k === 'Text' ||
-          k === 'Label'
-        ) || (keys.length > 1 ? keys[1] : keys[0]);
+          k === 'Name'
+        );
+        
+        // If no 'name', try firstname or lastname (prefer firstname)
+        if (!textKey) {
+          textKey = keys.find(k => 
+            k.toLowerCase() === 'firstname' || 
+            k.toLowerCase() === 'first_name' ||
+            k.toLowerCase() === 'firstName' ||
+            k === 'Firstname' ||
+            k === 'FirstName'
+          );
+        }
+        
+        // If still no match, try lastname
+        if (!textKey) {
+          textKey = keys.find(k => 
+            k.toLowerCase() === 'lastname' || 
+            k.toLowerCase() === 'last_name' ||
+            k.toLowerCase() === 'lastName' ||
+            k === 'Lastname' ||
+            k === 'LastName'
+          );
+        }
+        
+        // Try other common text fields
+        if (!textKey) {
+          textKey = keys.find(k => 
+            k.toLowerCase() === 'username' ||
+            k.toLowerCase() === 'user_name' ||
+            k.toLowerCase() === 'email' ||
+            k.toLowerCase() === 'text' ||
+            k.toLowerCase() === 'label' ||
+            k.toLowerCase() === 'title' ||
+            k.toLowerCase() === 'description' ||
+            k.toLowerCase() === 'desc' ||
+            k === 'Text' ||
+            k === 'Label' ||
+            k === 'Title'
+          );
+        }
+        
+        // Fallback: use first non-id, non-value, non-key field, or second key if available
+        if (!textKey) {
+          const nonValueKeys = keys.filter(k => {
+            const kLower = k.toLowerCase();
+            return kLower !== 'id' && kLower !== 'value' && kLower !== 'key' && 
+                   kLower !== 'uuid' && kLower !== 'createdat' && kLower !== 'updatedat';
+          });
+          textKey = nonValueKeys.length > 0 ? nonValueKeys[0] : (keys.length > 1 ? keys[1] : keys[0]);
+        }
 
         return {
           valuePath: valueKey,
@@ -2241,6 +2360,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     if (suggested) {
       this.dataSourceConfig.valuePath = suggested.valuePath;
       this.dataSourceConfig.textPath = suggested.textPath;
+      this.hasSuggestedPaths = false; // Reset flag after applying
       this.messageService.add({
         severity: 'success',
         summary: 'Paths Applied',
@@ -2248,6 +2368,34 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       });
       this.cdr.detectChanges();
     }
+  }
+
+  /**
+   * Apply property as Value Path or Text Path when clicked
+   */
+  applyPropertyAsPath(property: string): void {
+    const propLower = property.toLowerCase();
+    
+    // Check if it's likely a value path (id, value, key, etc.)
+    if (propLower.includes('id') || propLower === 'value' || propLower === 'key') {
+      this.dataSourceConfig.valuePath = property;
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Value Path Set',
+        detail: `Value Path set to: "${property}"`,
+        life: 3000
+      });
+    } else {
+      // Otherwise, set as text path (name, text, label, title, etc.)
+      this.dataSourceConfig.textPath = property;
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Text Path Set',
+        detail: `Text Path set to: "${property}"`,
+        life: 3000
+      });
+    }
+    this.cdr.detectChanges();
   }
 
   /**
@@ -2391,20 +2539,39 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
 
     // Ensure valuePath and textPath are set with defaults if empty
-    const defaultValuePath = this.dataSourceType === 'LookupTable' ? 'Id' : 'id';
-    const defaultTextPath = this.dataSourceType === 'LookupTable' ? 'Name' : 'name';
-    
-    // Update the config with defaults if paths are empty/null/undefined
-    if (!this.dataSourceConfig.valuePath || !this.dataSourceConfig.valuePath.trim()) {
-      this.dataSourceConfig.valuePath = defaultValuePath;
-      if (this.dataSourceType === 'LookupTable') {
-        this.lookupTableConfig.valueColumn = defaultValuePath;
+    // Only set defaults if availableProperties is empty (no API tested yet)
+    if (this.availableProperties.length === 0) {
+      const defaultValuePath = this.dataSourceType === 'LookupTable' ? 'Id' : 'id';
+      const defaultTextPath = this.dataSourceType === 'LookupTable' ? 'Name' : 'name';
+      
+      // Update the config with defaults if paths are empty/null/undefined
+      if (!this.dataSourceConfig.valuePath || !this.dataSourceConfig.valuePath.trim()) {
+        this.dataSourceConfig.valuePath = defaultValuePath;
+        if (this.dataSourceType === 'LookupTable') {
+          this.lookupTableConfig.valueColumn = defaultValuePath;
+        }
       }
-    }
-    if (!this.dataSourceConfig.textPath || !this.dataSourceConfig.textPath.trim()) {
-      this.dataSourceConfig.textPath = defaultTextPath;
-      if (this.dataSourceType === 'LookupTable') {
-        this.lookupTableConfig.textColumn = defaultTextPath;
+      if (!this.dataSourceConfig.textPath || !this.dataSourceConfig.textPath.trim()) {
+        this.dataSourceConfig.textPath = defaultTextPath;
+        if (this.dataSourceType === 'LookupTable') {
+          this.lookupTableConfig.textColumn = defaultTextPath;
+        }
+      }
+    } else {
+      // If availableProperties exists, auto-select first id-like property for valuePath
+      if (!this.dataSourceConfig.valuePath || !this.dataSourceConfig.valuePath.trim()) {
+        const idProp = this.availableProperties.find(p => 
+          p.toLowerCase().includes('id') || p.toLowerCase() === 'value' || p.toLowerCase() === 'key'
+        ) || this.availableProperties[0];
+        this.dataSourceConfig.valuePath = idProp;
+      }
+      // Auto-select first name-like property for textPath
+      if (!this.dataSourceConfig.textPath || !this.dataSourceConfig.textPath.trim()) {
+        const nameProp = this.availableProperties.find(p => 
+          p.toLowerCase().includes('name') || p.toLowerCase().includes('text') || 
+          p.toLowerCase().includes('label') || p.toLowerCase().includes('title')
+        ) || (this.availableProperties.length > 1 ? this.availableProperties[1] : this.availableProperties[0]);
+        this.dataSourceConfig.textPath = nameProp;
       }
     }
 
@@ -2614,8 +2781,35 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           errorMessage = error.message;
         }
         
+        // Check for network/DNS errors first (can occur with any status or no status)
+        const isNetworkError = errorMessage.toLowerCase().includes('no such host') ||
+                              errorMessage.toLowerCase().includes('host is known') ||
+                              errorMessage.toLowerCase().includes('failed to resolve') ||
+                              errorMessage.toLowerCase().includes('dns') ||
+                              errorMessage.toLowerCase().includes('network') ||
+                              errorMessage.toLowerCase().includes('connection') ||
+                              errorMessage.toLowerCase().includes('timeout') ||
+                              errorMessage.toLowerCase().includes('refused') ||
+                              error.status === 0;
+        
+        if (isNetworkError) {
+          errorMessage = errorMessage || 'Network error. Unable to connect to the API.';
+          errorDetail = `Network connectivity issue detected.\n\n` +
+                       `Possible causes:\n` +
+                       `• DNS resolution failure - the hostname cannot be resolved\n` +
+                       `• Network connectivity problem - check your internet connection\n` +
+                       `• Firewall or proxy blocking the request\n` +
+                       `• The API server might be down or unreachable\n\n` +
+                       `Current API URL: "${this.dataSourceConfig.apiUrl}"\n\n` +
+                       `Troubleshooting steps:\n` +
+                       `1. Verify the API URL is correct and accessible\n` +
+                       `2. Check your internet connection\n` +
+                       `3. Try accessing the URL directly in your browser\n` +
+                       `4. If behind a corporate firewall, check proxy settings\n` +
+                       `5. For localhost APIs, ensure the server is running`;
+        }
         // Specific error messages based on status
-        if (error.status === 404) {
+        else if (error.status === 404) {
           errorMessage = 'API endpoint not found. Please check the URL.';
         } else if (error.status === 500) {
           errorMessage = errorMessage || 'Server error. Please check backend logs.';
@@ -2644,8 +2838,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                          `  ✗ /api/users (relative path - not allowed)\n` +
                          `  ✗ api/users (relative path - not allowed)`;
           }
-        } else if (error.status === 0) {
-          errorMessage = 'Network error. Please check if the backend is running.';
         } else if (error.status === 400) {
           if (errorMessage.includes('invalid request URI') || errorMessage.includes('absolute URI') || errorMessage.includes('BaseAddress')) {
             errorDetail = `The API URL must be an absolute URL.\n\n` +
@@ -2685,6 +2877,64 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           errorMessage = error.message;
         }
         
+        // Check if error message contains "No options extracted" - this indicates path mismatch
+        // Skip this check if it's already a network error (don't override network error details)
+        const isNoOptionsError = !isNetworkError && (
+          errorMessage.toLowerCase().includes('no options extracted') || 
+          errorMessage.toLowerCase().includes('no options found')
+        );
+        
+        // Try to extract available properties from error message if mentioned (only if not a network error)
+        if (!isNetworkError) {
+          const availablePropsMatch = errorMessage.match(/available properties[^:]*:\s*([^.]+)/i);
+          if (availablePropsMatch && availablePropsMatch[1]) {
+            const propsFromError = availablePropsMatch[1].split(',').map(p => p.trim()).filter(p => p.length > 0);
+            if (propsFromError.length > 0 && this.availableProperties.length === 0) {
+              this.availableProperties = propsFromError;
+              // Extract properties from raw response if available
+              if (this.rawApiResponse) {
+                this.extractAvailableProperties();
+              }
+            }
+          }
+        }
+        
+        if (isNoOptionsError) {
+          // Ensure we have available properties - try to extract from raw response if not already done
+          if (this.availableProperties.length === 0 && this.rawApiResponse) {
+            this.extractAvailableProperties();
+          }
+          
+          // Try to get suggested paths from the raw API response
+          const suggested = this.getSuggestedPaths();
+          if (suggested && (suggested.valuePath !== valuePath || suggested.textPath !== textPath)) {
+            const availablePropsText = this.availableProperties.length > 0 
+              ? this.availableProperties.join(', ')
+              : 'Click "Test API" to see available properties';
+            
+            errorDetail = `No options extracted from API response. Please verify that valuePath '${valuePath}' and textPath '${textPath}' are correct.\n\n` +
+                         `Available properties in the first item: ${availablePropsText}.\n\n` +
+                         `Suggested paths based on API response:\n` +
+                         `• Value Path: "${suggested.valuePath}"\n` +
+                         `• Text Path: "${suggested.textPath}"\n\n` +
+                         `Click "Apply Suggested Paths" button to automatically update the configuration.\n\n` +
+                         `For nested properties, use dot notation (e.g., 'name.first' instead of 'first_name').`;
+            
+            // Store suggested paths for potential auto-apply
+            this.hasSuggestedPaths = true;
+          } else if (this.availableProperties.length > 0) {
+            errorDetail = `No options extracted from API response. Please verify that valuePath '${valuePath}' and textPath '${textPath}' are correct.\n\n` +
+                         `Available properties in the first item: ${this.availableProperties.join(', ')}.\n\n` +
+                         `Please select appropriate paths from the available properties above.\n\n` +
+                         `For nested properties, use dot notation (e.g., 'name.first' instead of 'first_name').`;
+          } else {
+            // If we don't have raw response or properties, suggest testing the API first
+            errorDetail = `No options extracted from API response. Please verify that valuePath '${valuePath}' and textPath '${textPath}' are correct.\n\n` +
+                         `Please click "Test API" first to see the available properties in the API response, then update the paths accordingly.\n\n` +
+                         `For nested properties, use dot notation (e.g., 'name.first' instead of 'first_name').`;
+          }
+        }
+        
         // Check if error message contains path-related keywords
         if (!errorDetail && (errorMessage.toLowerCase().includes('path') || 
                              errorMessage.toLowerCase().includes('format') ||
@@ -2694,6 +2944,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                        `• Text Path: "${textPath}"\n\n` +
                        `Please verify these paths match your API response structure.`;
         }
+        
         // Show error message with details
         this.messageService.add({ 
           severity: 'error', 
