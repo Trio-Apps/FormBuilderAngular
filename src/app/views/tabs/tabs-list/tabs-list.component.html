@@ -1,29 +1,41 @@
 <div class="fields-page-container">
+  <!-- Language Toggle Buttons -->
+  <div class="admin-language-toggle">
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'en'"
+      (click)="switchLanguage('en')">
+      English
+    </button>
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'ar'"
+      (click)="switchLanguage('ar')">
+      العربية
+    </button>
+  </div>
+
   <!-- Top Navigation Bar -->
   <div class="top-navbar">
     <div class="nav-content">
       <div class="nav-left">
-        <button class="nav-back-btn" routerLink="/form-builder/forms" title="Back to Forms">
+        <button class="nav-back-btn" routerLink="/form-builder/forms" [title]="'tabs.backToForms' | translate">
           <i class="pi pi-arrow-left"></i>
         </button>
         <div class="nav-title-section">
-          <h1 class="page-title">{{ translateLabel('tabs.title') }}</h1>
-          <p class="page-subtitle">
-            {{ translateLabel('tabs.subtitle') }} {{ formId }}
-          </p>
+          <h1 class="page-title">{{ 'tabs.title' | translate }}</h1>
+          <p class="page-subtitle">{{ 'tabs.subtitle' | translate }} {{ formId }}</p>
         </div>
       </div>
       <div class="nav-right">
-        <button class="btn-icon" (click)="loadTabs()" [disabled]="loading" [title]="translateLabel('common.refresh')">
+        <button class="btn-icon" (click)="loadTabs()" [disabled]="loading" [title]="'common.refresh' | translate">
           <i class="pi pi-refresh"></i>
-        </button>
-        <button class="btn-secondary" (click)="navigateToGrids()" [disabled]="loading" [title]="translateLabel('tabs.manageGrids') || 'Manage Grids'">
-          <i class="pi pi-table"></i>
-          <span>{{ translateLabel('tabs.manageGrids') || 'Manage Grids' }}</span>
         </button>
         <button class="btn-primary" (click)="openTabModal()" [disabled]="loading">
           <i class="pi pi-plus"></i>
-          <span>{{ translateLabel('tabs.newTab') }}</span>
+          <span>{{ 'tabs.newTab' | translate }}</span>
         </button>
       </div>
     </div>
@@ -34,12 +46,12 @@
     <nav class="breadcrumb-nav">
       <a routerLink="/form-builder/forms" class="breadcrumb-link">
         <i class="pi pi-home"></i>
-        <span>{{ translateLabel('common.forms') }}</span>
+        <span>{{ 'common.forms' | translate }}</span>
       </a>
       <i class="pi pi-angle-right breadcrumb-separator"></i>
       <span class="breadcrumb-current">
         <i class="pi pi-folder"></i>
-        <span>{{ translateLabel('common.tabs') }}</span>
+        <span>{{ 'common.tabs' | translate }}</span>
       </span>
     </nav>
   </div>
@@ -54,7 +66,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ tabs.length }}</div>
-          <div class="stat-label">{{ translateLabel('tabs.totalTabs') }}</div>
+          <div class="stat-label">{{ 'tabs.totalTabs' | translate }}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -63,7 +75,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ getActiveTabsCount() }}</div>
-          <div class="stat-label">{{ translateLabel('tabs.activeTabs') }}</div>
+          <div class="stat-label">{{ 'tabs.activeTabs' | translate }}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -72,7 +84,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ getTotalFieldsCount() }}</div>
-          <div class="stat-label">{{ translateLabel('tabs.totalFields') }}</div>
+          <div class="stat-label">{{ 'tabs.totalFields' | translate }}</div>
         </div>
       </div>
     </div>
@@ -82,14 +94,14 @@
       <div class="table-header">
         <h3 class="table-title">
           <i class="pi pi-folder"></i>
-          {{ translateLabel('tabs.tabsList') }}
+          {{ 'tabs.tabsList' | translate }}
         </h3>
         <div class="table-actions">
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input
               type="text"
-              [placeholder]="translateLabel('tabs.searchTabs')"
+              [placeholder]="'tabs.searchTabs' | translate"
               class="search-input"
               [(ngModel)]="searchTerm"
             />
@@ -102,7 +114,7 @@
         <div class="spinner-wrapper">
           <i class="pi pi-spin pi-spinner"></i>
         </div>
-        <p>{{ translateLabel('tabs.loadingTabs') }}</p>
+        <p>{{ 'tabs.loadingTabs' | translate }}</p>
       </div>
 
       <!-- Empty State -->
@@ -110,11 +122,11 @@
         <div class="empty-icon">
           <i class="pi pi-inbox"></i>
         </div>
-        <h3>{{ translateLabel('tabs.noTabsFound') }}</h3>
-        <p>{{ translateLabel('tabs.getStarted') }}</p>
+        <h3>{{ 'tabs.noTabsFound' | translate }}</h3>
+        <p>{{ 'tabs.getStarted' | translate }}</p>
         <button class="btn-primary" (click)="openTabModal()">
           <i class="pi pi-plus"></i>
-          <span>{{ translateLabel('tabs.addFirstTab') }}</span>
+          <span>{{ 'tabs.addFirstTab' | translate }}</span>
         </button>
       </div>
 
@@ -124,12 +136,12 @@
           <thead>
             <tr>
               <th class="col-order">#</th>
-              <th class="col-name">{{ translateLabel('tabs.tabName') }}</th>
-              <th class="col-code">{{ translateLabel('tabs.tabCode') }}</th>
-              <th class="col-type">{{ translateLabel('tabs.tabOrder') }}</th>
-              <th class="col-options">{{ translateLabel('common.fields') }}</th>
-              <th class="col-status">{{ translateLabel('common.status') }}</th>
-              <th class="col-actions">{{ translateLabel('common.actions') }}</th>
+              <th class="col-name">{{ 'tabs.tabName' | translate }}</th>
+              <th class="col-code">{{ 'tabs.tabCode' | translate }}</th>
+              <th class="col-type">{{ 'tabs.tabOrder' | translate }}</th>
+              <th class="col-options">{{ 'common.fields' | translate }}</th>
+              <th class="col-status">{{ 'common.status' | translate }}</th>
+              <th class="col-actions">{{ 'common.actions' | translate }}</th>
             </tr>
           </thead>
           <tbody>
@@ -161,27 +173,27 @@
                   {{ tab.fieldsCount }}
                 </span>
                 <span class="options-count empty" *ngIf="!tab.fieldsCount || tab.fieldsCount === 0">
-                  {{ translateLabel('common.noData') }}
+                  {{ 'common.noData' | translate }}
                 </span>
               </td>
               <td class="col-status">
                 <span class="status-badge" [class.status-active]="tab.isActive" [class.status-inactive]="!tab.isActive">
                   <i class="pi" [class.pi-check-circle]="tab.isActive" [class.pi-times-circle]="!tab.isActive"></i>
-                  {{ tab.isActive ? translateLabel('common.active') : translateLabel('common.inactive') }}
+                  {{ tab.isActive ? ('common.active' | translate) : ('common.inactive' | translate) }}
                 </span>
               </td>
               <td class="col-actions">
                 <div class="actions-menu">
-                  <button class="action-btn action-edit" (click)="openTabModal(tab)" [title]="translateLabel('common.edit')">
+                  <button class="action-btn action-edit" (click)="openTabModal(tab)" [title]="'common.edit' | translate">
                     <i class="pi pi-pencil"></i>
                   </button>
-                  <button class="action-btn action-duplicate" (click)="navigateToFields(tab.id)" [title]="translateLabel('tabs.manageFields')">
+                  <button class="action-btn action-duplicate" (click)="navigateToFields(tab.id)" [title]="'tabs.manageFields' | translate">
                     <i class="pi pi-list"></i>
                   </button>
-                  <button class="action-btn action-table" (click)="navigateToGrids(tab.id)" [title]="translateLabel('tabs.manageGrids') || 'Manage Grids'">
+                  <button class="action-btn action-table" (click)="navigateToGrids(tab.id)" [title]="'tabs.manageGrids' | translate">
                     <i class="pi pi-table"></i>
                   </button>
-                  <button class="action-btn action-delete" (click)="deleteTab(tab.id)" [title]="translateLabel('common.delete')">
+                  <button class="action-btn action-delete" (click)="deleteTab(tab.id)" [title]="'common.delete' | translate">
                     <i class="pi pi-trash"></i>
                   </button>
                 </div>
@@ -197,36 +209,35 @@
   <p-dialog
     [(visible)]="showTabModal"
     [modal]="true"
-    [header]="editingTab ? translateLabel('tabs.editTab') : translateLabel('tabs.addTab')"
-    [style]="{ width: '450px' }"
+    [header]="(editingTab ? 'tabs.editTab' : 'tabs.addTab') | translate"
+    [style]="{ width: '500px' }"
     [draggable]="false"
     [resizable]="false"
+    styleClass="custom-modal"
     (onHide)="closeTabModal()"
   >
-    <form (ngSubmit)="saveTab()">
-      <!-- Language Toggle Buttons -->
-      <div class="mb-3 d-flex gap-2">
+    <form (ngSubmit)="saveTab()" #tabForm="ngForm">
+      <!-- Language Toggle Tabs -->
+      <div class="language-tabs-container mb-3">
         <button
           type="button"
-          class="btn"
-          [class.btn-primary]="currentInputLanguage === 'en'"
-          [class.btn-outline-secondary]="currentInputLanguage !== 'en'"
+          class="language-tab"
+          [class.language-tab-active]="currentInputLanguage === 'en'"
           (click)="setInputLanguage('en')">
           English
         </button>
         <button
           type="button"
-          class="btn"
-          [class.btn-primary]="currentInputLanguage === 'ar'"
-          [class.btn-outline-secondary]="currentInputLanguage !== 'ar'"
+          class="language-tab"
+          [class.language-tab-active]="currentInputLanguage === 'ar'"
           (click)="setInputLanguage('ar')">
           العربية
         </button>
       </div>
 
       <!-- English Tab Name -->
-      <div class="mb-3" *ngIf="currentInputLanguage === 'en'">
-        <label class="form-label">{{ translateLabel('tabs.tabName') }} <span class="text-danger">*</span></label>
+      <div class="mb-4" *ngIf="currentInputLanguage === 'en'">
+        <label class="form-label text-muted small fw-bold">{{ translateLabel('tabs.tabName') }} <span class="text-danger">*</span></label>
         <input
           type="text"
           class="form-control"
@@ -238,8 +249,8 @@
       </div>
 
       <!-- Arabic Tab Name -->
-      <div class="mb-3" *ngIf="currentInputLanguage === 'ar'">
-        <label class="form-label">{{ translateLabel('tabs.tabName') }}</label>
+      <div class="mb-4" *ngIf="currentInputLanguage === 'ar'">
+        <label class="form-label text-muted small fw-bold">{{ translateLabel('tabs.tabName') }}</label>
         <input
           type="text"
           class="form-control"
@@ -249,8 +260,8 @@
         />
       </div>
 
-      <div class="mb-3">
-        <label class="form-label">{{ translateLabel('tabs.tabCode') }} <span class="text-danger">*</span></label>
+      <div class="mb-4">
+        <label class="form-label text-muted small fw-bold">{{ translateLabel('tabs.tabCode') }} <span class="text-danger">*</span></label>
         <input
           type="text"
           class="form-control"
@@ -261,8 +272,8 @@
         />
       </div>
 
-      <div class="mb-3">
-        <label class="form-label">{{ translateLabel('tabs.tabOrder') }}</label>
+      <div class="mb-4">
+        <label class="form-label text-muted small fw-bold">{{ translateLabel('tabs.tabOrder') }}</label>
         <input
           type="number"
           class="form-control"
@@ -273,40 +284,40 @@
         />
       </div>
 
-      <div class="mb-3">
-        <label class="form-label d-block">{{ translateLabel('common.status') }}</label>
-        <div class="form-check form-switch">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            id="isActive"
-            [(ngModel)]="isActive"
-            name="isActive"
-          />
-          <label class="form-check-label" for="isActive">
-            {{ isActive ? translateLabel('common.active') : translateLabel('common.inactive') }}
-          </label>
+      <div class="row mb-3 g-3">
+        <div class="col-12">
+          <label class="form-label text-muted small fw-bold d-block">{{ translateLabel('common.status') }}</label>
+          <div class="form-check form-switch">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="isActive"
+              [(ngModel)]="isActive"
+              name="isActive"
+            />
+            <label class="form-check-label" for="isActive">
+              {{ isActive ? translateLabel('common.active') : translateLabel('common.inactive') }}
+            </label>
+          </div>
         </div>
       </div>
 
-      <div class="d-flex justify-content-end gap-2 mt-4">
+      <div class="d-flex justify-content-end gap-2 pt-3">
         <button
           pButton
           type="button"
           [label]="translateLabel('common.cancel')"
           (click)="closeTabModal()"
-          class="p-button-text"
+          class="p-button-text text-muted"
         >
         </button>
-
         <button
           pButton
           type="submit"
+          [label]="loading ? translateLabel('common.saving') : translateLabel('common.save')"
           [disabled]="!tabName || !tabCode || loading"
-          class="p-button-primary"
+          class="p-button-primary px-4"
         >
-          <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>
-          {{ translateLabel('common.save') }}
         </button>
       </div>
     </form>

@@ -31,7 +31,7 @@ export class FormViewComponent implements OnInit {
   notFoundReason: string = '';
   activeTabIndex = 0;
   showLanguageDropdown = false;
-  
+
   // File upload state
   uploadingFiles: { [fieldId: number]: boolean } = {};
   uploadProgress: { [fieldId: number]: number } = {}; // Upload progress percentage
@@ -41,13 +41,13 @@ export class FormViewComponent implements OnInit {
   filePreviewUrls: { [attachmentId: number]: string } = {}; // File preview URLs for images/PDFs
   showPreviewModal: boolean = false;
   previewFile: FormSubmissionAttachmentDto | null = null;
-  
+
   // Field DataSource state
   fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
   loadingFieldOptions: { [fieldId: number]: boolean } = {}; // Loading state for each field
   private _loggedFieldOptions: { [fieldId: number]: boolean } = {}; // Track logged fields to avoid console spam
   private _loggedFieldNoOptions: { [fieldId: number]: boolean } = {}; // Track logged "no options" warnings
-  
+
   // Form Rules state - Dynamic field states based on rules
   dynamicFieldStates: {
     [fieldCode: string]: {
@@ -58,10 +58,10 @@ export class FormViewComponent implements OnInit {
     }
   } = {};
   fieldValues: { [fieldCode: string]: any } = {}; // Track field values for rule evaluation
-  
+
   // Grid components reference
   @ViewChildren(GridViewComponent) gridViewComponents!: QueryList<GridViewComponent>;
-  
+
   // Default allowed file types (matching backend validation)
   private readonly DEFAULT_ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx', 'doc', 'docx'];
 
@@ -73,7 +73,7 @@ export class FormViewComponent implements OnInit {
     private fieldDataSourceService: FieldDataSourceService,
     public fileUploadService: FileUploadService,
     public translationService: TranslationService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.route.paramMap.subscribe(params => {
@@ -85,7 +85,7 @@ export class FormViewComponent implements OnInit {
         this.notFound = true;
       }
     });
-    
+
     // Check for submissionId in query params (for draft/edit mode)
     this.route.queryParams.subscribe(params => {
       if (params['submissionId']) {
@@ -93,7 +93,7 @@ export class FormViewComponent implements OnInit {
       }
     });
   }
-  
+
   /**
    * Save all grid data (called from form submission)
    */
@@ -102,25 +102,25 @@ export class FormViewComponent implements OnInit {
     if (gridComponents.length === 0) {
       return of([]);
     }
-    
+
     const saveObservables = gridComponents
       .filter(grid => grid.hasGridData() && grid.submissionId > 0)
       .map(grid => grid.saveGridData());
-    
+
     if (saveObservables.length === 0) {
       return of([]);
     }
-    
+
     return forkJoin(saveObservables);
   }
-  
+
   /**
    * Validate all grids before submission
    */
   validateAllGrids(): { isValid: boolean; errors: string[] } {
     const gridComponents = this.gridViewComponents?.toArray() || [];
     const errors: string[] = [];
-    
+
     gridComponents.forEach((grid, index) => {
       if (grid.hasGridData()) {
         // Check if grid is valid
@@ -130,7 +130,7 @@ export class FormViewComponent implements OnInit {
         }
       }
     });
-    
+
     return {
       isValid: errors.length === 0,
       errors
@@ -143,13 +143,14 @@ export class FormViewComponent implements OnInit {
     this.loading = true;
     this.notFound = false;
 
-    console.log('[FormView] Loading form with code:', this.formCode);
+    // Removed verbose logging
+    // console.log('[FormView] Loading form with code:', this.formCode);
 
     // Fetch form data from API by formCode
     this.formsService.getFormByCode(this.formCode).subscribe({
       next: (form) => {
         console.log('[FormView] API Response:', form);
-        
+
         if (!form) {
           console.warn('[FormView] Form is null or undefined');
           this.handleNotFound('Form not found in API response');
@@ -181,13 +182,13 @@ export class FormViewComponent implements OnInit {
 
         this.form = form;
         const apiTabs = form.tabs || [];
-        
+
         // Initialize submission ID
         // Note: In a real scenario, you should create a submission record first
         // For now, we don't set submissionId until a file is actually uploaded
         // This prevents unnecessary API calls to load non-existent files
         this.submissionId = 0; // Will be set when first file is uploaded or when submission is created
-        
+
         // TODO: Create a submission record when form is first loaded
         // This ensures files are properly linked to a submission
         // Example: this.createSubmission(form.id).subscribe(submission => { this.submissionId = submission.id; });
@@ -200,7 +201,7 @@ export class FormViewComponent implements OnInit {
         });
         console.log('[FormView] Current Language:', this.translationService.getCurrentLanguage());
         console.log('[FormView] Tabs found:', apiTabs.length);
-        
+
         if (apiTabs && apiTabs.length > 0) {
           // API returned Tabs + Fields (or just Tabs)
           // Filter and sort tabs (only active ones)
@@ -220,34 +221,21 @@ export class FormViewComponent implements OnInit {
                   const filteredOptions = hasActiveOptions
                     ? originalOptions.filter(opt => opt?.isActive !== false)
                     : originalOptions; // If no active options, show all (for debugging)
-                  
+
                   const sortedOptions = filteredOptions.sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0));
-                  
-                  // Log options for debugging (only once per field)
-                  if (['select', 'radio', 'checkbox'].includes(this.getFieldType(field)) && !this._loggedFieldOptions[field.id]) {
-                    console.log(`[FormView] Field ${field.id} (${field.fieldCode || 'no-code'}) - Options loaded:`, {
-                      originalCount: originalOptions.length,
-                      filteredCount: sortedOptions.length,
-                      hasActiveOptions: hasActiveOptions,
-                      sampleOptions: sortedOptions.slice(0, 3).map(opt => ({
-                        optionValue: opt?.optionValue,
-                        optionText: opt?.optionText,
-                        isActive: opt?.isActive
-                      }))
-                    });
-                    
-                    if (sortedOptions.length === 0) {
-                      console.warn(`[FormView] WARNING: Field ${field.id} (${field.fieldCode || 'no-code'}) has NO options after filtering!`);
-                    }
+
+                  // Removed verbose logging - only warn if no options
+                  if (sortedOptions.length === 0) {
+                    console.warn(`[FormView] WARNING: Field ${field.id} (${field.fieldCode || 'no-code'}) has NO options after filtering!`);
                   }
-                  
+
                   return {
                     ...field,
                     fieldOptions: filteredOptions
                   };
                 })
             }));
-          
+
           // Initialize uploaded files arrays for file fields (don't load yet if no submissionId)
           this.tabs.forEach(tab => {
             tab.fields?.forEach(field => {
@@ -257,7 +245,7 @@ export class FormViewComponent implements OnInit {
                   this.uploadedFiles[field.id] = [];
                 }
               }
-              
+
               // Load field options from DataSource if field has options type
               const fieldType = this.getFieldType(field);
               if (['select', 'radio', 'checkbox'].includes(fieldType)) {
@@ -265,49 +253,18 @@ export class FormViewComponent implements OnInit {
               }
             });
           });
-          
+
           // Don't load files on initial form load - files will be loaded after first upload
           // or when submissionId is available from a saved submission
           // This prevents unnecessary 404 errors when no files have been uploaded yet
-          
+
           this.activeTabIndex = 0;
           this.loading = false;
-          
+
           // Initialize form rules after form is loaded
           this.initializeFormRules();
-          
-          console.log('[FormView] Form loaded successfully with', this.tabs.length, 'tabs');
-          console.log('[FormView] Loading state:', this.loading);
-          console.log('[FormView] NotFound state:', this.notFound);
-          
-          // Debug: Log multilingual data
-          if (this.tabs.length > 0) {
-            this.tabs.forEach((tab, index) => {
-              console.log(`[FormView] Tab ${index} Multilingual Data:`, {
-                id: tab.id,
-                tabName: tab.tabName,
-                foreignTabName: tab.foreignTabName,
-                name_en: tab.name_en,
-                name_ar: tab.name_ar,
-                currentLanguage: this.translationService.getCurrentLanguage(),
-                displayedName: this.getTabName(tab),
-                fieldsCount: tab.fields?.length || 0,
-                fields: tab.fields?.map(f => ({
-                  id: f.id,
-                  fieldName: f.fieldName,
-                  foreignFieldName: f.foreignFieldName,
-                  label_en: f.label_en,
-                  label_ar: f.label_ar,
-                  displayedLabel: this.getFieldLabel(f),
-                  placeholder: f.placeholder,
-                  foreignPlaceholder: f.foreignPlaceholder,
-                  placeholder_en: f.placeholder_en,
-                  placeholder_ar: f.placeholder_ar,
-                  displayedPlaceholder: this.getFieldPlaceholder(f)
-                }))
-              });
-            });
-          }
+
+          // Removed verbose logging
         } else if (form.id) {
           // API returned form only or Tabs without Fields
           console.log('[FormView] Loading tabs and fields for form ID:', form.id);
@@ -326,7 +283,7 @@ export class FormViewComponent implements OnInit {
           message: error?.message,
           error: error
         });
-        
+
         let reason = 'Unable to load form';
         if (error?.status === 404) {
           reason = 'Form not found (404)';
@@ -337,7 +294,7 @@ export class FormViewComponent implements OnInit {
         } else if (error?.status) {
           reason = `Error ${error.status}: ${error.statusText || error.message || 'Unknown error'}`;
         }
-        
+
         this.handleNotFound(reason);
       }
     });
@@ -382,32 +339,32 @@ export class FormViewComponent implements OnInit {
                     .filter(opt => opt.isActive)
                     .sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0))
                 }));
-              
+
               tabsWithFields.push({
                 ...tab,
                 fields: filteredFields
               });
               remaining--;
               if (remaining === 0) {
-              this.tabs = tabsWithFields.sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
-              this.activeTabIndex = 0;
-              this.loading = false;
-              // Initialize uploaded files arrays (don't load yet - files will be loaded after first upload)
-              this.tabs.forEach(tab => {
-                tab.fields?.forEach(field => {
-                  if (this.getFieldType(field) === 'file' && field.id) {
-                    if (!this.uploadedFiles[field.id]) {
-                      this.uploadedFiles[field.id] = [];
+                this.tabs = tabsWithFields.sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
+                this.activeTabIndex = 0;
+                this.loading = false;
+                // Initialize uploaded files arrays (don't load yet - files will be loaded after first upload)
+                this.tabs.forEach(tab => {
+                  tab.fields?.forEach(field => {
+                    if (this.getFieldType(field) === 'file' && field.id) {
+                      if (!this.uploadedFiles[field.id]) {
+                        this.uploadedFiles[field.id] = [];
+                      }
                     }
-                  }
-                  
-                  // Load field options from DataSource if field has options type
-                  const fieldType = this.getFieldType(field);
-                  if (['select', 'radio', 'checkbox'].includes(fieldType)) {
-                    this.loadFieldOptionsFromDataSource(field);
-                  }
+
+                    // Load field options from DataSource if field has options type
+                    const fieldType = this.getFieldType(field);
+                    if (['select', 'radio', 'checkbox'].includes(fieldType)) {
+                      this.loadFieldOptionsFromDataSource(field);
+                    }
+                  });
                 });
-              });
               }
             },
             error: () => {
@@ -463,7 +420,7 @@ export class FormViewComponent implements OnInit {
     const dataSource = field.fieldDataSource;
     if (!dataSource || !dataSource.isActive) {
       // No DataSource or inactive - use static options from field.fieldOptions
-      console.log(`[FormView] Field ${field.id} has no active DataSource, using static options`);
+      // Removed verbose logging
       this.fieldDataSourceOptions[field.id] = [];
       return;
     }
@@ -471,7 +428,8 @@ export class FormViewComponent implements OnInit {
     // Only load from API/LookupTable, not Static
     // Static options are already included in field.fieldOptions from the form schema
     if (dataSource.sourceType === 'Static') {
-      console.log(`[FormView] Field ${field.id} has Static DataSource, using field.fieldOptions`);
+      // Removed verbose logging
+      // console.log(`[FormView] Field ${field.id} has Static DataSource, using field.fieldOptions`);
       this.fieldDataSourceOptions[field.id] = [];
       return;
     }
@@ -486,58 +444,23 @@ export class FormViewComponent implements OnInit {
         next: (options: FieldOptionResponse[]) => {
           if (options && options.length > 0) {
             this.fieldDataSourceOptions[field.id] = options;
-            console.log(`[FormView] Loaded ${options.length} options from ${dataSource.sourceType} DataSource for field ${field.id}`);
-            console.log(`[FormView] DataSource config:`, {
-              sourceType: dataSource.sourceType,
-              apiUrl: dataSource.apiUrl,
-              valuePath: dataSource.valuePath,
-              textPath: dataSource.textPath
-            });
-            // Log first few options for debugging
-            if (options.length > 0) {
-              // Log the raw option structure
-              console.log(`[FormView] Raw first option (full structure):`, JSON.stringify(options[0], null, 2));
-              
-              const sampleOptions = options.slice(0, 3).map(opt => ({ 
-                value: opt.value, 
-                text: opt.text,
-                valueType: typeof opt.value,
-                textType: typeof opt.text,
-                isTextEmpty: !opt.text || String(opt.text).trim() === '',
-                isValueEmpty: !opt.value || String(opt.value).trim() === '',
-                allKeys: Object.keys(opt || {})
-              }));
-              console.log(`[FormView] Sample options (first 3):`, sampleOptions);
-              
-              // Check if all options have empty text
-              const allEmptyText = options.every(opt => !opt.text || String(opt.text).trim() === '');
-              const allEmptyValue = options.every(opt => !opt.value || String(opt.value).trim() === '');
-              
-              if (allEmptyText || allEmptyValue) {
-                console.error(`[FormView] ERROR: Options have empty data!`);
-                console.error(`[FormView] - All options have empty text: ${allEmptyText}`);
-                console.error(`[FormView] - All options have empty value: ${allEmptyValue}`);
-                console.error(`[FormView] - Current valuePath: "${dataSource.valuePath}"`);
-                console.error(`[FormView] - Current textPath: "${dataSource.textPath}"`);
-                console.error(`[FormView] - API URL: "${dataSource.apiUrl}"`);
-                console.error(`[FormView] This indicates the backend cannot extract data using the configured paths.`);
-                console.error(`[FormView] Please verify the paths match your API response structure.`);
-              }
-            }
+
+            // Log success (debug level)
+            console.log(`[FormView] Loaded ${options.length} options for field ${field.id} from ${dataSource.sourceType}`);
           } else {
             // If no options from DataSource, fallback to static options
             this.fieldDataSourceOptions[field.id] = [];
-            console.warn(`[FormView] No options from ${dataSource.sourceType} DataSource for field ${field.id}, using static options`);
+            console.warn(`[FormView] DataSource returned no options for field ${field.id}`);
           }
           this.loadingFieldOptions[field.id] = false;
         },
         error: (error) => {
           console.error(`[FormView] Error loading options from ${dataSource.sourceType} DataSource for field ${field.id}:`, error);
-          
+
           // Extract error message from backend response
           let backendErrorMessage = '';
           let backendErrorDetails: any = null;
-          
+
           if (error?.error) {
             if (typeof error.error === 'string') {
               backendErrorMessage = error.error;
@@ -548,7 +471,7 @@ export class FormViewComponent implements OnInit {
               backendErrorMessage = error.error.error;
             }
           }
-          
+
           console.error(`[FormView] Error details:`, {
             status: error?.status,
             statusText: error?.statusText,
@@ -557,7 +480,7 @@ export class FormViewComponent implements OnInit {
             backendMessage: backendErrorMessage,
             backendDetails: backendErrorDetails
           });
-          
+
           // Log DataSource configuration for debugging
           console.error(`[FormView] DataSource configuration:`, {
             sourceType: dataSource.sourceType,
@@ -566,26 +489,26 @@ export class FormViewComponent implements OnInit {
             textPath: dataSource.textPath,
             httpMethod: dataSource.httpMethod
           });
-          
+
           // Provide helpful error message based on status code and source type
           if (error?.status === 500) {
             console.error(`[FormView] Backend server error (500) for ${dataSource.sourceType} DataSource.`);
-            
+
             if (dataSource.sourceType === 'LookupTable') {
               console.error(`[FormView] LookupTable-specific troubleshooting:`);
-              
+
               // Display backend error message if available (includes available tables/columns)
               if (backendErrorMessage) {
                 console.error(`[FormView] Backend error message:`, backendErrorMessage);
               }
-              
+
               console.error(`[FormView] 1. Verify the table exists in the database`);
               console.error(`[FormView] 2. Check if valueColumn "${dataSource.valuePath}" exists in the table`);
               console.error(`[FormView] 3. Check if textColumn "${dataSource.textPath}" exists in the table`);
               console.error(`[FormView] 4. Ensure the table has data (rows)`);
               console.error(`[FormView] 5. Verify database connection is working`);
               console.error(`[FormView] 6. Check backend logs for detailed error messages`);
-              
+
               // If backend provides available tables/columns, log them
               if (backendErrorDetails?.availableTables) {
                 console.error(`[FormView] Available tables:`, backendErrorDetails.availableTables);
@@ -619,7 +542,7 @@ export class FormViewComponent implements OnInit {
               console.error(`[FormView] Check if valueColumn "${dataSource.valuePath}" and textColumn "${dataSource.textPath}" are correct.`);
             }
           }
-          
+
           // Fallback to static options on error
           this.fieldDataSourceOptions[field.id] = [];
           this.loadingFieldOptions[field.id] = false;
@@ -642,12 +565,20 @@ export class FormViewComponent implements OnInit {
 
     // If options are loaded from DataSource, use them
     if (this.fieldDataSourceOptions[field.id] && this.fieldDataSourceOptions[field.id].length > 0) {
-      // Only log once per field to avoid console spam
+      // Convert FieldOptionResponse to FieldOptionDto format for compatibility
+      const dataSource = field.fieldDataSource;
+      const textPath = dataSource?.textPath || '';
+      const valuePath = dataSource?.valuePath || '';
+
       if (!this._loggedFieldOptions[field.id]) {
-        console.log(`[FormView] Field ${field.id} (${field.fieldCode || 'no-code'}) - returning ${this.fieldDataSourceOptions[field.id].length} DataSource options`);
+        console.log(`[FormView] Mapping ${this.fieldDataSourceOptions[field.id].length} options for field ${field.id}`);
+        console.log(`[FormView] - Config: textPath="${textPath}", valuePath="${valuePath}"`);
+        if (this.fieldDataSourceOptions[field.id].length > 0) {
+          console.log(`[FormView] - First option sample:`, JSON.stringify(this.fieldDataSourceOptions[field.id][0]));
+        }
         this._loggedFieldOptions[field.id] = true;
       }
-      // Convert FieldOptionResponse to FieldOptionDto format for compatibility
+
       return this.fieldDataSourceOptions[field.id]
         .filter(opt => opt !== null && opt !== undefined) // Filter out null/undefined options
         .map((opt, index) => {
@@ -656,34 +587,68 @@ export class FormViewComponent implements OnInit {
           const optAny = opt as any;
           let text = '';
           let value = '';
-          
-          // Check for text property (case-insensitive)
-          if (opt.text !== undefined && opt.text !== null) {
-            text = String(opt.text).trim();
-          } else if (optAny.Text !== undefined && optAny.Text !== null) {
-            text = String(optAny.Text).trim();
-          } else if (optAny.label !== undefined && optAny.label !== null) {
-            text = String(optAny.label).trim();
-          } else if (optAny.name !== undefined && optAny.name !== null) {
-            text = String(optAny.name).trim();
+
+          // FIRST: Try to use the configured textPath from DataSource (case-insensitive)
+          if (textPath) {
+            const textPathLower = textPath.toLowerCase().trim();
+            const keys = Object.keys(optAny || {});
+            const matchingKey = keys.find(k => k.toLowerCase().trim() === textPathLower);
+            if (matchingKey && optAny[matchingKey] !== undefined && optAny[matchingKey] !== null) {
+              const val = optAny[matchingKey];
+              if (typeof val === 'object') {
+                text = JSON.stringify(val);
+              } else {
+                text = String(val).trim();
+              }
+            }
           }
-          
-          // Check for value property (case-insensitive)
-          if (opt.value !== undefined && opt.value !== null) {
-            value = String(opt.value);
-          } else if (optAny.Value !== undefined && optAny.Value !== null) {
-            value = String(optAny.Value);
-          } else if (optAny.id !== undefined && optAny.id !== null) {
-            value = String(optAny.id);
-          } else if (optAny.Id !== undefined && optAny.Id !== null) {
-            value = String(optAny.Id);
+
+          // FIRST: Try to use the configured valuePath from DataSource (case-insensitive)
+          if (valuePath) {
+            const valuePathLower = valuePath.toLowerCase().trim();
+            const keys = Object.keys(optAny || {});
+            const matchingKey = keys.find(k => k.toLowerCase().trim() === valuePathLower);
+            if (matchingKey && optAny[matchingKey] !== undefined && optAny[matchingKey] !== null) {
+              const val = optAny[matchingKey];
+              if (typeof val === 'object') {
+                value = JSON.stringify(val);
+              } else {
+                value = String(val);
+              }
+            }
           }
-          
+
+          // Fallback: Check for text property (case-insensitive) - only if textPath didn't work
+          if (!text) {
+            if (opt.text !== undefined && opt.text !== null) {
+              text = String(opt.text).trim();
+            } else if (optAny.Text !== undefined && optAny.Text !== null) {
+              text = String(optAny.Text).trim();
+            } else if (optAny.label !== undefined && optAny.label !== null) {
+              text = String(optAny.label).trim();
+            } else if (optAny.name !== undefined && optAny.name !== null) {
+              text = String(optAny.name).trim();
+            }
+          }
+
+          // Fallback: Check for value property (case-insensitive) - only if valuePath didn't work
+          if (!value) {
+            if (opt.value !== undefined && opt.value !== null) {
+              value = String(opt.value);
+            } else if (optAny.Value !== undefined && optAny.Value !== null) {
+              value = String(optAny.Value);
+            } else if (optAny.id !== undefined && optAny.id !== null) {
+              value = String(optAny.id);
+            } else if (optAny.Id !== undefined && optAny.Id !== null) {
+              value = String(optAny.Id);
+            }
+          }
+
           // If still no value, try to use the first property that looks like an ID
           if (!value && optAny) {
             const keys = Object.keys(optAny);
-            const idKey = keys.find(k => 
-              k.toLowerCase() === 'id' || 
+            const idKey = keys.find(k =>
+              k.toLowerCase() === 'id' ||
               k.toLowerCase() === 'value' ||
               k.toLowerCase() === 'key'
             );
@@ -691,23 +656,23 @@ export class FormViewComponent implements OnInit {
               value = String(optAny[idKey]);
             }
           }
-          
+
           // If still no text, try to use the first string property that's not value/id
           if (!text && optAny) {
             const keys = Object.keys(optAny);
             const textKey = keys.find(k => {
               const kLower = k.toLowerCase();
-              return kLower !== 'id' && 
-                     kLower !== 'value' && 
-                     kLower !== 'key' &&
-                     typeof optAny[k] === 'string' &&
-                     String(optAny[k]).trim() !== '';
+              return kLower !== 'id' &&
+                kLower !== 'value' &&
+                kLower !== 'key' &&
+                typeof optAny[k] === 'string' &&
+                String(optAny[k]).trim() !== '';
             });
             if (textKey) {
               text = String(optAny[textKey]).trim();
             }
           }
-          
+
           // Priority: text > value > index-based fallback
           let displayText = text;
           if (!displayText && value) {
@@ -721,7 +686,7 @@ export class FormViewComponent implements OnInit {
               optionString: JSON.stringify(opt)
             });
           }
-          
+
           return {
             optionValue: value || String(index),
             optionText: displayText,
@@ -733,56 +698,26 @@ export class FormViewComponent implements OnInit {
 
     // Otherwise, use static options from field.fieldOptions
     const staticOptions = field.fieldOptions || [];
-    
-    // Only log once per field to avoid console spam
-    if (!this._loggedFieldOptions[field.id]) {
-      console.log(`[FormView] Field ${field.id} (${field.fieldCode || 'no-code'}) - using ${staticOptions.length} static options`);
-      this._loggedFieldOptions[field.id] = true;
-    }
-    
+
+    // Only warn if no options at all (no static and no DataSource)
     if (staticOptions.length === 0 && !this._loggedFieldNoOptions[field.id]) {
-      console.warn(`[FormView] ⚠️ Field ${field.id} (${field.fieldCode || 'no-code'}) has NO static options!`);
-      console.warn(`[FormView] Field details:`, {
-        id: field.id,
-        fieldCode: field.fieldCode,
-        fieldName: field.fieldName,
-        fieldType: this.getFieldType(field),
-        fieldOptions: field.fieldOptions,
-        fieldOptionsLength: field.fieldOptions?.length || 0,
-        fieldDataSource: field.fieldDataSource ? {
-          id: field.fieldDataSource.id,
-          sourceType: field.fieldDataSource.sourceType,
-          isActive: field.fieldDataSource.isActive,
-          apiUrl: field.fieldDataSource.apiUrl,
-          valuePath: field.fieldDataSource.valuePath,
-          textPath: field.fieldDataSource.textPath
-        } : null,
-        dataSourceOptionsLoaded: this.fieldDataSourceOptions[field.id]?.length || 0
-      });
-      
-      // Check if DataSource failed to load
       if (field.fieldDataSource && field.fieldDataSource.isActive) {
-        console.warn(`[FormView] Field has active DataSource but no options were loaded.`);
-        console.warn(`[FormView] Possible causes:`);
-        console.warn(`[FormView] 1. DataSource failed to load (check error messages above)`);
-        console.warn(`[FormView] 2. DataSource returned empty results`);
-        console.warn(`[FormView] 3. No static options were configured as fallback`);
-        console.warn(`[FormView] SOLUTION: Add static options in Field Options section or fix DataSource configuration.`);
-      } else {
-        console.warn(`[FormView] Field has no DataSource or DataSource is inactive.`);
-        console.warn(`[FormView] SOLUTION: Add static options in Field Options section.`);
+        // DataSource is active but no options loaded - this is expected if DataSource failed
+        // Only log if we're sure there's a problem
+        if (!this.fieldDataSourceOptions[field.id] || this.fieldDataSourceOptions[field.id].length === 0) {
+          console.warn(`[FormView] ⚠️ Field ${field.id} (${field.fieldCode || 'no-code'}) has no options. Check DataSource configuration.`);
+        }
       }
-      
       this._loggedFieldNoOptions[field.id] = true;
     }
-    
+
     // Ensure static options also have proper text
     const processedOptions = staticOptions
       .filter(opt => opt !== null && opt !== undefined)
       .map((opt, index) => {
         // Create a copy to avoid mutating the original
         const option = { ...opt };
-        
+
         // Ensure optionText is never undefined
         if (!option.optionText || String(option.optionText).trim() === '') {
           if (option.optionValue && String(option.optionValue).trim() !== '') {
@@ -793,23 +728,17 @@ export class FormViewComponent implements OnInit {
             option.optionText = `Option ${index + 1}`;
           }
         }
-        
+
         // Ensure optionValue is never undefined
         if (!option.optionValue || String(option.optionValue).trim() === '') {
           option.optionValue = String(index);
         }
-        
+
         return option;
       });
-    
-    // Only log processed options once per field to avoid console spam
-    if (!this._loggedFieldOptions[field.id] && processedOptions.length > 0) {
-      console.log(`[FormView] Field ${field.id} - processed ${processedOptions.length} static options:`, processedOptions.slice(0, 3).map(opt => ({
-        optionValue: opt.optionValue,
-        optionText: opt.optionText
-      })));
-    }
-    
+
+    // Removed verbose logging
+
     return processedOptions;
   }
 
@@ -914,7 +843,7 @@ export class FormViewComponent implements OnInit {
   private initializeFormRules(): void {
     // Reset dynamic states
     this.resetDynamicFieldStates();
-    
+
     // Evaluate rules with initial values
     this.evaluateFormRules();
   }
@@ -1120,10 +1049,10 @@ export class FormViewComponent implements OnInit {
   onCheckboxChange(field: FormFieldDto, optionValue: any, event: Event): void {
     const isChecked = (event.target as HTMLInputElement).checked;
     const currentValue = this.fieldValues[field.fieldCode] || this.getDefaultValue(field);
-    
+
     try {
       let selectedValues: any[] = [];
-      
+
       // Try to parse current value as JSON array
       if (currentValue && typeof currentValue === 'string') {
         try {
@@ -1140,7 +1069,7 @@ export class FormViewComponent implements OnInit {
       } else if (Array.isArray(currentValue)) {
         selectedValues = [...currentValue];
       }
-      
+
       // Add or remove the option value
       if (isChecked) {
         if (!selectedValues.includes(optionValue)) {
@@ -1149,7 +1078,7 @@ export class FormViewComponent implements OnInit {
       } else {
         selectedValues = selectedValues.filter(v => v !== optionValue);
       }
-      
+
       // Update field value
       const newValue = selectedValues.length > 0 ? JSON.stringify(selectedValues) : '';
       this.onFieldValueChange(field.fieldCode, newValue);
@@ -1196,26 +1125,26 @@ export class FormViewComponent implements OnInit {
     if (!field.defaultValueJson || field.defaultValueJson.trim() === '') {
       return '';
     }
-    
+
     try {
       // Try to parse JSON if it's a JSON string
       const parsed = JSON.parse(field.defaultValueJson);
-      
+
       // Handle different types
       if (parsed === null || parsed === undefined) {
         return '';
       }
-      
+
       // If it's an array, join it or return first element
       if (Array.isArray(parsed)) {
         return parsed.length > 0 ? parsed.map(String).join(', ') : '';
       }
-      
+
       // If it's an object (but not null), stringify it
       if (typeof parsed === 'object') {
         return JSON.stringify(parsed);
       }
-      
+
       // Otherwise, return as string
       return String(parsed).trim();
     } catch {
@@ -1235,13 +1164,13 @@ export class FormViewComponent implements OnInit {
     if (!selectedValue || !options || options.length === 0) {
       return '';
     }
-    
-    const selectedOption = options.find(opt => 
+
+    const selectedOption = options.find(opt =>
       String(opt.optionValue) === String(selectedValue)
     );
-    
+
     if (!selectedOption) return '';
-    
+
     // Use multilingual option text
     return this.getOptionText(selectedOption);
   }
@@ -1257,7 +1186,7 @@ export class FormViewComponent implements OnInit {
     if (!value || !options || options.length === 0) {
       return '';
     }
-    
+
     try {
       // Try to parse as JSON array
       const parsed = JSON.parse(value);
@@ -1269,12 +1198,12 @@ export class FormViewComponent implements OnInit {
       }
     } catch {
       // If not JSON, treat as single value
-      const selectedOption = options.find(opt => 
+      const selectedOption = options.find(opt =>
         String(opt.optionValue) === String(value)
       );
       return selectedOption ? this.getOptionText(selectedOption) : '';
     }
-    
+
     return '';
   }
 
@@ -1284,7 +1213,7 @@ export class FormViewComponent implements OnInit {
     if (!value || !options || options.length === 0) {
       return false;
     }
-    
+
     try {
       const parsed = JSON.parse(value);
       if (Array.isArray(parsed)) {
@@ -1293,7 +1222,7 @@ export class FormViewComponent implements OnInit {
     } catch {
       return String(value) === String(optionValue);
     }
-    
+
     return false;
   }
 
@@ -1301,16 +1230,16 @@ export class FormViewComponent implements OnInit {
     if (!dateValue) {
       return '';
     }
-    
+
     try {
       const date = new Date(dateValue);
       if (isNaN(date.getTime())) {
         return dateValue; // Return as is if invalid date
       }
-      return date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
       });
     } catch {
       return dateValue;
@@ -1322,7 +1251,7 @@ export class FormViewComponent implements OnInit {
     if (!value) {
       return false;
     }
-    
+
     // Check for common truthy values
     const lowerValue = String(value).toLowerCase();
     return lowerValue === 'true' || lowerValue === '1' || lowerValue === 'on' || lowerValue === 'yes';
@@ -1367,10 +1296,10 @@ export class FormViewComponent implements OnInit {
     const files = Array.from(input.files);
     const fieldType = field.fieldType;
     const allowMultiple = fieldType?.allowMultiple || false;
-    
+
     // If single file upload, take first file only
     const filesToUpload = allowMultiple ? files : [files[0]];
-    
+
     // Validate all files
     const invalidFiles: string[] = [];
     for (const file of filesToUpload) {
@@ -1379,7 +1308,7 @@ export class FormViewComponent implements OnInit {
         invalidFiles.push(file.name);
         continue;
       }
-      
+
       // Validate file size
       const maxSize = this.getMaxFileSize(field);
       if (maxSize > 0 && file.size > maxSize) {
@@ -1387,12 +1316,12 @@ export class FormViewComponent implements OnInit {
         continue;
       }
     }
-    
+
     if (invalidFiles.length > 0) {
       const currentLang = this.translationService.getCurrentLanguage();
       const allowedExts = this.getAllowedExtensions(field);
       const maxSize = this.getMaxFileSize(field);
-      
+
       let errorMsg = '';
       if (invalidFiles.length === filesToUpload.length) {
         // All files invalid
@@ -1401,7 +1330,7 @@ export class FormViewComponent implements OnInit {
           const allowedTypes = currentLang === 'ar'
             ? 'PDF، الصور (JPG، PNG)، Excel (XLS، XLSX)، Word (DOC، DOCX)'
             : 'PDF, Images (JPG, PNG), Excel (XLS, XLSX), Word (DOC, DOCX)';
-          
+
           errorMsg = currentLang === 'ar'
             ? `نوع الملف غير مسموح. الأنواع المسموحة: ${allowedTypes}${maxSize > 0 ? `. الحجم الأقصى: ${this.formatFileSize(maxSize)}` : ''}`
             : `File type not allowed. Allowed types: ${allowedTypes}${maxSize > 0 ? `. Max size: ${this.formatFileSize(maxSize)}` : ''}`;
@@ -1415,15 +1344,15 @@ export class FormViewComponent implements OnInit {
           ? `بعض الملفات غير صالحة: ${invalidFiles.join(', ')}`
           : `Some files are invalid: ${invalidFiles.join(', ')}`;
       }
-      
+
       this.fileUploadErrors[field.id] = errorMsg;
       input.value = '';
       return;
     }
-    
+
     // Clear any previous errors
     this.fileUploadErrors[field.id] = '';
-    
+
     // Upload files
     if (allowMultiple && filesToUpload.length > 1) {
       this.uploadMultipleFiles(filesToUpload, field);
@@ -1444,7 +1373,7 @@ export class FormViewComponent implements OnInit {
         : 'Field ID is missing';
       return;
     }
-    
+
     // Note: submissionId will be set from the upload response
     // For now, we allow upload even if submissionId is 0 (backend should handle creating submission)
     // The submissionId will be updated from the response after successful upload
@@ -1455,7 +1384,7 @@ export class FormViewComponent implements OnInit {
 
     // If submissionId is not set, use form ID as fallback (backend should handle this)
     const submissionIdToUse = this.submissionId || this.form?.id || 0;
-    
+
     // Simulate progress (since HttpClient doesn't provide upload progress by default)
     // In a real scenario, you might want to use HttpEventType.UploadProgress
     const progressInterval = setInterval(() => {
@@ -1463,7 +1392,7 @@ export class FormViewComponent implements OnInit {
         this.uploadProgress[field.id] += 10;
       }
     }, 200);
-    
+
     this.fileUploadService.uploadFile(
       file,
       submissionIdToUse,
@@ -1477,12 +1406,12 @@ export class FormViewComponent implements OnInit {
           this.uploadingFiles[field.id!] = false;
           this.uploadProgress[field.id!] = 0;
         }, 500);
-        
+
         // Update submissionId from response if available
         if (response.data?.submissionId && !this.submissionId) {
           this.submissionId = response.data.submissionId;
         }
-        
+
         // Add to uploaded files list
         if (!this.uploadedFiles[field.id!]) {
           this.uploadedFiles[field.id!] = [];
@@ -1492,7 +1421,7 @@ export class FormViewComponent implements OnInit {
           // Generate preview URL for images and PDFs
           this.generatePreviewUrl(response.data);
         }
-        
+
         // Reset file input
         const fileInput = document.getElementById(`file-${field.id}`) as HTMLInputElement;
         if (fileInput) {
@@ -1504,18 +1433,18 @@ export class FormViewComponent implements OnInit {
         this.uploadingFiles[field.id!] = false;
         this.uploadProgress[field.id!] = 0;
         const currentLang = this.translationService.getCurrentLanguage();
-        
+
         // Extract error message from response if available
         let errorMessage = currentLang === 'ar'
           ? 'فشل رفع الملف. يرجى المحاولة مرة أخرى.'
           : 'Failed to upload file. Please try again.';
-        
+
         if (error?.error?.message) {
           errorMessage = error.error.message;
         } else if (error?.message) {
           errorMessage = error.message;
         }
-        
+
         this.fileUploadErrors[field.id!] = errorMessage;
         console.error('Error uploading file:', error);
       }
@@ -1534,7 +1463,7 @@ export class FormViewComponent implements OnInit {
         : 'Field ID is missing';
       return;
     }
-    
+
     // Note: submissionId will be set from the upload response
     // For now, we allow upload even if submissionId is 0 (backend should handle creating submission)
     // The submissionId will be updated from the response after successful upload
@@ -1545,14 +1474,14 @@ export class FormViewComponent implements OnInit {
 
     // If submissionId is not set, use form ID as fallback (backend should handle this)
     const submissionIdToUse = this.submissionId || this.form?.id || 0;
-    
+
     // Simulate progress for multiple files
     const progressInterval = setInterval(() => {
       if (this.uploadProgress[field.id] < 90) {
         this.uploadProgress[field.id] += 10;
       }
     }, 200);
-    
+
     this.fileUploadService.uploadMultipleFiles(
       files,
       submissionIdToUse,
@@ -1566,7 +1495,7 @@ export class FormViewComponent implements OnInit {
           this.uploadingFiles[field.id!] = false;
           this.uploadProgress[field.id!] = 0;
         }, 500);
-        
+
         // Update submissionId from response if available
         if (response.data && Array.isArray(response.data) && response.data.length > 0) {
           const firstAttachment = response.data[0];
@@ -1574,7 +1503,7 @@ export class FormViewComponent implements OnInit {
             this.submissionId = firstAttachment.submissionId;
           }
         }
-        
+
         // Add to uploaded files list
         if (!this.uploadedFiles[field.id!]) {
           this.uploadedFiles[field.id!] = [];
@@ -1586,7 +1515,7 @@ export class FormViewComponent implements OnInit {
             this.generatePreviewUrl(attachment);
           });
         }
-        
+
         // Reset file input
         const fileInput = document.getElementById(`file-${field.id}`) as HTMLInputElement;
         if (fileInput) {
@@ -1598,18 +1527,18 @@ export class FormViewComponent implements OnInit {
         this.uploadingFiles[field.id!] = false;
         this.uploadProgress[field.id!] = 0;
         const currentLang = this.translationService.getCurrentLanguage();
-        
+
         // Extract error message from response if available
         let errorMessage = currentLang === 'ar'
           ? 'فشل رفع الملفات. يرجى المحاولة مرة أخرى.'
           : 'Failed to upload files. Please try again.';
-        
+
         if (error?.error?.message) {
           errorMessage = error.error.message;
         } else if (error?.message) {
           errorMessage = error.message;
         }
-        
+
         this.fileUploadErrors[field.id!] = errorMessage;
         console.error('Error uploading files:', error);
       }
@@ -1655,50 +1584,30 @@ export class FormViewComponent implements OnInit {
       return this.DEFAULT_ALLOWED_EXTENSIONS;
     }
 
-    // Debug logging
-    console.log('[FormView] getAllowedExtensions for field:', {
-      fieldId: field.id,
-      fieldCode: field.fieldCode,
-      fieldType: field.fieldTypeName,
-      defaultValueJson: field.defaultValueJson
-    });
-
     if (!field.defaultValueJson || field.defaultValueJson.trim() === '') {
-      console.log('[FormView] No defaultValueJson found, using default extensions');
       return this.DEFAULT_ALLOWED_EXTENSIONS; // Use default extensions matching backend
     }
 
     try {
       const fileConfig = JSON.parse(field.defaultValueJson);
-      console.log('[FormView] Parsed fileConfig:', fileConfig);
-      
+
       // Check for allowedExtensions array
       if (fileConfig.allowedExtensions && Array.isArray(fileConfig.allowedExtensions) && fileConfig.allowedExtensions.length > 0) {
         const extensions = fileConfig.allowedExtensions
           .map((ext: string) => String(ext).toLowerCase().trim())
           .filter((ext: string) => ext.length > 0);
-        console.log('[FormView] Found allowedExtensions:', extensions);
         return extensions;
       }
-      
+
       // Also check for customExtensions (backward compatibility)
       if (fileConfig.customExtensions && Array.isArray(fileConfig.customExtensions) && fileConfig.customExtensions.length > 0) {
         const extensions = fileConfig.customExtensions
           .map((ext: string) => String(ext).toLowerCase().trim())
           .filter((ext: string) => ext.length > 0);
-        console.log('[FormView] Found customExtensions:', extensions);
         return extensions;
       }
-      
-      console.log('[FormView] No valid extensions found in config, using default');
     } catch (e) {
-      // Not a valid JSON, log for debugging
-      console.warn('[FormView] Failed to parse defaultValueJson as JSON:', {
-        error: e,
-        defaultValueJson: field.defaultValueJson,
-        fieldId: field.id,
-        fieldCode: field.fieldCode
-      });
+      // Not a valid JSON, silently use defaults
     }
 
     return this.DEFAULT_ALLOWED_EXTENSIONS; // Use default extensions if config is invalid
@@ -1749,7 +1658,7 @@ export class FormViewComponent implements OnInit {
    */
   isFileExtensionAllowed(file: File, field: FormFieldDto): boolean {
     const allowedExtensions = this.getAllowedExtensions(field);
-    
+
     // Always validate against allowed extensions (default or configured)
     if (allowedExtensions.length === 0) {
       return false; // No extensions allowed
@@ -1798,7 +1707,7 @@ export class FormViewComponent implements OnInit {
     if (field.maxValue && field.maxValue > 0) {
       return field.maxValue * 1024; // Convert KB to bytes
     }
-    
+
     // Use default from environment
     return environment.media?.maxFileSize || 10485760; // 10MB default
   }
@@ -1809,8 +1718,8 @@ export class FormViewComponent implements OnInit {
   isImageFile(attachment: FormSubmissionAttachmentDto): boolean {
     const contentType = attachment.contentType?.toLowerCase() || '';
     const fileName = attachment.fileName?.toLowerCase() || '';
-    return contentType.startsWith('image/') || 
-           /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
+    return contentType.startsWith('image/') ||
+      /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
   }
 
   /**
@@ -1836,7 +1745,7 @@ export class FormViewComponent implements OnInit {
     if (!attachment.id || !this.canPreviewFile(attachment)) {
       return;
     }
-    
+
     // Use download URL as preview URL
     this.filePreviewUrls[attachment.id] = this.fileUploadService.getDownloadUrl(attachment.id);
   }
@@ -1892,17 +1801,17 @@ export class FormViewComponent implements OnInit {
    */
   loadFieldFiles(fieldId: number): void {
     if (!fieldId) return;
-    
+
     // CRITICAL: Only try to load files if we have a valid submissionId
     // If submissionId is 0, null, undefined, or invalid, skip loading completely (no HTTP request)
     // This prevents 404 errors when the form is first loaded
-    const hasValidSubmissionId = this.submissionId && 
-                                  this.submissionId !== 0 && 
-                                  this.submissionId !== null && 
-                                  this.submissionId !== undefined &&
-                                  !isNaN(this.submissionId) &&
-                                  Number(this.submissionId) > 0;
-    
+    const hasValidSubmissionId = this.submissionId &&
+      this.submissionId !== 0 &&
+      this.submissionId !== null &&
+      this.submissionId !== undefined &&
+      !isNaN(this.submissionId) &&
+      Number(this.submissionId) > 0;
+
     // DEBUG: Uncomment to see why loadFieldFiles is being called
     // console.log('[FormView] loadFieldFiles called', {
     //   fieldId,
@@ -1910,7 +1819,7 @@ export class FormViewComponent implements OnInit {
     //   hasValidSubmissionId,
     //   type: typeof this.submissionId
     // });
-    
+
     if (!hasValidSubmissionId) {
       // Silently skip - this is expected behavior when no files have been uploaded yet
       // Initialize empty array to prevent UI issues
@@ -1919,7 +1828,7 @@ export class FormViewComponent implements OnInit {
       }
       return; // Exit early - NO HTTP REQUEST will be made
     }
-    
+
     // Only make HTTP request if we have a valid submissionId
     // Pass submissionId to service to prevent HTTP request if it's 0 or invalid
     // The service will also check submissionId before making HTTP request
@@ -1959,20 +1868,20 @@ export class FormViewComponent implements OnInit {
    */
   loadAllFieldFiles(): void {
     if (!this.tabs || this.tabs.length === 0) return;
-    
+
     // CRITICAL: Only load files if we have a valid submissionId
     // Check for valid submissionId (not 0, null, undefined, or NaN)
-    const hasValidSubmissionId = this.submissionId && 
-                                  this.submissionId !== 0 && 
-                                  this.submissionId !== null && 
-                                  this.submissionId !== undefined &&
-                                  !isNaN(this.submissionId);
-    
+    const hasValidSubmissionId = this.submissionId &&
+      this.submissionId !== 0 &&
+      this.submissionId !== null &&
+      this.submissionId !== undefined &&
+      !isNaN(this.submissionId);
+
     if (!hasValidSubmissionId) {
       // Silently skip - this is expected behavior when no files have been uploaded yet
       return;
     }
-    
+
     this.tabs.forEach(tab => {
       if (tab.fields && tab.fields.length > 0) {
         tab.fields.forEach(field => {
@@ -1999,13 +1908,13 @@ export class FormViewComponent implements OnInit {
   getFormName(form: FormBuilderDto | null): string {
     if (!form) return '';
     const lang = this.translationService.getCurrentLanguage();
-    
+
     if (lang === 'ar') {
       if (form.foreignFormName && form.foreignFormName.trim()) {
         return form.foreignFormName;
       }
     }
-    
+
     return form.formName || '';
   }
 
@@ -2015,13 +1924,13 @@ export class FormViewComponent implements OnInit {
   getFormDescription(form: FormBuilderDto | null): string {
     if (!form) return '';
     const lang = this.translationService.getCurrentLanguage();
-    
+
     if (lang === 'ar') {
       if (form.foreignDescription && form.foreignDescription.trim()) {
         return form.foreignDescription;
       }
     }
-    
+
     return form.description || '';
   }
 
@@ -2032,7 +1941,7 @@ export class FormViewComponent implements OnInit {
   getTabName(tab: FormTabDto): string {
     if (!tab) return '';
     const lang = this.translationService.getCurrentLanguage();
-    
+
     // Debug log
     if (lang === 'ar') {
       // Try computed property first (from API)
@@ -2062,7 +1971,7 @@ export class FormViewComponent implements OnInit {
   getFieldLabel(field: FormFieldDto): string {
     if (!field) return '';
     const lang = this.translationService.getCurrentLanguage();
-    
+
     // Use computed properties if available (from API)
     if (lang === 'ar') {
       // Try computed property first
@@ -2093,10 +2002,10 @@ export class FormViewComponent implements OnInit {
     if (!field) {
       return this.translationService.getCurrentLanguage() === 'ar' ? 'أدخل إجابتك' : 'Your answer';
     }
-    
+
     const lang = this.translationService.getCurrentLanguage();
     const defaultPlaceholder = lang === 'ar' ? 'أدخل إجابتك' : 'Your answer';
-    
+
     // Use computed properties if available (from API)
     if (lang === 'ar') {
       if (field.placeholder_ar && field.placeholder_ar.trim()) return field.placeholder_ar;
@@ -2105,7 +2014,7 @@ export class FormViewComponent implements OnInit {
       if (field.placeholder_en && field.placeholder_en.trim()) return field.placeholder_en;
       if (field.placeholder && field.placeholder.trim()) return field.placeholder;
     }
-    
+
     return defaultPlaceholder;
   }
 
@@ -2114,11 +2023,11 @@ export class FormViewComponent implements OnInit {
    */
   getFieldHintText(field: FormFieldDto): string {
     const lang = this.translationService.getCurrentLanguage();
-    
+
     if (lang === 'ar' && field.foreignHintText) {
       return field.foreignHintText;
     }
-    
+
     return field.hintText || '';
   }
 
@@ -2127,11 +2036,11 @@ export class FormViewComponent implements OnInit {
    */
   getFieldValidationMessage(field: FormFieldDto): string {
     const lang = this.translationService.getCurrentLanguage();
-    
+
     if (lang === 'ar' && field.foreignValidationMessage) {
       return field.foreignValidationMessage;
     }
-    
+
     return field.validationMessage || '';
   }
 
@@ -2142,18 +2051,18 @@ export class FormViewComponent implements OnInit {
    */
   getOptionText(option: any): string {
     if (!option) return '';
-    
+
     // Helper function to parse JSON string and extract readable text
     const parseJsonText = (text: string): string => {
       if (!text || typeof text !== 'string') return text;
-      
+
       const trimmed = text.trim();
       // Check if it's a JSON string (starts with { or [)
-      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
-          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
         try {
           const parsed = JSON.parse(trimmed);
-          
+
           // If it's an object, try to extract readable text
           if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
             // Try common name patterns: first + last, name, title + first + last, etc.
@@ -2164,12 +2073,12 @@ export class FormViewComponent implements OnInit {
               if (parsed.last) parts.push(String(parsed.last));
               return parts.join(' ');
             }
-            
+
             // Try name property
             if (parsed.name) {
               return String(parsed.name);
             }
-            
+
             // Try text or label properties
             if (parsed.text) {
               return String(parsed.text);
@@ -2177,12 +2086,12 @@ export class FormViewComponent implements OnInit {
             if (parsed.label) {
               return String(parsed.label);
             }
-            
+
             // Try title property
             if (parsed.title) {
               return String(parsed.title);
             }
-            
+
             // Try to find first string property
             const keys = Object.keys(parsed);
             for (const key of keys) {
@@ -2191,65 +2100,65 @@ export class FormViewComponent implements OnInit {
                 return value.trim();
               }
             }
-            
+
             // If nothing found, return stringified version (but formatted)
             return JSON.stringify(parsed);
           }
-          
+
           // If it's an array, return first element or stringified
           if (Array.isArray(parsed) && parsed.length > 0) {
             return String(parsed[0]);
           }
-          
+
           return trimmed;
         } catch (e) {
           // If parsing fails, return original text
           return trimmed;
         }
       }
-      
+
       return trimmed;
     };
-    
+
     // Handle FieldOptionResponse (from DataSource) - check for text property first
     if ('text' in option) {
       let text = option.text !== undefined && option.text !== null ? String(option.text).trim() : '';
-      
+
       // Parse JSON strings if present
       if (text) {
         text = parseJsonText(text);
       }
-      
+
       // If text is empty, try to use value as fallback
       if (!text && 'value' in option && option.value !== undefined && option.value !== null) {
         const valueText = String(option.value).trim();
         return parseJsonText(valueText);
       }
-      
+
       return text || '';
     }
-    
+
     // Handle FieldOptionDto (static options)
     const lang = this.translationService.getCurrentLanguage();
     if (lang === 'ar' && option.foreignOptionText && String(option.foreignOptionText).trim()) {
       return parseJsonText(String(option.foreignOptionText).trim());
     }
-    
-    let optionText = option.optionText !== undefined && option.optionText !== null 
-      ? String(option.optionText).trim() 
+
+    let optionText = option.optionText !== undefined && option.optionText !== null
+      ? String(option.optionText).trim()
       : '';
-    
+
     // Parse JSON strings if present
     if (optionText) {
       optionText = parseJsonText(optionText);
     }
-    
+
     // If optionText is empty, try to use optionValue as fallback
     if (!optionText && option.optionValue !== undefined && option.optionValue !== null) {
       const valueText = String(option.optionValue).trim();
       return parseJsonText(valueText);
     }
-    
+
     // Final fallback - return empty string instead of undefined
     return optionText || '';
   }
@@ -2260,14 +2169,14 @@ export class FormViewComponent implements OnInit {
   getFieldTypeName(field: FormFieldDto): string {
     if (!field.fieldType) return '';
     const lang = this.translationService.getCurrentLanguage();
-    
+
     if (lang === 'ar') {
       if (field.fieldType.type_name_ar) return field.fieldType.type_name_ar;
       if (field.fieldType.foreignTypeName) return field.fieldType.foreignTypeName;
     } else {
       if (field.fieldType.type_name_en) return field.fieldType.type_name_en;
     }
-    
+
     return field.fieldType.typeName || '';
   }
 }

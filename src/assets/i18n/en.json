@@ -75,7 +75,9 @@
     "tabOrder": "Tab Order",
     "enterTabName": "Enter tab name",
     "enterTabCode": "Enter tab code",
-    "manageFields": "Manage Fields"
+    "manageFields": "Manage Fields",
+    "manageGrids": "Manage Grids",
+    "backToForms": "Back to Forms"
   },
   "fields": {
     "title": "Fields Management",

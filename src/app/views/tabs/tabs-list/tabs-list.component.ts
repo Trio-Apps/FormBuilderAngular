@@ -17,6 +17,7 @@ import { DialogModule } from 'primeng/dialog';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
+import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-tabs-list',
@@ -31,7 +32,8 @@ import { TooltipModule } from 'primeng/tooltip';
     DialogModule,
     ToastModule,
     ConfirmDialogModule,
-    TooltipModule
+    TooltipModule,
+    TranslatePipe
   ],
   templateUrl: './tabs-list.component.html',
   styleUrls: ['./tabs-list.component.scss'],
@@ -65,6 +67,17 @@ export class TabsListComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // Force English language for admin panel by default
+    const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
+    if (adminLanguagePreference) {
+      // Use saved admin preference
+      this.translationService.setLanguage(adminLanguagePreference as 'en' | 'ar');
+    } else {
+      // Default to English for admin panel
+      this.translationService.setLanguage('en');
+      localStorage.setItem('adminLanguagePreference', 'en');
+    }
+
     this.routeSubscription = this.route.params.subscribe(params => {
       const newFormId = +params['formId'];
       if (newFormId && newFormId !== this.formId) {
@@ -174,6 +187,11 @@ export class TabsListComponent implements OnInit, OnDestroy {
 
   setInputLanguage(lang: 'en' | 'ar'): void {
     this.currentInputLanguage = lang;
+  }
+
+  switchLanguage(lang: 'en' | 'ar'): void {
+    this.translationService.setLanguage(lang);
+    localStorage.setItem('adminLanguagePreference', lang);
   }
 
   /**

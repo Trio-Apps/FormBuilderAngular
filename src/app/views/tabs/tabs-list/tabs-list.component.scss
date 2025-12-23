@@ -4,6 +4,56 @@
   display: block;
   min-height: 100vh;
   background: #f5f7fa;
+  position: relative;
+}
+
+// Admin Language Toggle
+.admin-language-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 4px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.admin-lang-btn {
+  padding: 8px 16px;
+  border: 1px solid #e0e0e0;
+  background: #ffffff;
+  color: #5f6368;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 80px;
+
+  &:hover {
+    background: #f8f9fa;
+    border-color: #dadce0;
+  }
+
+  &.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ffffff;
+    border-color: #667eea;
+    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+
+    &:hover {
+      background: linear-gradient(135deg, #5568d3 0%, #653a8f 100%);
+      box-shadow: 0 3px 6px rgba(102, 126, 234, 0.4);
+    }
+  }
+
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+  }
 }
 
 // Reuse the same layout and table styles as Fields Management
@@ -609,6 +659,57 @@
 
   .stats-row {
     grid-template-columns: 1fr;
+  }
+}
+
+// Custom Modal Styles
+.custom-modal {
+  .form-label {
+    letter-spacing: 0.5px;
+  }
+}
+
+// Language Tabs
+.language-tabs-container {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  margin-bottom: 16px;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+
+  .language-tab {
+    flex: 1;
+    padding: 12px 24px;
+    border: none;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+    position: relative;
+
+    &:first-child {
+      border-top-left-radius: 0;
+    }
+
+    &:last-child {
+      border-top-right-radius: 0;
+    }
+
+    &:hover {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    &.language-tab-active {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-bottom-color: #667eea;
+      font-weight: 600;
+    }
   }
 }
 

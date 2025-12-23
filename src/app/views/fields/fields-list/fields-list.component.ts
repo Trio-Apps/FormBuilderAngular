@@ -7,7 +7,7 @@ import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FieldOptionsService } from '../../FormBuilder/services/field-options.service';
 import { GridService } from '../../FormBuilder/services/grid.service';
 import { FieldDataSourceService } from '../../FormBuilder/services/field-data-source.service';
-import { FormFieldDto, FieldTypeDto, UpdateFormFieldDto, CreateFormFieldDto, FieldOptionDto, CreateFieldOptionDto, FieldDataSource, CreateFieldDataSourceDto, FieldOptionResponse } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { FormFieldDto, FieldTypeDto, UpdateFormFieldDto, CreateFormFieldDto, FieldOptionDto, CreateFieldOptionDto, FieldDataSource, CreateFieldDataSourceDto, FieldOptionResponse, PreviewDataSourceRequestDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { FormGridDto } from '../../FormBuilder/form-builder/models/grid-dto.model';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -122,10 +122,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     valueColumn: string;
     textColumn: string;
   } = {
-    table: '',
-    valueColumn: 'Id',
-    textColumn: 'Name'
-  };
+      table: '',
+      valueColumn: 'Id',
+      textColumn: 'Name'
+    };
   availableLookupTables: string[] = [];
   availableColumns: string[] = []; // Available columns from selected table
   previewOptions: FieldOptionResponse[] = [];
@@ -137,7 +137,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   apiDebugError: string | null = null;
   availableProperties: string[] = []; // Available properties from API response
   hasSuggestedPaths: boolean = false; // Flag to indicate if suggested paths are available
-  
+
   // Expose Array, Object, and Math to template
   Array = Array;
   Object = Object;
@@ -220,7 +220,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   loadTabAndFormId(): void {
     if (!this.tabId) return;
-    
+
     this.tabsService.getTabById(this.tabId).subscribe({
       next: (tab) => {
         if (tab && tab.formBuilderId) {
@@ -244,7 +244,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Try to get formId from parent route (snapshot first for immediate value)
     let parent = this.route.parent;
     let depth = 0;
-    
+
     while (parent && depth < 3) {
       const snapshot = parent.snapshot;
       if (snapshot && snapshot.params && snapshot.params['formId']) {
@@ -255,7 +255,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       parent = parent.parent;
       depth++;
     }
-    
+
     // If not found in snapshot, try subscription (async)
     parent = this.route.parent;
     depth = 0;
@@ -269,7 +269,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       parent = parent.parent;
       depth++;
     }
-    
+
     // Default fallback if not found
     if (!this.formBuilderId) {
       this.formBuilderId = 1;
@@ -290,7 +290,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     if (!this.tabId) {
       return;
     }
-    
+
     this.loading.fields = true;
     // Use formBuilderId if available, otherwise use 1 as fallback
     const formId = this.formBuilderId || 1;
@@ -304,10 +304,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       error: (error) => {
         this.fields = [];
         this.loading.fields = false;
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Error', 
-          detail: 'Failed to load fields' 
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load fields'
         });
       }
     });
@@ -396,7 +396,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       minValue: null,
       maxValue: null
     });
-    
+
     // Clear field options
     const optionsArray = this.fieldOptionsFormArray;
     while (optionsArray.length !== 0) {
@@ -411,7 +411,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     const regexPattern = field.regexPattern || '';
     let validationMessage = field.validationMessage || '';
-    
+
     // Auto-set validation message if pattern matches a preset and message is empty
     if (regexPattern && !validationMessage) {
       const matchingOption = this.regexOptions.find(opt => opt.value === regexPattern);
@@ -493,7 +493,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     // Load field options
     this.loadFieldOptions(field.id);
-    
+
     // Trigger change detection to ensure UI updates
     this.cdr.detectChanges();
   }
@@ -527,7 +527,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   onRegexPresetChange(value: string): void {
     const selectedOption = this.regexOptions.find(opt => opt.value === value);
     if (selectedOption) {
-      this.fieldForm.patchValue({ 
+      this.fieldForm.patchValue({
         regexPattern: selectedOption.value,
         validationMessage: selectedOption.message || ''
       }, { emitEvent: false }); // Prevent triggering regexPattern change listener
@@ -540,13 +540,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Only auto-update if validation message is empty or matches a preset message
     const currentMessage = this.fieldForm.get('validationMessage')?.value || '';
     const matchingOption = this.regexOptions.find(opt => opt.value === pattern);
-    
+
     // If pattern matches a preset and message is empty or matches the preset message, update it
     if (matchingOption && matchingOption.message) {
-      if (!currentMessage || currentMessage === matchingOption.message || 
-          this.regexOptions.some(opt => opt.message === currentMessage)) {
-        this.fieldForm.patchValue({ 
-          validationMessage: matchingOption.message 
+      if (!currentMessage || currentMessage === matchingOption.message ||
+        this.regexOptions.some(opt => opt.message === currentMessage)) {
+        this.fieldForm.patchValue({
+          validationMessage: matchingOption.message
         }, { emitEvent: false });
       }
     }
@@ -568,10 +568,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Validate Grid selection for Grid field type
     if (this.isGridFieldType(this.fieldForm.get('fieldTypeId')?.value)) {
       if (!this.selectedGridId) {
-        this.messageService.add({ 
-          severity: 'warn', 
-          summary: 'Validation', 
-          detail: 'Please select a Grid for Grid field type' 
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please select a Grid for Grid field type'
         });
         return;
       }
@@ -605,16 +605,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         isEditable: fieldData.isEditable ?? null,
         isVisible: fieldData.isVisible ?? null,
         gridId: this.isGridFieldType(fieldData.fieldTypeId) ? this.selectedGridId || undefined : undefined,
-        minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
-          ? Number(fieldData.minValue) 
+        minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== ''
+          ? Number(fieldData.minValue)
           : undefined,
-        maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== '' 
-          ? Number(fieldData.maxValue) 
+        maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== ''
+          ? Number(fieldData.maxValue)
           : undefined
       };
 
       if (!this.editingField) return;
-      
+
       this.fieldsService.updateField(this.editingField.id, updateDto).subscribe({
         next: (updatedField) => {
           // Save field options if field type has options
@@ -670,11 +670,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         validationMessage: fieldData.validationMessage || undefined,
         foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
         gridId: this.isGridFieldType(fieldData.fieldTypeId) ? this.selectedGridId || undefined : undefined,
-        minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
-          ? Number(fieldData.minValue) 
+        minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== ''
+          ? Number(fieldData.minValue)
           : undefined,
-        maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== '' 
-          ? Number(fieldData.maxValue) 
+        maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== ''
+          ? Number(fieldData.maxValue)
           : undefined,
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
       };
@@ -715,7 +715,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         error: (error) => {
           this.loading.save = false;
           let errorMessage = 'Failed to create field';
-          
+
           // Extract detailed error message
           if (error.error) {
             if (error.error.errors) {
@@ -732,11 +732,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           } else if (error.message) {
             errorMessage = error.message;
           }
-          
+
           console.error('Field creation error:', error);
-          this.messageService.add({ 
-            severity: 'error', 
-            summary: 'Error', 
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
             detail: errorMessage,
             life: 5000
           });
@@ -815,7 +815,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
         console.log('[toggleFieldStatus] User confirmed, updating field status to:', newStatus);
-        
+
         // Try using the dedicated status endpoint first
         this.fieldsService.updateFieldStatus(field.id, newStatus).subscribe({
           next: (updatedField) => {
@@ -840,7 +840,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           },
           error: (error) => {
             console.error('[toggleFieldStatus] Error using status endpoint, trying full update:', error);
-            
+
             // Fallback: use full update with isActive
             const updateDto: UpdateFormFieldDto = {
               tabId: field.tabId,
@@ -857,11 +857,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               defaultValueJson: field.defaultValueJson || '',
               regexPattern: field.regexPattern || '',
               validationMessage: field.validationMessage || '',
-              minValue: field.minValue !== null && field.minValue !== undefined 
-                ? field.minValue 
+              minValue: field.minValue !== null && field.minValue !== undefined
+                ? field.minValue
                 : undefined,
-              maxValue: field.maxValue !== null && field.maxValue !== undefined 
-                ? field.maxValue 
+              maxValue: field.maxValue !== null && field.maxValue !== undefined
+                ? field.maxValue
                 : undefined
             };
 
@@ -891,10 +891,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               error: (error2) => {
                 console.error('[toggleFieldStatus] Error updating field:', error2);
                 const errorMessage = error2?.error?.message || error2?.error?.errorMessage || error2?.message || `Failed to ${action} field`;
-                this.messageService.add({ 
-                  severity: 'error', 
-                  summary: 'Error', 
-                  detail: errorMessage 
+                this.messageService.add({
+                  severity: 'error',
+                  summary: 'Error',
+                  detail: errorMessage
                 });
               }
             });
@@ -982,7 +982,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
 
     const selectedFieldType = this.fieldTypes.find(t => t.id === normalizedId);
-    
+
     // Check if it's a Grid field type
     if (this.isGridFieldType(normalizedId)) {
       this.loadAvailableGrids();
@@ -1101,10 +1101,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         if (fileConfig.allowedExtensions && Array.isArray(fileConfig.allowedExtensions)) {
           // Separate predefined and custom extensions
           const allExtensions = fileConfig.allowedExtensions;
-          this.selectedFileExtensions = allExtensions.filter((ext: string) => 
+          this.selectedFileExtensions = allExtensions.filter((ext: string) =>
             this.availableFileExtensions.some(e => e.value === ext)
           );
-          this.customFileExtensions = allExtensions.filter((ext: string) => 
+          this.customFileExtensions = allExtensions.filter((ext: string) =>
             !this.availableFileExtensions.some(e => e.value === ext)
           );
         }
@@ -1140,9 +1140,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       const extInfo = this.availableFileExtensions.find(e => e.value === ext);
       return extInfo ? extInfo.mimeType : '';
     }).filter(mime => mime !== '');
-    
+
     const customExts = this.customFileExtensions.map(ext => `.${ext.toLowerCase()}`);
-    
+
     return [...mimeTypes, ...customExts].join(',');
   }
 
@@ -1154,7 +1154,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     if (!ext) {
       return;
     }
-    
+
     // Validate extension (alphanumeric and some special chars)
     if (!/^[a-z0-9]+$/i.test(ext)) {
       this.messageService.add({
@@ -1164,7 +1164,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       });
       return;
     }
-    
+
     // Check if already exists
     if (this.customFileExtensions.includes(ext) || this.selectedFileExtensions.includes(ext)) {
       this.messageService.add({
@@ -1174,7 +1174,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       });
       return;
     }
-    
+
     this.customFileExtensions.push(ext);
     this.newCustomExtension = '';
     this.saveFileExtensionsToForm();
@@ -1274,13 +1274,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         const deletedOptions = existingOptions.filter(o => o.id && !options.some(no => no.id === o.id));
 
         // Delete removed options
-        const deletePromises = deletedOptions.map(opt => 
+        const deletePromises = deletedOptions.map(opt =>
           opt.id ? this.fieldOptionsService.deleteFieldOption(opt.id).toPromise() : Promise.resolve()
         );
 
         Promise.all(deletePromises).then(() => {
           // Update existing options
-          const updatePromises = updatedOptions.map(opt => 
+          const updatePromises = updatedOptions.map(opt =>
             opt.id ? this.fieldOptionsService.updateFieldOption(opt.id, {
               optionValue: opt.optionValue,
               optionText: opt.optionText,
@@ -1415,18 +1415,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.fieldsService.updateField(fieldId, updateDto).subscribe({
       next: () => {
         field.fieldName = newName;
-        this.messageService.add({ 
-          severity: 'success', 
-          summary: 'Success', 
-          detail: 'Field name updated' 
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Field name updated'
         });
       },
       error: () => {
         event.target.value = field.fieldName; // Revert on error
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Error', 
-          detail: 'Failed to update field name' 
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to update field name'
         });
       }
     });
@@ -1460,18 +1460,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         field.fieldTypeId = newTypeId;
         // Reload field with options if new type supports options
         this.loadFields();
-        this.messageService.add({ 
-          severity: 'success', 
-          summary: 'Success', 
-          detail: 'Field type updated' 
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Field type updated'
         });
       },
       error: () => {
         event.target.value = field.fieldTypeId; // Revert on error
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Error', 
-          detail: 'Failed to update field type' 
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to update field type'
         });
       }
     });
@@ -1496,18 +1496,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: () => {
         option.optionText = newText;
-        this.messageService.add({ 
-          severity: 'success', 
-          summary: 'Success', 
-          detail: 'Option updated' 
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Option updated'
         });
       },
       error: () => {
         event.target.value = option.optionText; // Revert on error
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Error', 
-          detail: 'Failed to update option' 
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to update option'
         });
       }
     });
@@ -1532,17 +1532,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.fieldOptionsService.createFieldOption(createDto).subscribe({
       next: () => {
         this.loadFields();
-        this.messageService.add({ 
-          severity: 'success', 
-          summary: 'Success', 
-          detail: 'Option added' 
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Option added'
         });
       },
       error: () => {
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Error', 
-          detail: 'Failed to add option' 
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to add option'
         });
       }
     });
@@ -1550,7 +1550,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   removeOption(fieldId: number, optionId: number | undefined): void {
     if (!optionId) return;
-    
+
     this.confirmationService.confirm({
       message: 'Are you sure you want to remove this option?',
       header: 'Confirm Removal',
@@ -1559,17 +1559,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.fieldOptionsService.deleteFieldOption(optionId).subscribe({
           next: () => {
             this.loadFields();
-            this.messageService.add({ 
-              severity: 'success', 
-              summary: 'Success', 
-              detail: 'Option removed' 
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: 'Option removed'
             });
           },
           error: () => {
-            this.messageService.add({ 
-              severity: 'error', 
-              summary: 'Error', 
-              detail: 'Failed to remove option' 
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Failed to remove option'
             });
           }
         });
@@ -1592,17 +1592,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.fieldOptionsService.createFieldOption(createDto).subscribe({
       next: () => {
         this.loadFields();
-        this.messageService.add({ 
-          severity: 'success', 
-          summary: 'Success', 
-          detail: '"Other" option added' 
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: '"Other" option added'
         });
       },
       error: () => {
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Error', 
-          detail: 'Failed to add "Other" option' 
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to add "Other" option'
         });
       }
     });
@@ -1638,18 +1638,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.fieldsService.updateField(fieldId, updateDto).subscribe({
       next: () => {
         field.isMandatory = isRequired;
-        this.messageService.add({ 
-          severity: 'success', 
-          summary: 'Success', 
-          detail: isRequired ? 'Field marked as required' : 'Field marked as optional' 
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: isRequired ? 'Field marked as required' : 'Field marked as optional'
         });
       },
       error: () => {
         event.target.checked = !isRequired; // Revert on error
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Error', 
-          detail: 'Failed to update field' 
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to update field'
         });
       }
     });
@@ -1694,7 +1694,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   saveFieldSettings(): void {
     if (!this.editingField) return;
-    
+
     if (this.fieldForm.invalid) {
       this.markFormGroupTouched(this.fieldForm);
       this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Please fill all required fields correctly' });
@@ -1722,16 +1722,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       regexPattern: fieldData.regexPattern || '',
       validationMessage: fieldData.validationMessage || undefined,
       foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
-      minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== '' 
-        ? Number(fieldData.minValue) 
+      minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== ''
+        ? Number(fieldData.minValue)
         : undefined,
-      maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== '' 
-        ? Number(fieldData.maxValue) 
+      maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== ''
+        ? Number(fieldData.maxValue)
         : undefined
     };
 
     if (!this.editingField) return;
-    
+
     this.fieldsService.updateField(this.editingField.id, updateDto).subscribe({
       next: (updatedField) => {
         const selectedFieldType = this.fieldTypes.find(t => t.id === Number(fieldData.fieldTypeId));
@@ -1761,10 +1761,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   importFields(): void {
-    this.messageService.add({ 
-      severity: 'info', 
-      summary: 'Info', 
-      detail: 'Import fields feature coming soon' 
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Info',
+      detail: 'Import fields feature coming soon'
     });
   }
 
@@ -1781,13 +1781,14 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           const dataSource = dataSources[0];
           this.existingDataSource = dataSource;
           this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable';
-          
-          // Parse JSON configuration for LookupTable
+
+          // Parse LookupTable configuration
           if (dataSource.sourceType === 'LookupTable' && dataSource.apiUrl) {
             try {
-              // Try to parse as JSON first
+              // Try to parse as JSON first (for backwards compatibility with old data)
               const configJson = JSON.parse(dataSource.apiUrl);
               if (configJson.table && configJson.valueColumn && configJson.textColumn) {
+                // Old format: JSON object in apiUrl
                 this.lookupTableConfig = {
                   table: configJson.table,
                   valueColumn: configJson.valueColumn,
@@ -1795,7 +1796,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 };
                 this.dataSourceConfig = {
                   sourceType: dataSource.sourceType,
-                  apiUrl: dataSource.apiUrl, // Keep JSON string
+                  apiUrl: configJson.table, // Use table name only
                   httpMethod: null,
                   requestBodyJson: null,
                   valuePath: configJson.valueColumn,
@@ -1803,7 +1804,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                   isActive: dataSource.isActive
                 };
               } else {
-                // Fallback: treat as table name (backwards compatibility)
+                // Invalid JSON, treat as table name
                 this.lookupTableConfig = {
                   table: dataSource.apiUrl,
                   valueColumn: dataSource.valuePath || 'Id',
@@ -1820,7 +1821,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 };
               }
             } catch (e) {
-              // Not JSON, treat as table name (backwards compatibility)
+              // Not JSON, treat as table name (new format or backwards compatibility)
               this.lookupTableConfig = {
                 table: dataSource.apiUrl,
                 valueColumn: dataSource.valuePath || 'Id',
@@ -1837,6 +1838,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               };
             }
             this.loadLookupTables();
+
+            // Load columns for the selected table so "Available Columns" section appears
+            if (this.lookupTableConfig.table) {
+              this.loadTableColumns(this.lookupTableConfig.table);
+            }
           } else {
             // For Api and Static types
             this.dataSourceConfig = {
@@ -1848,7 +1854,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               textPath: dataSource.textPath || null,
               isActive: dataSource.isActive
             };
-            
+
             // Load lookup tables if source type is LookupTable (for new selections)
             if (dataSource.sourceType === 'LookupTable') {
               this.loadLookupTables();
@@ -1912,7 +1918,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    */
   onDataSourceTypeChange(): void {
     this.dataSourceConfig.sourceType = this.dataSourceType;
-    
+
     // Reset fields based on source type
     if (this.dataSourceType === 'Static') {
       // Clear DataSource config for Static
@@ -1955,7 +1961,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Clear static options when using DataSource
       this.clearFieldOptions();
     }
-    
+
     this.cdr.detectChanges();
   }
 
@@ -1977,15 +1983,105 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Update valuePath and textPath to match lookupTableConfig
       this.dataSourceConfig.valuePath = this.lookupTableConfig.valueColumn;
       this.dataSourceConfig.textPath = this.lookupTableConfig.textColumn;
-      // Clear available columns and preview options
-      this.availableColumns = [];
+      // Clear preview options
       this.previewOptions = [];
-      // Auto-preview when table is selected to extract columns
-      // Small delay to ensure the value is updated in the model
+      // Load table columns when table is selected - this will populate availableColumns
+      if (this.lookupTableConfig.table && this.lookupTableConfig.table.trim()) {
+        this.loadTableColumns(this.lookupTableConfig.table);
+      }
+
+      // Auto-preview when table is selected (since Refresh button is removed)
       setTimeout(() => {
         this.previewDataSource();
-      }, 100);
+      }, 200);
     }
+  }
+
+  /**
+   * Load columns from selected table
+   */
+  loadTableColumns(tableName: string): void {
+    if (!tableName || !tableName.trim()) {
+      this.availableColumns = [];
+      return;
+    }
+
+    console.log(`[FieldsList] Loading columns for table: "${tableName}"`);
+
+    // First try the dedicated columns endpoint
+    this.fieldDataSourceService.getTableColumns(tableName).subscribe({
+      next: (columns) => {
+        if (columns && columns.length > 0) {
+          this.availableColumns = columns.sort();
+          console.log(`[FieldsList] Successfully loaded ${columns.length} columns for table "${tableName}":`, this.availableColumns);
+          /*
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Columns Loaded',
+            detail: `Loaded ${columns.length} columns`
+          });
+          */
+          this.cdr.detectChanges();
+        } else {
+          // Fallback: Try to infer columns from preview data
+          this.inferColumnsFromPreview(tableName);
+        }
+      },
+      error: (error) => {
+        console.warn(`[FieldsList] Columns endpoint failed for "${tableName}", trying fallback to preview...`);
+        // Fallback: Try to infer columns from preview data
+        this.inferColumnsFromPreview(tableName);
+      }
+    });
+  }
+
+  /**
+   * Infer columns from preview data (Fallback)
+   */
+  private inferColumnsFromPreview(tableName: string): void {
+    // Construct a preview request to get a sample
+    const request: PreviewDataSourceRequestDto = {
+      fieldId: 0,
+      sourceType: 'LookupTable',
+      apiUrl: tableName,
+      valuePath: 'Id', // Default guess
+      textPath: 'Name' // Default guess
+    };
+
+    console.log(`[FieldsList] Attempting to infer columns for table "${tableName}" via preview...`);
+
+    this.fieldDataSourceService.previewDataSource(request).subscribe({
+      next: (response) => {
+        if (response && response.length > 0) {
+          // Extract keys from the first item
+          const firstItem = response[0];
+          const keys = Object.keys(firstItem);
+
+          // If we only have value/text, we can't really "infer" original columns,
+          // but we can provide the standard ones as a courtesy.
+          if (keys.length <= 2 && keys.includes('value') && keys.includes('text')) {
+            this.availableColumns = ['Id', 'Name', 'Code', 'Value', 'Text'].sort();
+          } else {
+            // Remove common internal/mapped properties if they exist
+            this.availableColumns = keys
+              .filter(k => k !== 'isActive' && k !== 'isDefault')
+              .sort();
+          }
+
+          console.log(`[FieldsList] Inferred ${this.availableColumns.length} columns:`, this.availableColumns);
+          this.cdr.detectChanges();
+        } else {
+          // Last resort fallback
+          this.availableColumns = ['Id', 'Name', 'Description', 'Code', 'IsActive', 'Value', 'Text'].sort();
+          this.cdr.detectChanges();
+        }
+      },
+      error: () => {
+        // Ultimate fallback if even preview fails
+        this.availableColumns = ['Id', 'Name', 'Code', 'Value', 'Text'].sort();
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   /**
@@ -2024,12 +2120,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   extractAvailableProperties(): void {
     this.availableProperties = [];
     this.hasSuggestedPaths = false; // Reset suggested paths flag
-    
+
     if (!this.rawApiResponse) return;
 
     try {
       let dataArray: any[] = [];
-      
+
       // Check if it's a direct array
       if (Array.isArray(this.rawApiResponse)) {
         dataArray = this.rawApiResponse;
@@ -2046,7 +2142,23 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       else if (this.rawApiResponse.items && Array.isArray(this.rawApiResponse.items)) {
         dataArray = this.rawApiResponse.items;
       }
-      
+      // Fallback: Check for ANY property that is an array of objects (to handle cases like { users: [...] })
+      else if (typeof this.rawApiResponse === 'object' && this.rawApiResponse !== null) {
+        const responseKeys = Object.keys(this.rawApiResponse);
+        for (const key of responseKeys) {
+          const value = this.rawApiResponse[key];
+          if (Array.isArray(value) && value.length > 0) {
+            const firstElement = value[0];
+            // If the first element is an object, this is likely our data array
+            if (typeof firstElement === 'object' && firstElement !== null) {
+              dataArray = value;
+              console.log(`[FieldsList] Found array data in property: "${key}"`);
+              break;
+            }
+          }
+        }
+      }
+
       if (dataArray.length > 0) {
         const firstItem = dataArray[0];
         const keys = Object.keys(firstItem);
@@ -2064,10 +2176,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    */
   extractColumnsFromRawResponse(): void {
     if (!this.rawApiResponse) return;
-    
+
     try {
       let dataArray: any[] = [];
-      
+
       // Check if it's a direct array
       if (Array.isArray(this.rawApiResponse)) {
         dataArray = this.rawApiResponse;
@@ -2084,14 +2196,28 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       else if (this.rawApiResponse.items && Array.isArray(this.rawApiResponse.items)) {
         dataArray = this.rawApiResponse.items;
       }
-      
+
       if (dataArray.length > 0) {
         const firstItem = dataArray[0];
+
+        // For FieldOptionResponse objects, we need to check if there's raw data
+        // If the item has a structure like { value: ..., text: ... }, we might need to look deeper
+        // But for LookupTable, the backend should return raw table rows
         const columns = Object.keys(firstItem);
-        this.availableColumns = columns.filter(col => 
-          !this.availableColumns.includes(col)
-        );
-        console.log('[FieldsList] Extracted columns:', this.availableColumns);
+
+        // Filter out internal properties that shouldn't be shown as columns
+        const filteredColumns = columns.filter(col => {
+          const colLower = col.toLowerCase();
+          // Keep common column names, exclude internal properties
+          return !colLower.includes('option') &&
+            !colLower.includes('foreign') &&
+            col !== 'isActive' &&
+            col !== 'isDefault' &&
+            col !== 'optionOrder';
+        });
+
+        // Replace availableColumns instead of filtering (to avoid duplicates)
+        this.availableColumns = filteredColumns.length > 0 ? filteredColumns.sort() : columns.sort();
       }
     } catch (e) {
       console.error('[FieldsList] Error extracting columns:', e);
@@ -2102,26 +2228,41 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    * Test API directly to see raw response structure
    */
   testApiResponse(): void {
+    // For LookupTable, use previewDataSource instead of direct API call
+    if (this.dataSourceType === 'LookupTable') {
+      if (!this.lookupTableConfig.table || !this.lookupTableConfig.table.trim()) {
+        // this.messageService.add({
+        //   severity: 'warn',
+        //   summary: 'Validation',
+        //   detail: 'Please select a table first'
+        // });
+        return;
+      }
+      // For LookupTable, call previewDataSource to get raw data
+      this.previewDataSource();
+      return;
+    }
+
     if (!this.dataSourceConfig.apiUrl || !this.dataSourceConfig.apiUrl.trim()) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Validation',
-        detail: 'Please enter API URL first'
-      });
+      // this.messageService.add({
+      //   severity: 'warn',
+      //   summary: 'Validation',
+      //   detail: 'Please enter API URL first'
+      // });
       return;
     }
 
     const url = this.dataSourceConfig.apiUrl.trim();
-    
+
     // Validate URL format for API type (must be absolute)
     if (this.dataSourceType === 'Api') {
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Invalid URL',
-          detail: 'API URL must be an absolute URL starting with http:// or https://. Example: https://api.example.com/endpoint',
-          life: 8000
-        });
+        // this.messageService.add({
+        //   severity: 'error',
+        //   summary: 'Invalid URL',
+        //   detail: 'API URL must be an absolute URL starting with http:// or https://. Example: https://api.example.com/endpoint',
+        //   life: 8000
+        // });
         return;
       }
     }
@@ -2130,11 +2271,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.rawApiResponse = null;
     this.apiDebugError = null;
     this.hasSuggestedPaths = false; // Reset suggested paths flag
-    this.showApiDebugInfo = true;
+    // this.showApiDebugInfo = true;
 
     const method = (this.dataSourceConfig.httpMethod || 'GET').toUpperCase();
     let body: any = null;
-    
+
     try {
       if (this.dataSourceConfig.requestBodyJson) {
         body = JSON.parse(this.dataSourceConfig.requestBodyJson);
@@ -2142,12 +2283,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     } catch (e) {
       this.loadingPreview = false;
       this.apiDebugError = 'Invalid JSON in request body';
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Invalid JSON',
-        detail: 'The request body JSON is invalid. Please check the format.',
-        life: 5000
-      });
+      // this.messageService.add({
+      //   severity: 'error',
+      //   summary: 'Invalid JSON',
+      //   detail: 'The request body JSON is invalid. Please check the format.',
+      //   life: 5000
+      // });
       this.cdr.detectChanges();
       return;
     }
@@ -2179,55 +2320,55 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.apiDebugError = null;
         this.loadingPreview = false;
         console.log('[FieldsList] Raw API Response:', data);
-        
+
         // Extract available properties
         this.extractAvailableProperties();
-        
+
         // Extract columns if LookupTable type
         if (this.dataSourceType === 'LookupTable') {
           this.extractColumnsFromRawResponse();
         }
-        
-        this.messageService.add({
-          severity: 'success',
-          summary: 'API Test Success',
-          detail: 'API response received. Check available properties below.',
-          life: 5000
-        });
+
+        // this.messageService.add({
+        //   severity: 'success',
+        //   summary: 'API Test Success',
+        //   detail: 'API response received. Check available properties below.',
+        //   life: 5000
+        // });
         this.cdr.detectChanges();
       })
       .catch(error => {
         this.loadingPreview = false;
         let errorMsg = error.message || 'Failed to fetch API response';
-        
+
         // Detect network/DNS errors and provide helpful messages
         const errorMsgLower = errorMsg.toLowerCase();
         if (errorMsgLower.includes('no such host') ||
-            errorMsgLower.includes('host is known') ||
-            errorMsgLower.includes('failed to resolve') ||
-            errorMsgLower.includes('dns') ||
-            errorMsgLower.includes('network') ||
-            errorMsgLower.includes('connection') ||
-            errorMsgLower.includes('timeout') ||
-            errorMsgLower.includes('refused') ||
-            errorMsgLower.includes('fetch')) {
+          errorMsgLower.includes('host is known') ||
+          errorMsgLower.includes('failed to resolve') ||
+          errorMsgLower.includes('dns') ||
+          errorMsgLower.includes('network') ||
+          errorMsgLower.includes('connection') ||
+          errorMsgLower.includes('timeout') ||
+          errorMsgLower.includes('refused') ||
+          errorMsgLower.includes('fetch')) {
           errorMsg = `Network error: ${errorMsg}\n\n` +
-                    `Possible causes:\n` +
-                    `• DNS resolution failure\n` +
-                    `• Network connectivity issue\n` +
-                    `• Firewall or proxy blocking\n` +
-                    `• API server might be down\n\n` +
-                    `Please verify the API URL is correct and accessible.`;
+            `Possible causes:\n` +
+            `• DNS resolution failure\n` +
+            `• Network connectivity issue\n` +
+            `• Firewall or proxy blocking\n` +
+            `• API server might be down\n\n` +
+            `Please verify the API URL is correct and accessible.`;
         }
-        
+
         this.apiDebugError = errorMsg;
         console.error('[FieldsList] API Test Error:', error);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'API Test Failed',
-          detail: errorMsg,
-          life: 8000
-        });
+        // this.messageService.add({
+        //   severity: 'error',
+        //   summary: 'API Test Failed',
+        //   detail: errorMsg,
+        //   life: 8000
+        // });
         this.cdr.detectChanges();
       });
   }
@@ -2276,8 +2417,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         const keys = Object.keys(firstItem);
 
         // Find potential value path (usually id, Id, value, Value, etc.)
-        const valueKey = keys.find(k => 
-          k.toLowerCase() === 'id' || 
+        const valueKey = keys.find(k =>
+          k.toLowerCase() === 'id' ||
           k.toLowerCase() === 'value' ||
           k.toLowerCase() === 'key' ||
           k === 'Id' ||
@@ -2286,36 +2427,36 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
         // Find potential text path with improved logic
         // Priority order: name > firstname/lastname > username > email > text > label > title > other text-like fields
-        let textKey = keys.find(k => 
-          k.toLowerCase() === 'name' || 
+        let textKey = keys.find(k =>
+          k.toLowerCase() === 'name' ||
           k === 'Name'
         );
-        
+
         // If no 'name', try firstname or lastname (prefer firstname)
         if (!textKey) {
-          textKey = keys.find(k => 
-            k.toLowerCase() === 'firstname' || 
+          textKey = keys.find(k =>
+            k.toLowerCase() === 'firstname' ||
             k.toLowerCase() === 'first_name' ||
             k.toLowerCase() === 'firstName' ||
             k === 'Firstname' ||
             k === 'FirstName'
           );
         }
-        
+
         // If still no match, try lastname
         if (!textKey) {
-          textKey = keys.find(k => 
-            k.toLowerCase() === 'lastname' || 
+          textKey = keys.find(k =>
+            k.toLowerCase() === 'lastname' ||
             k.toLowerCase() === 'last_name' ||
             k.toLowerCase() === 'lastName' ||
             k === 'Lastname' ||
             k === 'LastName'
           );
         }
-        
+
         // Try other common text fields
         if (!textKey) {
-          textKey = keys.find(k => 
+          textKey = keys.find(k =>
             k.toLowerCase() === 'username' ||
             k.toLowerCase() === 'user_name' ||
             k.toLowerCase() === 'email' ||
@@ -2329,13 +2470,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             k === 'Title'
           );
         }
-        
+
         // Fallback: use first non-id, non-value, non-key field, or second key if available
         if (!textKey) {
           const nonValueKeys = keys.filter(k => {
             const kLower = k.toLowerCase();
-            return kLower !== 'id' && kLower !== 'value' && kLower !== 'key' && 
-                   kLower !== 'uuid' && kLower !== 'createdat' && kLower !== 'updatedat';
+            return kLower !== 'id' && kLower !== 'value' && kLower !== 'key' &&
+              kLower !== 'uuid' && kLower !== 'createdat' && kLower !== 'updatedat';
           });
           textKey = nonValueKeys.length > 0 ? nonValueKeys[0] : (keys.length > 1 ? keys[1] : keys[0]);
         }
@@ -2375,7 +2516,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    */
   applyPropertyAsPath(property: string): void {
     const propLower = property.toLowerCase();
-    
+
     // Check if it's likely a value path (id, value, key, etc.)
     if (propLower.includes('id') || propLower === 'value' || propLower === 'key') {
       this.dataSourceConfig.valuePath = property;
@@ -2399,76 +2540,48 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Apply column as Value Path or Text Path when clicked (for LookupTable)
+   */
+  applyColumnAsPath(column: string): void {
+    const colLower = column.toLowerCase();
+
+    // Check if it's likely a value path (id, value, key, etc.)
+    if (colLower.includes('id') || colLower === 'value' || colLower === 'key') {
+      this.lookupTableConfig.valueColumn = column;
+      this.dataSourceConfig.valuePath = column;
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Value Path Set',
+        detail: `Value Path set to: "${column}"`,
+        life: 3000
+      });
+    } else {
+      // Otherwise, set as text path (name, text, label, title, etc.)
+      this.lookupTableConfig.textColumn = column;
+      this.dataSourceConfig.textPath = column;
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Text Path Set',
+        detail: `Text Path set to: "${column}"`,
+        life: 3000
+      });
+    }
+    this.cdr.detectChanges();
+  }
+
+  /**
    * Load available lookup tables
    */
   loadLookupTables(): void {
     if (this.dataSourceType !== 'LookupTable') {
       return;
     }
-    
+
     this.fieldDataSourceService.getAvailableLookupTables().subscribe({
       next: (tables) => {
-        console.log('[FieldsList] Raw tables response:', tables);
-        
-        // Ensure tables are strings
-        this.availableLookupTables = (tables || []).map((table: any) => {
-          // If it's already a string, return it
-          if (typeof table === 'string') {
-            return table;
-          }
-          
-          // If it's an object, try to extract the name property
-          if (typeof table === 'object' && table !== null) {
-            // Try all possible property names (case-insensitive check)
-            const keys = Object.keys(table);
-            const nameKey = keys.find(k => 
-              k.toLowerCase() === 'name' || 
-              k.toLowerCase() === 'tablename' || 
-              k.toLowerCase() === 'table_name' ||
-              k.toLowerCase() === 'value' ||
-              k.toLowerCase() === 'text' ||
-              k.toLowerCase() === 'label'
-            );
-            
-            if (nameKey && table[nameKey]) {
-              const name = String(table[nameKey]);
-              console.log(`[FieldsList] Extracted table name from key "${nameKey}":`, name);
-              return name;
-            }
-            
-            // Try direct property access (case-sensitive)
-            const name = table.name || table.tableName || table.TableName || table.Name || 
-                        table.value || table.Value || table.text || table.Text ||
-                        table.label || table.Label || table.title || table.Title;
-            
-            if (name) {
-              console.log(`[FieldsList] Extracted table name:`, name);
-              return String(name);
-            }
-            
-            // If no name found, log the object structure for debugging
-            console.warn('[FieldsList] Table object has no recognizable name property:', table);
-            console.warn('[FieldsList] Available keys:', keys);
-            
-            // Last resort: try to use the first string value found
-            for (const key of keys) {
-              const value = table[key];
-              if (typeof value === 'string' && value.trim() !== '') {
-                console.log(`[FieldsList] Using first string value from key "${key}":`, value);
-                return value;
-              }
-            }
-            
-            // If still nothing, return a placeholder
-            return `[Unknown Table: ${keys.join(', ')}]`;
-          }
-          
-          // Fallback to string conversion
-          return String(table);
-        }).filter((name: string) => name && name.trim() !== ''); // Remove empty strings
-        
-        console.log('[FieldsList] Final lookup tables array:', this.availableLookupTables);
-        
+        // Backend returns string[], simply assign it
+        this.availableLookupTables = tables || [];
+
         if (this.availableLookupTables.length === 0) {
           this.messageService.add({
             severity: 'warn',
@@ -2495,6 +2608,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    * Preview DataSource options
    */
   previewDataSource(): void {
+    // If it's an API, we also want to fetch the raw response to populate "Available Properties"
+    if (this.dataSourceType === 'Api') {
+      this.testApiResponse();
+    }
     // For new fields, use a temporary fieldId (0) - backend should handle this
     const fieldId = this.editingField?.id || 0;
 
@@ -2505,31 +2622,31 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Validate required fields
     if (this.dataSourceType === 'Api') {
       if (!this.dataSourceConfig.apiUrl || !this.dataSourceConfig.apiUrl.trim()) {
-        this.messageService.add({ 
-          severity: 'warn', 
-          summary: 'Validation', 
-          detail: 'Please enter API URL' 
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please enter API URL'
         });
         return;
       }
-      
+
       // Validate that API URL is absolute (must start with http:// or https://)
       const apiUrl = this.dataSourceConfig.apiUrl.trim();
       if (!apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Invalid URL', 
-          detail: 'API URL must be an absolute URL starting with http:// or https://. Example: https://api.example.com/endpoint',
-          life: 8000
-        });
+        // this.messageService.add({
+        //   severity: 'error',
+        //   summary: 'Invalid URL',
+        //   detail: 'API URL must be an absolute URL starting with http:// or https://. Example: https://api.example.com/endpoint',
+        //   life: 8000
+        // });
         return;
       }
     } else if (this.dataSourceType === 'LookupTable') {
       if (!this.lookupTableConfig.table || !this.lookupTableConfig.table.trim()) {
-        this.messageService.add({ 
-          severity: 'warn', 
-          summary: 'Validation', 
-          detail: 'Please select a Table' 
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please select a Table'
         });
         return;
       }
@@ -2543,7 +2660,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     if (this.availableProperties.length === 0) {
       const defaultValuePath = this.dataSourceType === 'LookupTable' ? 'Id' : 'id';
       const defaultTextPath = this.dataSourceType === 'LookupTable' ? 'Name' : 'name';
-      
+
       // Update the config with defaults if paths are empty/null/undefined
       if (!this.dataSourceConfig.valuePath || !this.dataSourceConfig.valuePath.trim()) {
         this.dataSourceConfig.valuePath = defaultValuePath;
@@ -2560,15 +2677,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     } else {
       // If availableProperties exists, auto-select first id-like property for valuePath
       if (!this.dataSourceConfig.valuePath || !this.dataSourceConfig.valuePath.trim()) {
-        const idProp = this.availableProperties.find(p => 
+        const idProp = this.availableProperties.find(p =>
           p.toLowerCase().includes('id') || p.toLowerCase() === 'value' || p.toLowerCase() === 'key'
         ) || this.availableProperties[0];
         this.dataSourceConfig.valuePath = idProp;
       }
       // Auto-select first name-like property for textPath
       if (!this.dataSourceConfig.textPath || !this.dataSourceConfig.textPath.trim()) {
-        const nameProp = this.availableProperties.find(p => 
-          p.toLowerCase().includes('name') || p.toLowerCase().includes('text') || 
+        const nameProp = this.availableProperties.find(p =>
+          p.toLowerCase().includes('name') || p.toLowerCase().includes('text') ||
           p.toLowerCase().includes('label') || p.toLowerCase().includes('title')
         ) || (this.availableProperties.length > 1 ? this.availableProperties[1] : this.availableProperties[0]);
         this.dataSourceConfig.textPath = nameProp;
@@ -2584,8 +2701,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     // For LookupTable, use table name directly for preview (backend expects table name, not JSON)
     // For Api, use the URL
-    const apiUrlForPreview = this.dataSourceType === 'LookupTable' 
-      ? this.lookupTableConfig.table 
+    const apiUrlForPreview = this.dataSourceType === 'LookupTable'
+      ? this.lookupTableConfig.table
       : (this.dataSourceConfig.apiUrl || undefined);
 
     // Prepare request payload
@@ -2618,7 +2735,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         console.log('[FieldsList] API Response received:', options);
         console.log('[FieldsList] Number of options:', options?.length || 0);
         console.log('[FieldsList] Full response structure:', JSON.stringify(options, null, 2));
-        
+
         // Check if response is empty
         if (!options || options.length === 0) {
           console.warn('[FieldsList] Empty response received. Possible reasons:');
@@ -2627,11 +2744,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           console.warn('3. The API URL might be incorrect');
           console.warn('4. The backend preview endpoint might need the actual API to be called first');
         }
-        
+
         // Process options to ensure text is a string (not JSON object)
         const processedOptions = (options || []).map((opt: FieldOptionResponse) => {
           let textValue = opt.text;
-          
+
           // Helper function to extract value from object using path
           const extractValueByPath = (obj: any, path: string): any => {
             if (!path || !obj) return null;
@@ -2646,7 +2763,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             }
             return value;
           };
-          
+
           // If text is an object, try to extract using the configured textPath
           if (typeof textValue === 'object' && textValue !== null) {
             // Try using the configured textPath first
@@ -2656,23 +2773,23 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 textValue = extracted;
               }
             }
-            
+
             // Fallback to common field names if textPath extraction didn't work
             if (typeof textValue === 'object' && textValue !== null) {
-              textValue = (textValue as any).name || 
-                         (textValue as any).first || 
-                         (textValue as any).text || 
-                         (textValue as any).title ||
-                         (textValue as any).label ||
-                         null;
+              textValue = (textValue as any).name ||
+                (textValue as any).first ||
+                (textValue as any).text ||
+                (textValue as any).title ||
+                (textValue as any).label ||
+                null;
             }
-            
+
             // Last resort: if still an object, use JSON string
             if (typeof textValue === 'object' && textValue !== null) {
               textValue = JSON.stringify(textValue);
             }
           }
-          
+
           // If text is a JSON string, try to parse and extract using textPath
           if (typeof textValue === 'string' && textValue.trim().startsWith('{')) {
             try {
@@ -2694,23 +2811,23 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               // If parsing fails, keep the original string
             }
           }
-          
+
           // Convert to string if still not a string
           if (typeof textValue !== 'string' && textValue !== null && textValue !== undefined) {
             textValue = String(textValue);
           }
-          
+
           return {
             ...opt,
             text: textValue || ''
           };
         });
-        
+
         // Filter out "Select All" options (in both English and Arabic)
         const filteredOptions = processedOptions.filter((opt: FieldOptionResponse) => {
           const text = String(opt.text || '').toLowerCase().trim();
           const value = String(opt.value || '').toLowerCase().trim();
-          
+
           // Filter out common "Select All" variations
           const selectAllPatterns = [
             'select all',
@@ -2721,35 +2838,64 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             'all',
             'الكل'
           ];
-          
-          return !selectAllPatterns.some(pattern => 
-            text === pattern || 
+
+          return !selectAllPatterns.some(pattern =>
+            text === pattern ||
             value === pattern ||
             text.includes(pattern) ||
             value.includes(pattern)
           );
         });
-        
+
         this.previewOptions = filteredOptions;
         this.loadingPreview = false;
-        
-        // For LookupTable, try to extract columns from raw response if available
-        if (this.dataSourceType === 'LookupTable' && this.rawApiResponse) {
-          this.extractColumnsFromRawResponse();
+
+        // For LookupTable, if columns are not already loaded, try to load from endpoint
+        if (this.dataSourceType === 'LookupTable') {
+          // If columns are already loaded from endpoint, don't override
+          if (this.availableColumns.length === 0) {
+            // Try to load columns from endpoint first
+            if (this.lookupTableConfig.table && this.lookupTableConfig.table.trim()) {
+              this.loadTableColumns(this.lookupTableConfig.table);
+            }
+
+            // Also try to extract from preview data as fallback
+            if (options && options.length > 0) {
+              const firstOption = options[0] as any;
+              if (firstOption && typeof firstOption === 'object') {
+                const allKeys = Object.keys(firstOption);
+                // Filter out standard FieldOptionResponse properties
+                const extraKeys = allKeys.filter(key =>
+                  key !== 'value' &&
+                  key !== 'text' &&
+                  key !== 'isActive' &&
+                  key !== 'isDefault' &&
+                  key !== 'optionOrder'
+                );
+
+                // If there are extra keys, use them as columns (fallback)
+                if (extraKeys.length > 0 && this.availableColumns.length === 0) {
+                  // Use the full object structure as raw response
+                  this.rawApiResponse = options;
+                  this.extractColumnsFromRawResponse();
+                }
+              }
+            }
+          }
         }
-        
+
         if (this.previewOptions.length === 0) {
-          this.messageService.add({ 
-            severity: 'warn', 
-            summary: 'Preview', 
-            detail: 'No options found. Please check your DataSource configuration.' 
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Preview',
+            detail: 'No options found. Please check your DataSource configuration.'
           });
         } else {
-          this.messageService.add({ 
-            severity: 'success', 
-            summary: 'Preview', 
-            detail: `Found ${this.previewOptions.length} options` 
-          });
+          // this.messageService.add({
+          //   severity: 'success',
+          //   summary: 'Preview',
+          //   detail: `Found ${this.previewOptions.length} options`
+          // });
         }
         this.cdr.detectChanges();
       },
@@ -2763,10 +2909,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           message: error.message,
           url: error.url
         });
-        
+
         let errorMessage = 'Failed to preview DataSource';
         let errorDetail = '';
-        
+
         if (error.error) {
           // Handle different error formats
           if (typeof error.error === 'string') {
@@ -2780,33 +2926,33 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         } else if (error.message) {
           errorMessage = error.message;
         }
-        
+
         // Check for network/DNS errors first (can occur with any status or no status)
         const isNetworkError = errorMessage.toLowerCase().includes('no such host') ||
-                              errorMessage.toLowerCase().includes('host is known') ||
-                              errorMessage.toLowerCase().includes('failed to resolve') ||
-                              errorMessage.toLowerCase().includes('dns') ||
-                              errorMessage.toLowerCase().includes('network') ||
-                              errorMessage.toLowerCase().includes('connection') ||
-                              errorMessage.toLowerCase().includes('timeout') ||
-                              errorMessage.toLowerCase().includes('refused') ||
-                              error.status === 0;
-        
+          errorMessage.toLowerCase().includes('host is known') ||
+          errorMessage.toLowerCase().includes('failed to resolve') ||
+          errorMessage.toLowerCase().includes('dns') ||
+          errorMessage.toLowerCase().includes('network') ||
+          errorMessage.toLowerCase().includes('connection') ||
+          errorMessage.toLowerCase().includes('timeout') ||
+          errorMessage.toLowerCase().includes('refused') ||
+          error.status === 0;
+
         if (isNetworkError) {
           errorMessage = errorMessage || 'Network error. Unable to connect to the API.';
           errorDetail = `Network connectivity issue detected.\n\n` +
-                       `Possible causes:\n` +
-                       `• DNS resolution failure - the hostname cannot be resolved\n` +
-                       `• Network connectivity problem - check your internet connection\n` +
-                       `• Firewall or proxy blocking the request\n` +
-                       `• The API server might be down or unreachable\n\n` +
-                       `Current API URL: "${this.dataSourceConfig.apiUrl}"\n\n` +
-                       `Troubleshooting steps:\n` +
-                       `1. Verify the API URL is correct and accessible\n` +
-                       `2. Check your internet connection\n` +
-                       `3. Try accessing the URL directly in your browser\n` +
-                       `4. If behind a corporate firewall, check proxy settings\n` +
-                       `5. For localhost APIs, ensure the server is running`;
+            `Possible causes:\n` +
+            `• DNS resolution failure - the hostname cannot be resolved\n` +
+            `• Network connectivity problem - check your internet connection\n` +
+            `• Firewall or proxy blocking the request\n` +
+            `• The API server might be down or unreachable\n\n` +
+            `Current API URL: "${this.dataSourceConfig.apiUrl}"\n\n` +
+            `Troubleshooting steps:\n` +
+            `1. Verify the API URL is correct and accessible\n` +
+            `2. Check your internet connection\n` +
+            `3. Try accessing the URL directly in your browser\n` +
+            `4. If behind a corporate firewall, check proxy settings\n` +
+            `5. For localhost APIs, ensure the server is running`;
         }
         // Specific error messages based on status
         else if (error.status === 404) {
@@ -2815,156 +2961,156 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           errorMessage = errorMessage || 'Server error. Please check backend logs.';
           if (errorMessage.includes('Invalid API response format') || errorMessage.includes('response format')) {
             errorDetail = `The API response structure doesn't match the expected format based on the paths you provided.\n\n` +
-                         `Current Paths:\n` +
-                         `• Value Path: "${valuePath}"\n` +
-                         `• Text Path: "${textPath}"\n\n` +
-                         `The API should return data in one of these formats:\n` +
-                         `• Direct Array: [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]\n` +
-                         `• Wrapped Object: {"data": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n` +
-                         `• Results Object: {"results": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n\n` +
-                         `Please verify:\n` +
-                         `1. The property names in your API response match the paths (case-sensitive)\n` +
-                         `2. Update valuePath/textPath if your API uses different property names\n` +
-                         `3. For nested properties, use dot notation (e.g., "user.id", "data.items[].name")`;
+              `Current Paths:\n` +
+              `• Value Path: "${valuePath}"\n` +
+              `• Text Path: "${textPath}"\n\n` +
+              `The API should return data in one of these formats:\n` +
+              `• Direct Array: [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]\n` +
+              `• Wrapped Object: {"data": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n` +
+              `• Results Object: {"results": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n\n` +
+              `Please verify:\n` +
+              `1. The property names in your API response match the paths (case-sensitive)\n` +
+              `2. Update valuePath/textPath if your API uses different property names\n` +
+              `3. For nested properties, use dot notation (e.g., "user.id", "data.items[].name")`;
           } else if (errorMessage.includes('invalid request URI') || errorMessage.includes('absolute URI') || errorMessage.includes('BaseAddress')) {
             errorDetail = `The API URL must be an absolute URL.\n\n` +
-                         `Current URL: "${this.dataSourceConfig.apiUrl}"\n\n` +
-                         `Please ensure your API URL:\n` +
-                         `• Starts with http:// or https://\n` +
-                         `• Is a complete URL, not a relative path\n` +
-                         `• Examples:\n` +
-                         `  ✓ https://api.example.com/users\n` +
-                         `  ✓ http://localhost:5000/api/items\n` +
-                         `  ✗ /api/users (relative path - not allowed)\n` +
-                         `  ✗ api/users (relative path - not allowed)`;
+              `Current URL: "${this.dataSourceConfig.apiUrl}"\n\n` +
+              `Please ensure your API URL:\n` +
+              `• Starts with http:// or https://\n` +
+              `• Is a complete URL, not a relative path\n` +
+              `• Examples:\n` +
+              `  ✓ https://api.example.com/users\n` +
+              `  ✓ http://localhost:5000/api/items\n` +
+              `  ✗ /api/users (relative path - not allowed)\n` +
+              `  ✗ api/users (relative path - not allowed)`;
           }
         } else if (error.status === 400) {
           if (errorMessage.includes('invalid request URI') || errorMessage.includes('absolute URI') || errorMessage.includes('BaseAddress')) {
             errorDetail = `The API URL must be an absolute URL.\n\n` +
-                         `Current URL: "${this.dataSourceConfig.apiUrl}"\n\n` +
-                         `Please ensure your API URL:\n` +
-                         `• Starts with http:// or https://\n` +
-                         `• Is a complete URL, not a relative path\n` +
-                         `• Examples:\n` +
-                         `  ✓ https://api.example.com/users\n` +
-                         `  ✓ http://localhost:5000/api/items\n` +
-                         `  ✗ /api/users (relative path - not allowed)\n` +
-                         `  ✗ api/users (relative path - not allowed)`;
+              `Current URL: "${this.dataSourceConfig.apiUrl}"\n\n` +
+              `Please ensure your API URL:\n` +
+              `• Starts with http:// or https://\n` +
+              `• Is a complete URL, not a relative path\n` +
+              `• Examples:\n` +
+              `  ✓ https://api.example.com/users\n` +
+              `  ✓ http://localhost:5000/api/items\n` +
+              `  ✗ /api/users (relative path - not allowed)\n` +
+              `  ✗ api/users (relative path - not allowed)`;
           }
           errorMessage = errorMessage || 'Bad request. Please check your API configuration.';
           if (errorMessage.includes('Invalid API response format') || errorMessage.includes('response format')) {
             errorDetail = `The API response structure doesn't match the expected format based on the paths you provided.\n\n` +
-                         `Current Paths:\n` +
-                         `• Value Path: "${valuePath}"\n` +
-                         `• Text Path: "${textPath}"\n\n` +
-                         `Expected API Response Formats:\n` +
-                         `• Direct Array: [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]\n` +
-                         `• Wrapped: {"data": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n` +
-                         `• Results: {"results": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n\n` +
-                         `Tips:\n` +
-                         `• Property names are case-sensitive (e.g., "Id" vs "id", "Name" vs "name")\n` +
-                         `• Update the paths to match your actual API response structure\n` +
-                         `• For nested properties, use dot notation like "user.profile.name"\n` +
-                         `• For arrays, use bracket notation like "results[].id"`;
+              `Current Paths:\n` +
+              `• Value Path: "${valuePath}"\n` +
+              `• Text Path: "${textPath}"\n\n` +
+              `Expected API Response Formats:\n` +
+              `• Direct Array: [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]\n` +
+              `• Wrapped: {"data": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n` +
+              `• Results: {"results": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n\n` +
+              `Tips:\n` +
+              `• Property names are case-sensitive (e.g., "Id" vs "id", "Name" vs "name")\n` +
+              `• Update the paths to match your actual API response structure\n` +
+              `• For nested properties, use dot notation like "user.profile.name"\n` +
+              `• For arrays, use bracket notation like "results[].id"`;
           } else if (errorMessage.includes('valuePath') || errorMessage.includes('textPath')) {
             errorDetail = `Path Configuration Error.\n\n` +
-                         `Current Paths:\n` +
-                         `• Value Path: "${valuePath}"\n` +
-                         `• Text Path: "${textPath}"\n\n` +
-                         `Please ensure these paths match the property names in your API response.`;
+              `Current Paths:\n` +
+              `• Value Path: "${valuePath}"\n` +
+              `• Text Path: "${textPath}"\n\n` +
+              `Please ensure these paths match the property names in your API response.`;
           }
         } else if (error.message) {
           errorMessage = error.message;
         }
-        
+
         // Check if error message contains "No options extracted" - this indicates path mismatch
         // Skip this check if it's already a network error (don't override network error details)
         const isNoOptionsError = !isNetworkError && (
-          errorMessage.toLowerCase().includes('no options extracted') || 
+          errorMessage.toLowerCase().includes('no options extracted') ||
           errorMessage.toLowerCase().includes('no options found')
         );
-        
+
         // Try to extract available properties from error message if mentioned (only if not a network error)
         if (!isNetworkError) {
           const availablePropsMatch = errorMessage.match(/available properties[^:]*:\s*([^.]+)/i);
           if (availablePropsMatch && availablePropsMatch[1]) {
             const propsFromError = availablePropsMatch[1].split(',').map(p => p.trim()).filter(p => p.length > 0);
             if (propsFromError.length > 0 && this.availableProperties.length === 0) {
-              this.availableProperties = propsFromError;
+              // this.availableProperties = propsFromError;
               // Extract properties from raw response if available
               if (this.rawApiResponse) {
-                this.extractAvailableProperties();
+                // this.extractAvailableProperties();
               }
             }
           }
         }
-        
+
         if (isNoOptionsError) {
           // Ensure we have available properties - try to extract from raw response if not already done
-          if (this.availableProperties.length === 0 && this.rawApiResponse) {
-            this.extractAvailableProperties();
-          }
-          
+          // if (this.availableProperties.length === 0 && this.rawApiResponse) {
+          //   this.extractAvailableProperties();
+          // }
+
           // Try to get suggested paths from the raw API response
-          const suggested = this.getSuggestedPaths();
-          if (suggested && (suggested.valuePath !== valuePath || suggested.textPath !== textPath)) {
-            const availablePropsText = this.availableProperties.length > 0 
-              ? this.availableProperties.join(', ')
-              : 'Click "Test API" to see available properties';
-            
-            errorDetail = `No options extracted from API response. Please verify that valuePath '${valuePath}' and textPath '${textPath}' are correct.\n\n` +
-                         `Available properties in the first item: ${availablePropsText}.\n\n` +
-                         `Suggested paths based on API response:\n` +
-                         `• Value Path: "${suggested.valuePath}"\n` +
-                         `• Text Path: "${suggested.textPath}"\n\n` +
-                         `Click "Apply Suggested Paths" button to automatically update the configuration.\n\n` +
-                         `For nested properties, use dot notation (e.g., 'name.first' instead of 'first_name').`;
-            
-            // Store suggested paths for potential auto-apply
-            this.hasSuggestedPaths = true;
-          } else if (this.availableProperties.length > 0) {
-            errorDetail = `No options extracted from API response. Please verify that valuePath '${valuePath}' and textPath '${textPath}' are correct.\n\n` +
-                         `Available properties in the first item: ${this.availableProperties.join(', ')}.\n\n` +
-                         `Please select appropriate paths from the available properties above.\n\n` +
-                         `For nested properties, use dot notation (e.g., 'name.first' instead of 'first_name').`;
-          } else {
-            // If we don't have raw response or properties, suggest testing the API first
-            errorDetail = `No options extracted from API response. Please verify that valuePath '${valuePath}' and textPath '${textPath}' are correct.\n\n` +
-                         `Please click "Test API" first to see the available properties in the API response, then update the paths accordingly.\n\n` +
-                         `For nested properties, use dot notation (e.g., 'name.first' instead of 'first_name').`;
-          }
+          // const suggested = this.getSuggestedPaths();
+          // if (suggested && (suggested.valuePath !== valuePath || suggested.textPath !== textPath)) {
+          //   const availablePropsText = this.availableProperties.length > 0
+          //     ? this.availableProperties.join(', ')
+          //     : 'Click "Test API" to see available properties';
+
+          //   errorDetail = `No options extracted from API response. Please verify that valuePath '${valuePath}' and textPath '${textPath}' are correct.\n\n` +
+          //     `Available properties in the first item: ${availablePropsText}.\n\n` +
+          //     `Suggested paths based on API response:\n` +
+          //     `• Value Path: "${suggested.valuePath}"\n` +
+          //     `• Text Path: "${suggested.textPath}"\n\n` +
+          //     `Click "Apply Suggested Paths" button to automatically update the configuration.\n\n` +
+          //     `For nested properties, use dot notation (e.g., 'name.first' instead of 'first_name').`;
+
+          //   // Store suggested paths for potential auto-apply
+          //   this.hasSuggestedPaths = true;
+          // } else if (this.availableProperties.length > 0) {
+          //   errorDetail = `No options extracted from API response. Please verify that valuePath '${valuePath}' and textPath '${textPath}' are correct.\n\n` +
+          //     `Available properties in the first item: ${this.availableProperties.join(', ')}.\n\n` +
+          //     `Please select appropriate paths from the available properties above.\n\n` +
+          //     `For nested properties, use dot notation (e.g., 'name.first' instead of 'first_name').`;
+          // } else {
+          //   // If we don't have raw response or properties, suggest testing the API first
+          //   errorDetail = `No options extracted from API response. Please verify that valuePath '${valuePath}' and textPath '${textPath}' are correct.\n\n` +
+          //     `Please click "Test API" first to see the available properties in the API response, then update the paths accordingly.\n\n` +
+          //     `For nested properties, use dot notation (e.g., 'name.first' instead of 'first_name').`;
+          // }
         }
-        
+
         // Check if error message contains path-related keywords
-        if (!errorDetail && (errorMessage.toLowerCase().includes('path') || 
-                             errorMessage.toLowerCase().includes('format') ||
-                             errorMessage.toLowerCase().includes('structure'))) {
+        if (!errorDetail && (errorMessage.toLowerCase().includes('path') ||
+          errorMessage.toLowerCase().includes('format') ||
+          errorMessage.toLowerCase().includes('structure'))) {
           errorDetail = `Current Configuration:\n` +
-                       `• Value Path: "${valuePath}"\n` +
-                       `• Text Path: "${textPath}"\n\n` +
-                       `Please verify these paths match your API response structure.`;
+            `• Value Path: "${valuePath}"\n` +
+            `• Text Path: "${textPath}"\n\n` +
+            `Please verify these paths match your API response structure.`;
         }
-        
+
         // Show error message with details
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Preview Error', 
-          detail: errorMessage,
-          life: 8000 // Show for 8 seconds
-        });
-        
+        // this.messageService.add({
+        //   severity: 'error',
+        //   summary: 'Preview Error',
+        //   detail: errorMessage,
+        //   life: 8000 // Show for 8 seconds
+        // });
+
         // If there's additional detail, show it in a separate message
         if (errorDetail) {
           setTimeout(() => {
-            this.messageService.add({ 
-              severity: 'info', 
-              summary: 'Help', 
-              detail: errorDetail,
-              life: 10000 // Show for 10 seconds
-            });
+            // this.messageService.add({
+            //   severity: 'info',
+            //   summary: 'Help',
+            //   detail: errorDetail,
+            //   life: 10000 // Show for 10 seconds
+            // });
           }, 500);
         }
-        
+
         this.cdr.detectChanges();
       }
     });
@@ -2992,21 +3138,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // For LookupTable, create JSON configuration
+      // For LookupTable, use table name only in apiUrl
       let apiUrlValue: string | null = null;
       let valuePathValue: string | null = null;
       let textPathValue: string | null = null;
-      
+
       if (this.dataSourceType === 'LookupTable') {
-        // Create JSON object with table, valueColumn, textColumn
-        const lookupConfig = {
-          table: this.lookupTableConfig.table,
-          valueColumn: this.lookupTableConfig.valueColumn,
-          textColumn: this.lookupTableConfig.textColumn
-        };
-        apiUrlValue = JSON.stringify(lookupConfig);
-        valuePathValue = this.lookupTableConfig.valueColumn;
-        textPathValue = this.lookupTableConfig.textColumn;
+        // Backend expects only the table name in apiUrl, not JSON object
+        apiUrlValue = this.lookupTableConfig.table || null;
+        valuePathValue = this.lookupTableConfig.valueColumn || null;
+        textPathValue = this.lookupTableConfig.textColumn || null;
       } else {
         // For Api type, use the URL directly
         apiUrlValue = this.dataSourceConfig.apiUrl || null;
@@ -3040,10 +3181,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             resolve();
           },
           error: () => {
-            this.messageService.add({ 
-              severity: 'error', 
-              summary: 'Error', 
-              detail: 'Failed to update DataSource' 
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Failed to update DataSource'
             });
             reject();
           }
@@ -3055,10 +3196,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             resolve();
           },
           error: () => {
-            this.messageService.add({ 
-              severity: 'error', 
-              summary: 'Error', 
-              detail: 'Failed to create DataSource' 
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Failed to create DataSource'
             });
             reject();
           }
@@ -3068,34 +3209,34 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   addTitleDescription(): void {
-    this.messageService.add({ 
-      severity: 'info', 
-      summary: 'Info', 
-      detail: 'Add title/description feature coming soon' 
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Info',
+      detail: 'Add title/description feature coming soon'
     });
   }
 
   addImage(): void {
-    this.messageService.add({ 
-      severity: 'info', 
-      summary: 'Info', 
-      detail: 'Add image feature coming soon' 
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Info',
+      detail: 'Add image feature coming soon'
     });
   }
 
   addVideo(): void {
-    this.messageService.add({ 
-      severity: 'info', 
-      summary: 'Info', 
-      detail: 'Add video feature coming soon' 
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Info',
+      detail: 'Add video feature coming soon'
     });
   }
 
   addSection(): void {
-    this.messageService.add({ 
-      severity: 'info', 
-      summary: 'Info', 
-      detail: 'Add section feature coming soon' 
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Info',
+      detail: 'Add section feature coming soon'
     });
   }
 

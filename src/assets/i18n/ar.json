@@ -75,7 +75,9 @@
     "tabOrder": "ترتيب التبويب",
     "enterTabName": "أدخل اسم التبويب",
     "enterTabCode": "أدخل كود التبويب",
-    "manageFields": "إدارة الحقول"
+    "manageFields": "إدارة الحقول",
+    "manageGrids": "إدارة الجداول",
+    "backToForms": "العودة إلى النماذج"
   },
   "fields": {
     "title": "إدارة الحقول",

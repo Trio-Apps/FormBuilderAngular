@@ -169,22 +169,29 @@
               </td>
               <td class="col-flags">
                 <div class="flags-group">
-                  <span class="flag-badge" [class.flag-yes]="field.isMandatory === true" [class.flag-no]="field.isMandatory !== true">
-                    <i class="pi" [class.pi-check]="field.isMandatory === true" [class.pi-times]="field.isMandatory !== true"></i>
+                  <span class="flag-badge" [class.flag-yes]="field.isMandatory === true"
+                    [class.flag-no]="field.isMandatory !== true">
+                    <i class="pi" [class.pi-check]="field.isMandatory === true"
+                      [class.pi-times]="field.isMandatory !== true"></i>
                     Mandatory
                   </span>
-                  <span class="flag-badge" [class.flag-yes]="field.isEditable !== false" [class.flag-no]="field.isEditable === false">
-                    <i class="pi" [class.pi-check]="field.isEditable !== false" [class.pi-times]="field.isEditable === false"></i>
+                  <span class="flag-badge" [class.flag-yes]="field.isEditable !== false"
+                    [class.flag-no]="field.isEditable === false">
+                    <i class="pi" [class.pi-check]="field.isEditable !== false"
+                      [class.pi-times]="field.isEditable === false"></i>
                     Editable
                   </span>
-                  <span class="flag-badge" [class.flag-yes]="field.isVisible !== false" [class.flag-no]="field.isVisible === false">
-                    <i class="pi" [class.pi-check]="field.isVisible !== false" [class.pi-times]="field.isVisible === false"></i>
+                  <span class="flag-badge" [class.flag-yes]="field.isVisible !== false"
+                    [class.flag-no]="field.isVisible === false">
+                    <i class="pi" [class.pi-check]="field.isVisible !== false"
+                      [class.pi-times]="field.isVisible === false"></i>
                     Visible
                   </span>
                 </div>
               </td>
               <td class="col-status">
-                <span class="status-badge" [class.status-active]="field.isActive" [class.status-inactive]="!field.isActive">
+                <span class="status-badge" [class.status-active]="field.isActive"
+                  [class.status-inactive]="!field.isActive">
                   <i class="pi" [class.pi-check-circle]="field.isActive" [class.pi-times-circle]="!field.isActive"></i>
                   {{ field.isActive ? 'Active' : 'Inactive' }}
                 </span>
@@ -197,11 +204,9 @@
                   <button class="action-btn action-duplicate" (click)="duplicateField(field)" title="Duplicate">
                     <i class="pi pi-copy"></i>
                   </button>
-                  <button class="action-btn" 
-                          [class.action-activate]="!field.isActive"
-                          [class.action-deactivate]="field.isActive"
-                          (click)="toggleFieldStatus(field)"
-                          [title]="field.isActive ? 'Deactivate' : 'Activate'">
+                  <button class="action-btn" [class.action-activate]="!field.isActive"
+                    [class.action-deactivate]="field.isActive" (click)="toggleFieldStatus(field)"
+                    [title]="field.isActive ? 'Deactivate' : 'Activate'">
                     <i class="pi" [class.pi-power-off]="field.isActive" [class.pi-check]="!field.isActive"></i>
                   </button>
                   <button class="action-btn action-delete" (click)="deleteField(field.id!)" title="Delete">
@@ -217,31 +222,20 @@
   </div>
 
   <!-- Add/Edit Field Modal -->
-  <p-dialog [(visible)]="showFieldModal" 
-            [modal]="true" 
-            [header]="editingField ? translateLabel('fields.editField') : translateLabel('fields.addField')" 
-            [style]="{width: '750px', maxWidth: '90vw'}"
-            [draggable]="false" 
-            [resizable]="false"
-            [closable]="true"
-            (onHide)="closeFieldModal()"
-            [styleClass]="'field-modal'">
-    
+  <p-dialog [(visible)]="showFieldModal" [modal]="true"
+    [header]="editingField ? translateLabel('fields.editField') : translateLabel('fields.addField')"
+    [style]="{width: '750px', maxWidth: '90vw'}" [draggable]="false" [resizable]="false" [closable]="true"
+    (onHide)="closeFieldModal()" [styleClass]="'field-modal'">
+
     <form [formGroup]="fieldForm" (ngSubmit)="saveField()">
       <div class="modal-form-content">
         <!-- Language Toggle Tabs -->
         <div class="language-tabs-container">
-          <button
-            type="button"
-            class="language-tab"
-            [class.language-tab-active]="currentInputLanguage === 'en'"
+          <button type="button" class="language-tab" [class.language-tab-active]="currentInputLanguage === 'en'"
             (click)="setInputLanguage('en')">
             English
           </button>
-          <button
-            type="button"
-            class="language-tab"
-            [class.language-tab-active]="currentInputLanguage === 'ar'"
+          <button type="button" class="language-tab" [class.language-tab-active]="currentInputLanguage === 'ar'"
             (click)="setInputLanguage('ar')">
             العربية
           </button>
@@ -257,11 +251,9 @@
             <!-- English Field Name -->
             <div class="form-group" *ngIf="currentInputLanguage === 'en'">
               <label class="form-label">{{ translateLabel('fields.fieldName') }} <span class="required">*</span></label>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="fieldName"
-                     [placeholder]="translateLabel('fields.enterFieldName')"
-                     [class.is-invalid]="isFieldInvalid('fieldName')">
+              <input type="text" class="form-control" formControlName="fieldName"
+                [placeholder]="translateLabel('fields.enterFieldName')"
+                [class.is-invalid]="isFieldInvalid('fieldName')">
               <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldName')">
                 {{ getFieldErrorMessage('fieldName') }}
               </div>
@@ -270,19 +262,15 @@
             <!-- Arabic Field Name -->
             <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
               <label class="form-label">{{ translateLabel('fields.fieldName') }}</label>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="foreignFieldName"
-                     [placeholder]="translateLabel('fields.enterFieldName')">
+              <input type="text" class="form-control" formControlName="foreignFieldName"
+                [placeholder]="translateLabel('fields.enterFieldName')">
             </div>
 
             <div class="form-group">
               <label class="form-label">{{ translateLabel('fields.fieldCode') }} <span class="required">*</span></label>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="fieldCode"
-                     [placeholder]="translateLabel('fields.enterFieldCode')"
-                     [class.is-invalid]="isFieldInvalid('fieldCode')">
+              <input type="text" class="form-control" formControlName="fieldCode"
+                [placeholder]="translateLabel('fields.enterFieldCode')"
+                [class.is-invalid]="isFieldInvalid('fieldCode')">
               <small class="form-hint">{{ translateLabel('fields.enterFieldCode') }}</small>
               <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldCode')">
                 {{ getFieldErrorMessage('fieldCode') }}
@@ -290,13 +278,10 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">{{ translateLabel('fields.fieldOrder') }} <span class="required">*</span></label>
-              <input type="number" 
-                     class="form-control" 
-                     formControlName="fieldOrder"
-                     min="1"
-                     [placeholder]="translateLabel('fields.fieldOrder')"
-                     [class.is-invalid]="isFieldInvalid('fieldOrder')">
+              <label class="form-label">{{ translateLabel('fields.fieldOrder') }} <span
+                  class="required">*</span></label>
+              <input type="number" class="form-control" formControlName="fieldOrder" min="1"
+                [placeholder]="translateLabel('fields.fieldOrder')" [class.is-invalid]="isFieldInvalid('fieldOrder')">
               <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldOrder')">
                 {{ getFieldErrorMessage('fieldOrder') }}
               </div>
@@ -304,9 +289,8 @@
 
             <div class="form-group">
               <label class="form-label">{{ translateLabel('fields.fieldType') }} <span class="required">*</span></label>
-              <select class="form-control" 
-                      formControlName="fieldTypeId"
-                      [class.is-invalid]="isFieldInvalid('fieldTypeId')">
+              <select class="form-control" formControlName="fieldTypeId"
+                [class.is-invalid]="isFieldInvalid('fieldTypeId')">
                 <option value="" disabled selected>{{ translateLabel('fields.selectFieldType') }}</option>
                 <option *ngFor="let type of filteredFieldTypes" [value]="type.id">
                   {{ type.typeName }}
@@ -329,37 +313,29 @@
             <!-- English Placeholder -->
             <div class="form-group" *ngIf="currentInputLanguage === 'en'">
               <label class="form-label">{{ translateLabel('fields.placeholder') }}</label>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="placeholder"
-                     [placeholder]="translateLabel('fields.enterPlaceholder')">
+              <input type="text" class="form-control" formControlName="placeholder"
+                [placeholder]="translateLabel('fields.enterPlaceholder')">
             </div>
 
             <!-- Arabic Placeholder -->
             <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
               <label class="form-label">{{ translateLabel('fields.placeholder') }}</label>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="foreignPlaceholder"
-                     [placeholder]="translateLabel('fields.enterPlaceholder')">
+              <input type="text" class="form-control" formControlName="foreignPlaceholder"
+                [placeholder]="translateLabel('fields.enterPlaceholder')">
             </div>
 
             <!-- English Hint Text -->
             <div class="form-group" *ngIf="currentInputLanguage === 'en'">
               <label class="form-label">{{ translateLabel('fields.hintText') }}</label>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="hintText"
-                     [placeholder]="translateLabel('fields.enterHintText')">
+              <input type="text" class="form-control" formControlName="hintText"
+                [placeholder]="translateLabel('fields.enterHintText')">
             </div>
 
             <!-- Arabic Hint Text -->
             <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
               <label class="form-label">{{ translateLabel('fields.hintText') }}</label>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="foreignHintText"
-                     [placeholder]="translateLabel('fields.enterHintText')">
+              <input type="text" class="form-control" formControlName="foreignHintText"
+                [placeholder]="translateLabel('fields.enterHintText')">
             </div>
           </div>
         </div>
@@ -373,24 +349,24 @@
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">
-                {{ translateLabel('fields.selectGrid') || 'Select Grid' }} 
+                {{ translateLabel('fields.selectGrid') || 'Select Grid' }}
                 <span class="required">*</span>
               </label>
-              <select 
-                class="form-control" 
-                [(ngModel)]="selectedGridId"
-                [ngModelOptions]="{standalone: true}"
+              <select class="form-control" [(ngModel)]="selectedGridId" [ngModelOptions]="{standalone: true}"
                 [class.is-invalid]="isGridFieldType(fieldForm.get('fieldTypeId')?.value) && !selectedGridId">
                 <option value="">{{ translateLabel('fields.selectGrid') || '-- Select Grid --' }}</option>
                 <option *ngFor="let grid of availableGrids" [value]="grid.id">
                   {{ grid.gridName }} ({{ grid.gridCode }})
                 </option>
               </select>
-              <div class="invalid-feedback" *ngIf="isGridFieldType(fieldForm.get('fieldTypeId')?.value) && !selectedGridId">
+              <div class="invalid-feedback"
+                *ngIf="isGridFieldType(fieldForm.get('fieldTypeId')?.value) && !selectedGridId">
                 {{ translateLabel('fields.gridRequired') || 'Please select a Grid' }}
               </div>
-              <small class="form-text text-muted" *ngIf="availableGrids.length === 0 && isGridFieldType(fieldForm.get('fieldTypeId')?.value)">
-                {{ translateLabel('fields.noGridsAvailable') || 'No grids available for this tab. Please create a grid first.' }}
+              <small class="form-text text-muted"
+                *ngIf="availableGrids.length === 0 && isGridFieldType(fieldForm.get('fieldTypeId')?.value)">
+                {{ translateLabel('fields.noGridsAvailable') || 'No grids available for this tab. Please create a grid
+                first.' }}
               </small>
             </div>
           </div>
@@ -407,34 +383,27 @@
               <i class="pi pi-info-circle"></i>
               <span>{{ translateLabel('fields.fileUploadInfo') }}</span>
             </div>
-            
+
             <!-- Allowed File Extensions -->
             <div class="file-extensions-section">
               <label class="extensions-label">
                 <i class="pi pi-filter"></i>
                 {{ translateLabel('fields.allowedFileExtensions') }}
               </label>
-              
+
               <!-- Predefined Extensions -->
               <div class="extensions-grid">
-                <div 
-                  *ngFor="let ext of availableFileExtensions" 
-                  class="extension-item"
-                  [class.selected]="isExtensionSelected(ext.value)"
-                  (click)="toggleFileExtension(ext.value)">
-                  <input
-                    type="checkbox"
-                    [checked]="isExtensionSelected(ext.value)"
-                    (change)="toggleFileExtension(ext.value)"
-                    [id]="'ext-' + ext.value"
-                  />
+                <div *ngFor="let ext of availableFileExtensions" class="extension-item"
+                  [class.selected]="isExtensionSelected(ext.value)" (click)="toggleFileExtension(ext.value)">
+                  <input type="checkbox" [checked]="isExtensionSelected(ext.value)"
+                    (change)="toggleFileExtension(ext.value)" [id]="'ext-' + ext.value" />
                   <label [for]="'ext-' + ext.value" class="extension-label">
                     <span class="extension-value">.{{ ext.value.toUpperCase() }}</span>
                     <span class="extension-name">{{ getExtensionLabel(ext) }}</span>
                   </label>
                 </div>
               </div>
-              
+
               <!-- Custom Extensions -->
               <div class="custom-extensions-section">
                 <label class="custom-extensions-label">
@@ -442,54 +411,36 @@
                   {{ translateLabel('fields.addCustomExtension') }}
                 </label>
                 <div class="add-custom-extension">
-                  <input
-                    type="text"
-                    class="form-control custom-extension-input"
-                    [(ngModel)]="newCustomExtension"
-                    [placeholder]="translateLabel('fields.enterExtension')"
-                    (keyup.enter)="addCustomExtension()"
-                    maxlength="10"
-                  />
-                  <button
-                    type="button"
-                    class="btn-add-extension"
-                    (click)="addCustomExtension()"
+                  <input type="text" class="form-control custom-extension-input" [(ngModel)]="newCustomExtension"
+                    [placeholder]="translateLabel('fields.enterExtension')" (keyup.enter)="addCustomExtension()"
+                    maxlength="10" />
+                  <button type="button" class="btn-add-extension" (click)="addCustomExtension()"
                     [disabled]="!newCustomExtension.trim()">
                     <i class="pi pi-plus"></i>
                     {{ translateLabel('common.add') }}
                   </button>
                 </div>
-                
+
                 <!-- Custom Extensions List -->
                 <div class="custom-extensions-list" *ngIf="customFileExtensions.length > 0">
-                  <div 
-                    *ngFor="let ext of customFileExtensions" 
-                    class="custom-extension-item">
+                  <div *ngFor="let ext of customFileExtensions" class="custom-extension-item">
                     <span class="custom-extension-value">.{{ ext.toUpperCase() }}</span>
-                    <button
-                      type="button"
-                      class="btn-remove-custom-extension"
-                      (click)="removeCustomExtension(ext)"
+                    <button type="button" class="btn-remove-custom-extension" (click)="removeCustomExtension(ext)"
                       [title]="translateLabel('common.delete')">
                       <i class="pi pi-times"></i>
                     </button>
                   </div>
                 </div>
               </div>
-              
+
               <small class="form-text text-muted">
                 {{ translateLabel('fields.selectAllowedExtensions') }}
               </small>
             </div>
-            
+
             <div class="file-input-preview">
-              <input
-                type="file"
-                class="form-control file-input-preview"
-                disabled
-                [placeholder]="translateLabel('fields.selectFile')"
-                [accept]="getAcceptedFileTypes()"
-              />
+              <input type="file" class="form-control file-input-preview" disabled
+                [placeholder]="translateLabel('fields.selectFile')" [accept]="getAcceptedFileTypes()" />
               <small class="form-text text-muted">
                 {{ translateLabel('fields.fileUploadHint') }}
               </small>
@@ -504,53 +455,43 @@
             {{ translateLabel('fields.fieldOptions') }}
           </h4>
           <div class="field-options-list" formArrayName="fieldOptions">
-            <div *ngFor="let option of fieldOptionsFormArray.controls; let i = index" 
-                 [formGroupName]="i" 
-                 class="option-item">
+            <div *ngFor="let option of fieldOptionsFormArray.controls; let i = index" [formGroupName]="i"
+              class="option-item">
               <div class="option-row">
                 <div class="option-order">
                   <span class="order-label">{{ i + 1 }}</span>
                 </div>
                 <div class="option-inputs">
                   <div class="option-input-wrapper">
-                    <label class="option-label">{{ translateLabel('fields.optionValue') }} <span class="text-danger">*</span></label>
-                    <input type="text" 
-                           class="form-control" 
-                           formControlName="optionValue" 
-                           [placeholder]="translateLabel('fieldOptions.enterOptionValue')"
-                           [class.is-invalid]="option.get('optionValue')?.invalid && (option.get('optionValue')?.dirty || option.get('optionValue')?.touched)">
+                    <label class="option-label">{{ translateLabel('fields.optionValue') }} <span
+                        class="text-danger">*</span></label>
+                    <input type="text" class="form-control" formControlName="optionValue"
+                      [placeholder]="translateLabel('fieldOptions.enterOptionValue')"
+                      [class.is-invalid]="option.get('optionValue')?.invalid && (option.get('optionValue')?.dirty || option.get('optionValue')?.touched)">
                   </div>
                   <!-- English Option Text - Always visible -->
                   <div class="option-input-wrapper">
-                    <label class="option-label">{{ translateLabel('fields.optionText') }} <span class="text-danger">*</span></label>
-                    <input type="text" 
-                           class="form-control" 
-                           formControlName="optionText" 
-                           [placeholder]="translateLabel('fieldOptions.enterOptionText')"
-                           [class.is-invalid]="option.get('optionText')?.invalid && (option.get('optionText')?.dirty || option.get('optionText')?.touched)">
+                    <label class="option-label">{{ translateLabel('fields.optionText') }} <span
+                        class="text-danger">*</span></label>
+                    <input type="text" class="form-control" formControlName="optionText"
+                      [placeholder]="translateLabel('fieldOptions.enterOptionText')"
+                      [class.is-invalid]="option.get('optionText')?.invalid && (option.get('optionText')?.dirty || option.get('optionText')?.touched)">
                   </div>
                   <!-- Arabic Option Text - Show when Arabic tab is selected -->
                   <div class="option-input-wrapper" *ngIf="currentInputLanguage === 'ar'">
                     <label class="option-label">{{ translateLabel('fields.optionText') }}</label>
-                    <input type="text" 
-                           class="form-control" 
-                           formControlName="foreignOptionText" 
-                           [placeholder]="translateLabel('fieldOptions.enterOptionText')">
+                    <input type="text" class="form-control" formControlName="foreignOptionText"
+                      [placeholder]="translateLabel('fieldOptions.enterOptionText')">
                   </div>
                 </div>
-                <button type="button" 
-                        class="btn-remove-option" 
-                        (click)="removeFieldOption(i)" 
-                        [disabled]="fieldOptionsFormArray.length === 1"
-                        [title]="translateLabel('common.delete')">
+                <button type="button" class="btn-remove-option" (click)="removeFieldOption(i)"
+                  [disabled]="fieldOptionsFormArray.length === 1" [title]="translateLabel('common.delete')">
                   <i class="pi pi-times"></i>
                 </button>
               </div>
             </div>
           </div>
-          <button type="button" 
-                  class="btn-add-option" 
-                  (click)="addFieldOption()">
+          <button type="button" class="btn-add-option" (click)="addFieldOption()">
             <i class="pi pi-plus"></i>
             <span>{{ translateLabel('fields.addOption') }}</span>
           </button>
@@ -562,51 +503,40 @@
             <i class="pi pi-database"></i>
             {{ translateLabel('fields.dataSource') || 'Data Source' }}
           </h4>
-          
+
           <div class="form-grid">
             <!-- Data Source Type Selection (3 Options) -->
             <div class="form-group" style="grid-column: 1 / -1;">
-              <label class="form-label">{{ translateLabel('fields.dataSourceType') || 'How to load options?' }} <span class="required">*</span></label>
-              
+              <label class="form-label">{{ translateLabel('fields.dataSourceType') || 'How to load options?' }} <span
+                  class="required">*</span></label>
+
               <!-- Radio Buttons for 3 Options -->
-              <div class="data-source-options" style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
+              <div class="data-source-options"
+                style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
                 <!-- Option 1: Static -->
-                <label class="data-source-option" 
-                       [class.selected]="dataSourceType === 'Static'"
-                       style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
-                       [style.border-color]="dataSourceType === 'Static' ? '#667eea' : '#e5e7eb'"
-                       [style.background]="dataSourceType === 'Static' ? '#f0ebf8' : '#f9fafb'">
-                  <input 
-                    type="radio" 
-                    name="dataSourceType"
-                    value="Static"
-                    [(ngModel)]="dataSourceType"
-                    [ngModelOptions]="{standalone: true}"
-                    (change)="onDataSourceTypeChange()"
-                    style="width: 20px; height: 20px; cursor: pointer;"
-                  />
+                <label class="data-source-option" [class.selected]="dataSourceType === 'Static'"
+                  style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                  [style.border-color]="dataSourceType === 'Static' ? '#667eea' : '#e5e7eb'"
+                  [style.background]="dataSourceType === 'Static' ? '#f0ebf8' : '#f9fafb'">
+                  <input type="radio" name="dataSourceType" value="Static" [(ngModel)]="dataSourceType"
+                    [ngModelOptions]="{standalone: true}" (change)="onDataSourceTypeChange()"
+                    style="width: 20px; height: 20px; cursor: pointer;" />
                   <i class="pi pi-list" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
                     <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Static Options</div>
-                    <div style="font-size: 12px; color: #6b7280;">Enter options manually in Field Options section above</div>
+                    <div style="font-size: 12px; color: #6b7280;">Enter options manually in Field Options section above
+                    </div>
                   </div>
                 </label>
 
                 <!-- Option 2: Database Tables -->
-                <label class="data-source-option" 
-                       [class.selected]="dataSourceType === 'LookupTable'"
-                       style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
-                       [style.border-color]="dataSourceType === 'LookupTable' ? '#667eea' : '#e5e7eb'"
-                       [style.background]="dataSourceType === 'LookupTable' ? '#f0ebf8' : '#f9fafb'">
-                  <input 
-                    type="radio" 
-                    name="dataSourceType"
-                    value="LookupTable"
-                    [(ngModel)]="dataSourceType"
-                    [ngModelOptions]="{standalone: true}"
-                    (change)="onDataSourceTypeChange()"
-                    style="width: 20px; height: 20px; cursor: pointer;"
-                  />
+                <label class="data-source-option" [class.selected]="dataSourceType === 'LookupTable'"
+                  style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                  [style.border-color]="dataSourceType === 'LookupTable' ? '#667eea' : '#e5e7eb'"
+                  [style.background]="dataSourceType === 'LookupTable' ? '#f0ebf8' : '#f9fafb'">
+                  <input type="radio" name="dataSourceType" value="LookupTable" [(ngModel)]="dataSourceType"
+                    [ngModelOptions]="{standalone: true}" (change)="onDataSourceTypeChange()"
+                    style="width: 20px; height: 20px; cursor: pointer;" />
                   <i class="pi pi-table" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
                     <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Database Table</div>
@@ -615,20 +545,13 @@
                 </label>
 
                 <!-- Option 3: API Link -->
-                <label class="data-source-option" 
-                       [class.selected]="dataSourceType === 'Api'"
-                       style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
-                       [style.border-color]="dataSourceType === 'Api' ? '#667eea' : '#e5e7eb'"
-                       [style.background]="dataSourceType === 'Api' ? '#f0ebf8' : '#f9fafb'">
-                  <input 
-                    type="radio" 
-                    name="dataSourceType"
-                    value="Api"
-                    [(ngModel)]="dataSourceType"
-                    [ngModelOptions]="{standalone: true}"
-                    (change)="onDataSourceTypeChange()"
-                    style="width: 20px; height: 20px; cursor: pointer;"
-                  />
+                <label class="data-source-option" [class.selected]="dataSourceType === 'Api'"
+                  style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                  [style.border-color]="dataSourceType === 'Api' ? '#667eea' : '#e5e7eb'"
+                  [style.background]="dataSourceType === 'Api' ? '#f0ebf8' : '#f9fafb'">
+                  <input type="radio" name="dataSourceType" value="Api" [(ngModel)]="dataSourceType"
+                    [ngModelOptions]="{standalone: true}" (change)="onDataSourceTypeChange()"
+                    style="width: 20px; height: 20px; cursor: pointer;" />
                   <i class="pi pi-link" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
                     <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">API Link</div>
@@ -644,17 +567,94 @@
                 <i class="pi pi-table" style="margin-right: 6px; color: #667eea;"></i>
                 {{ translateLabel('fields.selectTable') || 'Select Table' }} <span class="required">*</span>
               </label>
-              <select 
-                class="form-control" 
-                [(ngModel)]="lookupTableConfig.table"
-                [ngModelOptions]="{standalone: true}"
+              <select class="form-control" [(ngModel)]="lookupTableConfig.table" [ngModelOptions]="{standalone: true}"
                 (change)="onTableSelected()">
                 <option value="">{{ translateLabel('fields.selectLookupTable') || '-- Select Table --' }}</option>
                 <option *ngFor="let table of availableLookupTables" [value]="table">{{ table }}</option>
               </select>
-              <small class="form-text text-muted" *ngIf="availableLookupTables.length === 0" style="color: #f59e0b; margin-top: 6px; display: block;">
+              <small class="form-text text-muted" *ngIf="availableLookupTables.length === 0"
+                style="color: #f59e0b; margin-top: 6px; display: block;">
                 <i class="pi pi-exclamation-triangle"></i> No tables available. Loading...
               </small>
+
+              <!-- Available Columns Display (similar to Available Properties for API) -->
+              <div *ngIf="availableColumns.length > 0"
+                style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <i class="pi pi-info-circle" style="color: #10b981; font-size: 16px;"></i>
+                  <span style="font-weight: 600; color: #166534; font-size: 13px;">Available Properties:</span>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                  <span *ngFor="let col of availableColumns"
+                    style="display: inline-block; padding: 4px 10px; background: white; border: 1px solid #86efac; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; color: #166534; cursor: pointer;"
+                    [title]="'Click to use as ' + (col.toLowerCase().includes('id') || col.toLowerCase() === 'value' ? 'Value Path' : 'Text Path')"
+                    (click)="applyColumnAsPath(col)">
+                    {{ col }}
+                  </span>
+                </div>
+                <small style="display: block; margin-top: 8px; color: #166534; font-size: 11px;">
+                  <i class="pi pi-lightbulb" style="margin-right: 4px;"></i>
+                  Click on a property to use it as Value Path or Text Path
+                </small>
+              </div>
+
+              <!-- Value Path & Text Path Configuration for Database Table -->
+              <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
+                    Value Path
+                  </label>
+                  <select class="form-control" [(ngModel)]="lookupTableConfig.valueColumn"
+                    [ngModelOptions]="{standalone: true}" (change)="onValuePathBlur()"
+                    [disabled]="availableColumns.length === 0"
+                    style="font-family: 'Courier New', monospace; font-size: 13px;">
+                    <option value="">-- Select Value Path --</option>
+                    <option *ngFor="let col of availableColumns" [value]="col">{{ col }}</option>
+                    <option
+                      *ngIf="lookupTableConfig.valueColumn && !availableColumns.includes(lookupTableConfig.valueColumn)"
+                      [value]="lookupTableConfig.valueColumn">
+                      {{ lookupTableConfig.valueColumn }} (current)
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+                    *ngIf="availableColumns.length > 0">
+                    Select value column from available columns
+                  </small>
+                  <small class="form-text text-warning"
+                    style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+                    *ngIf="availableColumns.length === 0">
+                    <i class="pi pi-info-circle"></i> Select a table above to load available columns automatically
+                  </small>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
+                    Text Path
+                  </label>
+                  <select class="form-control" [(ngModel)]="lookupTableConfig.textColumn"
+                    [ngModelOptions]="{standalone: true}" (change)="onTextPathBlur()"
+                    [disabled]="availableColumns.length === 0"
+                    style="font-family: 'Courier New', monospace; font-size: 13px;">
+                    <option value="">-- Select Text Path --</option>
+                    <option *ngFor="let col of availableColumns" [value]="col">{{ col }}</option>
+                    <option
+                      *ngIf="lookupTableConfig.textColumn && !availableColumns.includes(lookupTableConfig.textColumn)"
+                      [value]="lookupTableConfig.textColumn">
+                      {{ lookupTableConfig.textColumn }} (current)
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+                    *ngIf="availableColumns.length > 0">
+                    Select text column from available columns
+                  </small>
+                  <small class="form-text text-warning"
+                    style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+                    *ngIf="availableColumns.length === 0">
+                    <i class="pi pi-info-circle"></i> Select a table above to load available columns automatically
+                  </small>
+                </div>
+              </div>
             </div>
 
             <!-- API URL -->
@@ -665,47 +665,37 @@
                 {{ translateLabel('fields.httpMethod') || 'HTTP Method' }} <span class="required">*</span>
               </label>
               <div class="http-method-tabs" style="display: flex; gap: 8px; margin-bottom: 12px;">
-                <button
-                  type="button"
-                  class="method-tab"
-                  [class.active]="dataSourceConfig.httpMethod === 'GET'"
+                <button type="button" class="method-tab" [class.active]="dataSourceConfig.httpMethod === 'GET'"
                   (click)="dataSourceConfig.httpMethod = 'GET'"
                   style="flex: 1; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
                   <i class="pi pi-download" style="font-size: 14px;"></i>
                   <span>GET</span>
                 </button>
-                <button
-                  type="button"
-                  class="method-tab"
-                  [class.active]="dataSourceConfig.httpMethod === 'POST'"
+                <button type="button" class="method-tab" [class.active]="dataSourceConfig.httpMethod === 'POST'"
                   (click)="dataSourceConfig.httpMethod = 'POST'"
                   style="flex: 1; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
                   <i class="pi pi-upload" style="font-size: 14px;"></i>
                   <span>POST</span>
                 </button>
               </div>
-              
+
               <!-- API URL Input -->
               <label class="form-label" style="margin-top: 16px;">
                 <i class="pi pi-link" style="margin-right: 6px; color: #667eea;"></i>
                 {{ translateLabel('fields.apiUrl') || 'API URL' }} <span class="required">*</span>
               </label>
-              <input 
-                type="text" 
-                class="form-control" 
-                [(ngModel)]="dataSourceConfig.apiUrl"
-                [ngModelOptions]="{standalone: true}"
-                [placeholder]="getApiUrlPlaceholder()">
-              
+              <input type="text" class="form-control" [(ngModel)]="dataSourceConfig.apiUrl"
+                [ngModelOptions]="{standalone: true}" [placeholder]="getApiUrlPlaceholder()">
+
               <!-- Available Properties Display -->
-              <div *ngIf="availableProperties.length > 0" style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+              <div *ngIf="availableProperties.length > 0"
+                style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                   <i class="pi pi-info-circle" style="color: #10b981; font-size: 16px;"></i>
                   <span style="font-weight: 600; color: #166534; font-size: 13px;">Available Properties:</span>
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                  <span 
-                    *ngFor="let prop of availableProperties" 
+                  <span *ngFor="let prop of availableProperties"
                     style="display: inline-block; padding: 4px 10px; background: white; border: 1px solid #86efac; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; color: #166534; cursor: pointer;"
                     [title]="'Click to use as ' + (prop.toLowerCase().includes('id') || prop.toLowerCase() === 'value' ? 'Value Path' : 'Text Path')"
                     (click)="applyPropertyAsPath(prop)">
@@ -717,23 +707,20 @@
                   Click on a property to use it as Value Path or Text Path
                 </small>
               </div>
-              
+
               <!-- Request Body (for POST only) -->
               <div *ngIf="dataSourceConfig.httpMethod === 'POST'" style="margin-top: 16px;">
                 <label class="form-label">
                   <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
                   {{ translateLabel('fields.requestBody') || 'Request Body (JSON)' }}
                 </label>
-                <textarea
-                  class="form-control"
-                  rows="4"
-                  [(ngModel)]="dataSourceConfig.requestBodyJson"
-                  [ngModelOptions]="{standalone: true}"
-                  placeholder='Enter JSON body, e.g. filter: active'
+                <textarea class="form-control" rows="4" [(ngModel)]="dataSourceConfig.requestBodyJson"
+                  [ngModelOptions]="{standalone: true}" placeholder='Enter JSON body, e.g. filter: active'
                   style="font-family: 'Courier New', monospace; font-size: 13px;">
                 </textarea>
                 <small class="form-text text-muted" style="margin-top: 6px; display: block;">
-                  Optional: Enter JSON body for POST requests. Example: <code>{{ '{' }}"filter": "active"{{ '}' }}</code>
+                  Optional: Enter JSON body for POST requests. Example:
+                  <code>{{ '{' }}"filter": "active"{{ '}' }}</code>
                 </small>
               </div>
 
@@ -744,23 +731,25 @@
                     <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
                     Value Path
                   </label>
-                  <select 
-                    class="form-control" 
-                    [(ngModel)]="dataSourceConfig.valuePath"
-                    [ngModelOptions]="{standalone: true}"
-                    (change)="onValuePathBlur()"
+                  <select class="form-control" [(ngModel)]="dataSourceConfig.valuePath"
+                    [ngModelOptions]="{standalone: true}" (change)="onValuePathBlur()"
                     [disabled]="availableProperties.length === 0"
                     style="font-family: 'Courier New', monospace; font-size: 13px;">
                     <option value="">-- Select Value Path --</option>
                     <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
-                    <option *ngIf="dataSourceConfig.valuePath && !availableProperties.includes(dataSourceConfig.valuePath)" [value]="dataSourceConfig.valuePath">
+                    <option
+                      *ngIf="dataSourceConfig.valuePath && !availableProperties.includes(dataSourceConfig.valuePath)"
+                      [value]="dataSourceConfig.valuePath">
                       {{ dataSourceConfig.valuePath }} (current)
                     </option>
                   </select>
-                  <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;" *ngIf="availableProperties.length > 0">
+                  <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+                    *ngIf="availableProperties.length > 0">
                     Select value field from available properties
                   </small>
-                  <small class="form-text text-warning" style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;" *ngIf="availableProperties.length === 0">
+                  <small class="form-text text-warning"
+                    style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+                    *ngIf="availableProperties.length === 0">
                     <i class="pi pi-info-circle"></i> Click "Test API" first to load available properties
                   </small>
                 </div>
@@ -769,23 +758,25 @@
                     <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
                     Text Path
                   </label>
-                  <select 
-                    class="form-control" 
-                    [(ngModel)]="dataSourceConfig.textPath"
-                    [ngModelOptions]="{standalone: true}"
-                    (change)="onTextPathBlur()"
+                  <select class="form-control" [(ngModel)]="dataSourceConfig.textPath"
+                    [ngModelOptions]="{standalone: true}" (change)="onTextPathBlur()"
                     [disabled]="availableProperties.length === 0"
                     style="font-family: 'Courier New', monospace; font-size: 13px;">
                     <option value="">-- Select Text Path --</option>
                     <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
-                    <option *ngIf="dataSourceConfig.textPath && !availableProperties.includes(dataSourceConfig.textPath)" [value]="dataSourceConfig.textPath">
+                    <option
+                      *ngIf="dataSourceConfig.textPath && !availableProperties.includes(dataSourceConfig.textPath)"
+                      [value]="dataSourceConfig.textPath">
                       {{ dataSourceConfig.textPath }} (current)
                     </option>
                   </select>
-                  <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;" *ngIf="availableProperties.length > 0">
+                  <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+                    *ngIf="availableProperties.length > 0">
                     Select text field from available properties
                   </small>
-                  <small class="form-text text-warning" style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;" *ngIf="availableProperties.length === 0">
+                  <small class="form-text text-warning"
+                    style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+                    *ngIf="availableProperties.length === 0">
                     <i class="pi pi-info-circle"></i> Click "Test API" first to load available properties
                   </small>
                 </div>
@@ -793,94 +784,71 @@
             </div>
 
             <!-- Preview Options Display (id, name) -->
-            <div class="form-group" *ngIf="(dataSourceType === 'LookupTable' && lookupTableConfig.table) || (dataSourceType === 'Api' && dataSourceConfig.apiUrl)" style="grid-column: 1 / -1;">
+            <div class="form-group"
+              *ngIf="(dataSourceType === 'LookupTable' && lookupTableConfig.table) || (dataSourceType === 'Api' && dataSourceConfig.apiUrl)"
+              style="grid-column: 1 / -1;">
               <label class="form-label">
-                <i class="pi pi-eye" style="margin-right: 6px; color: #667eea;"></i>
-                {{ translateLabel('fields.previewOptions') || 'Preview Options' }}
-                <button 
-                  type="button" 
-                  class="btn-preview-small"
-                  (click)="previewDataSource()"
+                <button type="button" class="btn-preview-small" (click)="previewDataSource()"
                   [disabled]="loadingPreview"
-                  style="margin-left: 12px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">
-                  <i class="pi" [class.pi-spin]="loadingPreview" [class.pi-spinner]="loadingPreview" [class.pi-refresh]="!loadingPreview"></i>
-                  {{ loadingPreview ? 'Loading...' : 'Refresh' }}
-                </button>
-                <button 
-                  type="button" 
-                  class="btn-preview-small"
-                  (click)="testApiResponse()"
-                  [disabled]="loadingPreview"
-                  style="margin-left: 8px; padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;"
-                  title="Test API to see raw response structure">
-                  <i class="pi pi-code"></i>
-                  Test API
-                </button>
-                <button 
-                  type="button" 
-                  class="btn-preview-small"
-                  (click)="toggleApiDebugInfo()"
-                  style="margin-left: 8px; padding: 6px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;"
-                  title="Toggle debug information">
-                  <i class="pi" [class.pi-eye-slash]="showApiDebugInfo" [class.pi-eye]="!showApiDebugInfo"></i>
-                  {{ showApiDebugInfo ? 'Hide' : 'Show' }} Debug
+                  style="margin-left: 0px; padding: 6px 12px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;"
+                  title="Refresh Data">
+                  send
                 </button>
               </label>
-              
+
               <!-- Preview Results -->
               <div class="preview-options-list" *ngIf="previewOptions.length > 0">
                 <div class="preview-header" style="margin-bottom: 12px;">
-                  <span class="preview-count" style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; font-weight: 500;">
+                  <span class="preview-count"
+                    style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; font-weight: 500;">
                     <i class="pi pi-check-circle"></i>
                     {{ previewOptions.length }} {{ previewOptions.length === 1 ? 'option' : 'options' }} found
                   </span>
                 </div>
-                <div class="preview-dropdown-container">
+                <!-- <div class="preview-dropdown-container">
                   <label class="form-label" style="margin-bottom: 8px; font-weight: 500; color: #374151;">
                     Preview Dropdown:
                   </label>
-                  <select 
-                    class="form-control preview-select"
+                  <select class="form-control preview-select"
                     style="width: 100%; padding: 10px 12px; font-size: 14px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer;"
-                    [(ngModel)]="selectedPreviewOption"
-                    [ngModelOptions]="{standalone: true}">
+                    [(ngModel)]="selectedPreviewOption" [ngModelOptions]="{standalone: true}">
                     <option [value]="null">
                       -- Select an option ({{ previewOptions.length }} available) --
                     </option>
-                    <option 
-                      *ngFor="let opt of previewOptions; let i = index" 
-                      [value]="opt.value">
+                    <option *ngFor="let opt of previewOptions; let i = index" [value]="opt.value">
                       {{ opt.text }}
                     </option>
                   </select>
-                  <small class="form-text text-muted" style="margin-top: 8px; display: block; color: #6b7280; font-size: 12px;">
-                    <i class="pi pi-info-circle"></i> 
+                  <small class="form-text text-muted"
+                    style="margin-top: 8px; display: block; color: #6b7280; font-size: 12px;">
+                    <i class="pi pi-info-circle"></i>
                     This is a preview of how the dropdown will appear with {{ previewOptions.length }} options.
                   </small>
-                </div>
+                </div> -->
               </div>
-              
-              <div *ngIf="previewOptions.length === 0 && !loadingPreview" style="padding: 16px; text-align: center; color: #6b7280; font-style: italic;">
+
+              <div *ngIf="previewOptions.length === 0 && !loadingPreview"
+                style="padding: 16px; text-align: center; color: #6b7280; font-style: italic;">
                 No options found. Click Refresh to load.
               </div>
 
               <!-- API Debug Information -->
-              <div *ngIf="showApiDebugInfo" style="margin-top: 16px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
+              <div *ngIf="showApiDebugInfo"
+                style="margin-top: 16px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                   <h5 style="margin: 0; color: #374151; font-size: 14px; font-weight: 600;">
                     <i class="pi pi-bug" style="margin-right: 6px; color: #667eea;"></i>
                     API Debug Information
                   </h5>
-                  <button 
-                    type="button"
-                    (click)="toggleApiDebugInfo()"
+                  <button type="button" (click)="toggleApiDebugInfo()"
                     style="background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px;">
                     <i class="pi pi-times"></i>
                   </button>
                 </div>
 
                 <!-- Error Display -->
-                <div *ngIf="apiDebugError" style="padding: 12px; background: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px; margin-bottom: 12px;">
+                <div *ngIf="apiDebugError"
+                  style="padding: 12px; background: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px; margin-bottom: 12px;">
                   <div style="color: #991b1b; font-weight: 600; margin-bottom: 4px;">
                     <i class="pi pi-exclamation-triangle" style="margin-right: 6px;"></i>
                     Error
@@ -894,23 +862,29 @@
                     <div style="color: #374151; font-weight: 600; margin-bottom: 8px; font-size: 13px;">
                       Raw API Response Structure:
                     </div>
-                    <pre style="background: #1f2937; color: #f9fafb; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; max-height: 300px; overflow-y: auto; margin: 0;">{{ rawApiResponse | json }}</pre>
+                    <pre
+                      style="background: #1f2937; color: #f9fafb; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; max-height: 300px; overflow-y: auto; margin: 0;">{{ rawApiResponse | json }}</pre>
                   </div>
 
                   <!-- Suggested Paths -->
-                  <div *ngIf="getSuggestedPaths()" [style.background]="hasSuggestedPaths ? '#fef3c7' : '#eff6ff'" [style.border-left-color]="hasSuggestedPaths ? '#f59e0b' : '#3b82f6'" style="padding: 12px; border-left: 4px solid; border-radius: 4px; margin-top: 12px;">
-                    <div [style.color]="hasSuggestedPaths ? '#92400e' : '#1e40af'" style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">
-                      <i class="pi" [ngClass]="hasSuggestedPaths ? 'pi-exclamation-triangle' : 'pi-lightbulb'" style="margin-right: 6px;"></i>
+                  <div *ngIf="getSuggestedPaths()" [style.background]="hasSuggestedPaths ? '#fef3c7' : '#eff6ff'"
+                    [style.border-left-color]="hasSuggestedPaths ? '#f59e0b' : '#3b82f6'"
+                    style="padding: 12px; border-left: 4px solid; border-radius: 4px; margin-top: 12px;">
+                    <div [style.color]="hasSuggestedPaths ? '#92400e' : '#1e40af'"
+                      style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">
+                      <i class="pi" [ngClass]="hasSuggestedPaths ? 'pi-exclamation-triangle' : 'pi-lightbulb'"
+                        style="margin-right: 6px;"></i>
                       <span *ngIf="hasSuggestedPaths" style="font-weight: 700;">⚠️ Path Mismatch Detected - </span>
                       Suggested Paths (based on API response):
                     </div>
-                    <div [style.color]="hasSuggestedPaths ? '#78350f' : '#1e3a8a'" style="font-size: 13px; margin-bottom: 8px;">
-                      <strong>Value Path:</strong> <code [style.background]="hasSuggestedPaths ? '#fde68a' : '#dbeafe'" style="padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.valuePath }}</code><br>
-                      <strong>Text Path:</strong> <code [style.background]="hasSuggestedPaths ? '#fde68a' : '#dbeafe'" style="padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.textPath }}</code>
+                    <div [style.color]="hasSuggestedPaths ? '#78350f' : '#1e3a8a'"
+                      style="font-size: 13px; margin-bottom: 8px;">
+                      <strong>Value Path:</strong> <code [style.background]="hasSuggestedPaths ? '#fde68a' : '#dbeafe'"
+                        style="padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.valuePath }}</code><br>
+                      <strong>Text Path:</strong> <code [style.background]="hasSuggestedPaths ? '#fde68a' : '#dbeafe'"
+                        style="padding: 2px 6px; border-radius: 3px;">{{ getSuggestedPaths()?.textPath }}</code>
                     </div>
-                    <button 
-                      type="button"
-                      (click)="applySuggestedPaths()"
+                    <button type="button" (click)="applySuggestedPaths()"
                       [style.background]="hasSuggestedPaths ? '#f59e0b' : '#3b82f6'"
                       style="padding: 6px 12px; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;">
                       <i class="pi pi-check" style="margin-right: 4px;"></i>
@@ -919,7 +893,8 @@
                   </div>
 
                   <!-- Structure Analysis -->
-                  <div style="margin-top: 12px; padding: 12px; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 4px;">
+                  <div
+                    style="margin-top: 12px; padding: 12px; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 4px;">
                     <div style="color: #166534; font-weight: 600; margin-bottom: 8px; font-size: 13px;">
                       <i class="pi pi-info-circle" style="margin-right: 6px;"></i>
                       Response Analysis:
@@ -946,7 +921,8 @@
                 </div>
 
                 <!-- Instructions -->
-                <div *ngIf="!rawApiResponse && !apiDebugError" style="padding: 12px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px; margin-top: 12px;">
+                <div *ngIf="!rawApiResponse && !apiDebugError"
+                  style="padding: 12px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px; margin-top: 12px;">
                   <div style="color: #92400e; font-weight: 600; margin-bottom: 4px; font-size: 13px;">
                     <i class="pi pi-question-circle" style="margin-right: 6px;"></i>
                     How to use:
@@ -973,46 +949,35 @@
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">{{ translateLabel('fields.regexPattern') }}</label>
-              <select class="form-control mb-2" 
-                      [value]="getSelectedRegexPreset()"
-                      (change)="onRegexPresetChange($any($event.target)?.value || '')">
+              <select class="form-control mb-2" [value]="getSelectedRegexPreset()"
+                (change)="onRegexPresetChange($any($event.target)?.value || '')">
                 <option *ngFor="let opt of regexOptions" [value]="opt.value">{{ opt.label }}</option>
               </select>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="regexPattern" 
-                     [placeholder]="translateLabel('fields.regexPattern')">
+              <input type="text" class="form-control" formControlName="regexPattern"
+                [placeholder]="translateLabel('fields.regexPattern')">
             </div>
             <!-- English Validation Message -->
             <div class="form-group" *ngIf="currentInputLanguage === 'en'">
               <label class="form-label">{{ translateLabel('fields.validationMessage') }}</label>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="validationMessage"
-                     [placeholder]="translateLabel('fields.customValidationMessage')">
+              <input type="text" class="form-control" formControlName="validationMessage"
+                [placeholder]="translateLabel('fields.customValidationMessage')">
             </div>
 
             <!-- Arabic Validation Message -->
             <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
               <label class="form-label">{{ translateLabel('fields.validationMessage') }}</label>
-              <input type="text" 
-                     class="form-control" 
-                     formControlName="foreignValidationMessage"
-                     [placeholder]="translateLabel('fields.customValidationMessage')">
+              <input type="text" class="form-control" formControlName="foreignValidationMessage"
+                [placeholder]="translateLabel('fields.customValidationMessage')">
             </div>
             <div class="form-group">
               <label class="form-label">{{ translateLabel('fields.minValue') }}</label>
-              <input type="number" 
-                     class="form-control" 
-                     formControlName="minValue"
-                     [placeholder]="translateLabel('fields.minimumValue')">
+              <input type="number" class="form-control" formControlName="minValue"
+                [placeholder]="translateLabel('fields.minimumValue')">
             </div>
             <div class="form-group">
               <label class="form-label">{{ translateLabel('fields.maxValue') }}</label>
-              <input type="number" 
-                     class="form-control" 
-                     formControlName="maxValue"
-                     [placeholder]="translateLabel('fields.maximumValue')">
+              <input type="number" class="form-control" formControlName="maxValue"
+                [placeholder]="translateLabel('fields.maximumValue')">
             </div>
           </div>
         </div>
@@ -1026,40 +991,28 @@
           <div class="switches-grid">
             <div class="switch-item">
               <label class="switch-label">
-                <input type="checkbox" 
-                       class="switch-input" 
-                       formControlName="isMandatory"
-                       id="isMandatory">
+                <input type="checkbox" class="switch-input" formControlName="isMandatory" id="isMandatory">
                 <span class="switch-slider"></span>
                 <span class="switch-text">{{ translateLabel('fields.mandatory') }}</span>
               </label>
             </div>
             <div class="switch-item">
               <label class="switch-label">
-                <input type="checkbox" 
-                       class="switch-input" 
-                       formControlName="isEditable"
-                       id="isEditable">
+                <input type="checkbox" class="switch-input" formControlName="isEditable" id="isEditable">
                 <span class="switch-slider"></span>
                 <span class="switch-text">{{ translateLabel('fields.editable') }}</span>
               </label>
             </div>
             <div class="switch-item">
               <label class="switch-label">
-                <input type="checkbox" 
-                       class="switch-input" 
-                       formControlName="isVisible"
-                       id="isVisible">
+                <input type="checkbox" class="switch-input" formControlName="isVisible" id="isVisible">
                 <span class="switch-slider"></span>
                 <span class="switch-text">{{ translateLabel('fields.visible') }}</span>
               </label>
             </div>
             <div class="switch-item">
               <label class="switch-label">
-                <input type="checkbox" 
-                       class="switch-input" 
-                       formControlName="isActive"
-                       id="isActive">
+                <input type="checkbox" class="switch-input" formControlName="isActive" id="isActive">
                 <span class="switch-slider"></span>
                 <span class="switch-text">{{ translateLabel('fields.active') }}</span>
               </label>
@@ -1067,26 +1020,17 @@
           </div>
           <div class="form-group mt-3">
             <label class="form-label">{{ translateLabel('fields.defaultValue') }}</label>
-            <input type="text" 
-                   class="form-control" 
-                   formControlName="defaultValue"
-                   [placeholder]="translateLabel('fields.enterDefaultValue')">
+            <input type="text" class="form-control" formControlName="defaultValue"
+              [placeholder]="translateLabel('fields.enterDefaultValue')">
           </div>
         </div>
       </div>
 
       <div class="modal-footer">
-        <button pButton 
-                type="button" 
-                [label]="translateLabel('common.cancel')" 
-                (click)="closeFieldModal()"
-                [disabled]="loading.save"
-                class="p-button-text">
+        <button pButton type="button" [label]="translateLabel('common.cancel')" (click)="closeFieldModal()"
+          [disabled]="loading.save" class="p-button-text">
         </button>
-        <button pButton 
-                type="submit" 
-                [disabled]="fieldForm.invalid || loading.save"
-                class="p-button-primary">
+        <button pButton type="submit" [disabled]="fieldForm.invalid || loading.save" class="p-button-primary">
           <i *ngIf="loading.save" class="pi pi-spin pi-spinner mr-2"></i>
           {{ editingField ? translateLabel('fields.updateField') : translateLabel('fields.createField') }}
         </button>

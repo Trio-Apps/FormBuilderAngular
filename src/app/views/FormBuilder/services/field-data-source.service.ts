@@ -23,7 +23,7 @@ export class FieldDataSourceService {
   constructor(
     private http: HttpClient,
     private authService: AuthService
-  ) {}
+  ) { }
 
   // ==================== CRUD Operations (Admin) ====================
 
@@ -219,7 +219,7 @@ export class FieldDataSourceService {
    */
   getFieldOptions(fieldId: number, context?: Record<string, any>): Observable<FieldOptionResponse[]> {
     let params = new HttpParams().set('fieldId', fieldId.toString());
-    
+
     if (context) {
       params = params.set('context', JSON.stringify(context));
     }
@@ -230,7 +230,7 @@ export class FieldDataSourceService {
       }),
       catchError((error) => {
         console.error(`[FieldDataSourceService] Error fetching field options for field ${fieldId}:`, error);
-        
+
         // Log backend error details if available
         if (error?.error) {
           if (error.error.message) {
@@ -240,7 +240,7 @@ export class FieldDataSourceService {
             console.error(`[FieldDataSourceService] Backend error details:`, error.error.error);
           }
         }
-        
+
         return of([]);
       })
     );
@@ -281,90 +281,60 @@ export class FieldDataSourceService {
   }
 
   /**
+   * GET - جلب أعمدة جدول معين (للـ LookupTable)
+   * Authorization: Required (Administration)
+   * Endpoint: GET /api/FieldDataSources/lookup-tables/{tableName}/columns
+   */
+  /**
+   * GET - جلب أعمدة جدول معين (للـ LookupTable)
+   * Authorization: Required (Administration)
+   * Endpoint: GET /api/FieldDataSources/lookup-tables/{tableName}/columns
+   */
+  getTableColumns(tableName: string): Observable<string[]> {
+    if (!tableName || !tableName.trim()) {
+      return of([]);
+    }
+
+    const url = `${this.baseUrl}/lookup-tables/${encodeURIComponent(tableName)}/columns`;
+
+    return this.http.get<ApiResponse<string[]>>(url).pipe(
+      map((response: any) => {
+        // Backend returns ApiResponse<string[]> or potentially objects
+        const data = response.data || [];
+        return data.map((item: any) => {
+          if (typeof item === 'string') return item;
+          if (typeof item === 'object' && item !== null) {
+            // Try common name properties for columns
+            return item.name || item.columnName || item.ColumnName || item.Name || String(item);
+          }
+          return String(item);
+        });
+      }),
+      catchError((error) => {
+        console.error(`[FieldDataSourceService] Error fetching columns for table "${tableName}":`, error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
    * GET - جلب قائمة الجداول المتاحة للـ LookupTable
    * Authorization: Required (Administration)
    */
   getAvailableLookupTables(): Observable<string[]> {
-    return this.http.get<any>(`${this.baseUrl}/lookup-tables`).pipe(
+    return this.http.get<ApiResponse<string[]>>(`${this.baseUrl}/lookup-tables`).pipe(
       map((response: any) => {
-        console.log('[FieldDataSourceService] Raw lookup tables response:', response);
-        
-        // Handle different response formats
-        let tables: any[] = [];
-        
-        // If response is wrapped in ApiResponse
-        if (response && typeof response === 'object' && !Array.isArray(response)) {
-          const data = response.data || response.items || response.result || [];
-          tables = Array.isArray(data) ? data : [];
-        } else if (Array.isArray(response)) {
-          tables = response;
-        }
-        
-        console.log('[FieldDataSourceService] Extracted tables array:', tables);
-        
-        // Extract table names from objects if needed
-        const tableNames = tables.map((table: any, index: number) => {
-          // If it's already a string, return it
-          if (typeof table === 'string') {
-            return table;
+        // Backend returns ApiResponse<string[]> or potentially ApiResponse<any[]>
+        const data = response.data || [];
+        // Handle case where backend returns objects instead of strings
+        return data.map((item: any) => {
+          if (typeof item === 'string') return item;
+          if (typeof item === 'object' && item !== null) {
+            // Try common name properties
+            return item.name || item.tableName || item.TableName || item.Name || String(item);
           }
-          
-          // If it's an object, try to extract the name property
-          if (typeof table === 'object' && table !== null) {
-            // Get all keys for case-insensitive search
-            const keys = Object.keys(table);
-            
-            // Try case-insensitive key matching first
-            const nameKey = keys.find(k => {
-              const lowerKey = k.toLowerCase();
-              return lowerKey === 'name' || 
-                     lowerKey === 'tablename' || 
-                     lowerKey === 'table_name' ||
-                     lowerKey === 'value' ||
-                     lowerKey === 'text' ||
-                     lowerKey === 'label' ||
-                     lowerKey === 'title';
-            });
-            
-            if (nameKey && table[nameKey]) {
-              const name = String(table[nameKey]);
-              console.log(`[FieldDataSourceService] Extracted table name from key "${nameKey}":`, name);
-              return name;
-            }
-            
-            // Try common property names (case-sensitive)
-            const name = table.name || table.tableName || table.TableName || table.Name || 
-                        table.value || table.Value || table.text || table.Text ||
-                        table.label || table.Label || table.title || table.Title;
-            
-            if (name) {
-              console.log(`[FieldDataSourceService] Extracted table name:`, name);
-              return String(name);
-            }
-            
-            // If no name found, log the object structure for debugging
-            console.warn(`[FieldDataSourceService] Table at index ${index} has no recognizable name property:`, table);
-            console.warn(`[FieldDataSourceService] Available keys:`, keys);
-            
-            // Last resort: try to use the first string value found
-            for (const key of keys) {
-              const value = table[key];
-              if (typeof value === 'string' && value.trim() !== '') {
-                console.log(`[FieldDataSourceService] Using first string value from key "${key}":`, value);
-                return value;
-              }
-            }
-            
-            // If still nothing, return a placeholder with available keys
-            return `[Unknown Table: ${keys.join(', ')}]`;
-          }
-          
-          // Fallback to string conversion
-          return String(table);
-        }).filter((name: string) => name && name.trim() !== ''); // Remove empty strings
-        
-        console.log('[FieldDataSourceService] Final table names:', tableNames);
-        return tableNames;
+          return String(item);
+        });
       }),
       catchError((error) => {
         console.error('[FieldDataSourceService] Error fetching lookup tables:', error);
