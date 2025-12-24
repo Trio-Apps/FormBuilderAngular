@@ -501,13 +501,13 @@
         <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions">
           <h4 class="section-title">
             <i class="pi pi-database"></i>
-            {{ translateLabel('fields.dataSource') || 'Data Source' }}
+            {{ translateLabel('fields.dataSource') }}
           </h4>
 
           <div class="form-grid">
             <!-- Data Source Type Selection (3 Options) -->
             <div class="form-group" style="grid-column: 1 / -1;">
-              <label class="form-label">{{ translateLabel('fields.dataSourceType') || 'How to load options?' }} <span
+              <label class="form-label">{{ translateLabel('fields.dataSourceType') }} <span
                   class="required">*</span></label>
 
               <!-- Radio Buttons for 3 Options -->
@@ -523,8 +523,9 @@
                     style="width: 20px; height: 20px; cursor: pointer;" />
                   <i class="pi pi-list" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
-                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Static Options</div>
-                    <div style="font-size: 12px; color: #6b7280;">Enter options manually in Field Options section above
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
+                      translateLabel('fields.dataSourceStatic') }}</div>
+                    <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceStaticDesc') }}
                     </div>
                   </div>
                 </label>
@@ -539,8 +540,10 @@
                     style="width: 20px; height: 20px; cursor: pointer;" />
                   <i class="pi pi-table" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
-                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Database Table</div>
-                    <div style="font-size: 12px; color: #6b7280;">Load options from database table (id, name)</div>
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
+                      translateLabel('fields.dataSourceTable') }}</div>
+                    <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceTableDesc') }}
+                    </div>
                   </div>
                 </label>
 
@@ -554,8 +557,9 @@
                     style="width: 20px; height: 20px; cursor: pointer;" />
                   <i class="pi pi-link" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
-                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">API Link</div>
-                    <div style="font-size: 12px; color: #6b7280;">Load options from API endpoint (id, name)</div>
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
+                      translateLabel('fields.dataSourceApi') }}</div>
+                    <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceApiDesc') }}</div>
                   </div>
                 </label>
               </div>
@@ -664,18 +668,18 @@
                 <i class="pi pi-cog" style="margin-right: 6px; color: #667eea;"></i>
                 {{ translateLabel('fields.httpMethod') || 'HTTP Method' }} <span class="required">*</span>
               </label>
-              <div class="http-method-tabs" style="display: flex; gap: 8px; margin-bottom: 12px;">
+              <div class="http-method-tabs" style="display: flex; gap: 10px; margin-bottom: 12px; width: 100%;">
                 <button type="button" class="method-tab" [class.active]="dataSourceConfig.httpMethod === 'GET'"
                   (click)="dataSourceConfig.httpMethod = 'GET'"
-                  style="flex: 1; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                  <i class="pi pi-download" style="font-size: 14px;"></i>
-                  <span>GET</span>
+                  style="flex: 1; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; cursor: pointer;">
+                  <i class="pi pi-download" style="font-size: 16px; color: inherit;"></i>
+                  <span style="color: inherit; font-size: 15px;">GET</span>
                 </button>
                 <button type="button" class="method-tab" [class.active]="dataSourceConfig.httpMethod === 'POST'"
                   (click)="dataSourceConfig.httpMethod = 'POST'"
-                  style="flex: 1; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                  <i class="pi pi-upload" style="font-size: 14px;"></i>
-                  <span>POST</span>
+                  style="flex: 1; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; cursor: pointer;">
+                  <i class="pi pi-upload" style="font-size: 16px; color: inherit;"></i>
+                  <span style="color: inherit; font-size: 15px;">POST</span>
                 </button>
               </div>
 
@@ -792,7 +796,7 @@
                   [disabled]="loadingPreview"
                   style="margin-left: 0px; padding: 6px 12px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;"
                   title="Refresh Data">
-                  send
+                  {{ translateLabel('common.send') }}
                 </button>
               </label>
 

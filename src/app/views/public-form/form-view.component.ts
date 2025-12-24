@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener, ViewChildren, QueryList } from '@angular/core';
+import { Component, OnInit, HostListener, ViewChildren, QueryList, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { FormsService } from '../FormBuilder/services/forms.service';
@@ -72,7 +72,8 @@ export class FormViewComponent implements OnInit {
     private fieldsService: FieldsService,
     private fieldDataSourceService: FieldDataSourceService,
     public fileUploadService: FileUploadService,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    private cdr: ChangeDetectorRef
   ) { }
 
   ngOnInit(): void {
@@ -251,6 +252,18 @@ export class FormViewComponent implements OnInit {
               if (['select', 'radio', 'checkbox'].includes(fieldType)) {
                 this.loadFieldOptionsFromDataSource(field);
               }
+
+              // Initialize fieldValues with default values if not already set
+              if (field.id !== undefined && field.id !== null) {
+                const defaultValue = this.getDefaultValue(field);
+                if (this.fieldValues[field.id] === undefined) {
+                  this.fieldValues[field.id] = defaultValue;
+                }
+                // Also keep fieldCode map for rules
+                if (field.fieldCode) {
+                  this.fieldValues[field.fieldCode] = this.fieldValues[field.id];
+                }
+              }
             });
           });
 
@@ -362,6 +375,18 @@ export class FormViewComponent implements OnInit {
                     const fieldType = this.getFieldType(field);
                     if (['select', 'radio', 'checkbox'].includes(fieldType)) {
                       this.loadFieldOptionsFromDataSource(field);
+                    }
+
+                    // Initialize fieldValues with default values if not already set
+                    if (field.id !== undefined && field.id !== null) {
+                      const defaultValue = this.getDefaultValue(field);
+                      if (this.fieldValues[field.id] === undefined) {
+                        this.fieldValues[field.id] = defaultValue;
+                      }
+                      // Also keep fieldCode map for rules
+                      if (field.fieldCode) {
+                        this.fieldValues[field.fieldCode] = this.fieldValues[field.id];
+                      }
                     }
                   });
                 });
@@ -1021,13 +1046,23 @@ export class FormViewComponent implements OnInit {
         case 'SetValue':
           if (action.value !== undefined) {
             state.value = action.value;
+            // Update both Code and ID if possible
             this.fieldValues[action.fieldCode] = action.value;
+            // We need to find the field ID for this code
+            const field = this.findFieldByCode(action.fieldCode);
+            if (field && field.id) {
+              this.fieldValues[String(field.id)] = action.value;
+            }
           }
           break;
         case 'SetDefaultValue':
           if (action.value !== undefined && this.fieldValues[action.fieldCode] === undefined) {
             state.value = action.value;
             this.fieldValues[action.fieldCode] = action.value;
+            const field = this.findFieldByCode(action.fieldCode);
+            if (field && field.id) {
+              this.fieldValues[String(field.id)] = action.value;
+            }
           }
           break;
       }
@@ -1035,12 +1070,40 @@ export class FormViewComponent implements OnInit {
   }
 
   /**
+   * Helper to find a field by its code across all tabs
+   */
+  private findFieldByCode(code: string): FormFieldDto | undefined {
+    for (const tab of this.tabs) {
+      const field = tab.fields?.find(f => f.fieldCode === code);
+      if (field) return field;
+    }
+    return undefined;
+  }
+
+  /**
    * Track field value changes for rule evaluation
    */
-  onFieldValueChange(fieldCode: string, value: any): void {
-    this.fieldValues[fieldCode] = value;
-    // Re-evaluate rules when any field value changes
+  onFieldValueChange(fieldId: number | string | undefined, value: any, fieldCode?: string): void {
+    if (fieldId === undefined || fieldId === null) return;
+
+    // Normalize fieldId to string to avoid numeric key issues
+    const idKey = String(fieldId);
+
+    console.log(`[FormView] Value change: ID=${idKey}, Code=${fieldCode} ->`, value);
+
+    this.fieldValues[idKey] = value;
+    if (fieldCode && fieldCode.trim() !== '') {
+      this.fieldValues[fieldCode] = value;
+    }
+
+    // Force a new object reference to trigger change detection
+    this.fieldValues = { ...this.fieldValues };
+
+    // Re-evaluate rules
     this.evaluateFormRules();
+
+    // Explicitly trigger change detection
+    this.cdr.detectChanges();
   }
 
   /**
@@ -1048,42 +1111,50 @@ export class FormViewComponent implements OnInit {
    */
   onCheckboxChange(field: FormFieldDto, optionValue: any, event: Event): void {
     const isChecked = (event.target as HTMLInputElement).checked;
-    const currentValue = this.fieldValues[field.fieldCode] || this.getDefaultValue(field);
+    const fieldId = field.id;
+    const fieldCode = field.fieldCode;
+    const currentValue = this.getFieldValue(field);
+
+    console.log(`[FormView] Checkbox change: ID=${fieldId}, option=${optionValue}, checked=${isChecked}`);
 
     try {
       let selectedValues: any[] = [];
 
-      // Try to parse current value as JSON array
-      if (currentValue && typeof currentValue === 'string') {
+      // Robustly extract current selected values as an array
+      if (Array.isArray(currentValue)) {
+        selectedValues = [...currentValue];
+      } else if (currentValue && String(currentValue).trim() !== '') {
         try {
-          const parsed = JSON.parse(currentValue);
-          if (Array.isArray(parsed)) {
-            selectedValues = [...parsed];
-          }
+          const parsed = JSON.parse(String(currentValue));
+          selectedValues = Array.isArray(parsed) ? parsed : [parsed];
         } catch {
-          // Not JSON, treat as single value
-          if (currentValue) {
+          if (String(currentValue).includes(',')) {
+            selectedValues = String(currentValue).split(',').map(s => s.trim());
+          } else {
             selectedValues = [currentValue];
           }
         }
-      } else if (Array.isArray(currentValue)) {
-        selectedValues = [...currentValue];
       }
+
+      // Convert all values to strings for consistent comparison
+      selectedValues = selectedValues.map(v => String(v).trim()).filter(v => v !== '');
+      const optStr = String(optionValue).trim();
 
       // Add or remove the option value
       if (isChecked) {
-        if (!selectedValues.includes(optionValue)) {
-          selectedValues.push(optionValue);
+        if (!selectedValues.includes(optStr)) {
+          selectedValues.push(optStr);
         }
       } else {
-        selectedValues = selectedValues.filter(v => v !== optionValue);
+        selectedValues = selectedValues.filter(v => v !== optStr);
       }
 
       // Update field value
       const newValue = selectedValues.length > 0 ? JSON.stringify(selectedValues) : '';
-      this.onFieldValueChange(field.fieldCode, newValue);
+      console.log(`[FormView] Checkbox new value for field ID ${fieldId}:`, newValue);
+      this.onFieldValueChange(fieldId, newValue, fieldCode);
     } catch (error) {
-      console.error(`[FormView] Error handling checkbox change for field ${field.fieldCode}:`, error);
+      console.error(`[FormView] Error handling checkbox change for field ${fieldId}:`, error);
     }
   }
 
@@ -1153,8 +1224,26 @@ export class FormViewComponent implements OnInit {
     }
   }
 
+  getFieldValue(field: FormFieldDto): any {
+    if (!field) return '';
+
+    // Priority 1: Field ID (unique, normalized to string)
+    const idKey = field.id !== undefined && field.id !== null ? String(field.id) : null;
+    if (idKey && this.fieldValues[idKey] !== undefined) {
+      return this.fieldValues[idKey];
+    }
+
+    // Priority 2: Field Code
+    if (field.fieldCode && this.fieldValues[field.fieldCode] !== undefined) {
+      return this.fieldValues[field.fieldCode];
+    }
+
+    // Fallback: Default value
+    return this.getDefaultValue(field);
+  }
+
   getDisplayValue(field: FormFieldDto): string {
-    const value = this.getDefaultValue(field);
+    const value = this.getFieldValue(field);
     return value || '';
   }
 
@@ -1176,8 +1265,16 @@ export class FormViewComponent implements OnInit {
   }
 
   isOptionSelected(field: FormFieldDto, optionValue: any): boolean {
-    const selectedValue = this.getDefaultValue(field);
-    return String(selectedValue) === String(optionValue);
+    const selectedValue = this.getFieldValue(field);
+    if (selectedValue === undefined || selectedValue === null || selectedValue === '') {
+      return false;
+    }
+
+    // Robust comparison: handle string/number mixing
+    const valStr = String(selectedValue).trim();
+    const optStr = String(optionValue).trim();
+
+    return valStr === optStr;
   }
 
   getSelectedCheckboxValues(field: FormFieldDto): string {
@@ -1208,22 +1305,43 @@ export class FormViewComponent implements OnInit {
   }
 
   isCheckboxSelected(field: FormFieldDto, optionValue: any): boolean {
-    const value = this.getDefaultValue(field);
-    const options = this.getFieldOptions(field);
-    if (!value || !options || options.length === 0) {
+    const value = this.getFieldValue(field);
+    const targetValue = String(optionValue).trim();
+
+    if (value === undefined || value === null) {
+      return false;
+    }
+
+    const valueStr = String(value).trim();
+    if (valueStr === '') {
       return false;
     }
 
     try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed.includes(optionValue);
-      }
-    } catch {
-      return String(value) === String(optionValue);
-    }
+      let selectedArray: string[] = [];
 
-    return false;
+      if (Array.isArray(value)) {
+        selectedArray = value.map(v => String(v).trim());
+      } else if (valueStr.startsWith('[') && valueStr.endsWith(']')) {
+        // Looks like a JSON array
+        try {
+          const parsed = JSON.parse(valueStr);
+          selectedArray = Array.isArray(parsed) ? parsed.map(v => String(v).trim()) : [String(parsed).trim()];
+        } catch {
+          // Fallback if JSON parse fails
+          selectedArray = [valueStr];
+        }
+      } else if (valueStr.includes(',')) {
+        selectedArray = valueStr.split(',').map(s => s.trim());
+      } else {
+        selectedArray = [valueStr];
+      }
+
+      return selectedArray.includes(targetValue);
+    } catch (error) {
+      console.error(`[FormView] Error in isCheckboxSelected for field ${field.id}:`, error);
+      return false;
+    }
   }
 
   formatDate(dateValue: string): string {
@@ -1247,12 +1365,13 @@ export class FormViewComponent implements OnInit {
   }
 
   isSwitchOn(field: FormFieldDto): boolean {
-    const value = this.getDefaultValue(field);
+    const value = this.getFieldValue(field);
     if (!value) {
       return false;
     }
 
     // Check for common truthy values
+    if (typeof value === 'boolean') return value;
     const lowerValue = String(value).toLowerCase();
     return lowerValue === 'true' || lowerValue === '1' || lowerValue === 'on' || lowerValue === 'yes';
   }

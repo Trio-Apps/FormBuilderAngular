@@ -2,29 +2,21 @@
   <!-- Language Dropdown Button -->
   <div class="language-dropdown-container">
     <div class="language-dropdown-wrapper">
-      <button
-        type="button"
-        class="language-sphere-btn"
-        (click)="showLanguageDropdown = !showLanguageDropdown"
+      <button type="button" class="language-sphere-btn" (click)="showLanguageDropdown = !showLanguageDropdown"
         [attr.aria-expanded]="showLanguageDropdown">
         <span class="language-icon">🌐</span>
-        <span class="language-text">{{ translationService.getCurrentLanguage() === 'ar' ? 'العربية' : 'English' }}</span>
+        <span class="language-text">{{ translationService.getCurrentLanguage() === 'ar' ? 'العربية' : 'English'
+          }}</span>
         <i class="pi pi-chevron-down" [class.rotated]="showLanguageDropdown"></i>
       </button>
       <div class="language-dropdown-menu" *ngIf="showLanguageDropdown">
-        <button
-          type="button"
-          class="language-option"
-          [class.active]="translationService.getCurrentLanguage() === 'en'"
+        <button type="button" class="language-option" [class.active]="translationService.getCurrentLanguage() === 'en'"
           (click)="switchLanguage('en')">
           <span class="language-flag">🇬🇧</span>
           <span>English</span>
           <i class="pi pi-check" *ngIf="translationService.getCurrentLanguage() === 'en'"></i>
         </button>
-        <button
-          type="button"
-          class="language-option"
-          [class.active]="translationService.getCurrentLanguage() === 'ar'"
+        <button type="button" class="language-option" [class.active]="translationService.getCurrentLanguage() === 'ar'"
           (click)="switchLanguage('ar')">
           <span class="language-flag">🇸🇦</span>
           <span>العربية</span>
@@ -43,14 +35,8 @@
   <!-- Tabs Navigation (if multiple tabs) -->
   <div class="tabs-navigation" *ngIf="tabs && tabs.length > 1">
     <ul class="nav-tabs-list">
-      <li 
-        *ngFor="let tab of tabs; let i = index"
-        class="nav-tab-item"
-        [class.active]="i === activeTabIndex">
-        <button 
-          type="button"
-          class="nav-tab-button"
-          (click)="setActiveTab(i)">
+      <li *ngFor="let tab of tabs; let i = index" class="nav-tab-item" [class.active]="i === activeTabIndex">
+        <button type="button" class="nav-tab-button" (click)="setActiveTab(i)">
           {{ getTabName(tab) }}
         </button>
       </li>
@@ -58,17 +44,15 @@
   </div>
 
   <div class="form-content" *ngIf="tabs && tabs.length > 0">
-    <div 
-      class="tab-panel"
-      *ngFor="let tab of tabs; let i = index"
-      [class.active]="i === activeTabIndex"
+    <div class="tab-panel" *ngFor="let tab of tabs; let i = index" [class.active]="i === activeTabIndex"
       [class.hidden]="i !== activeTabIndex">
-      
+
       <div class="tab-section" *ngIf="tab.fields && tab.fields.length > 0">
-        
+
         <!-- Field Display -->
-        <div class="form-field" *ngFor="let field of tab.fields" [style.display]="isFieldVisible(field) ? 'block' : 'none'">
-          
+        <div class="form-field" *ngFor="let field of tab.fields"
+          [style.display]="isFieldVisible(field) ? 'block' : 'none'">
+
           <!-- Field Label -->
           <label class="field-label">
             {{ getFieldLabel(field) }}
@@ -83,65 +67,37 @@
           <!-- Field Input (Google Forms style - preview only, empty answer) -->
           <div class="field-input-wrapper">
             <ng-container [ngSwitch]="getFieldType(field)">
-              
+
               <!-- Text Input -->
-              <input
-                *ngSwitchCase="'text'"
-                type="text"
-                class="form-input"
-                [placeholder]="getFieldPlaceholder(field)"
-                [value]="getDefaultValue(field)"
-                [disabled]="!isFieldEditable(field)"
-                (input)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
-              />
+              <input *ngSwitchCase="'text'" type="text" class="form-input" [placeholder]="getFieldPlaceholder(field)"
+                [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
+                (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- Email Input -->
-              <input
-                *ngSwitchCase="'email'"
-                type="email"
-                class="form-input"
-                [placeholder]="getFieldPlaceholder(field)"
-                [value]="getDefaultValue(field)"
-                [disabled]="!isFieldEditable(field)"
-                (input)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
-              />
+              <input *ngSwitchCase="'email'" type="email" class="form-input" [placeholder]="getFieldPlaceholder(field)"
+                [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
+                (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- Number Input -->
-              <input
-                *ngSwitchCase="'number'"
-                type="number"
-                class="form-input"
-                [placeholder]="getFieldPlaceholder(field)"
-                [min]="field.minValue"
-                [max]="field.maxValue"
-                [value]="getDefaultValue(field)"
-                [disabled]="!isFieldEditable(field)"
-                (input)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
-              />
+              <input *ngSwitchCase="'number'" type="number" class="form-input"
+                [placeholder]="getFieldPlaceholder(field)" [min]="field.minValue" [max]="field.maxValue"
+                [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
+                (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- Textarea -->
-              <textarea
-                *ngSwitchCase="'textarea'"
-                class="form-textarea"
-                rows="4"
-                [placeholder]="getFieldPlaceholder(field)"
-                [disabled]="!isFieldEditable(field)"
-                (input)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
-              >{{ getDefaultValue(field) }}</textarea>
+              <textarea *ngSwitchCase="'textarea'" class="form-textarea" rows="4"
+                [placeholder]="getFieldPlaceholder(field)" [disabled]="!isFieldEditable(field)"
+                (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)">{{ getDefaultValue(field) }}</textarea>
 
               <!-- Select / Dropdown -->
-              <select
-                *ngSwitchCase="'select'"
-                class="form-select"
+              <select *ngSwitchCase="'select'" class="form-select"
                 [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
-                (change)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
-              >
+                (change)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)">
                 <option value="" selected disabled>
-                  {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') : getFieldPlaceholder(field) }}
+                  {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') :
+                  getFieldPlaceholder(field) }}
                 </option>
-                <option
-                  *ngFor="let opt of getFieldOptions(field)"
-                  [value]="opt.optionValue"
+                <option *ngFor="let opt of getFieldOptions(field)" [value]="opt.optionValue"
                   [selected]="isOptionSelected(field, opt.optionValue)">
                   {{ getOptionText(opt) }}
                 </option>
@@ -152,23 +108,18 @@
                 <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                   {{ translationService.translate('formView.loading') || 'Loading options...' }}
                 </div>
-                <div
-                  class="radio-option"
-                  *ngFor="let opt of getFieldOptions(field)">
-                  <input
-                    type="radio"
-                    [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
-                    [name]="'radio-' + field.id"
-                    [value]="opt.optionValue"
+                <div class="radio-option" *ngFor="let opt of getFieldOptions(field)">
+                  <input type="radio" [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
+                    [name]="'radio-' + field.id" [value]="opt.optionValue"
                     [checked]="isOptionSelected(field, opt.optionValue)"
                     [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
-                    (change)="onFieldValueChange(field.fieldCode, opt.optionValue)"
-                  />
+                    (change)="onFieldValueChange(field.id, opt.optionValue, field.fieldCode)" />
                   <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
                     {{ getOptionText(opt) }}
                   </label>
                 </div>
-                <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)" class="no-options">
+                <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)"
+                  class="no-options">
                   {{ translationService.translate('formView.noOptionsAvailable') }}
                 </p>
               </div>
@@ -178,35 +129,25 @@
                 <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                   {{ translationService.translate('formView.loading') || 'Loading options...' }}
                 </div>
-                <div
-                  class="checkbox-option"
-                  *ngFor="let opt of getFieldOptions(field)">
-                  <input
-                    type="checkbox"
-                    [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
-                    [value]="opt.optionValue"
-                    [checked]="isCheckboxSelected(field, opt.optionValue)"
+                <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field)">
+                  <input type="checkbox" [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
+                    [value]="opt.optionValue" [checked]="isCheckboxSelected(field, opt.optionValue)"
                     [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
-                    (change)="onCheckboxChange(field, opt.optionValue, $event)"
-                  />
+                    (change)="onCheckboxChange(field, opt.optionValue, $event)" />
                   <label [for]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)" class="checkbox-label">
                     {{ getOptionText(opt) }}
                   </label>
                 </div>
-                <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)" class="no-options">
+                <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)"
+                  class="no-options">
                   {{ translationService.translate('formView.noOptionsAvailable') }}
                 </p>
               </div>
 
               <!-- Date Picker -->
-              <input
-                *ngSwitchCase="'date'"
-                type="date"
-                class="form-input"
-                [value]="getDefaultValue(field)"
+              <input *ngSwitchCase="'date'" type="date" class="form-input" [value]="getDefaultValue(field)"
                 [disabled]="!isFieldEditable(field)"
-                (change)="onFieldValueChange(field.fieldCode, $any($event.target).value)"
-              />
+                (change)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- File Upload -->
               <div *ngSwitchCase="'file'" class="file-upload-wrapper">
@@ -214,44 +155,40 @@
                 <div class="allowed-extensions-info" *ngIf="getAllowedExtensions(field).length > 0">
                   <i class="pi pi-info-circle"></i>
                   <span>
-                    {{ translationService.getCurrentLanguage() === 'ar' ? 'الامتدادات المسموحة:' : 'Allowed extensions:' }}
+                    {{ translationService.getCurrentLanguage() === 'ar' ? 'الامتدادات المسموحة:' : 'Allowed extensions:'
+                    }}
                     <strong>{{ formatAllowedExtensions(getAllowedExtensions(field)) }}</strong>
                   </span>
                 </div>
-                
+
                 <div class="file-upload-area">
-                  <input
-                    type="file"
-                    [id]="'file-' + field.id"
-                    class="file-input-hidden"
-                    (change)="onFileSelected($event, field)"
-                    [disabled]="uploadingFiles[field.id!]"
-                    [multiple]="field.fieldType?.allowMultiple || false"
-                    [accept]="getAcceptedFileTypes(field)"
-                  />
-                  <label [for]="'file-' + field.id" class="file-upload-label" [class.uploading]="uploadingFiles[field.id!]">
+                  <input type="file" [id]="'file-' + field.id" class="file-input-hidden"
+                    (change)="onFileSelected($event, field)" [disabled]="uploadingFiles[field.id!]"
+                    [multiple]="field.fieldType?.allowMultiple || false" [accept]="getAcceptedFileTypes(field)" />
+                  <label [for]="'file-' + field.id" class="file-upload-label"
+                    [class.uploading]="uploadingFiles[field.id!]">
                     <i class="pi pi-cloud-upload"></i>
                     <span *ngIf="!uploadingFiles[field.id!]">
-                      {{ (field.fieldType?.allowMultiple ? (translationService.getCurrentLanguage() === 'ar' ? 'اختر ملفات للرفع' : 'Choose files to upload') : (translationService.getCurrentLanguage() === 'ar' ? 'اختر ملف للرفع' : 'Choose file to upload')) }}
+                      {{ (field.fieldType?.allowMultiple ? (translationService.getCurrentLanguage() === 'ar' ? 'اختر
+                      ملفات للرفع' : 'Choose files to upload') : (translationService.getCurrentLanguage() === 'ar' ?
+                      'اختر ملف للرفع' : 'Choose file to upload')) }}
                     </span>
                     <span *ngIf="uploadingFiles[field.id!]">
                       {{ translationService.getCurrentLanguage() === 'ar' ? 'جاري الرفع...' : 'Uploading...' }}
                     </span>
                   </label>
-                  
+
                   <!-- Upload Progress Bar -->
                   <div class="upload-progress-container" *ngIf="uploadingFiles[field.id!]">
                     <div class="upload-progress-bar">
-                      <div 
-                        class="upload-progress-fill" 
-                        [style.width.%]="getUploadProgress(field.id!)">
+                      <div class="upload-progress-fill" [style.width.%]="getUploadProgress(field.id!)">
                       </div>
                     </div>
                     <div class="upload-progress-text">
                       {{ getUploadProgress(field.id!) }}%
                     </div>
                   </div>
-                  
+
                   <div class="file-size-info" *ngIf="getMaxFileSize(field) > 0">
                     <small>
                       {{ translationService.getCurrentLanguage() === 'ar' ? 'الحجم الأقصى:' : 'Max size:' }}
@@ -259,60 +196,54 @@
                     </small>
                   </div>
                 </div>
-                
+
                 <!-- File Upload Error -->
                 <div class="file-upload-error" *ngIf="getFileUploadError(field.id!)">
                   <i class="pi pi-exclamation-triangle"></i>
                   <span>{{ getFileUploadError(field.id!) }}</span>
                 </div>
-                
+
                 <!-- Uploaded Files List -->
-                <div class="uploaded-files-list" *ngIf="uploadedFiles[field.id!] && uploadedFiles[field.id!].length > 0">
+                <div class="uploaded-files-list"
+                  *ngIf="uploadedFiles[field.id!] && uploadedFiles[field.id!].length > 0">
                   <div class="uploaded-file-item" *ngFor="let attachment of uploadedFiles[field.id!]">
                     <!-- File Preview Thumbnail (for images) -->
                     <div class="file-preview-thumbnail" *ngIf="isImageFile(attachment) && getPreviewUrl(attachment)">
-                      <img [src]="getPreviewUrl(attachment)" [alt]="attachment.fileName" (click)="openPreview(attachment)" />
+                      <img [src]="getPreviewUrl(attachment)" [alt]="attachment.fileName"
+                        (click)="openPreview(attachment)" />
                     </div>
-                    
+
                     <!-- File Icon -->
-                    <div class="file-icon" [class.has-preview]="canPreviewFile(attachment)" (click)="canPreviewFile(attachment) && openPreview(attachment)">
+                    <div class="file-icon" [class.has-preview]="canPreviewFile(attachment)"
+                      (click)="canPreviewFile(attachment) && openPreview(attachment)">
                       <i [class]="getFileIcon(attachment)"></i>
                     </div>
-                    
+
                     <!-- File Info -->
                     <div class="file-info">
                       <span class="file-name" [title]="attachment.fileName">{{ attachment.fileName }}</span>
                       <span class="file-size">{{ formatFileSize(attachment.fileSize) }}</span>
                     </div>
-                    
+
                     <!-- File Actions -->
                     <div class="file-actions">
-                      <button 
-                        type="button" 
-                        class="preview-btn" 
-                        *ngIf="canPreviewFile(attachment)"
+                      <button type="button" class="preview-btn" *ngIf="canPreviewFile(attachment)"
                         (click)="openPreview(attachment)"
                         [title]="translationService.getCurrentLanguage() === 'ar' ? 'معاينة' : 'Preview'">
                         <i class="pi pi-eye"></i>
                       </button>
-                      <a 
-                        [href]="fileUploadService.getDownloadUrl(attachment.id!)" 
-                        target="_blank" 
-                        class="download-link"
+                      <a [href]="fileUploadService.getDownloadUrl(attachment.id!)" target="_blank" class="download-link"
                         [title]="translationService.getCurrentLanguage() === 'ar' ? 'تحميل' : 'Download'">
                         <i class="pi pi-download"></i>
                       </a>
-                      <button 
-                        type="button" 
-                        class="remove-file-btn" 
-                        (click)="removeFile(field.id!, attachment.id!)"
+                      <button type="button" class="remove-file-btn" (click)="removeFile(field.id!, attachment.id!)"
                         [title]="translationService.getCurrentLanguage() === 'ar' ? 'حذف' : 'Remove'">
                         <i class="pi pi-times"></i>
                       </button>
                     </div>
                   </div>
                 </div>
-                
+
                 <!-- File Preview Modal -->
                 <div class="preview-modal-overlay" *ngIf="showPreviewModal && previewFile" (click)="closePreview()">
                   <div class="preview-modal-content" (click)="$event.stopPropagation()">
@@ -320,12 +251,15 @@
                       <i class="pi pi-times"></i>
                     </button>
                     <div class="preview-container">
-                      <img *ngIf="isImageFile(previewFile)" [src]="getPreviewUrl(previewFile!)" [alt]="previewFile!.fileName" />
-                      <iframe *ngIf="isPdfFile(previewFile)" [src]="getPreviewUrl(previewFile!)" frameborder="0"></iframe>
+                      <img *ngIf="isImageFile(previewFile)" [src]="getPreviewUrl(previewFile!)"
+                        [alt]="previewFile!.fileName" />
+                      <iframe *ngIf="isPdfFile(previewFile)" [src]="getPreviewUrl(previewFile!)"
+                        frameborder="0"></iframe>
                     </div>
                     <div class="preview-footer">
                       <span class="preview-file-name">{{ previewFile!.fileName }}</span>
-                      <a [href]="fileUploadService.getDownloadUrl(previewFile!.id!)" target="_blank" class="download-link">
+                      <a [href]="fileUploadService.getDownloadUrl(previewFile!.id!)" target="_blank"
+                        class="download-link">
                         <i class="pi pi-download"></i>
                         {{ translationService.getCurrentLanguage() === 'ar' ? 'تحميل' : 'Download' }}
                       </a>
@@ -337,31 +271,20 @@
               <!-- Switch / Toggle -->
               <div *ngSwitchCase="'switch'" class="switch-wrapper">
                 <label class="switch-label">
-                  <input
-                    type="checkbox"
-                    class="switch-input"
-                    [checked]="isSwitchOn(field)"
-                  />
+                  <input type="checkbox" class="switch-input" [checked]="isSwitchOn(field)"
+                    (change)="onFieldValueChange(field.id, $event.target.checked, field.fieldCode)" />
                   <span class="switch-slider"></span>
                 </label>
               </div>
 
               <!-- Grid (Line Items Grid) -->
-              <app-grid-view
-                *ngSwitchCase="'grid'"
-                [field]="field"
-                [submissionId]="submissionId"
+              <app-grid-view *ngSwitchCase="'grid'" [field]="field" [submissionId]="submissionId"
                 [formBuilderId]="form?.id || 0">
               </app-grid-view>
 
               <!-- Default: Text -->
-              <input
-                *ngSwitchDefault
-                type="text"
-                class="form-input"
-                [placeholder]="getFieldPlaceholder(field)"
-                [value]="getDefaultValue(field)"
-              />
+              <input *ngSwitchDefault type="text" class="form-input" [placeholder]="getFieldPlaceholder(field)"
+                [value]="getDefaultValue(field)" />
 
             </ng-container>
           </div>
@@ -377,7 +300,8 @@
 
       <!-- Empty Tab Message -->
       <div class="empty-tab-message" *ngIf="!tab.fields || tab.fields.length === 0">
-        <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'لا توجد حقول في هذا التبويب.' : 'No fields in this tab.' }}</p>
+        <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'لا توجد حقول في هذا التبويب.' : 'No fields in this
+          tab.' }}</p>
       </div>
 
     </div>

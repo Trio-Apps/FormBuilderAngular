@@ -894,6 +894,7 @@
 
   .option-order {
     flex-shrink: 0;
+
     .order-label {
       display: flex;
       align-items: center;
@@ -1039,7 +1040,7 @@
     &:checked {
       background: #667eea;
 
-      + .switch-slider {
+      +.switch-slider {
         transform: translateX(20px);
       }
     }
@@ -1576,39 +1577,56 @@
 
   .method-tab {
     flex: 1;
-    padding: 10px 16px;
+    padding: 12px 20px;
     border: 2px solid #e5e7eb;
     border-radius: 8px;
     background: white;
     cursor: pointer;
-    font-weight: 500;
+    font-weight: 600;
     transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    color: #6b7280;
-    font-size: 14px;
+    gap: 8px;
+    color: #374151;
+    font-size: 15px;
+    min-height: 44px;
 
     i {
-      font-size: 14px;
+      font-size: 16px;
+      color: inherit;
+    }
+
+    span {
+      color: inherit;
+      font-weight: 600;
+      letter-spacing: 0.5px;
     }
 
     &:hover {
       border-color: #667eea;
       color: #667eea;
       background: #f0f4ff;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(102, 126, 234, 0.15);
     }
 
     &.active {
       border-color: #667eea;
-      background: #667eea;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
-      box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+      box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+
+      i,
+      span {
+        color: white;
+      }
 
       &:hover {
-        background: #5568d3;
+        background: linear-gradient(135deg, #5568d3 0%, #6a3d8f 100%);
         border-color: #5568d3;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(102, 126, 234, 0.5);
       }
     }
   }
