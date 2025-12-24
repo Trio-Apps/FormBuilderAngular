@@ -254,12 +254,102 @@ export class TabsListComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           this.loading = false;
-          const errorMessage = error?.error?.message || error?.message || 'Failed to update tab';
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: errorMessage
-          });
+          
+          // Extract error message from backend response
+          let errorMessage = '';
+          let errorDetails: string[] = [];
+          
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            } else if (error.error.detail) {
+              errorMessage = error.error.detail;
+            }
+            
+            // Extract validation errors if available (ASP.NET Core ProblemDetails format)
+            if (error.error.errors) {
+              if (typeof error.error.errors === 'object') {
+                // Format: { "TabCode": ["error message"] }
+                const errors: { [key: string]: string[] } = error.error.errors;
+                for (const [field, messages] of Object.entries(errors)) {
+                  if (Array.isArray(messages)) {
+                    messages.forEach(msg => errorDetails.push(msg));
+                  } else {
+                    errorDetails.push(String(messages));
+                  }
+                }
+              } else if (Array.isArray(error.error.errors)) {
+                errorDetails = error.error.errors;
+              }
+            }
+          }
+          
+          // If no message found, use default
+          if (!errorMessage) {
+            errorMessage = error?.message || 'Failed to update tab';
+          }
+          
+          // Check for duplicate code error and create user-friendly message
+          const errorLower = errorMessage.toLowerCase();
+          const isDuplicateError = errorLower.includes('duplicate') || 
+                                   errorLower.includes('already exists') ||
+                                   errorLower.includes('tabcode') ||
+                                   errorLower.includes('tab code');
+          
+          // Check if error details contain duplicate info
+          const duplicateInDetails = errorDetails.some(detail => 
+            detail.toLowerCase().includes('duplicate') || 
+            detail.toLowerCase().includes('already exists')
+          );
+          
+          // If duplicate error, show clear message with tab code
+          if (isDuplicateError || duplicateInDetails || error?.status === 400) {
+            // Try to extract tab code from error message or use current tabCode
+            let tabCodeInError = this.tabCode;
+            
+            // Try to find tab code in error message
+            const codeMatch = errorMessage.match(/['"]?([a-zA-Z0-9_]+)['"]?/i);
+            if (codeMatch && codeMatch[1]) {
+              tabCodeInError = codeMatch[1];
+            }
+            
+            // Check error details for tab code
+            if (errorDetails.length > 0) {
+              const codeInDetails = errorDetails[0].match(/['"]?([a-zA-Z0-9_]+)['"]?/i);
+              if (codeInDetails && codeInDetails[1]) {
+                tabCodeInError = codeInDetails[1];
+              }
+            }
+            
+            // Show clear duplicate message
+            const duplicateMessage = `Tab Code "${tabCodeInError}" is duplicate.`;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Validation Error',
+              detail: duplicateMessage,
+              life: 10000
+            });
+          } else if (errorDetails.length > 0) {
+            // Show validation errors
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ في التحقق',
+              detail: errorDetails[0] + (errorDetails.length > 1 ? ` (+${errorDetails.length - 1} أكثر)` : ''),
+              life: 10000
+            });
+          } else {
+            // Show generic error
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ',
+              detail: errorMessage,
+              life: 7000
+            });
+          }
         }
       });
     } else {
@@ -285,12 +375,102 @@ export class TabsListComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           this.loading = false;
-          const errorMessage = error?.error?.message || error?.error?.title || error?.message || 'Failed to create tab';
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: errorMessage
-          });
+          
+          // Extract error message from backend response
+          let errorMessage = '';
+          let errorDetails: string[] = [];
+          
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            } else if (error.error.detail) {
+              errorMessage = error.error.detail;
+            }
+            
+            // Extract validation errors if available (ASP.NET Core ProblemDetails format)
+            if (error.error.errors) {
+              if (typeof error.error.errors === 'object') {
+                // Format: { "TabCode": ["error message"] }
+                const errors: { [key: string]: string[] } = error.error.errors;
+                for (const [field, messages] of Object.entries(errors)) {
+                  if (Array.isArray(messages)) {
+                    messages.forEach(msg => errorDetails.push(msg));
+                  } else {
+                    errorDetails.push(String(messages));
+                  }
+                }
+              } else if (Array.isArray(error.error.errors)) {
+                errorDetails = error.error.errors;
+              }
+            }
+          }
+          
+          // If no message found, use default
+          if (!errorMessage) {
+            errorMessage = error?.message || 'Failed to create tab';
+          }
+          
+          // Check for duplicate code error and create user-friendly message
+          const errorLower = errorMessage.toLowerCase();
+          const isDuplicateError = errorLower.includes('duplicate') || 
+                                   errorLower.includes('already exists') ||
+                                   errorLower.includes('tabcode') ||
+                                   errorLower.includes('tab code');
+          
+          // Check if error details contain duplicate info
+          const duplicateInDetails = errorDetails.some(detail => 
+            detail.toLowerCase().includes('duplicate') || 
+            detail.toLowerCase().includes('already exists')
+          );
+          
+          // If duplicate error, show clear message with tab code
+          if (isDuplicateError || duplicateInDetails || error?.status === 400) {
+            // Try to extract tab code from error message or use current tabCode
+            let tabCodeInError = this.tabCode;
+            
+            // Try to find tab code in error message
+            const codeMatch = errorMessage.match(/['"]?([a-zA-Z0-9_]+)['"]?/i);
+            if (codeMatch && codeMatch[1]) {
+              tabCodeInError = codeMatch[1];
+            }
+            
+            // Check error details for tab code
+            if (errorDetails.length > 0) {
+              const codeInDetails = errorDetails[0].match(/['"]?([a-zA-Z0-9_]+)['"]?/i);
+              if (codeInDetails && codeInDetails[1]) {
+                tabCodeInError = codeInDetails[1];
+              }
+            }
+            
+            // Show clear duplicate message
+            const duplicateMessage = `Tab Code "${tabCodeInError}" is duplicate.`;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Validation Error',
+              detail: duplicateMessage,
+              life: 10000
+            });
+          } else if (errorDetails.length > 0) {
+            // Show validation errors
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ في التحقق',
+              detail: errorDetails[0] + (errorDetails.length > 1 ? ` (+${errorDetails.length - 1} أكثر)` : ''),
+              life: 10000
+            });
+          } else {
+            // Show generic error
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ',
+              detail: errorMessage,
+              life: 7000
+            });
+          }
         }
       });
     }

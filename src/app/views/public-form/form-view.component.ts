@@ -1091,18 +1091,21 @@ export class FormViewComponent implements OnInit {
 
     console.log(`[FormView] Value change: ID=${idKey}, Code=${fieldCode} ->`, value);
 
-    this.fieldValues[idKey] = value;
+    // Create a new object to ensure change detection
+    const newFieldValues = { ...this.fieldValues };
+    newFieldValues[idKey] = value;
     if (fieldCode && fieldCode.trim() !== '') {
-      this.fieldValues[fieldCode] = value;
+      newFieldValues[fieldCode] = value;
     }
 
-    // Force a new object reference to trigger change detection
-    this.fieldValues = { ...this.fieldValues };
+    // Update the reference to trigger change detection
+    this.fieldValues = newFieldValues;
 
     // Re-evaluate rules
     this.evaluateFormRules();
 
-    // Explicitly trigger change detection
+    // Mark for check and detect changes
+    this.cdr.markForCheck();
     this.cdr.detectChanges();
   }
 
@@ -1113,9 +1116,28 @@ export class FormViewComponent implements OnInit {
     const isChecked = (event.target as HTMLInputElement).checked;
     const fieldId = field.id;
     const fieldCode = field.fieldCode;
-    const currentValue = this.getFieldValue(field);
+    
+    if (!fieldId) {
+      console.error(`[FormView] Checkbox change: Field ID is missing`);
+      return;
+    }
 
-    console.log(`[FormView] Checkbox change: ID=${fieldId}, option=${optionValue}, checked=${isChecked}`);
+    const idKey = String(fieldId);
+    
+    // Get current value directly from fieldValues (most up-to-date)
+    let currentValue = this.fieldValues[idKey];
+    
+    // Fallback to fieldCode if idKey doesn't have value
+    if (currentValue === undefined && fieldCode) {
+      currentValue = this.fieldValues[fieldCode];
+    }
+    
+    // If still undefined, try getFieldValue
+    if (currentValue === undefined) {
+      currentValue = this.getFieldValue(field);
+    }
+
+    console.log(`[FormView] Checkbox change: ID=${fieldId}, option=${optionValue}, checked=${isChecked}, currentValue=`, currentValue);
 
     try {
       let selectedValues: any[] = [];
@@ -1151,7 +1173,7 @@ export class FormViewComponent implements OnInit {
 
       // Update field value
       const newValue = selectedValues.length > 0 ? JSON.stringify(selectedValues) : '';
-      console.log(`[FormView] Checkbox new value for field ID ${fieldId}:`, newValue);
+      console.log(`[FormView] Checkbox new value for field ID ${fieldId}:`, newValue, 'selectedValues:', selectedValues);
       this.onFieldValueChange(fieldId, newValue, fieldCode);
     } catch (error) {
       console.error(`[FormView] Error handling checkbox change for field ${fieldId}:`, error);
@@ -1265,16 +1287,38 @@ export class FormViewComponent implements OnInit {
   }
 
   isOptionSelected(field: FormFieldDto, optionValue: any): boolean {
-    const selectedValue = this.getFieldValue(field);
+    if (!field || !field.id) return false;
+    
+    const idKey = String(field.id);
+    const optStr = String(optionValue).trim();
+
+    // Get value directly from fieldValues (most up-to-date)
+    let selectedValue = this.fieldValues[idKey];
+    
+    // Fallback to fieldCode if idKey doesn't have value
+    if (selectedValue === undefined && field.fieldCode) {
+      selectedValue = this.fieldValues[field.fieldCode];
+    }
+    
+    // If still undefined, try getFieldValue
+    if (selectedValue === undefined) {
+      selectedValue = this.getFieldValue(field);
+    }
+    
     if (selectedValue === undefined || selectedValue === null || selectedValue === '') {
       return false;
     }
 
     // Robust comparison: handle string/number mixing
     const valStr = String(selectedValue).trim();
-    const optStr = String(optionValue).trim();
-
-    return valStr === optStr;
+    const isSelected = valStr === optStr;
+    
+    // Debug log (can be removed later)
+    if (isSelected) {
+      console.log(`[FormView] Radio selected: field ${field.id}, option ${optStr}, value:`, valStr);
+    }
+    
+    return isSelected;
   }
 
   getSelectedCheckboxValues(field: FormFieldDto): string {
@@ -1305,10 +1349,25 @@ export class FormViewComponent implements OnInit {
   }
 
   isCheckboxSelected(field: FormFieldDto, optionValue: any): boolean {
-    const value = this.getFieldValue(field);
+    if (!field || !field.id) return false;
+    
+    const idKey = String(field.id);
     const targetValue = String(optionValue).trim();
 
-    if (value === undefined || value === null) {
+    // Get value directly from fieldValues (most up-to-date)
+    let value = this.fieldValues[idKey];
+    
+    // Fallback to fieldCode if idKey doesn't have value
+    if (value === undefined && field.fieldCode) {
+      value = this.fieldValues[field.fieldCode];
+    }
+    
+    // If still undefined, try getFieldValue
+    if (value === undefined) {
+      value = this.getFieldValue(field);
+    }
+
+    if (value === undefined || value === null || value === '') {
       return false;
     }
 
@@ -1321,23 +1380,32 @@ export class FormViewComponent implements OnInit {
       let selectedArray: string[] = [];
 
       if (Array.isArray(value)) {
-        selectedArray = value.map(v => String(v).trim());
+        selectedArray = value.map(v => String(v).trim()).filter(v => v !== '');
       } else if (valueStr.startsWith('[') && valueStr.endsWith(']')) {
         // Looks like a JSON array
         try {
           const parsed = JSON.parse(valueStr);
-          selectedArray = Array.isArray(parsed) ? parsed.map(v => String(v).trim()) : [String(parsed).trim()];
+          selectedArray = Array.isArray(parsed) 
+            ? parsed.map(v => String(v).trim()).filter(v => v !== '')
+            : [String(parsed).trim()].filter(v => v !== '');
         } catch {
           // Fallback if JSON parse fails
-          selectedArray = [valueStr];
+          selectedArray = valueStr ? [valueStr] : [];
         }
       } else if (valueStr.includes(',')) {
-        selectedArray = valueStr.split(',').map(s => s.trim());
+        selectedArray = valueStr.split(',').map(s => s.trim()).filter(s => s !== '');
       } else {
         selectedArray = [valueStr];
       }
 
-      return selectedArray.includes(targetValue);
+      const isSelected = selectedArray.includes(targetValue);
+      
+      // Debug log (can be removed later)
+      if (isSelected) {
+        console.log(`[FormView] Checkbox selected: field ${field.id}, option ${targetValue}, value:`, valueStr, 'array:', selectedArray);
+      }
+      
+      return isSelected;
     } catch (error) {
       console.error(`[FormView] Error in isCheckboxSelected for field ${field.id}:`, error);
       return false;
@@ -1382,6 +1450,10 @@ export class FormViewComponent implements OnInit {
 
   trackByFieldId(index: number, field: FormFieldDto): any {
     return field.id || index;
+  }
+
+  trackByOptionValue(index: number, option: any): any {
+    return option?.optionValue || option?.value || option?.id || index;
   }
 
   /**

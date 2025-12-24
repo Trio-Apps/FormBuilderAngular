@@ -382,7 +382,7 @@ export class FormsListComponent implements OnInit, OnDestroy {
       this.formCode = '';
       this.description = '';
       this.foreignDescription = '';
-      this.isPublished = false;
+      this.isPublished = true; // Default to true for new forms
       this.isActive = true;
     }
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
@@ -428,13 +428,26 @@ export class FormsListComponent implements OnInit, OnDestroy {
     const trimmedFormCode = this.formCode?.trim() || '';
     const trimmedDescription = this.description?.trim() || '';
 
-    if (!trimmedFormName || !trimmedFormCode) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: this.translationService.translate('common.validation'),
-        detail: this.translationService.translate('messages.validationFailed')
-      });
-      return;
+    // In edit mode, description is not required
+    if (this.editingForm) {
+      if (!trimmedFormName || !trimmedFormCode) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: this.translationService.translate('common.validation'),
+          detail: this.translationService.translate('messages.validationFailed')
+        });
+        return;
+      }
+    } else {
+      // In create mode, formName and formCode are required
+      if (!trimmedFormName || !trimmedFormCode) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: this.translationService.translate('common.validation'),
+          detail: this.translationService.translate('messages.validationFailed')
+        });
+        return;
+      }
     }
 
     this.loading = true;
@@ -563,12 +576,102 @@ export class FormsListComponent implements OnInit, OnDestroy {
         error: (error) => {
           console.error('[FormsList] Form update error:', error);
           this.loading = false;
-          const errorMessage = error?.error?.message || error?.message || 'Failed to update form';
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: errorMessage
-          });
+          
+          // Extract error message from backend response
+          let errorMessage = '';
+          let errorDetails: string[] = [];
+          
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            }
+            
+            // Extract validation errors if available
+            if (error.error.errors) {
+              if (typeof error.error.errors === 'object') {
+                errorDetails = Object.values(error.error.errors).flat() as string[];
+              } else if (Array.isArray(error.error.errors)) {
+                errorDetails = error.error.errors;
+              }
+            }
+          }
+          
+          // If no message found, use default
+          if (!errorMessage) {
+            errorMessage = error?.message || 'Failed to update form';
+          }
+          
+          // Check for duplicate code or required field errors
+          const errorLower = errorMessage.toLowerCase();
+          const isDuplicateError = errorLower.includes('duplicate') || 
+                                   errorLower.includes('already exists') ||
+                                   errorLower.includes('formcode') ||
+                                   errorLower.includes('form code');
+          
+          // Check if description is required error (should not happen in edit mode)
+          const isDescriptionRequired = errorLower.includes('description') && 
+                                       (errorLower.includes('required') || errorLower.includes('mandatory'));
+          
+          // Check if error details contain duplicate info
+          const duplicateInDetails = errorDetails.some(detail => 
+            detail.toLowerCase().includes('duplicate') || 
+            detail.toLowerCase().includes('already exists')
+          );
+          
+          // If duplicate error, show clear message with form code
+          if (isDuplicateError || duplicateInDetails) {
+            let formCodeInError = this.formCode;
+            
+            // Try to find form code in error message
+            const codeMatch = errorMessage.match(/['"]?([a-zA-Z0-9_]+)['"]?/i);
+            if (codeMatch && codeMatch[1]) {
+              formCodeInError = codeMatch[1];
+            }
+            
+            // Check error details for form code
+            if (errorDetails.length > 0) {
+              const codeInDetails = errorDetails[0].match(/['"]?([a-zA-Z0-9_]+)['"]?/i);
+              if (codeInDetails && codeInDetails[1]) {
+                formCodeInError = codeInDetails[1];
+              }
+            }
+            
+            const duplicateMessage = `Form Code "${formCodeInError}" متكرر. يرجى استخدام كود آخر.`;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ في التحقق',
+              detail: duplicateMessage,
+              life: 10000
+            });
+          } else if (isDescriptionRequired && this.editingForm) {
+            // Description should not be required in edit mode - show friendly message
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ في التحقق',
+              detail: 'Description غير مطلوب في وضع التعديل. يرجى المحاولة مرة أخرى.',
+              life: 10000
+            });
+          } else if (errorDetails.length > 0) {
+            // Show validation errors
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ في التحقق',
+              detail: errorDetails[0] + (errorDetails.length > 1 ? ` (+${errorDetails.length - 1} أكثر)` : ''),
+              life: 10000
+            });
+          } else {
+            // Show generic error
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ',
+              detail: errorMessage,
+              life: 7000
+            });
+          }
         }
       });
     } else {
@@ -595,8 +698,92 @@ export class FormsListComponent implements OnInit, OnDestroy {
             detail: 'Form created successfully'
           });
         },
-        error: () => {
+        error: (error) => {
           this.loading = false;
+          
+          // Extract error message from backend response
+          let errorMessage = '';
+          let errorDetails: string[] = [];
+          
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            }
+            
+            // Extract validation errors if available
+            if (error.error.errors) {
+              if (typeof error.error.errors === 'object') {
+                errorDetails = Object.values(error.error.errors).flat() as string[];
+              } else if (Array.isArray(error.error.errors)) {
+                errorDetails = error.error.errors;
+              }
+            }
+          }
+          
+          // If no message found, use default
+          if (!errorMessage) {
+            errorMessage = error?.message || 'Failed to create form';
+          }
+          
+          // Check for duplicate code or required field errors
+          const errorLower = errorMessage.toLowerCase();
+          const isDuplicateError = errorLower.includes('duplicate') || 
+                                   errorLower.includes('already exists') ||
+                                   errorLower.includes('formcode') ||
+                                   errorLower.includes('form code');
+          
+          // Check if error details contain duplicate info
+          const duplicateInDetails = errorDetails.some(detail => 
+            detail.toLowerCase().includes('duplicate') || 
+            detail.toLowerCase().includes('already exists')
+          );
+          
+          // If duplicate error, show clear message with form code
+          if (isDuplicateError || duplicateInDetails) {
+            let formCodeInError = this.formCode;
+            
+            // Try to find form code in error message
+            const codeMatch = errorMessage.match(/['"]?([a-zA-Z0-9_]+)['"]?/i);
+            if (codeMatch && codeMatch[1]) {
+              formCodeInError = codeMatch[1];
+            }
+            
+            // Check error details for form code
+            if (errorDetails.length > 0) {
+              const codeInDetails = errorDetails[0].match(/['"]?([a-zA-Z0-9_]+)['"]?/i);
+              if (codeInDetails && codeInDetails[1]) {
+                formCodeInError = codeInDetails[1];
+              }
+            }
+            
+            const duplicateMessage = `Form Code "${formCodeInError}" متكرر. يرجى استخدام كود آخر.`;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ في التحقق',
+              detail: duplicateMessage,
+              life: 10000
+            });
+          } else if (errorDetails.length > 0) {
+            // Show validation errors
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ في التحقق',
+              detail: errorDetails[0] + (errorDetails.length > 1 ? ` (+${errorDetails.length - 1} أكثر)` : ''),
+              life: 10000
+            });
+          } else {
+            // Show generic error
+            this.messageService.add({
+              severity: 'error',
+              summary: 'خطأ',
+              detail: errorMessage,
+              life: 7000
+            });
+          }
         }
       });
     }

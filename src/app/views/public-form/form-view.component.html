@@ -91,14 +91,14 @@
 
               <!-- Select / Dropdown -->
               <select *ngSwitchCase="'select'" class="form-select"
+                [value]="getFieldValue(field)"
                 [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
                 (change)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)">
-                <option value="" selected disabled>
+                <option [value]="" [disabled]="isRequired(field)">
                   {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') :
                   getFieldPlaceholder(field) }}
                 </option>
-                <option *ngFor="let opt of getFieldOptions(field)" [value]="opt.optionValue"
-                  [selected]="isOptionSelected(field, opt.optionValue)">
+                <option *ngFor="let opt of getFieldOptions(field)" [value]="opt.optionValue">
                   {{ getOptionText(opt) }}
                 </option>
               </select>
@@ -108,7 +108,7 @@
                 <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                   {{ translationService.translate('formView.loading') || 'Loading options...' }}
                 </div>
-                <div class="radio-option" *ngFor="let opt of getFieldOptions(field)">
+                <div class="radio-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
                   <input type="radio" [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
                     [name]="'radio-' + field.id" [value]="opt.optionValue"
                     [checked]="isOptionSelected(field, opt.optionValue)"
@@ -129,7 +129,7 @@
                 <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                   {{ translationService.translate('formView.loading') || 'Loading options...' }}
                 </div>
-                <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field)">
+                <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
                   <input type="checkbox" [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
                     [value]="opt.optionValue" [checked]="isCheckboxSelected(field, opt.optionValue)"
                     [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
