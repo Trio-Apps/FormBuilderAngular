@@ -216,7 +216,10 @@ export class FormViewComponent implements OnInit {
                 .filter(field => field.isActive && (field.isVisible ?? true))
                 .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0))
                 .map(field => {
+                  // IMPORTANT: Keep static options even for Api/LookupTable DataSource fields
+                  // Static options will be used as fallback if DataSource fails or returns no options
                   const originalOptions = field.fieldOptions || [];
+                  
                   // Filter options - include all options if none are active, otherwise filter by isActive
                   const hasActiveOptions = originalOptions.some(opt => opt?.isActive !== false);
                   const filteredOptions = hasActiveOptions
@@ -225,9 +228,15 @@ export class FormViewComponent implements OnInit {
 
                   const sortedOptions = filteredOptions.sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0));
 
-                  // Removed verbose logging - only warn if no options
+                  // Only warn if no options at all (will be handled later in getFieldOptions)
                   if (sortedOptions.length === 0) {
-                    console.warn(`[FormView] WARNING: Field ${field.id} (${field.fieldCode || 'no-code'}) has NO options after filtering!`);
+                    const dataSource = field.fieldDataSource;
+                    const hasExternalDataSource = dataSource && 
+                                                 dataSource.isActive && 
+                                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable');
+                    if (!hasExternalDataSource) {
+                      console.warn(`[FormView] WARNING: Field ${field.id} (${field.fieldCode || 'no-code'}) has NO static options!`);
+                    }
                   }
 
                   return {
@@ -465,17 +474,41 @@ export class FormViewComponent implements OnInit {
       this.loadingFieldOptions[field.id] = true;
 
       // Load options from DataSource API
+      console.log(`[FormView] Loading options for field ${field.id} (${field.fieldCode || 'no-code'}) from ${dataSource.sourceType} DataSource`, {
+        fieldId: field.id,
+        fieldCode: field.fieldCode,
+        sourceType: dataSource.sourceType,
+        apiUrl: dataSource.apiUrl,
+        valuePath: dataSource.valuePath,
+        textPath: dataSource.textPath,
+        httpMethod: dataSource.httpMethod
+      });
+      
       this.fieldDataSourceService.getFieldOptions(field.id, context).subscribe({
         next: (options: FieldOptionResponse[]) => {
+          console.log(`[FormView] Received response for field ${field.id}:`, {
+            optionsCount: options?.length || 0,
+            options: options,
+            isArray: Array.isArray(options),
+            firstOption: options && options.length > 0 ? options[0] : null
+          });
+          
           if (options && options.length > 0) {
             this.fieldDataSourceOptions[field.id] = options;
 
             // Log success (debug level)
-            console.log(`[FormView] Loaded ${options.length} options for field ${field.id} from ${dataSource.sourceType}`);
+            console.log(`[FormView] ✅ Loaded ${options.length} options for field ${field.id} from ${dataSource.sourceType}`);
           } else {
-            // If no options from DataSource, fallback to static options
+            // If no options from DataSource, fallback to static options from database
             this.fieldDataSourceOptions[field.id] = [];
-            console.warn(`[FormView] DataSource returned no options for field ${field.id}`);
+            console.warn(`[FormView] ⚠️ DataSource returned no options for field ${field.id} (${field.fieldCode || 'no-code'}), will use static options from database as fallback`, {
+              sourceType: dataSource.sourceType,
+              apiUrl: dataSource.apiUrl,
+              valuePath: dataSource.valuePath,
+              textPath: dataSource.textPath,
+              response: options,
+              staticOptionsCount: field.fieldOptions?.length || 0
+            });
           }
           this.loadingFieldOptions[field.id] = false;
         },
@@ -569,6 +602,8 @@ export class FormViewComponent implements OnInit {
           }
 
           // Fallback to static options on error
+          // If DataSource fails, try to use static options from database as fallback
+          console.warn(`[FormView] DataSource failed for field ${field.id}, will try static options as fallback`);
           this.fieldDataSourceOptions[field.id] = [];
           this.loadingFieldOptions[field.id] = false;
         }
@@ -613,7 +648,27 @@ export class FormViewComponent implements OnInit {
           let text = '';
           let value = '';
 
-          // FIRST: Try to use the configured textPath from DataSource (case-insensitive)
+          // Check if this is a FieldOptionDto (static options from database) or FieldOptionResponse (from DataSource)
+          // FieldOptionDto has: optionText, optionValue
+          // FieldOptionResponse has: text, value (or custom paths)
+          const isStaticOption = 'optionText' in optAny || 'optionValue' in optAny;
+          
+          if (isStaticOption) {
+            // This is a static option from database (FieldOptionDto format)
+            // Use optionText and optionValue directly
+            if (optAny.optionText !== undefined && optAny.optionText !== null) {
+              text = String(optAny.optionText).trim();
+            }
+            if (optAny.optionValue !== undefined && optAny.optionValue !== null) {
+              value = String(optAny.optionValue);
+            }
+            // Also check foreignOptionText for multilingual support
+            if (!text && optAny.foreignOptionText) {
+              text = String(optAny.foreignOptionText).trim();
+            }
+          } else {
+            // This is a DataSource option (FieldOptionResponse format)
+            // Try to use the configured textPath from DataSource (case-insensitive)
           if (textPath) {
             const textPathLower = textPath.toLowerCase().trim();
             const keys = Object.keys(optAny || {});
@@ -628,7 +683,7 @@ export class FormViewComponent implements OnInit {
             }
           }
 
-          // FIRST: Try to use the configured valuePath from DataSource (case-insensitive)
+            // Try to use the configured valuePath from DataSource (case-insensitive)
           if (valuePath) {
             const valuePathLower = valuePath.toLowerCase().trim();
             const keys = Object.keys(optAny || {});
@@ -666,17 +721,20 @@ export class FormViewComponent implements OnInit {
               value = String(optAny.id);
             } else if (optAny.Id !== undefined && optAny.Id !== null) {
               value = String(optAny.Id);
+              }
             }
           }
 
           // If still no value, try to use the first property that looks like an ID
           if (!value && optAny) {
             const keys = Object.keys(optAny);
-            const idKey = keys.find(k =>
-              k.toLowerCase() === 'id' ||
-              k.toLowerCase() === 'value' ||
-              k.toLowerCase() === 'key'
-            );
+            const idKey = keys.find(k => {
+              const kLower = k.toLowerCase();
+              return kLower === 'id' ||
+                kLower === 'value' ||
+                kLower === 'key' ||
+                kLower === 'optionvalue';
+            });
             if (idKey && optAny[idKey] !== undefined && optAny[idKey] !== null) {
               value = String(optAny[idKey]);
             }
@@ -690,6 +748,7 @@ export class FormViewComponent implements OnInit {
               return kLower !== 'id' &&
                 kLower !== 'value' &&
                 kLower !== 'key' &&
+                kLower !== 'optionvalue' &&
                 typeof optAny[k] === 'string' &&
                 String(optAny[k]).trim() !== '';
             });
@@ -722,7 +781,22 @@ export class FormViewComponent implements OnInit {
     }
 
     // Otherwise, use static options from field.fieldOptions
+    // IMPORTANT: Even if field has Api/LookupTable DataSource, use static options as fallback
+    // if DataSource failed or returned no options
     const staticOptions = field.fieldOptions || [];
+    
+    // Check if DataSource failed or returned no options
+    const dataSource = field.fieldDataSource;
+    const hasExternalDataSource = dataSource && 
+                                 dataSource.isActive && 
+                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable');
+    const dataSourceFailed = hasExternalDataSource && 
+                            (!this.fieldDataSourceOptions[field.id] || this.fieldDataSourceOptions[field.id].length === 0);
+
+    // If DataSource failed, use static options as fallback
+    if (dataSourceFailed && staticOptions.length > 0) {
+      console.log(`[FormView] Using static options as fallback for field ${field.id} (${field.fieldCode || 'no-code'}) - DataSource returned no options`);
+    }
 
     // Only warn if no options at all (no static and no DataSource)
     if (staticOptions.length === 0 && !this._loggedFieldNoOptions[field.id]) {

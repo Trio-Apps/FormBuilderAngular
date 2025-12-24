@@ -224,12 +224,40 @@ export class FieldDataSourceService {
       params = params.set('context', JSON.stringify(context));
     }
 
-    return this.http.get<ApiResponse<FieldOptionResponse[]>>(`${this.baseUrl}/field-options`, { params }).pipe(
+    const url = `${this.baseUrl}/field-options`;
+    console.log(`[FieldDataSourceService] Requesting options for field ${fieldId}`, {
+      url: url,
+      params: params.toString(),
+      context: context
+    });
+
+    return this.http.get<ApiResponse<FieldOptionResponse[]>>(url, { params }).pipe(
       map((response: ApiResponse<FieldOptionResponse[]>) => {
-        return response.data || [];
+        console.log(`[FieldDataSourceService] Response for field ${fieldId}:`, {
+          response: response,
+          hasData: !!response?.data,
+          dataLength: response?.data?.length || 0,
+          data: response?.data
+        });
+        
+        const options = response.data || [];
+        console.log(`[FieldDataSourceService] Extracted ${options.length} options for field ${fieldId}`);
+        
+        if (options.length > 0) {
+          console.log(`[FieldDataSourceService] First option sample:`, JSON.stringify(options[0]));
+        }
+        
+        return options;
       }),
       catchError((error) => {
-        console.error(`[FieldDataSourceService] Error fetching field options for field ${fieldId}:`, error);
+        console.error(`[FieldDataSourceService] ❌ Error fetching field options for field ${fieldId}:`, {
+          error: error,
+          status: error?.status,
+          statusText: error?.statusText,
+          message: error?.message,
+          url: error?.url,
+          errorDetails: error?.error
+        });
 
         // Log backend error details if available
         if (error?.error) {
@@ -238,6 +266,15 @@ export class FieldDataSourceService {
           }
           if (error.error.error) {
             console.error(`[FieldDataSourceService] Backend error details:`, error.error.error);
+          }
+          if (error.error.errors) {
+            console.error(`[FieldDataSourceService] Backend validation errors:`, error.error.errors);
+          }
+          if (error.error.title) {
+            console.error(`[FieldDataSourceService] Backend error title:`, error.error.title);
+          }
+          if (error.error.detail) {
+            console.error(`[FieldDataSourceService] Backend error detail:`, error.error.detail);
           }
         }
 

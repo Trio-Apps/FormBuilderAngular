@@ -486,13 +486,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     if (selectedFieldType?.hasOptions && field.id) {
       // Initialize DataSource config with Static as default while loading
       this.dataSourceType = 'Static';
-      this.loadDataSourceForField(field.id);
+      this.loadDataSourceForField(field.id, () => {
+        // Load field options AFTER DataSource is loaded
+        // This ensures we know the DataSource type before loading options
+        this.loadFieldOptions(field.id);
+      });
     } else {
       this.resetDataSourceConfig();
+      // Load field options if no options type (shouldn't happen, but safe)
+      this.loadFieldOptions(field.id);
     }
-
-    // Load field options
-    this.loadFieldOptions(field.id);
 
     // Trigger change detection to ensure UI updates
     this.cdr.detectChanges();
@@ -1222,6 +1225,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Load field options from database
+   * IMPORTANT: Only loads options from database if DataSource is Static.
+   * For Api or LookupTable DataSources, options come from external source (API/Database tables)
+   * and should NOT be loaded from database. They are loaded dynamically when the form is displayed.
+   */
   loadFieldOptions(fieldId: number): void {
     const optionsArray = this.fieldOptionsFormArray;
     // Clear existing options
@@ -1229,7 +1238,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       optionsArray.removeAt(0);
     }
 
-    // Load options from API
+    // IMPORTANT: Only load options from database if DataSource is Static
+    // For Api/LookupTable, options come from external source and should NOT be loaded from database
+    if (this.dataSourceType && this.dataSourceType !== 'Static') {
+      // Don't load options from database for Api/LookupTable DataSources
+      // Options will be loaded from external source (API/Database) when form is displayed
+      console.log(`[FieldsList] Skipping loading options from database for field ${fieldId}. DataSource type is ${this.dataSourceType}. Options will be loaded from external source.`);
+      return;
+    }
+
+    // Load options from API only for Static DataSource
     this.fieldOptionsService.getFieldOptionsByFieldId(fieldId).subscribe({
       next: (options: FieldOptionDto[]) => {
         options.sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0));
@@ -1252,7 +1270,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Save field options to database
+   * IMPORTANT: Only saves options for Static DataSource.
+   * For Api or LookupTable DataSources, options come from external source (API/Database tables)
+   * and should NOT be saved to database. They are loaded dynamically when the form is displayed.
+   */
   saveFieldOptions(fieldId: number): void {
+    // IMPORTANT: Only save options for Static DataSource
+    // For Api or LookupTable, options come from external source and should NOT be saved
+    if (this.dataSourceType !== 'Static') {
+      console.warn(`[FieldsList] ⚠️ Attempted to save options for non-Static DataSource (${this.dataSourceType}). Options will NOT be saved.`);
+      this.loading.save = false;
+      this.loadFields();
+      this.messageService.add({ severity: 'warn', summary: 'Warning', detail: 'Options are not saved for Api/LookupTable DataSources. They are loaded from external source.' });
+      this.closeFieldModal();
+      this.cdr.detectChanges();
+      return;
+    }
+
     const optionsArray = this.fieldOptionsFormArray;
     const options = optionsArray.value as FieldOptionDto[];
 
@@ -1736,7 +1772,24 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       next: (updatedField) => {
         const selectedFieldType = this.fieldTypes.find(t => t.id === Number(fieldData.fieldTypeId));
         if (selectedFieldType?.hasOptions) {
+          // Check if field has DataSource - only save options if DataSource is Static or doesn't exist
+          const fieldDataSource = updatedField.fieldDataSource;
+          const dataSourceType = fieldDataSource?.sourceType || 'Static';
+          
+          // IMPORTANT: Only save options for Static DataSource
+          // For Api or LookupTable, options come from external source and should NOT be saved
+          if (dataSourceType === 'Static') {
           this.saveFieldOptions(this.editingField!.id);
+          } else {
+            // For Api/LookupTable, ensure no options are saved
+            this.deleteAllFieldOptions(this.editingField!.id).then(() => {
+              this.loading.save = false;
+              this.loadFields();
+              this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field settings saved successfully' });
+              this.closeFieldSettingsModal();
+              this.cdr.detectChanges();
+            });
+          }
         } else {
           this.deleteAllFieldOptions(this.editingField!.id).then(() => {
             this.loading.save = false;
@@ -1772,8 +1825,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   /**
    * Load DataSource configuration for a field
+   * @param fieldId - The field ID to load DataSource for
+   * @param callback - Optional callback to execute after DataSource is loaded
    */
-  loadDataSourceForField(fieldId: number): void {
+  loadDataSourceForField(fieldId: number, callback?: () => void): void {
     this.fieldDataSourceService.getActiveDataSourcesByFieldId(fieldId).subscribe({
       next: (dataSources) => {
         if (dataSources && dataSources.length > 0) {
@@ -1869,6 +1924,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             this.resetDataSourceConfig();
           }
         }
+        
+        // Execute callback after DataSource is loaded
+        if (callback) {
+          callback();
+        }
+        
         this.cdr.detectChanges();
       },
       error: () => {
@@ -1879,6 +1940,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         } else {
           this.resetDataSourceConfig();
         }
+        
+        // Execute callback even on error
+        if (callback) {
+          callback();
+        }
+        
         this.cdr.detectChanges();
       }
     });
@@ -3118,6 +3185,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   /**
    * Save DataSource configuration
+   * IMPORTANT: When DataSource is Api or LookupTable, we should NOT save options to database.
+   * Options are only saved for Static DataSource.
    */
   saveDataSource(fieldId: number): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -3138,6 +3207,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         return;
       }
 
+      // For Api or LookupTable: Delete all existing options first (if switching from Static)
+      // Options should NOT be saved for Api/LookupTable DataSources
+      this.deleteAllFieldOptions(fieldId).then(() => {
       // For LookupTable, use table name only in apiUrl
       let apiUrlValue: string | null = null;
       let valuePathValue: string | null = null;
@@ -3205,6 +3277,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           }
         });
       }
+      }).catch(() => {
+        // Even if delete fails, continue with DataSource save
+        reject();
+      });
     });
   }
 

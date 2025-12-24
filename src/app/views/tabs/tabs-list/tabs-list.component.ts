@@ -343,12 +343,12 @@ export class TabsListComponent implements OnInit, OnDestroy {
             });
           } else {
             // Show generic error
-            this.messageService.add({
-              severity: 'error',
+          this.messageService.add({
+            severity: 'error',
               summary: 'خطأ',
               detail: errorMessage,
               life: 7000
-            });
+          });
           }
         }
       });
@@ -464,12 +464,12 @@ export class TabsListComponent implements OnInit, OnDestroy {
             });
           } else {
             // Show generic error
-            this.messageService.add({
-              severity: 'error',
+          this.messageService.add({
+            severity: 'error',
               summary: 'خطأ',
               detail: errorMessage,
               life: 7000
-            });
+          });
           }
         }
       });
