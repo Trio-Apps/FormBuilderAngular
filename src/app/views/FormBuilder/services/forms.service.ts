@@ -5,7 +5,8 @@ import { catchError, map } from 'rxjs/operators';
 import {
   FormBuilderDto,
   CreateFormBuilderDto,
-  UpdateFormBuilderDto
+  UpdateFormBuilderDto,
+  FormRule
 } from '../form-builder/models/form-builder-dto.model';
 import { environment } from '../../../environments/environment';
 
@@ -223,5 +224,61 @@ export class FormsService {
 
   deleteForm(id: number): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/${id}`);
+  }
+
+  // ==================== Form Rules API Methods ====================
+
+  /**
+   * Get active rules for a form
+   * GET /api/FormRules/form/{formId}/active
+   */
+  getActiveRulesByFormId(formId: number): Observable<FormRule[]> {
+    return this.http.get<any>(`${environment.apiUrl}/FormRules/form/${formId}/active`).pipe(
+      map((response: any) => {
+        // Handle different response formats
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const data = response.data || response.items || response.result || [];
+          return Array.isArray(data) ? data : [];
+        }
+        return Array.isArray(response) ? response : [];
+      }),
+      catchError((error) => {
+        console.error(`[FormsService] Error fetching active rules for form ${formId}:`, error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Validate form rules before submission
+   * POST /api/FormRules/validate
+   */
+  validateFormRules(
+    formId: number,
+    fieldValues: Record<string, any>
+  ): Observable<{ valid: boolean; errors: string[] }> {
+    return this.http.post<any>(`${environment.apiUrl}/FormRules/validate`, {
+      formId,
+      fieldValues
+    }).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object') {
+          return {
+            valid: response.valid || false,
+            errors: response.errors || []
+          };
+        }
+        return { valid: false, errors: ['Invalid response format'] };
+      }),
+      catchError((error) => {
+        console.error('[FormsService] Error validating form rules:', error);
+        const errorMessage = error?.error?.message || error?.message || 'Validation failed';
+        const errors = error?.error?.errors || [errorMessage];
+        return of({
+          valid: false,
+          errors: Array.isArray(errors) ? errors : [errors]
+        });
+      })
+    );
   }
 }

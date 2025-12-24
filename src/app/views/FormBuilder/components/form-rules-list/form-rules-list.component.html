@@ -1,0 +1,392 @@
+<div class="fields-page-container">
+  <!-- Language Toggle -->
+  <div class="admin-language-toggle">
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'en'"
+      (click)="translationService.setLanguage('en')">
+      English
+    </button>
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'ar'"
+      (click)="translationService.setLanguage('ar')">
+      العربية
+    </button>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/form-builder/forms" title="Back to Forms">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Form Rules</h1>
+          <p class="page-subtitle" *ngIf="form">Form: {{ form.formName }}</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadRules()" [disabled]="loading" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openRuleModal()" [disabled]="loading">
+          <i class="pi pi-plus"></i>
+          <span>New Rule</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Forms</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-shield"></i>
+        <span>Rules</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-shield"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ rules.length }}</div>
+          <div class="stat-label">Total Rules</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveRulesCount() }}</div>
+          <div class="stat-label">Active Rules</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rules Table Card -->
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-shield"></i>
+          Rules List
+        </h3>
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              [(ngModel)]="searchTerm"
+              placeholder="Search rules..."
+              class="search-input" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>Loading rules...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!loading && filteredRules.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-inbox"></i>
+        </div>
+        <h3>No rules found</h3>
+        <p>Create your first rule to get started</p>
+        <button class="btn-primary" (click)="openRuleModal()">
+          <i class="pi pi-plus"></i>
+          <span>Add First Rule</span>
+        </button>
+      </div>
+
+      <!-- Rules Table -->
+      <div *ngIf="!loading && filteredRules.length > 0" class="table-wrapper">
+        <table class="rules-table">
+          <thead>
+            <tr>
+              <th class="col-priority">Priority</th>
+              <th class="col-name">Name</th>
+              <th class="col-type">Type</th>
+              <th class="col-condition">Conditions</th>
+              <th class="col-actions-summary">Actions</th>
+              <th class="col-status">Status</th>
+              <th class="col-actions">Operations</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let rule of filteredRules">
+              <td class="col-priority">
+                <span class="priority-badge">{{ rule.priority || 1 }}</span>
+              </td>
+              <td class="col-name">
+                <div class="rule-name-wrapper">
+                  <div class="rule-name-main">{{ rule.ruleName || '-' }}</div>
+                  <div class="rule-name-meta" *ngIf="rule.description">
+                    <span class="meta-item">
+                      <i class="pi pi-info-circle"></i> {{ rule.description }}
+                    </span>
+                  </div>
+                </div>
+              </td>
+              <td class="col-type">
+                <span class="type-badge">{{ rule.ruleType || '-' }}</span>
+              </td>
+              <td class="col-condition">
+                <div class="condition-summary" *ngIf="rule.condition">
+                  <span class="operator-badge">{{ rule.condition.operator || 'AND' }}</span>
+                  <ul class="conditions-list" *ngIf="rule.condition.conditions">
+                    <li *ngFor="let cond of rule.condition.conditions">
+                      {{ getFieldLabel(cond.fieldCode) }} {{ cond.operator }} {{ requiresValueInput(cond.operator) ? cond.value : '' }}
+                    </li>
+                  </ul>
+                </div>
+              </td>
+              <td class="col-actions-summary">
+                <ul class="actions-list" *ngIf="rule.actions">
+                  <li *ngFor="let action of rule.actions">
+                    {{ action.actionType }} {{ getFieldLabel(action.fieldCode) }} {{ requiresActionValueInput(action.actionType) ? action.value : '' }}
+                  </li>
+                </ul>
+              </td>
+              <td class="col-status">
+                <span class="status-badge" [class.status-active]="rule.isActive" [class.status-inactive]="!rule.isActive">
+                  <i class="pi" [class.pi-check-circle]="rule.isActive" [class.pi-times-circle]="!rule.isActive"></i>
+                  {{ rule.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <div class="actions-menu">
+                  <button class="action-btn action-edit" (click)="openRuleModal(rule)" title="Edit Rule">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button class="action-btn action-delete" (click)="deleteRule(rule.id)" title="Delete Rule">
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule Modal -->
+  <p-dialog
+    [(visible)]="showRuleModal"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '1200px' }"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="true"
+    [header]="editingRule ? 'Edit Rule' : 'New Rule'"
+    styleClass="rule-modal">
+    <form [formGroup]="ruleForm" (ngSubmit)="saveRule()">
+      <!-- Basic Information -->
+      <div class="form-section">
+        <h4>Basic Information</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Rule Name *</label>
+            <input type="text" formControlName="ruleName" class="form-control" placeholder="Enter rule name" />
+            <small class="text-danger" *ngIf="ruleForm.get('ruleName')?.invalid && ruleForm.get('ruleName')?.touched">
+              Rule name is required
+            </small>
+          </div>
+          <div class="form-group">
+            <label>Rule Type *</label>
+            <select formControlName="ruleType" class="form-control">
+              <option value="" disabled>Select rule type</option>
+              <option *ngFor="let type of ruleTypes" [value]="type.value">
+                {{ type.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Priority</label>
+            <input
+              type="number"
+              formControlName="priority"
+              min="0"
+              max="100"
+              placeholder="Priority (higher = first)"
+              class="form-control" />
+            <small class="form-text">Higher priority rules are evaluated first</small>
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <div class="checkbox-wrapper">
+              <label class="checkbox-label">
+                <input type="checkbox" formControlName="isActive" />
+                <span>Active</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea
+            formControlName="description"
+            class="form-control"
+            rows="2"
+            placeholder="Rule description (optional)"></textarea>
+        </div>
+      </div>
+
+      <!-- Conditions -->
+      <div class="form-section">
+        <div class="section-header">
+          <h4>Conditions</h4>
+          <button type="button" class="btn-sm btn-primary" (click)="addCondition()">
+            <i class="pi pi-plus"></i> Add Condition
+          </button>
+        </div>
+        <div formGroupName="condition">
+          <div class="form-group">
+            <label>Operator</label>
+            <select formControlName="operator" class="form-control">
+              <option *ngFor="let op of conditionOperators" [value]="op.value">
+                {{ op.label }}
+              </option>
+            </select>
+          </div>
+          <div formArrayName="conditions" class="conditions-list">
+            <div
+              *ngFor="let condition of conditionsArray.controls; let i = index"
+              [formGroupName]="i"
+              class="condition-item">
+              <div class="condition-header">
+                <strong>Condition {{ i + 1 }}</strong>
+                <button type="button" class="btn-icon btn-danger btn-sm" (click)="removeCondition(i)">
+                  <i class="pi pi-trash"></i>
+                </button>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Field *</label>
+                  <select formControlName="fieldCode" class="form-control">
+                    <option value="" disabled>Select field</option>
+                    <option *ngFor="let field of formFields" [value]="field.fieldCode">
+                      {{ field.fieldName }} ({{ field.fieldCode }})
+                    </option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Operator *</label>
+                  <select formControlName="operator" class="form-control">
+                    <option *ngFor="let op of fieldOperators" [value]="op.value">
+                      {{ op.label }}
+                    </option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Value</label>
+                  <input
+                    type="text"
+                    formControlName="value"
+                    class="form-control"
+                    placeholder="Value to compare" />
+                  <small class="form-text">Leave empty for IsEmpty/IsNotEmpty</small>
+                </div>
+              </div>
+            </div>
+            <div *ngIf="conditionsArray.length === 0" class="empty-state-small">
+              <p>No conditions added. Click "Add Condition" to add one.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="form-section">
+        <div class="section-header">
+          <h4>Actions</h4>
+          <button type="button" class="btn-sm btn-primary" (click)="addAction()">
+            <i class="pi pi-plus"></i> Add Action
+          </button>
+        </div>
+        <div formArrayName="actions" class="actions-list">
+          <div
+            *ngFor="let action of actionsArray.controls; let i = index"
+            [formGroupName]="i"
+            class="action-item">
+            <div class="action-header">
+              <strong>Action {{ i + 1 }}</strong>
+              <button type="button" class="btn-icon btn-danger btn-sm" (click)="removeAction(i)">
+                <i class="pi pi-trash"></i>
+              </button>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Target Field *</label>
+                <select formControlName="fieldCode" class="form-control">
+                  <option value="" disabled>Select target field</option>
+                  <option *ngFor="let field of formFields" [value]="field.fieldCode">
+                    {{ field.fieldName }} ({{ field.fieldCode }})
+                  </option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Action Type *</label>
+                <select formControlName="actionType" class="form-control">
+                  <option value="" disabled>Select action</option>
+                  <option *ngFor="let action of actionTypes" [value]="action.value">
+                    {{ action.label }}
+                  </option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Value</label>
+                <input
+                  type="text"
+                  formControlName="value"
+                  class="form-control"
+                  placeholder="Value (for SetValue/SetDefaultValue)" />
+                <small class="form-text">Required for SetValue/SetDefaultValue actions</small>
+              </div>
+            </div>
+          </div>
+          <div *ngIf="actionsArray.length === 0" class="empty-state-small">
+            <p>No actions added. Click "Add Action" to add one.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeRuleModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="ruleForm.invalid">
+          {{ editingRule ? 'Update' : 'Create' }} Rule
+        </button>
+      </div>
+    </form>
+  </p-dialog>
+
+  <!-- Toast Messages -->
+  <p-toast></p-toast>
+  <p-confirmDialog></p-confirmDialog>
+</div>
+

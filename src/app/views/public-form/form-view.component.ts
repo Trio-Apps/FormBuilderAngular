@@ -6,6 +6,8 @@ import { TabsService } from '../FormBuilder/services/tabs.service';
 import { FieldsService } from '../FormBuilder/services/fields.service';
 import { FileUploadService, FormSubmissionAttachmentDto } from '../FormBuilder/services/file-upload.service';
 import { FieldDataSourceService } from '../FormBuilder/services/field-data-source.service';
+import { RuleEvaluationService, FieldState } from '../FormBuilder/services/rule-evaluation.service';
+import { buildContext, getContextFieldCodes, requiresContext } from '../FormBuilder/utils/field-data-source-helpers';
 import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse, FormRule, RuleCondition, FieldCondition, RuleAction } from '../FormBuilder/form-builder/models/form-builder-dto.model';
 import { TranslationService } from '../../core/services/translation.service';
 import { environment } from '../../environments/environment';
@@ -65,12 +67,16 @@ export class FormViewComponent implements OnInit {
   // Default allowed file types (matching backend validation)
   private readonly DEFAULT_ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx', 'doc', 'docx'];
 
+  // Track which fields depend on context for reloading options
+  private contextDependencies: { [fieldId: number]: string[] } = {}; // fieldId -> array of context field codes
+
   constructor(
     private route: ActivatedRoute,
     private formsService: FormsService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
     private fieldDataSourceService: FieldDataSourceService,
+    private ruleEvaluationService: RuleEvaluationService,
     public fileUploadService: FileUploadService,
     public translationService: TranslationService,
     private cdr: ChangeDetectorRef
@@ -440,6 +446,7 @@ export class FormViewComponent implements OnInit {
    * Load field options from DataSource if available
    * This method checks if a field has an active DataSource and loads options from it
    * Only loads from API/LookupTable, not from Static (Static options are already in field.fieldOptions)
+   * Automatically builds context from formValues if not provided
    */
   loadFieldOptionsFromDataSource(field: FormFieldDto, context?: Record<string, any>): void {
     if (!field.id) return;
@@ -473,6 +480,18 @@ export class FormViewComponent implements OnInit {
       // Set loading state
       this.loadingFieldOptions[field.id] = true;
 
+      // Build context if not provided and DataSource requires it
+      let finalContext = context;
+      if (!finalContext && requiresContext(dataSource)) {
+        finalContext = buildContext(dataSource, this.fieldValues);
+      }
+
+      // Track context dependencies for this field
+      const contextFields = getContextFieldCodes(dataSource);
+      if (contextFields.length > 0) {
+        this.contextDependencies[field.id] = contextFields;
+      }
+
       // Load options from DataSource API
       console.log(`[FormView] Loading options for field ${field.id} (${field.fieldCode || 'no-code'}) from ${dataSource.sourceType} DataSource`, {
         fieldId: field.id,
@@ -481,10 +500,12 @@ export class FormViewComponent implements OnInit {
         apiUrl: dataSource.apiUrl,
         valuePath: dataSource.valuePath,
         textPath: dataSource.textPath,
-        httpMethod: dataSource.httpMethod
+        httpMethod: dataSource.httpMethod,
+        context: finalContext,
+        contextFields: contextFields
       });
       
-      this.fieldDataSourceService.getFieldOptions(field.id, context).subscribe({
+      this.fieldDataSourceService.getFieldOptions(field.id, finalContext).subscribe({
         next: (options: FieldOptionResponse[]) => {
           console.log(`[FormView] Received response for field ${field.id}:`, {
             optionsCount: options?.length || 0,
@@ -950,26 +971,71 @@ export class FormViewComponent implements OnInit {
   /**
    * Evaluate all form rules and apply actions
    * Called whenever field values change
+   * Uses RuleEvaluationService for evaluation
    */
   evaluateFormRules(): void {
     if (!this.form || !this.form.formRules || this.form.formRules.length === 0) {
       return;
     }
 
-    // Sort rules by priority (higher priority first)
-    const sortedRules = [...this.form.formRules]
-      .filter(rule => rule.isActive)
-      .sort((a, b) => (b.priority || 0) - (a.priority || 0));
-
     // Reset dynamic states to base field states
     this.resetDynamicFieldStates();
 
-    // Evaluate each rule
-    for (const rule of sortedRules) {
-      if (this.evaluateCondition(rule.condition)) {
-        this.applyActions(rule.actions);
-      }
+    // Build base field states
+    const baseFieldStates: Record<string, FieldState> = {};
+    if (this.tabs) {
+      this.tabs.forEach(tab => {
+        tab.fields?.forEach(field => {
+          if (field.fieldCode) {
+            baseFieldStates[field.fieldCode] = {
+              isVisible: field.isVisible ?? true,
+              isMandatory: field.isMandatory ?? false,
+              isReadOnly: field.isEditable === false
+            };
+          }
+        });
+      });
     }
+
+    // Use RuleEvaluationService to evaluate all rules
+    const evaluatedStates = this.ruleEvaluationService.evaluateAllRules(
+      this.form.formRules,
+      this.fieldValues,
+      baseFieldStates
+    );
+
+    // Update dynamicFieldStates with evaluated states
+    Object.keys(evaluatedStates).forEach(fieldCode => {
+      const state = evaluatedStates[fieldCode];
+      if (this.dynamicFieldStates[fieldCode]) {
+        this.dynamicFieldStates[fieldCode].isVisible = state.isVisible;
+        this.dynamicFieldStates[fieldCode].isRequired = state.isMandatory;
+        this.dynamicFieldStates[fieldCode].isReadOnly = state.isReadOnly;
+        if (state.value !== undefined) {
+          this.dynamicFieldStates[fieldCode].value = state.value;
+        }
+      } else {
+        this.dynamicFieldStates[fieldCode] = {
+          isVisible: state.isVisible,
+          isRequired: state.isMandatory,
+          isReadOnly: state.isReadOnly,
+          value: state.value
+        };
+      }
+    });
+
+    // Update fieldValues with any computed values from rules
+    Object.keys(evaluatedStates).forEach(fieldCode => {
+      const state = evaluatedStates[fieldCode];
+      if (state.value !== undefined && this.fieldValues[fieldCode] !== state.value) {
+        this.fieldValues[fieldCode] = state.value;
+        // Also update by field ID if possible
+        const field = this.findFieldByCode(fieldCode);
+        if (field && field.id) {
+          this.fieldValues[String(field.id)] = state.value;
+        }
+      }
+    });
 
     console.log('[FormView] Form rules evaluated, dynamic states:', this.dynamicFieldStates);
   }
@@ -978,16 +1044,20 @@ export class FormViewComponent implements OnInit {
    * Reset dynamic field states to base field configuration
    */
   private resetDynamicFieldStates(): void {
-    this.dynamicFieldStates = {};
+    // Keep existing structure but reset to base values
     if (this.tabs) {
       this.tabs.forEach(tab => {
         tab.fields?.forEach(field => {
-          this.dynamicFieldStates[field.fieldCode] = {
-            isVisible: field.isVisible ?? true,
-            isRequired: field.isMandatory ?? false,
-            isReadOnly: field.isEditable === false,
-            value: undefined
-          };
+          if (field.fieldCode) {
+            if (!this.dynamicFieldStates[field.fieldCode]) {
+              this.dynamicFieldStates[field.fieldCode] = {};
+            }
+            // Reset to base values but keep existing structure
+            this.dynamicFieldStates[field.fieldCode].isVisible = field.isVisible ?? true;
+            this.dynamicFieldStates[field.fieldCode].isRequired = field.isMandatory ?? false;
+            this.dynamicFieldStates[field.fieldCode].isReadOnly = field.isEditable === false;
+            // Don't reset value here - it will be set by rules if needed
+          }
         });
       });
     }
@@ -1155,7 +1225,82 @@ export class FormViewComponent implements OnInit {
   }
 
   /**
+   * Validate form rules before submission
+   * Returns validation result with errors if any
+   */
+  validateFormRulesBeforeSubmit(): Observable<{ valid: boolean; errors: string[] }> {
+    if (!this.form || !this.form.id) {
+      return of({ valid: true, errors: [] });
+    }
+
+    // Use FormsService to validate rules
+    return this.formsService.validateFormRules(this.form.id, this.fieldValues).pipe(
+      catchError((error) => {
+        console.error('[FormView] Error validating form rules:', error);
+        return of({
+          valid: false,
+          errors: ['Failed to validate form rules. Please try again.']
+        });
+      })
+    );
+  }
+
+  /**
+   * Validate all form fields and rules before submission
+   * This should be called before submitting the form
+   */
+  async validateFormBeforeSubmit(): Promise<{ valid: boolean; errors: string[] }> {
+    const errors: string[] = [];
+
+    // 1. Validate required fields
+    if (this.tabs) {
+      this.tabs.forEach(tab => {
+        tab.fields?.forEach(field => {
+          if (this.isRequired(field) && !this.isFieldVisible(field)) {
+            // Skip hidden required fields
+            return;
+          }
+
+          if (this.isRequired(field)) {
+            const value = this.getFieldValue(field);
+            if (value === undefined || value === null || value === '' || 
+                (Array.isArray(value) && value.length === 0)) {
+              const fieldLabel = this.getFieldLabel(field);
+              errors.push(`Field "${fieldLabel}" is required`);
+            }
+          }
+        });
+      });
+    }
+
+    // 2. Validate grids
+    const gridValidation = this.validateAllGrids();
+    if (!gridValidation.isValid) {
+      errors.push(...gridValidation.errors);
+    }
+
+    // 3. Validate form rules (if backend validation is available)
+    if (errors.length === 0 && this.form && this.form.id) {
+      try {
+        const ruleValidation = await this.validateFormRulesBeforeSubmit().toPromise();
+        if (ruleValidation && !ruleValidation.valid) {
+          errors.push(...ruleValidation.errors);
+        }
+      } catch (error) {
+        console.error('[FormView] Error during rule validation:', error);
+        // Don't block submission if rule validation fails
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
    * Track field value changes for rule evaluation
+   * Also reloads field options if context fields changed
    */
   onFieldValueChange(fieldId: number | string | undefined, value: any, fieldCode?: string): void {
     if (fieldId === undefined || fieldId === null) return;
@@ -1175,12 +1320,46 @@ export class FormViewComponent implements OnInit {
     // Update the reference to trigger change detection
     this.fieldValues = newFieldValues;
 
+    // Reload options for fields that depend on this field's value (context)
+    this.reloadDependentFieldOptions(fieldCode || idKey);
+
     // Re-evaluate rules
     this.evaluateFormRules();
 
     // Mark for check and detect changes
     this.cdr.markForCheck();
     this.cdr.detectChanges();
+  }
+
+  /**
+   * Reload field options for fields that depend on the changed context field
+   */
+  private reloadDependentFieldOptions(changedFieldCode: string): void {
+    // Find all fields that depend on the changed field
+    Object.keys(this.contextDependencies).forEach(fieldIdStr => {
+      const fieldId = Number(fieldIdStr);
+      const contextFields = this.contextDependencies[fieldId];
+      
+      // If the changed field is in the context dependencies, reload options
+      if (contextFields.includes(changedFieldCode)) {
+        const field = this.findFieldById(fieldId);
+        if (field) {
+          console.log(`[FormView] Reloading options for field ${fieldId} because context field "${changedFieldCode}" changed`);
+          this.loadFieldOptionsFromDataSource(field);
+        }
+      }
+    });
+  }
+
+  /**
+   * Helper to find a field by its ID across all tabs
+   */
+  private findFieldById(fieldId: number): FormFieldDto | undefined {
+    for (const tab of this.tabs) {
+      const field = tab.fields?.find(f => f.id === fieldId);
+      if (field) return field;
+    }
+    return undefined;
   }
 
   /**

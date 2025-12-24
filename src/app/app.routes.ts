@@ -65,6 +65,13 @@ export const routes: Routes = [
               .then(m => m.TabsListComponent) 
           },
           
+          // إدارة Rules لنموذج معين (مثال: form-builder/rules/5)
+          { 
+            path: 'rules/:formId', 
+            loadComponent: () => import('./views/FormBuilder/components/form-rules-list/form-rules-list.component')
+              .then(m => m.FormRulesListComponent) 
+          },
+          
           // حقول تبويب معين (مثال: form-builder/fields/10)
           { 
             path: 'fields/:tabId', 

@@ -198,6 +198,13 @@
                     <i class="pi pi-th-large"></i>
                   </button>
                   <button
+                    class="action-btn action-rules"
+                    [title]="'forms.manageRules' | translate"
+                    [routerLink]="['../rules', form.id]"
+                  >
+                    <i class="pi pi-shield"></i>
+                  </button>
+                  <button
                     class="action-btn action-delete"
                     [title]="'common.delete' | translate"
                     (click)="deleteForm(form.id)"
