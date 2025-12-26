@@ -1,0 +1,308 @@
+<div class="document-settings-container">
+  <!-- Language Toggle Buttons -->
+  <div class="admin-language-toggle">
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'en'"
+      (click)="switchLanguage('en')">
+      English
+    </button>
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'ar'"
+      (click)="switchLanguage('ar')">
+      العربية
+    </button>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/form-builder/forms" title="Back to Forms">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Document Settings</h1>
+          <p class="page-subtitle" *ngIf="form">
+            Form: {{ form.formName }} ({{ form.formCode }}) - Configure Document Type & Series
+          </p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button 
+          class="btn-secondary" 
+          (click)="loadSettings()" 
+          [disabled]="loading"
+          title="Refresh">
+          <i class="pi pi-refresh"></i>
+          <span>Refresh</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <span>Forms</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-cog"></i>
+        <span>Document Settings</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-container" *ngIf="loading && !settings">
+    <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+    <p>Loading document settings...</p>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content" *ngIf="!loading || settings">
+    <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
+      <!-- Document Type Section -->
+      <p-card header="Document Type" class="settings-card">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="documentName" class="required">
+              Document Name
+            </label>
+            <input
+              id="documentName"
+              type="text"
+              pInputText
+              formControlName="documentName"
+              placeholder="Enter document name"
+              [class.ng-invalid]="settingsForm.get('documentName')?.invalid && settingsForm.get('documentName')?.touched"
+              [maxlength]="200" />
+            <small class="error-text" *ngIf="settingsForm.get('documentName')?.invalid && settingsForm.get('documentName')?.touched">
+              Document name is required
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="documentCode" class="required">
+              Document Code
+            </label>
+            <input
+              id="documentCode"
+              type="text"
+              pInputText
+              formControlName="documentCode"
+              placeholder="Enter document code"
+              [class.ng-invalid]="settingsForm.get('documentCode')?.invalid && settingsForm.get('documentCode')?.touched"
+              [maxlength]="100" />
+            <small class="error-text" *ngIf="settingsForm.get('documentCode')?.invalid && settingsForm.get('documentCode')?.touched">
+              Document code is required
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="menuCaption">
+              Menu Caption
+            </label>
+            <input
+              id="menuCaption"
+              type="text"
+              pInputText
+              formControlName="menuCaption"
+              placeholder="Enter menu caption"
+              [maxlength]="100" />
+          </div>
+
+          <div class="form-group">
+            <label for="menuOrder">
+              Menu Order
+            </label>
+            <p-inputNumber
+              id="menuOrder"
+              formControlName="menuOrder"
+              [showButtons]="true"
+              [min]="0"
+              placeholder="Enter menu order"
+              styleClass="w-full"></p-inputNumber>
+          </div>
+
+          <div class="form-group">
+            <label for="parentMenuId">
+              Parent Menu ID (Optional)
+            </label>
+            <p-inputNumber
+              id="parentMenuId"
+              formControlName="parentMenuId"
+              [showButtons]="true"
+              [min]="0"
+              placeholder="Enter parent menu ID"
+              styleClass="w-full"></p-inputNumber>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <p-checkbox
+              formControlName="isActive"
+              inputId="isActive"
+              label="Is Active"></p-checkbox>
+          </div>
+        </div>
+      </p-card>
+
+      <!-- Document Series Section -->
+      <p-card header="Document Series" class="settings-card">
+        <div class="series-header">
+          <p class="section-description">
+            Configure document numbering series for different projects. Each project can have multiple series, but only one can be set as default.
+          </p>
+          <button
+            type="button"
+            pButton
+            label="Add Series"
+            icon="pi pi-plus"
+            class="p-button-sm"
+            (click)="addSeries()"></button>
+        </div>
+
+        <div formArrayName="documentSeries">
+          <div
+            *ngFor="let series of documentSeriesFormArray.controls; let i = index"
+            [formGroupName]="i"
+            class="series-item">
+            <div class="series-header-item">
+              <h4>Series {{ i + 1 }}</h4>
+              <button
+                type="button"
+                pButton
+                icon="pi pi-trash"
+                class="p-button-danger p-button-text p-button-sm"
+                (click)="removeSeries(i)"
+                title="Remove Series"></button>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label [for]="'projectId_' + i" class="required">
+                  Project
+                </label>
+                <select
+                  [id]="'projectId_' + i"
+                  formControlName="projectId"
+                  class="form-control"
+                  [class.ng-invalid]="series.get('projectId')?.invalid && series.get('projectId')?.touched">
+                  <option value="" disabled>Select Project</option>
+                  <option *ngFor="let project of projects" [value]="project.id">
+                    {{ project.projectName }}
+                  </option>
+                </select>
+                <small class="error-text" *ngIf="series.get('projectId')?.invalid && series.get('projectId')?.touched">
+                  Project is required
+                </small>
+              </div>
+
+              <div class="form-group">
+                <label [for]="'seriesCode_' + i" class="required">
+                  Series Code / Prefix
+                </label>
+                <input
+                  [id]="'seriesCode_' + i"
+                  type="text"
+                  pInputText
+                  formControlName="seriesCode"
+                  placeholder="Enter series code"
+                  [class.ng-invalid]="series.get('seriesCode')?.invalid && series.get('seriesCode')?.touched"
+                  [maxlength]="50" />
+                <small class="error-text" *ngIf="series.get('seriesCode')?.invalid && series.get('seriesCode')?.touched">
+                  Series code is required
+                </small>
+              </div>
+
+              <div class="form-group">
+                <label [for]="'nextNumber_' + i" class="required">
+                  Next Number
+                </label>
+                <p-inputNumber
+                  [id]="'nextNumber_' + i"
+                  formControlName="nextNumber"
+                  [showButtons]="true"
+                  [min]="1"
+                  placeholder="Enter next number"
+                  styleClass="w-full"></p-inputNumber>
+                <small class="error-text" *ngIf="series.get('nextNumber')?.invalid && series.get('nextNumber')?.touched">
+                  Next number must be at least 1
+                </small>
+              </div>
+
+              <div class="form-group checkbox-group">
+                <p-checkbox
+                  formControlName="isDefault"
+                  [inputId]="'isDefault_' + i"
+                  label="Is Default"
+                  (onChange)="onDefaultSeriesChange(i)"></p-checkbox>
+                <small class="hint-text">
+                  Only one series per project can be default
+                </small>
+              </div>
+
+              <div class="form-group checkbox-group">
+                <p-checkbox
+                  formControlName="isActive"
+                  [inputId]="'seriesIsActive_' + i"
+                  label="Is Active"></p-checkbox>
+              </div>
+            </div>
+          </div>
+
+          <div class="empty-state" *ngIf="documentSeriesFormArray.length === 0">
+            <i class="pi pi-info-circle"></i>
+            <p>No series configured. Click "Add Series" to add one.</p>
+          </div>
+        </div>
+      </p-card>
+
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button
+          type="button"
+          pButton
+          label="Cancel"
+          icon="pi pi-times"
+          class="p-button-secondary"
+          routerLink="/form-builder/forms"></button>
+
+        <button
+          type="button"
+          pButton
+          label="Delete"
+          icon="pi pi-trash"
+          class="p-button-danger"
+          *ngIf="settings"
+          (click)="deleteSettings()"
+          [disabled]="saving"></button>
+
+        <button
+          type="submit"
+          pButton
+          label="Save Settings"
+          icon="pi pi-save"
+          [disabled]="saving || settingsForm.invalid"
+          [loading]="saving"></button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast Messages -->
+<p-toast></p-toast>
+
+<!-- Confirmation Dialog -->
+<p-confirmDialog></p-confirmDialog>
+

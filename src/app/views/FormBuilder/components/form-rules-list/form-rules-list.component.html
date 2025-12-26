@@ -93,6 +93,7 @@
             <input
               type="text"
               [(ngModel)]="searchTerm"
+              (ngModelChange)="updateFilteredRules()"
               placeholder="Search rules..."
               class="search-input" />
           </div>
@@ -125,10 +126,9 @@
         <table class="rules-table">
           <thead>
             <tr>
-              <th class="col-priority">Priority</th>
+              <th class="col-order">Order</th>
               <th class="col-name">Name</th>
-              <th class="col-type">Type</th>
-              <th class="col-condition">Conditions</th>
+              <th class="col-condition">Condition</th>
               <th class="col-actions-summary">Actions</th>
               <th class="col-status">Status</th>
               <th class="col-actions">Operations</th>
@@ -136,38 +136,58 @@
           </thead>
           <tbody>
             <tr *ngFor="let rule of filteredRules">
-              <td class="col-priority">
-                <span class="priority-badge">{{ rule.priority || 1 }}</span>
+              <td class="col-order">
+                <span class="order-badge">{{ rule.executionOrder || 1 }}</span>
               </td>
               <td class="col-name">
                 <div class="rule-name-wrapper">
                   <div class="rule-name-main">{{ rule.ruleName || '-' }}</div>
-                  <div class="rule-name-meta" *ngIf="rule.description">
-                    <span class="meta-item">
-                      <i class="pi pi-info-circle"></i> {{ rule.description }}
-                    </span>
-                  </div>
                 </div>
-              </td>
-              <td class="col-type">
-                <span class="type-badge">{{ rule.ruleType || '-' }}</span>
               </td>
               <td class="col-condition">
                 <div class="condition-summary" *ngIf="rule.condition">
-                  <span class="operator-badge">{{ rule.condition.operator || 'AND' }}</span>
-                  <ul class="conditions-list" *ngIf="rule.condition.conditions">
-                    <li *ngFor="let cond of rule.condition.conditions">
-                      {{ getFieldLabel(cond.fieldCode) }} {{ cond.operator }} {{ requiresValueInput(cond.operator) ? cond.value : '' }}
-                    </li>
-                  </ul>
+                  <div class="condition-text">
+                    <strong>{{ getFieldLabel(rule.condition.field) }}</strong>
+                    <span class="operator-badge">{{ rule.condition.operator }}</span>
+                    <span *ngIf="requiresValueInput(rule.condition.operator)">{{ rule.condition.value }}</span>
+                    <span class="value-type-badge" *ngIf="rule.condition.valueType">({{ rule.condition.valueType }})</span>
+                  </div>
                 </div>
               </td>
               <td class="col-actions-summary">
-                <ul class="actions-list" *ngIf="rule.actions">
-                  <li *ngFor="let action of rule.actions">
-                    {{ action.actionType }} {{ getFieldLabel(action.fieldCode) }} {{ requiresActionValueInput(action.actionType) ? action.value : '' }}
-                  </li>
-                </ul>
+                <div class="actions-container">
+                  <!-- Actions (THEN) -->
+                  <div *ngIf="rule.actions && rule.actions.length > 0" class="actions-group">
+                    <div class="actions-group-label">
+                      <i class="pi pi-check-circle"></i> THEN:
+                    </div>
+                    <ul class="actions-list">
+                      <li *ngFor="let action of rule.actions">
+                        <span class="action-type">{{ action.type }}</span>
+                        <span class="action-field">{{ getFieldLabel(action.fieldCode) }}</span>
+                        <span class="action-value" *ngIf="action.value !== null && action.value !== undefined">= {{ action.value }}</span>
+                        <span class="action-expression" *ngIf="action.expression">: {{ action.expression }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                  
+                  <!-- Else Actions (ELSE) -->
+                  <div *ngIf="rule.elseActions && rule.elseActions.length > 0" class="actions-group else-actions">
+                    <div class="actions-group-label">
+                      <i class="pi pi-times-circle"></i> ELSE:
+                    </div>
+                    <ul class="actions-list">
+                      <li *ngFor="let action of rule.elseActions">
+                        <span class="action-type">{{ action.type }}</span>
+                        <span class="action-field">{{ getFieldLabel(action.fieldCode) }}</span>
+                        <span class="action-value" *ngIf="action.value !== null && action.value !== undefined">= {{ action.value }}</span>
+                        <span class="action-expression" *ngIf="action.expression">: {{ action.expression }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                  
+                  <span *ngIf="(!rule.actions || rule.actions.length === 0) && (!rule.elseActions || rule.elseActions.length === 0)" class="text-muted">No actions</span>
+                </div>
               </td>
               <td class="col-status">
                 <span class="status-badge" [class.status-active]="rule.isActive" [class.status-inactive]="!rule.isActive">
@@ -215,26 +235,15 @@
             </small>
           </div>
           <div class="form-group">
-            <label>Rule Type *</label>
-            <select formControlName="ruleType" class="form-control">
-              <option value="" disabled>Select rule type</option>
-              <option *ngFor="let type of ruleTypes" [value]="type.value">
-                {{ type.label }}
-              </option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Priority</label>
+            <label>Execution Order *</label>
             <input
               type="number"
-              formControlName="priority"
+              formControlName="executionOrder"
               min="0"
               max="100"
-              placeholder="Priority (higher = first)"
+              placeholder="Execution Order (lower = first)"
               class="form-control" />
-            <small class="form-text">Higher priority rules are evaluated first</small>
+            <small class="form-text">Lower numbers execute first</small>
           </div>
           <div class="form-group">
             <label>Status</label>
@@ -246,84 +255,77 @@
             </div>
           </div>
         </div>
-        <div class="form-group">
-          <label>Description</label>
-          <textarea
-            formControlName="description"
-            class="form-control"
-            rows="2"
-            placeholder="Rule description (optional)"></textarea>
-        </div>
       </div>
 
-      <!-- Conditions -->
+      <!-- Condition -->
       <div class="form-section">
-        <div class="section-header">
-          <h4>Conditions</h4>
-          <button type="button" class="btn-sm btn-primary" (click)="addCondition()">
-            <i class="pi pi-plus"></i> Add Condition
-          </button>
-        </div>
-        <div formGroupName="condition">
-          <div class="form-group">
-            <label>Operator</label>
-            <select formControlName="operator" class="form-control">
-              <option *ngFor="let op of conditionOperators" [value]="op.value">
-                {{ op.label }}
-              </option>
-            </select>
-          </div>
-          <div formArrayName="conditions" class="conditions-list">
-            <div
-              *ngFor="let condition of conditionsArray.controls; let i = index"
-              [formGroupName]="i"
-              class="condition-item">
-              <div class="condition-header">
-                <strong>Condition {{ i + 1 }}</strong>
-                <button type="button" class="btn-icon btn-danger btn-sm" (click)="removeCondition(i)">
-                  <i class="pi pi-trash"></i>
-                </button>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Field *</label>
-                  <select formControlName="fieldCode" class="form-control">
-                    <option value="" disabled>Select field</option>
-                    <option *ngFor="let field of formFields" [value]="field.fieldCode">
-                      {{ field.fieldName }} ({{ field.fieldCode }})
-                    </option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Operator *</label>
-                  <select formControlName="operator" class="form-control">
-                    <option *ngFor="let op of fieldOperators" [value]="op.value">
-                      {{ op.label }}
-                    </option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Value</label>
-                  <input
-                    type="text"
-                    formControlName="value"
-                    class="form-control"
-                    placeholder="Value to compare" />
-                  <small class="form-text">Leave empty for IsEmpty/IsNotEmpty</small>
-                </div>
-              </div>
+        <h4>Condition (IF)</h4>
+        <div formGroupName="condition" class="condition-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Field *</label>
+              <select formControlName="field" class="form-control">
+                <option value="" disabled>Select field</option>
+                <option *ngFor="let field of formFields" [value]="field.fieldCode">
+                  {{ field.fieldName }} ({{ field.fieldCode }})
+                </option>
+              </select>
+              <small class="text-danger" *ngIf="conditionGroup.get('field')?.invalid && conditionGroup.get('field')?.touched">
+                Field is required
+              </small>
             </div>
-            <div *ngIf="conditionsArray.length === 0" class="empty-state-small">
-              <p>No conditions added. Click "Add Condition" to add one.</p>
+            <div class="form-group">
+              <label>Operator *</label>
+              <select formControlName="operator" class="form-control">
+                <option value="" disabled>Select operator</option>
+                <option *ngFor="let op of conditionOperators" [value]="op.value">
+                  {{ op.label }}
+                </option>
+              </select>
+              <small class="text-danger" *ngIf="conditionGroup.get('operator')?.invalid && conditionGroup.get('operator')?.touched">
+                Operator is required
+              </small>
+            </div>
+            <div class="form-group">
+              <label>Value Type *</label>
+              <select formControlName="valueType" class="form-control">
+                <option *ngFor="let vt of valueTypes" [value]="vt.value">
+                  {{ vt.label }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" [class.form-group-full]="!requiresValueInput(conditionGroup.get('operator')?.value)">
+              <label>Value</label>
+              <input
+                *ngIf="conditionGroup.get('valueType')?.value === 'constant'"
+                type="text"
+                formControlName="value"
+                class="form-control"
+                placeholder="Value to compare"
+                [disabled]="!requiresValueInput(conditionGroup.get('operator')?.value)" />
+              <select
+                *ngIf="conditionGroup.get('valueType')?.value === 'field'"
+                formControlName="value"
+                class="form-control">
+                <option value="" disabled>Select field</option>
+                <option *ngFor="let field of formFields" [value]="field.fieldCode">
+                  {{ field.fieldName }} ({{ field.fieldCode }})
+                </option>
+              </select>
+              <small class="form-text" *ngIf="!requiresValueInput(conditionGroup.get('operator')?.value)">
+                Value not required for this operator
+              </small>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Actions -->
+      <!-- Actions (THEN) -->
       <div class="form-section">
         <div class="section-header">
-          <h4>Actions</h4>
+          <h4>Actions (THEN)</h4>
           <button type="button" class="btn-sm btn-primary" (click)="addAction()">
             <i class="pi pi-plus"></i> Add Action
           </button>
@@ -341,6 +343,87 @@
             </div>
             <div class="form-row">
               <div class="form-group">
+                <label>Action Type *</label>
+                <select formControlName="type" class="form-control">
+                  <option value="" disabled>Select action</option>
+                  <option *ngFor="let actionType of actionTypes" [value]="actionType.value">
+                    {{ actionType.label }}
+                  </option>
+                </select>
+                <small class="text-danger" *ngIf="action.get('type')?.invalid && action.get('type')?.touched">
+                  Action type is required
+                </small>
+              </div>
+              <div class="form-group">
+                <label>Target Field *</label>
+                <select formControlName="fieldCode" class="form-control">
+                  <option value="" disabled>Select target field</option>
+                  <option *ngFor="let field of formFields" [value]="field.fieldCode">
+                    {{ field.fieldName }} ({{ field.fieldCode }})
+                  </option>
+                </select>
+                <small class="text-danger" *ngIf="action.get('fieldCode')?.invalid && action.get('fieldCode')?.touched">
+                  Target field is required
+                </small>
+              </div>
+            </div>
+            <div class="form-row" *ngIf="requiresActionValueInput(action.get('type')?.value) || requiresActionExpression(action.get('type')?.value)">
+              <div class="form-group" *ngIf="requiresActionValueInput(action.get('type')?.value) && !requiresActionExpression(action.get('type')?.value)">
+                <label>Value</label>
+                <input
+                  type="text"
+                  formControlName="value"
+                  class="form-control"
+                  placeholder="Value for SetDefault" />
+                <small class="form-text">Required for SetDefault action</small>
+              </div>
+              <div class="form-group form-group-full" *ngIf="requiresActionExpression(action.get('type')?.value)">
+                <label>Expression *</label>
+                <textarea
+                  formControlName="expression"
+                  class="form-control"
+                  rows="3"
+                  placeholder="Enter expression (e.g., field1 + field2)"></textarea>
+                <small class="form-text">Required for Compute action. Use field codes in expression.</small>
+              </div>
+            </div>
+          </div>
+          <div *ngIf="actionsArray.length === 0" class="empty-state-small">
+            <p>No actions added. Click "Add Action" to add one.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Else Actions (ELSE) -->
+      <div class="form-section">
+        <div class="section-header">
+          <h4>Else Actions (ELSE) - Optional</h4>
+          <button type="button" class="btn-sm btn-secondary" (click)="addElseAction()">
+            <i class="pi pi-plus"></i> Add Else Action
+          </button>
+        </div>
+        <div formArrayName="elseActions" class="actions-list">
+          <div
+            *ngFor="let action of elseActionsArray.controls; let i = index"
+            [formGroupName]="i"
+            class="action-item action-else">
+            <div class="action-header">
+              <strong>Else Action {{ i + 1 }}</strong>
+              <button type="button" class="btn-icon btn-danger btn-sm" (click)="removeElseAction(i)">
+                <i class="pi pi-trash"></i>
+              </button>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Action Type *</label>
+                <select formControlName="type" class="form-control">
+                  <option value="" disabled>Select action</option>
+                  <option *ngFor="let actionType of actionTypes" [value]="actionType.value">
+                    {{ actionType.label }}
+                  </option>
+                </select>
+              </div>
+              <div class="form-group">
                 <label>Target Field *</label>
                 <select formControlName="fieldCode" class="form-control">
                   <option value="" disabled>Select target field</option>
@@ -349,28 +432,28 @@
                   </option>
                 </select>
               </div>
-              <div class="form-group">
-                <label>Action Type *</label>
-                <select formControlName="actionType" class="form-control">
-                  <option value="" disabled>Select action</option>
-                  <option *ngFor="let action of actionTypes" [value]="action.value">
-                    {{ action.label }}
-                  </option>
-                </select>
-              </div>
-              <div class="form-group">
+            </div>
+            <div class="form-row" *ngIf="requiresActionValueInput(action.get('type')?.value) || requiresActionExpression(action.get('type')?.value)">
+              <div class="form-group" *ngIf="requiresActionValueInput(action.get('type')?.value) && !requiresActionExpression(action.get('type')?.value)">
                 <label>Value</label>
                 <input
                   type="text"
                   formControlName="value"
                   class="form-control"
-                  placeholder="Value (for SetValue/SetDefaultValue)" />
-                <small class="form-text">Required for SetValue/SetDefaultValue actions</small>
+                  placeholder="Value for SetDefault" />
+              </div>
+              <div class="form-group form-group-full" *ngIf="requiresActionExpression(action.get('type')?.value)">
+                <label>Expression *</label>
+                <textarea
+                  formControlName="expression"
+                  class="form-control"
+                  rows="3"
+                  placeholder="Enter expression (e.g., field1 + field2)"></textarea>
               </div>
             </div>
           </div>
-          <div *ngIf="actionsArray.length === 0" class="empty-state-small">
-            <p>No actions added. Click "Add Action" to add one.</p>
+          <div *ngIf="elseActionsArray.length === 0" class="empty-state-small">
+            <p>No else actions. Click "Add Else Action" to add one (optional).</p>
           </div>
         </div>
       </div>

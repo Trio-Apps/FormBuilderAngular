@@ -1,9 +1,8 @@
 import { Injectable } from '@angular/core';
 import {
   FormRule,
-  RuleCondition,
-  FieldCondition,
-  RuleAction
+  Condition,
+  Action
 } from '../form-builder/models/form-builder-dto.model';
 
 /**
@@ -26,30 +25,27 @@ export interface FieldState {
 export class RuleEvaluationService {
 
   /**
-   * Evaluate a rule condition
+   * Evaluate a rule condition (single condition)
    */
-  evaluateCondition(condition: RuleCondition, fieldValues: Record<string, any>): boolean {
-    if (!condition || !condition.conditions || condition.conditions.length === 0) {
+  evaluateCondition(condition: Condition, fieldValues: Record<string, any>): boolean {
+    if (!condition || !condition.field) {
       return true; // Empty condition is always true
     }
 
-    const results = condition.conditions.map(cond => this.evaluateFieldCondition(cond, fieldValues));
-
-    // Apply operator (And/Or)
-    if (condition.operator === 'Or') {
-      return results.some(r => r === true);
-    } else {
-      // Default to And
-      return results.every(r => r === true);
-    }
+    return this.evaluateFieldCondition(condition, fieldValues);
   }
 
   /**
    * Evaluate a single field condition
    */
-  evaluateFieldCondition(condition: FieldCondition, fieldValues: Record<string, any>): boolean {
-    const fieldValue = fieldValues[condition.fieldCode];
-    const conditionValue = condition.value;
+  evaluateFieldCondition(condition: Condition, fieldValues: Record<string, any>): boolean {
+    const fieldValue = fieldValues[condition.field];
+    
+    // Get compare value - if valueType is 'field', get value from fieldValues
+    let conditionValue = condition.value;
+    if (condition.valueType === 'field' && condition.value) {
+      conditionValue = fieldValues[condition.value];
+    }
 
     switch (condition.operator) {
       case 'Equals':
@@ -169,7 +165,7 @@ export class RuleEvaluationService {
    * Apply rule actions
    */
   applyActions(
-    actions: RuleAction[],
+    actions: Action[],
     fieldValues: Record<string, any>,
     fieldStates: Record<string, FieldState>
   ): void {
@@ -186,7 +182,7 @@ export class RuleEvaluationService {
    * Apply a single action
    */
   applyAction(
-    action: RuleAction,
+    action: Action,
     fieldValues: Record<string, any>,
     fieldStates: Record<string, FieldState>
   ): void {
@@ -201,39 +197,41 @@ export class RuleEvaluationService {
 
     const state = fieldStates[action.fieldCode];
 
-    switch (action.actionType) {
-      case 'Show':
-        state.isVisible = true;
-        break;
-      case 'Hide':
-        state.isVisible = false;
-        break;
-      case 'SetRequired':
-        state.isMandatory = true;
-        break;
-      case 'SetOptional':
-        state.isMandatory = false;
+    switch (action.type) {
+      case 'SetVisible':
+        state.isVisible = action.value !== undefined ? action.value : true;
         break;
       case 'SetReadOnly':
-        state.isReadOnly = true;
+        state.isReadOnly = action.value !== undefined ? action.value : true;
         break;
-      case 'SetEditable':
-        state.isReadOnly = false;
+      case 'SetMandatory':
+        state.isMandatory = action.value !== undefined ? action.value : true;
         break;
-      case 'SetValue':
-        if (action.value !== undefined) {
-          state.value = action.value;
-          fieldValues[action.fieldCode] = action.value;
-        }
-        break;
-      case 'SetDefaultValue':
+      case 'SetDefault':
         if (action.value !== undefined && fieldValues[action.fieldCode] === undefined) {
           state.value = action.value;
           fieldValues[action.fieldCode] = action.value;
         }
         break;
+      case 'ClearValue':
+        state.value = undefined;
+        fieldValues[action.fieldCode] = undefined;
+        break;
+      case 'Compute':
+        if (action.expression) {
+          try {
+            // Evaluate expression - simple implementation
+            // TODO: Implement proper expression evaluation
+            const computedValue = this.evaluateExpression(action.expression, fieldValues);
+            state.value = computedValue;
+            fieldValues[action.fieldCode] = computedValue;
+          } catch (e) {
+            console.warn(`[RuleEvaluationService] Failed to compute expression: ${action.expression}`, e);
+          }
+        }
+        break;
       default:
-        console.warn(`[RuleEvaluationService] Unknown action type: ${action.actionType}`);
+        console.warn(`[RuleEvaluationService] Unknown action type: ${action.type}`);
     }
   }
 
@@ -251,10 +249,10 @@ export class RuleEvaluationService {
       fieldStates[key] = { ...baseFieldStates[key] };
     });
 
-    // Sort rules by priority (higher priority first)
+    // Sort rules by executionOrder (lower order first)
     const sortedRules = [...rules]
       .filter(rule => rule.isActive)
-      .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+      .sort((a, b) => (a.executionOrder || 0) - (b.executionOrder || 0));
 
     // Execute each rule
     for (const rule of sortedRules) {

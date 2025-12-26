@@ -297,87 +297,313 @@ export interface ApiResponse<T> {
 // ==================== Form Rules Interfaces ====================
 
 /**
- * Form Rule - Controls dynamic form behavior based on field values
+ * Condition - Simplified condition structure
  */
-export interface FormRule {
-  id?: number;
-  formId: number;
-  ruleName: string;
-  ruleType: FormRuleType; // 'Visibility' | 'Mandatory' | 'ReadOnly' | 'Custom'
-  condition: RuleCondition;
-  actions: RuleAction[];
-  isActive: boolean;
-  priority?: number; // Higher priority rules are evaluated first
-  description?: string;
+export interface Condition {
+  field: string;
+  operator: string;
+  value: any;
+  valueType: 'constant' | 'field';
 }
 
 /**
- * Rule Types
+ * Action - Rule action structure
+ * ActionType values: 'SetVisible' | 'SetReadOnly' | 'SetMandatory' | 'SetDefault' | 'ClearValue' | 'Compute'
+ */
+export interface Action {
+  type: string; // SetVisible, SetReadOnly, SetMandatory, SetDefault, ClearValue, Compute
+  fieldCode: string;
+  value?: any; // For SetVisible, SetReadOnly, SetMandatory, SetDefault
+  expression?: string; // For Compute action
+}
+
+/**
+ * Form Rule Data - Frontend rule structure
+ */
+export interface FormRuleData {
+  condition: Condition;
+  actions?: Action[];
+  elseActions?: Action[];
+}
+
+/**
+ * Frontend Form Rule (for UI)
+ */
+export interface FormRule {
+  id?: number;
+  ruleName: string;
+  condition: Condition;
+  actions: Action[];
+  elseActions?: Action[];
+  isActive: boolean;
+  executionOrder: number;
+}
+
+/**
+ * Create Form Rule DTO - Backend API structure
+ * ✅ Updated: Actions and ElseActions are now Arrays directly (not JSON strings)
+ */
+export interface CreateFormRuleDto {
+  formBuilderId: number;
+  ruleName: string;
+  conditionField?: string;
+  conditionOperator?: string;
+  conditionValue?: string;
+  conditionValueType?: string;
+  actions?: Action[]; // ✅ Array directly (not JSON string)
+  elseActions?: Action[]; // ✅ Array directly (not JSON string)
+  isActive?: boolean;
+  executionOrder?: number;
+}
+
+/**
+ * Update Form Rule DTO - Backend API structure
+ * ✅ Updated: Actions and ElseActions are now Arrays directly (not JSON strings)
+ */
+export interface UpdateFormRuleDto {
+  formBuilderId: number;
+  ruleName?: string;
+  conditionField?: string;
+  conditionOperator?: string;
+  conditionValue?: string;
+  conditionValueType?: string;
+  actions?: Action[]; // ✅ Array directly (not JSON string)
+  elseActions?: Action[]; // ✅ Array directly (not JSON string)
+  isActive?: boolean;
+  executionOrder?: number;
+}
+
+/**
+ * Form Rule DTO - Backend response structure
+ * ✅ Updated: Actions and ElseActions are now Arrays directly (not JSON strings)
+ */
+export interface FormRuleDto {
+  id: number;
+  formBuilderId: number;
+  ruleName: string;
+  conditionField?: string;
+  conditionOperator?: string;
+  conditionValue?: string;
+  conditionValueType?: string;
+  actions?: Action[]; // ✅ Array directly (not JSON string)
+  elseActions?: Action[]; // ✅ Array directly (not JSON string)
+  isActive: boolean;
+  executionOrder?: number;
+  formName?: string;
+  formCode?: string;
+}
+
+// ==================== Legacy Types (for backward compatibility) ====================
+// These are kept for backward compatibility but should be migrated to use new interfaces
+
+/**
+ * @deprecated Use Condition instead
  */
 export type FormRuleType = 'Visibility' | 'Mandatory' | 'ReadOnly' | 'Custom';
 
 /**
- * Rule Condition - Defines when the rule should be triggered
+ * @deprecated Use Condition instead
  */
 export interface RuleCondition {
-  operator: ConditionOperator; // 'And' | 'Or'
+  operator: ConditionOperator;
   conditions: FieldCondition[];
 }
 
 /**
- * Condition Operators
+ * @deprecated Use Condition instead
  */
 export type ConditionOperator = 'And' | 'Or';
 
 /**
- * Field Condition - Single condition on a field value
+ * @deprecated Use Condition instead
  */
 export interface FieldCondition {
-  fieldCode: string; // Field code to check
-  operator: FieldOperator; // 'Equals' | 'NotEquals' | 'Contains' | 'GreaterThan' | 'LessThan' | 'IsEmpty' | 'IsNotEmpty'
-  value?: any; // Value to compare (optional for IsEmpty/IsNotEmpty)
-  valueType?: 'string' | 'number' | 'boolean' | 'date'; // Type of the value
+  fieldCode: string;
+  operator: FieldOperator;
+  value?: any;
+  valueType?: 'string' | 'number' | 'boolean' | 'date';
 }
 
 /**
- * Field Operators
+ * @deprecated Use Action instead
  */
 export type FieldOperator = 'Equals' | 'NotEquals' | 'Contains' | 'GreaterThan' | 'LessThan' | 'IsEmpty' | 'IsNotEmpty' | 'In' | 'NotIn';
 
 /**
- * Rule Action - What happens when condition is met
+ * @deprecated Use Action instead
  */
 export interface RuleAction {
-  fieldCode: string; // Target field code
-  actionType: ActionType; // 'Show' | 'Hide' | 'SetRequired' | 'SetOptional' | 'SetReadOnly' | 'SetEditable' | 'SetValue' | 'SetDefaultValue'
-  value?: any; // Optional value for SetValue/SetDefaultValue
+  fieldCode: string;
+  actionType: ActionType;
+  value?: any;
 }
 
 /**
- * Action Types
+ * @deprecated Use Action.type instead
  */
 export type ActionType = 'Show' | 'Hide' | 'SetRequired' | 'SetOptional' | 'SetReadOnly' | 'SetEditable' | 'SetValue' | 'SetDefaultValue';
 
+// ==================== Form Rules Helper Types ====================
+
 /**
- * DTOs for Create/Update
+ * Action Types for FORM_RULE_ACTIONS
  */
-export interface CreateFormRuleDto {
-  formId: number;
-  ruleName: string;
-  ruleType: FormRuleType;
-  condition: RuleCondition;
-  actions: RuleAction[];
-  isActive?: boolean;
-  priority?: number;
-  description?: string;
+export type RuleActionType = 'SetVisible' | 'SetReadOnly' | 'SetMandatory' | 'SetDefault' | 'ClearValue' | 'Compute';
+
+// ==================== Form Rules Helper Functions ====================
+
+/**
+ * Convert FormRule (Frontend) to CreateFormRuleDto (Backend)
+ * Updated: Now sends Actions and ElseActions as Arrays directly (not JSON strings)
+ */
+export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number): CreateFormRuleDto {
+  // Clean condition - remove empty values
+  const cleanCondition: Condition = {
+    field: formRule.condition.field || '',
+    operator: formRule.condition.operator || '',
+    value: formRule.condition.value !== null && formRule.condition.value !== undefined 
+      ? formRule.condition.value 
+      : '',
+    valueType: formRule.condition.valueType || 'constant'
+  };
+
+  // Clean actions - remove undefined/null values
+  // ✅ Fixed: Allow boolean false and 0 values (they are valid)
+  const cleanActions: Action[] = (formRule.actions || []).map(action => {
+    const cleanAction: Action = {
+      type: action.type || '',
+      fieldCode: action.fieldCode || ''
+    };
+    // Include value if it's not null/undefined (allow false, 0, empty string)
+    if (action.value !== null && action.value !== undefined) {
+      cleanAction.value = action.value;
+    }
+    // Include expression if it's not null/undefined/empty
+    if (action.expression !== null && action.expression !== undefined && action.expression !== '') {
+      cleanAction.expression = action.expression;
+    }
+    return cleanAction;
+  });
+
+  // Clean elseActions - remove undefined/null values
+  // ✅ Fixed: Allow boolean false and 0 values (they are valid)
+  const cleanElseActions: Action[] = (formRule.elseActions || []).map(action => {
+    const cleanAction: Action = {
+      type: action.type || '',
+      fieldCode: action.fieldCode || ''
+    };
+    // Include value if it's not null/undefined (allow false, 0, empty string)
+    if (action.value !== null && action.value !== undefined) {
+      cleanAction.value = action.value;
+    }
+    // Include expression if it's not null/undefined/empty
+    if (action.expression !== null && action.expression !== undefined && action.expression !== '') {
+      cleanAction.expression = action.expression;
+    }
+    return cleanAction;
+  });
+
+  // Convert condition value to string (handle null/undefined/empty)
+  let conditionValueStr: string | undefined = undefined;
+  if (cleanCondition.value !== null && cleanCondition.value !== undefined && cleanCondition.value !== '') {
+    conditionValueStr = cleanCondition.value.toString();
+  }
+
+  // Validate required fields before creating DTO
+  if (!cleanCondition.field || !cleanCondition.operator) {
+    throw new Error('Condition field and operator are required');
+  }
+
+  if (cleanActions.length === 0) {
+    throw new Error('At least one action is required');
+  }
+
+  // Return DTO with Arrays directly (no JSON serialization needed)
+  return {
+    formBuilderId: formBuilderId,
+    ruleName: formRule.ruleName,
+    conditionField: cleanCondition.field,
+    conditionOperator: cleanCondition.operator,
+    conditionValue: conditionValueStr,
+    conditionValueType: cleanCondition.valueType,
+    actions: cleanActions.length > 0 ? cleanActions : undefined,      // ✅ Array directly
+    elseActions: cleanElseActions.length > 0 ? cleanElseActions : undefined,  // ✅ Array directly
+    isActive: formRule.isActive !== undefined ? formRule.isActive : true,
+    executionOrder: formRule.executionOrder || 1
+  };
 }
 
-export interface UpdateFormRuleDto {
-  ruleName?: string;
-  ruleType?: FormRuleType;
-  condition?: RuleCondition;
-  actions?: RuleAction[];
-  isActive?: boolean;
-  priority?: number;
-  description?: string;
+/**
+ * Convert FormRuleDto (Backend) to FormRule (Frontend)
+ * ✅ Updated: Now reads Actions and ElseActions as Arrays directly (not JSON strings)
+ */
+export function convertFormRuleDtoToFormRule(dto: FormRuleDto): FormRule {
+  // Build condition from DTO fields
+  let condition: Condition = {
+    field: dto.conditionField || '',
+    operator: dto.conditionOperator || '',
+    value: dto.conditionValue || '',
+    valueType: (dto.conditionValueType as 'constant' | 'field') || 'constant'
+  };
+
+  // ✅ Use Actions and ElseActions Arrays directly from DTO
+  let actions: Action[] = dto.actions || [];
+  let elseActions: Action[] = dto.elseActions || [];
+
+  // Fallback: Try to parse from JSON strings if Arrays are not available (for backward compatibility)
+  if (actions.length === 0 && (dto as any).actionsJson) {
+    try {
+      const parsedActions: any[] = JSON.parse((dto as any).actionsJson);
+      actions = parsedActions.map((a: any) => ({
+        type: a.type || a.actionType || '',
+        fieldCode: a.fieldCode || '',
+        value: a.value,
+        expression: a.expression
+      }));
+    } catch (e) {
+      console.warn('[convertFormRuleDtoToFormRule] Failed to parse actionsJson', e);
+    }
+  }
+
+  if (elseActions.length === 0 && (dto as any).elseActionsJson) {
+    try {
+      const parsedElseActions: any[] = JSON.parse((dto as any).elseActionsJson);
+      elseActions = parsedElseActions.map((a: any) => ({
+        type: a.type || a.actionType || '',
+        fieldCode: a.fieldCode || '',
+        value: a.value,
+        expression: a.expression
+      }));
+    } catch (e) {
+      console.warn('[convertFormRuleDtoToFormRule] Failed to parse elseActionsJson', e);
+    }
+  }
+
+  // Fallback: Try to parse ruleJson if available (for backward compatibility)
+  if (actions.length === 0 && (dto as any).ruleJson) {
+    try {
+      const ruleData: FormRuleData = JSON.parse((dto as any).ruleJson);
+      if (ruleData.condition) {
+        condition = ruleData.condition;
+      }
+      if (ruleData.actions) {
+        actions = ruleData.actions;
+      }
+      if (ruleData.elseActions) {
+        elseActions = ruleData.elseActions;
+      }
+    } catch (e) {
+      console.warn('[convertFormRuleDtoToFormRule] Failed to parse ruleJson', e);
+    }
+  }
+
+  return {
+    id: dto.id,
+    ruleName: dto.ruleName,
+    condition: condition,
+    actions: actions,
+    elseActions: elseActions.length > 0 ? elseActions : undefined,
+    isActive: dto.isActive,
+    executionOrder: dto.executionOrder || 1
+  };
 }

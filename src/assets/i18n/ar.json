@@ -54,6 +54,8 @@
     "formCodeRequired": "كود النموذج مطلوب",
     "copyPublicLink": "نسخ الرابط العام",
     "manageTabs": "إدارة التبويبات",
+    "manageRules": "إدارة القواعد",
+    "documentSettings": "إعدادات المستند",
     "backToDashboard": "العودة إلى لوحة التحكم"
   },
   "tabs": {

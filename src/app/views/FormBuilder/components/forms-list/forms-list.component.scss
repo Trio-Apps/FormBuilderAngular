@@ -560,6 +560,26 @@
     }
   }
 
+  &.action-rules {
+    color: #8b5cf6;
+    border-color: #8b5cf6;
+
+    &:hover {
+      background: #8b5cf6;
+      color: white;
+    }
+  }
+
+  &.action-document-settings {
+    color: #f59e0b;
+    border-color: #f59e0b;
+
+    &:hover {
+      background: #f59e0b;
+      color: white;
+    }
+  }
+
   &.action-delete {
     color: #ef4444;
     border-color: #ef4444;

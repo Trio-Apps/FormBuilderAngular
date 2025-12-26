@@ -5,6 +5,7 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Va
 import { FormRulesService } from '../../services/form-rules.service';
 import { FormsService } from '../../services/forms.service';
 import { FieldsService } from '../../services/fields.service';
+import { TabsService } from '../../services/tabs.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import {
   FormRule,
@@ -12,15 +13,13 @@ import {
   UpdateFormRuleDto,
   FormBuilderDto,
   FormFieldDto,
-  RuleCondition,
-  FieldCondition,
-  RuleAction,
-  ConditionOperator,
-  FieldOperator,
-  ActionType,
-  FormRuleType
+  Condition,
+  Action,
+  RuleActionType,
+  convertFormRuleToDto
 } from '../../form-builder/models/form-builder-dto.model';
-import { Subscription } from 'rxjs';
+import { Subscription, forkJoin } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { TranslationService } from '../../../../core/services/translation.service';
 
 // PrimeNG Modules
@@ -53,7 +52,7 @@ import { TooltipModule } from 'primeng/tooltip';
   providers: [MessageService, ConfirmationService]
 })
 export class FormRulesListComponent implements OnInit, OnDestroy {
-  formId!: number;
+  formId!: number; // formBuilderId
   form: FormBuilderDto | null = null;
   rules: FormRule[] = [];
   filteredRules: FormRule[] = [];
@@ -68,19 +67,7 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
   formFields: FormFieldDto[] = [];
 
   // Available options
-  ruleTypes: { label: string; value: FormRuleType }[] = [
-    { label: 'Visibility', value: 'Visibility' },
-    { label: 'Mandatory', value: 'Mandatory' },
-    { label: 'ReadOnly', value: 'ReadOnly' },
-    { label: 'Custom', value: 'Custom' }
-  ];
-
-  conditionOperators: { label: string; value: ConditionOperator }[] = [
-    { label: 'And', value: 'And' },
-    { label: 'Or', value: 'Or' }
-  ];
-
-  fieldOperators: { label: string; value: FieldOperator }[] = [
+  conditionOperators: { label: string; value: string }[] = [
     { label: 'Equals', value: 'Equals' },
     { label: 'Not Equals', value: 'NotEquals' },
     { label: 'Contains', value: 'Contains' },
@@ -92,15 +79,18 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     { label: 'Not In', value: 'NotIn' }
   ];
 
-  actionTypes: { label: string; value: ActionType }[] = [
-    { label: 'Show', value: 'Show' },
-    { label: 'Hide', value: 'Hide' },
-    { label: 'Set Required', value: 'SetRequired' },
-    { label: 'Set Optional', value: 'SetOptional' },
+  actionTypes: { label: string; value: RuleActionType }[] = [
+    { label: 'Set Visible', value: 'SetVisible' },
     { label: 'Set ReadOnly', value: 'SetReadOnly' },
-    { label: 'Set Editable', value: 'SetEditable' },
-    { label: 'Set Value', value: 'SetValue' },
-    { label: 'Set Default Value', value: 'SetDefaultValue' }
+    { label: 'Set Mandatory', value: 'SetMandatory' },
+    { label: 'Set Default', value: 'SetDefault' },
+    { label: 'Clear Value', value: 'ClearValue' },
+    { label: 'Compute', value: 'Compute' }
+  ];
+
+  valueTypes: { label: string; value: 'constant' | 'field' }[] = [
+    { label: 'Constant', value: 'constant' },
+    { label: 'Field', value: 'field' }
   ];
 
   constructor(
@@ -109,6 +99,7 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     private formRulesService: FormRulesService,
     private formsService: FormsService,
     private fieldsService: FieldsService,
+    private tabsService: TabsService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private fb: FormBuilder,
@@ -151,15 +142,16 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
   initRuleForm(): void {
     this.ruleForm = this.fb.group({
       ruleName: ['', Validators.required],
-      ruleType: ['Visibility', Validators.required],
-      description: [''],
       isActive: [true],
-      priority: [5, [Validators.required, Validators.min(0)]],
+      executionOrder: [1, [Validators.required, Validators.min(0)]],
       condition: this.fb.group({
-        operator: ['And', Validators.required],
-        conditions: this.fb.array([])
+        field: ['', Validators.required],
+        operator: ['Equals', Validators.required],
+        value: [''],
+        valueType: ['constant', Validators.required]
       }),
-      actions: this.fb.array([])
+      actions: this.fb.array([]),
+      elseActions: this.fb.array([])
     });
   }
 
@@ -181,35 +173,91 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
 
   loadFormFields(): void {
     if (!this.formId) return;
-    // Load all fields from all tabs
-    this.formsService.getFormById(this.formId).subscribe({
-      next: (form) => {
-        this.formFields = [];
-        if (form.tabs) {
-          form.tabs.forEach(tab => {
-            if (tab.fields) {
-              this.formFields.push(...tab.fields);
+    this.formFields = [];
+    
+    // First, load tabs for this form
+    this.tabsService.getTabs(this.formId).subscribe({
+      next: (tabs) => {
+        if (tabs && tabs.length > 0) {
+          // Load fields for each tab
+          const fieldObservables = tabs.map(tab => 
+            this.fieldsService.getFields(this.formId, tab.id).pipe(
+              map(fields => ({ tabId: tab.id, fields }))
+            )
+          );
+          
+          // Wait for all fields to load
+          forkJoin(fieldObservables).subscribe({
+            next: (results) => {
+              this.formFields = [];
+              results.forEach(result => {
+                if (result.fields && result.fields.length > 0) {
+                  this.formFields.push(...result.fields);
+                }
+              });
+              console.log('[FormRulesList] Loaded fields:', this.formFields.length, 'from', tabs.length, 'tabs');
+            },
+            error: (error) => {
+              console.error('[FormRulesList] Error loading fields from tabs:', error);
+            }
+          });
+        } else {
+          console.warn('[FormRulesList] No tabs found for form:', this.formId);
+          // Try fallback: get form with tabs included
+          this.formsService.getFormById(this.formId).subscribe({
+            next: (form) => {
+              if (form.tabs) {
+                form.tabs.forEach(tab => {
+                  if (tab.fields && tab.fields.length > 0) {
+                    this.formFields.push(...tab.fields);
+                  }
+                });
+              }
             }
           });
         }
+      },
+      error: (error) => {
+        console.error('[FormRulesList] Error loading tabs:', error);
+        // Fallback: try to get fields from form.tabs if available
+        this.formsService.getFormById(this.formId).subscribe({
+          next: (form) => {
+            if (form.tabs) {
+              form.tabs.forEach(tab => {
+                if (tab.fields && tab.fields.length > 0) {
+                  this.formFields.push(...tab.fields);
+                }
+              });
+            }
+          }
+        });
       }
     });
   }
 
   loadRules(): void {
     if (!this.formId || isNaN(this.formId)) {
+      console.warn('[FormRulesList] Invalid formId:', this.formId);
       this.loading = false;
       return;
     }
 
+    console.log('[FormRulesList] Loading rules for formId:', this.formId);
     this.loading = true;
     this.formRulesService.getRulesByFormId(this.formId).subscribe({
       next: (rules) => {
+        console.log('[FormRulesList] Received rules:', rules);
+        console.log('[FormRulesList] Rules count:', rules?.length || 0);
         this.rules = Array.isArray(rules) ? rules : [];
-        this.filteredRules = [...this.rules];
+        console.log('[FormRulesList] Set rules array:', this.rules);
+        console.log('[FormRulesList] Rules array length:', this.rules.length);
+        this.updateFilteredRules();
+        console.log('[FormRulesList] Filtered rules:', this.filteredRules);
+        console.log('[FormRulesList] Filtered rules length:', this.filteredRules.length);
         this.loading = false;
       },
-      error: () => {
+      error: (error) => {
+        console.error('[FormRulesList] Error loading rules:', error);
         this.loading = false;
         this.messageService.add({
           severity: 'error',
@@ -220,19 +268,24 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     });
   }
 
-  get filteredRulesList(): FormRule[] {
+  updateFilteredRules(): void {
     if (!this.searchTerm.trim()) {
-      return this.rules;
+      this.filteredRules = [...this.rules];
+    } else {
+      const term = this.searchTerm.toLowerCase();
+      this.filteredRules = this.rules.filter(rule =>
+        rule.ruleName?.toLowerCase().includes(term) ||
+        rule.condition?.field?.toLowerCase().includes(term)
+      );
     }
-    const term = this.searchTerm.toLowerCase();
-    return this.rules.filter(rule =>
-      rule.ruleName?.toLowerCase().includes(term) ||
-      rule.description?.toLowerCase().includes(term) ||
-      rule.ruleType?.toLowerCase().includes(term)
-    );
   }
 
   openRuleModal(rule?: FormRule): void {
+    // Ensure fields are loaded before opening modal
+    if (this.formFields.length === 0) {
+      this.loadFormFields();
+    }
+    
     this.editingRule = rule || null;
     this.initRuleForm();
 
@@ -240,21 +293,19 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
       // Edit mode
       this.ruleForm.patchValue({
         ruleName: rule.ruleName,
-        ruleType: rule.ruleType,
-        description: rule.description || '',
         isActive: rule.isActive,
-        priority: rule.priority || 5
+        executionOrder: rule.executionOrder || 1
       });
 
-      // Load conditions
-      if (rule.condition?.conditions) {
+      // Load condition
+      if (rule.condition) {
         const conditionGroup = this.ruleForm.get('condition') as FormGroup;
-        const conditionsArray = conditionGroup.get('conditions') as FormArray;
-        conditionsArray.clear();
-        rule.condition.conditions.forEach(cond => {
-          conditionsArray.push(this.createConditionFormGroup(cond));
+        conditionGroup.patchValue({
+          field: rule.condition.field || '',
+          operator: rule.condition.operator || 'Equals',
+          value: rule.condition.value || '',
+          valueType: rule.condition.valueType || 'constant'
         });
-        conditionGroup.get('operator')?.setValue(rule.condition.operator || 'And');
       }
 
       // Load actions
@@ -265,9 +316,17 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
           actionsArray.push(this.createActionFormGroup(action));
         });
       }
+
+      // Load else actions
+      if (rule.elseActions) {
+        const elseActionsArray = this.ruleForm.get('elseActions') as FormArray;
+        elseActionsArray.clear();
+        rule.elseActions.forEach(action => {
+          elseActionsArray.push(this.createActionFormGroup(action));
+        });
+      }
     } else {
-      // Add mode - add one default condition and action
-      this.addCondition();
+      // Add mode - add one default action
       this.addAction();
     }
 
@@ -280,27 +339,9 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     this.initRuleForm();
   }
 
-  // Conditions Management
-  get conditionsArray(): FormArray {
-    const conditionGroup = this.ruleForm.get('condition') as FormGroup;
-    return conditionGroup.get('conditions') as FormArray;
-  }
-
-  addCondition(): void {
-    this.conditionsArray.push(this.createConditionFormGroup());
-  }
-
-  removeCondition(index: number): void {
-    this.conditionsArray.removeAt(index);
-  }
-
-  createConditionFormGroup(condition?: FieldCondition): FormGroup {
-    return this.fb.group({
-      fieldCode: [condition?.fieldCode || '', Validators.required],
-      operator: [condition?.operator || 'Equals', Validators.required],
-      value: [condition?.value || ''],
-      valueType: [condition?.valueType || 'string']
-    });
+  // Condition Management (single condition now)
+  get conditionGroup(): FormGroup {
+    return this.ruleForm.get('condition') as FormGroup;
   }
 
   // Actions Management
@@ -308,19 +349,32 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     return this.ruleForm.get('actions') as FormArray;
   }
 
+  get elseActionsArray(): FormArray {
+    return this.ruleForm.get('elseActions') as FormArray;
+  }
+
   addAction(): void {
     this.actionsArray.push(this.createActionFormGroup());
+  }
+
+  addElseAction(): void {
+    this.elseActionsArray.push(this.createActionFormGroup());
   }
 
   removeAction(index: number): void {
     this.actionsArray.removeAt(index);
   }
 
-  createActionFormGroup(action?: RuleAction): FormGroup {
+  removeElseAction(index: number): void {
+    this.elseActionsArray.removeAt(index);
+  }
+
+  createActionFormGroup(action?: Action): FormGroup {
     return this.fb.group({
+      type: [action?.type || 'SetVisible', Validators.required],
       fieldCode: [action?.fieldCode || '', Validators.required],
-      actionType: [action?.actionType || 'Show', Validators.required],
-      value: [action?.value || '']
+      value: [action?.value || ''],
+      expression: [action?.expression || '']
     });
   }
 
@@ -335,31 +389,122 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     }
 
     const formValue = this.ruleForm.value;
-    const ruleData: CreateFormRuleDto | UpdateFormRuleDto = {
-      ruleName: formValue.ruleName,
-      ruleType: formValue.ruleType,
-      description: formValue.description || undefined,
-      isActive: formValue.isActive,
-      priority: formValue.priority || 5,
+
+    // Validate that condition field is selected
+    if (!formValue.condition.field || !formValue.condition.operator) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please select condition field and operator'
+      });
+      return;
+    }
+
+    // Validate that at least one action exists
+    if (!formValue.actions || formValue.actions.length === 0) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please add at least one action'
+      });
+      return;
+    }
+
+    // Build FormRule object - clean empty values
+    const formRule: FormRule = {
+      id: this.editingRule?.id,
+      ruleName: formValue.ruleName.trim(),
       condition: {
+        field: formValue.condition.field.trim(),
         operator: formValue.condition.operator,
-        conditions: formValue.condition.conditions.map((c: any) => ({
-          fieldCode: c.fieldCode,
-          operator: c.operator,
-          value: c.value || undefined,
-          valueType: c.valueType || 'string'
-        }))
+        value: formValue.condition.value && formValue.condition.value.toString().trim() !== ''
+          ? formValue.condition.value.toString().trim()
+          : '',
+        valueType: formValue.condition.valueType || 'constant'
       },
-      actions: formValue.actions.map((a: any) => ({
-        fieldCode: a.fieldCode,
-        actionType: a.actionType,
-        value: a.value || undefined
-      }))
+      actions: formValue.actions
+        .filter((a: any) => a.fieldCode && a.type) // Filter out incomplete actions
+        .map((a: any) => {
+          const action: Action = {
+            type: a.type,
+            fieldCode: a.fieldCode.trim()
+          };
+          if (a.value && a.value.toString().trim() !== '') {
+            action.value = a.value.toString().trim();
+          }
+          if (a.expression && a.expression.toString().trim() !== '') {
+            action.expression = a.expression.toString().trim();
+          }
+          return action;
+        }),
+      elseActions: formValue.elseActions && formValue.elseActions.length > 0
+        ? formValue.elseActions
+            .filter((a: any) => a.fieldCode && a.type)
+            .map((a: any) => {
+              const action: Action = {
+                type: a.type,
+                fieldCode: a.fieldCode.trim()
+              };
+              if (a.value && a.value.toString().trim() !== '') {
+                action.value = a.value.toString().trim();
+              }
+              if (a.expression && a.expression.toString().trim() !== '') {
+                action.expression = a.expression.toString().trim();
+              }
+              return action;
+            })
+        : undefined,
+      isActive: formValue.isActive !== undefined ? formValue.isActive : true,
+      executionOrder: formValue.executionOrder || 1
     };
+
+    // Validate actions after cleaning
+    if (formRule.actions.length === 0) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please add at least one valid action'
+      });
+      return;
+    }
+
+    // Convert to DTO
+    let ruleDto: CreateFormRuleDto;
+    try {
+      ruleDto = convertFormRuleToDto(formRule, this.formId);
+      
+      // Validate actions before sending
+      if (!ruleDto.actions || ruleDto.actions.length === 0) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Validation Error',
+          detail: 'At least one action is required',
+          life: 7000
+        });
+        return;
+      }
+      
+      // Log for debugging
+      console.log('[FormRulesList] Saving rule:', {
+        formRule,
+        ruleDto,
+        actionsCount: ruleDto.actions?.length || 0,
+        elseActionsCount: ruleDto.elseActions?.length || 0
+      });
+    } catch (error: any) {
+      console.error('[FormRulesList] Error converting rule to DTO:', error);
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Validation Error',
+        detail: error?.message || 'Failed to prepare rule data',
+        life: 7000
+      });
+      return;
+    }
 
     if (this.editingRule?.id) {
       // Update
-      this.formRulesService.updateRule(this.editingRule.id, ruleData).subscribe({
+      this.formRulesService.updateRule(this.editingRule.id, ruleDto).subscribe({
         next: () => {
           this.messageService.add({
             severity: 'success',
@@ -369,18 +514,25 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
           this.closeRuleModal();
           this.loadRules();
         },
-        error: () => {
+        error: (error) => {
+          console.error('[FormRulesList] Error updating rule:', error);
+          let errorMessage = 'Failed to update rule';
+          if (error?.error?.message) {
+            errorMessage = error.error.message;
+          } else if (error?.error?.title) {
+            errorMessage = error.error.title;
+          }
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to update rule'
+            detail: errorMessage,
+            life: 7000
           });
         }
       });
     } else {
       // Create
-      (ruleData as CreateFormRuleDto).formId = this.formId;
-      this.formRulesService.createRule(ruleData as CreateFormRuleDto).subscribe({
+      this.formRulesService.createRule(ruleDto).subscribe({
         next: () => {
           this.messageService.add({
             severity: 'success',
@@ -390,11 +542,52 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
           this.closeRuleModal();
           this.loadRules();
         },
-        error: () => {
+        error: (error) => {
+          console.error('[FormRulesList] Error creating rule:', error);
+          console.error('[FormRulesList] Rule DTO sent:', JSON.stringify(ruleDto, null, 2));
+          console.error('[FormRulesList] Actions:', ruleDto.actions);
+          console.error('[FormRulesList] ElseActions:', ruleDto.elseActions);
+          console.error('[FormRulesList] Full error object:', {
+            status: error?.status,
+            statusText: error?.statusText,
+            error: error?.error,
+            message: error?.message,
+            url: error?.url
+          });
+          
+          let errorMessage = 'Failed to create rule';
+          
+          // Try to extract error message from different possible locations
+          if (error?.error?.message) {
+            errorMessage = error.error.message;
+          } else if (error?.error?.title) {
+            errorMessage = error.error.title;
+          } else if (error?.error?.errors && typeof error.error.errors === 'object') {
+            // Handle validation errors object
+            const errors = Object.values(error.error.errors).flat();
+            errorMessage = errors.length > 0 ? errors.join(', ') : 'Validation failed';
+          } else if (error?.message) {
+            errorMessage = error.message;
+          } else if (typeof error?.error === 'string') {
+            errorMessage = error.error;
+          }
+          
+          // Check for specific error patterns
+          if (errorMessage.toLowerCase().includes('no data returned')) {
+            errorMessage = 'Server did not return the created rule. The rule may have been created but failed to retrieve it.';
+          } else if (errorMessage.toLowerCase().includes('invalid') || errorMessage.toLowerCase().includes('validation')) {
+            errorMessage = 'Invalid rule data format. Please check all fields are filled correctly.';
+          } else if (error?.status === 400) {
+            errorMessage = 'Bad request. Please check all required fields are filled correctly.';
+          } else if (error?.status === 500) {
+            errorMessage = 'Server error. Please try again or contact support.';
+          }
+          
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to create rule'
+            detail: errorMessage,
+            life: 7000
           });
         }
       });
@@ -412,12 +605,16 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     return field ? (field.fieldName || fieldCode) : fieldCode;
   }
 
-  requiresValueInput(operator: FieldOperator): boolean {
+  requiresValueInput(operator: string): boolean {
     return !['IsEmpty', 'IsNotEmpty'].includes(operator);
   }
 
-  requiresActionValueInput(actionType: ActionType): boolean {
-    return ['SetValue', 'SetDefaultValue'].includes(actionType);
+  requiresActionValueInput(actionType: RuleActionType): boolean {
+    return ['SetDefault', 'Compute'].includes(actionType);
+  }
+
+  requiresActionExpression(actionType: RuleActionType): boolean {
+    return actionType === 'Compute';
   }
 
   getActiveRulesCount(): number {

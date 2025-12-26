@@ -205,6 +205,13 @@
                     <i class="pi pi-shield"></i>
                   </button>
                   <button
+                    class="action-btn action-document-settings"
+                    [title]="'forms.documentSettings' | translate"
+                    [routerLink]="['../document-settings', form.id]"
+                  >
+                    <i class="pi pi-cog"></i>
+                  </button>
+                  <button
                     class="action-btn action-delete"
                     [title]="'common.delete' | translate"
                     (click)="deleteForm(form.id)"

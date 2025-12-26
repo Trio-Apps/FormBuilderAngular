@@ -54,6 +54,8 @@
     "formCodeRequired": "Form code is required",
     "copyPublicLink": "Copy Public Link",
     "manageTabs": "Manage Tabs",
+    "manageRules": "Manage Rules",
+    "documentSettings": "Document Settings",
     "backToDashboard": "Back to Dashboard"
   },
   "tabs": {

@@ -107,6 +107,13 @@ export const routes: Routes = [
               .then(m => m.FieldTypesListComponent) 
           },
           
+          // إدارة Document Settings لنموذج معين (مثال: form-builder/document-settings/5)
+          { 
+            path: 'document-settings/:id', 
+            loadComponent: () => import('./views/FormBuilder/components/document-settings/document-settings.component')
+              .then(m => m.DocumentSettingsComponent) 
+          },
+          
           // NOTE: Field options are now managed directly inside the Fields screen
           // If you need a separate management screen again, you can add routes here.
         ]
