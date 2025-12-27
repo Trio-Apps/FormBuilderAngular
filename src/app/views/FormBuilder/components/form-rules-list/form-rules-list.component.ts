@@ -503,9 +503,22 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     }
 
     if (this.editingRule?.id) {
-      // Update
-      this.formRulesService.updateRule(this.editingRule.id, ruleDto).subscribe({
-        next: () => {
+      // Update - convert CreateFormRuleDto to UpdateFormRuleDto
+      const updateDto: UpdateFormRuleDto = {
+        formBuilderId: ruleDto.formBuilderId,
+        ruleName: ruleDto.ruleName,
+        conditionField: ruleDto.conditionField,
+        conditionOperator: ruleDto.conditionOperator,
+        conditionValue: ruleDto.conditionValue,
+        conditionValueType: ruleDto.conditionValueType,
+        actions: ruleDto.actions,
+        elseActions: ruleDto.elseActions,
+        isActive: ruleDto.isActive,
+        executionOrder: ruleDto.executionOrder
+      };
+      
+      this.formRulesService.updateRule(this.editingRule.id, updateDto).subscribe({
+        next: (updatedRule) => {
           this.messageService.add({
             severity: 'success',
             summary: 'Success',
@@ -516,12 +529,20 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           console.error('[FormRulesList] Error updating rule:', error);
+          
           let errorMessage = 'Failed to update rule';
-          if (error?.error?.message) {
+          
+          // Extract error message from various error formats
+          if (error?.message) {
+            errorMessage = error.message;
+          } else if (error?.error?.message) {
             errorMessage = error.error.message;
           } else if (error?.error?.title) {
             errorMessage = error.error.title;
+          } else if (error?.error && typeof error.error === 'string') {
+            errorMessage = error.error;
           }
+          
           this.messageService.add({
             severity: 'error',
             summary: 'Error',

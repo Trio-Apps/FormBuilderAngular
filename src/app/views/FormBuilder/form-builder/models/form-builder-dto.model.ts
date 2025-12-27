@@ -467,9 +467,11 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     valueType: formRule.condition.valueType || 'constant'
   };
 
-  // Clean actions - remove undefined/null values
+  // Clean actions - remove undefined/null values and any 'id' property
   // ✅ Fixed: Allow boolean false and 0 values (they are valid)
+  // ✅ Fixed: Remove 'id' property to avoid Entity Framework tracking conflicts
   const cleanActions: Action[] = (formRule.actions || []).map(action => {
+    // Create a clean action object without 'id' property
     const cleanAction: Action = {
       type: action.type || '',
       fieldCode: action.fieldCode || ''
@@ -482,12 +484,15 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     if (action.expression !== null && action.expression !== undefined && action.expression !== '') {
       cleanAction.expression = action.expression;
     }
+    // Ensure 'id' is not included (Action interface doesn't have 'id', but we explicitly exclude it)
     return cleanAction;
   });
 
-  // Clean elseActions - remove undefined/null values
+  // Clean elseActions - remove undefined/null values and any 'id' property
   // ✅ Fixed: Allow boolean false and 0 values (they are valid)
+  // ✅ Fixed: Remove 'id' property to avoid Entity Framework tracking conflicts
   const cleanElseActions: Action[] = (formRule.elseActions || []).map(action => {
+    // Create a clean action object without 'id' property
     const cleanAction: Action = {
       type: action.type || '',
       fieldCode: action.fieldCode || ''
@@ -500,6 +505,7 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     if (action.expression !== null && action.expression !== undefined && action.expression !== '') {
       cleanAction.expression = action.expression;
     }
+    // Ensure 'id' is not included (Action interface doesn't have 'id', but we explicitly exclude it)
     return cleanAction;
   });
 
