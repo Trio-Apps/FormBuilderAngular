@@ -15,6 +15,10 @@
         <button class="btn-icon" (click)="loadFields()" [disabled]="loading.fields" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
+        <button class="btn-secondary" [routerLink]="['/form-builder/rules', formBuilderId]" title="Manage Form Rules">
+          <i class="pi pi-shield"></i>
+          <span>Manage Rules</span>
+        </button>
         <button class="btn-secondary" routerLink="/form-builder/field-types" title="Manage Field Types">
           <i class="pi pi-tags"></i>
           <span>Field Types</span>
@@ -203,6 +207,10 @@
                   </button>
                   <button class="action-btn action-duplicate" (click)="duplicateField(field)" title="Duplicate">
                     <i class="pi pi-copy"></i>
+                  </button>
+                  <button class="action-btn action-rule" [routerLink]="['/form-builder/rules', formBuilderId]" 
+                    [queryParams]="{ fieldCode: field.fieldCode }" title="Create Rule for this Field">
+                    <i class="pi pi-shield"></i>
                   </button>
                   <button class="action-btn" [class.action-activate]="!field.isActive"
                     [class.action-deactivate]="field.isActive" (click)="toggleFieldStatus(field)"

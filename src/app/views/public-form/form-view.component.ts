@@ -7,6 +7,7 @@ import { FieldsService } from '../FormBuilder/services/fields.service';
 import { FileUploadService, FormSubmissionAttachmentDto } from '../FormBuilder/services/file-upload.service';
 import { FieldDataSourceService } from '../FormBuilder/services/field-data-source.service';
 import { RuleEvaluationService, FieldState } from '../FormBuilder/services/rule-evaluation.service';
+import { FormRulesService } from '../FormBuilder/services/form-rules.service';
 import { buildContext, getContextFieldCodes, requiresContext } from '../FormBuilder/utils/field-data-source-helpers';
 import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse, FormRule, RuleCondition, FieldCondition, RuleAction } from '../FormBuilder/form-builder/models/form-builder-dto.model';
 import { TranslationService } from '../../core/services/translation.service';
@@ -77,6 +78,7 @@ export class FormViewComponent implements OnInit {
     private fieldsService: FieldsService,
     private fieldDataSourceService: FieldDataSourceService,
     private ruleEvaluationService: RuleEvaluationService,
+    private formRulesService: FormRulesService,
     public fileUploadService: FileUploadService,
     public translationService: TranslationService,
     private cdr: ChangeDetectorRef
@@ -188,6 +190,14 @@ export class FormViewComponent implements OnInit {
         }
 
         this.form = form;
+        
+        // Check if rules are included with form (from backend)
+        if (form.formRules && form.formRules.length > 0) {
+          console.log('[FormView] Form includes rules:', form.formRules.length);
+        } else {
+          console.log('[FormView] Form does not include rules, will try to load separately');
+        }
+        
         const apiTabs = form.tabs || [];
 
         // Initialize submission ID
@@ -217,9 +227,9 @@ export class FormViewComponent implements OnInit {
             .sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0))
             .map(tab => ({
               ...tab,
-              // Filter and sort fields (only active and visible ones)
+              // Filter and sort fields (only active ones - visibility controlled by rules)
               fields: (tab.fields || [])
-                .filter(field => field.isActive && (field.isVisible ?? true))
+                .filter(field => field.isActive)
                 .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0))
                 .map(field => {
                   // IMPORTANT: Keep static options even for Api/LookupTable DataSource fields
@@ -356,9 +366,9 @@ export class FormViewComponent implements OnInit {
 
           this.fieldsService.getFieldsByTabId(tab.id).subscribe({
             next: (fields: FormFieldDto[]) => {
-              // Filter and sort fields (only active and visible ones)
+              // Filter and sort fields (only active ones - visibility controlled by rules)
               const filteredFields = (Array.isArray(fields) ? fields : [])
-                .filter(field => field.isActive && (field.isVisible ?? true))
+                .filter(field => field.isActive)
                 .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0))
                 .map(field => ({
                   ...field,
@@ -961,11 +971,51 @@ export class FormViewComponent implements OnInit {
    * Initialize form rules after form is loaded
    */
   private initializeFormRules(): void {
-    // Reset dynamic states
-    this.resetDynamicFieldStates();
+    if (!this.form || !this.form.id) {
+      console.warn('[FormView] Cannot initialize rules: form or form.id is missing');
+      return;
+    }
 
-    // Evaluate rules with initial values
-    this.evaluateFormRules();
+    // If rules are already loaded with form, use them
+    if (this.form.formRules && this.form.formRules.length > 0) {
+      console.log('[FormView] Using rules from form object:', this.form.formRules.length);
+      this.resetDynamicFieldStates();
+      this.evaluateFormRules();
+      return;
+    }
+
+    // Otherwise, load rules from API
+    console.log('[FormView] Loading rules from API for form:', this.form.id);
+    this.formRulesService.getActiveRulesByFormId(this.form.id).subscribe({
+      next: (rules) => {
+        console.log('[FormView] Loaded rules from API:', rules.length);
+        if (!this.form) return;
+        
+        // Assign rules to form
+        this.form.formRules = rules;
+        
+        // Reset and evaluate
+        this.resetDynamicFieldStates();
+        this.evaluateFormRules();
+        
+        // Trigger change detection
+        this.cdr.markForCheck();
+      },
+      error: (error) => {
+        console.warn('[FormView] Error loading rules (may require authentication):', error);
+        console.warn('[FormView] Status:', error?.status, '- Form will work without rules');
+        
+        // If 401 Unauthorized, the endpoint may require authentication
+        // For public forms, we'll continue without rules
+        if (error?.status === 401) {
+          console.warn('[FormView] Rules endpoint requires authentication (401). Public forms may not have access to rules.');
+          console.warn('[FormView] Form will work without dynamic rules. Consider making rules endpoint public or adding authentication.');
+        }
+        
+        // Continue without rules - form will work without them
+        this.resetDynamicFieldStates();
+      }
+    });
   }
 
   /**
@@ -974,27 +1024,47 @@ export class FormViewComponent implements OnInit {
    * Uses RuleEvaluationService for evaluation
    */
   evaluateFormRules(): void {
-    if (!this.form || !this.form.formRules || this.form.formRules.length === 0) {
+    if (!this.form) {
+      console.log('[FormView] Cannot evaluate rules: form is null');
       return;
     }
+
+    if (!this.form.formRules || this.form.formRules.length === 0) {
+      console.log('[FormView] No rules to evaluate');
+      return;
+    }
+
+    console.log('[FormView] Evaluating', this.form.formRules.length, 'rules');
+    console.log('[FormView] Current field values:', this.fieldValues);
 
     // Reset dynamic states to base field states
     this.resetDynamicFieldStates();
 
     // Build base field states
     const baseFieldStates: Record<string, FieldState> = {};
+    const allFieldCodes: string[] = [];
     if (this.tabs) {
       this.tabs.forEach(tab => {
         tab.fields?.forEach(field => {
           if (field.fieldCode) {
+            allFieldCodes.push(field.fieldCode);
             baseFieldStates[field.fieldCode] = {
               isVisible: field.isVisible ?? true,
               isMandatory: field.isMandatory ?? false,
               isReadOnly: field.isEditable === false
             };
+            if (field.fieldCode === 'NOTES' || field.fieldCode.toUpperCase() === 'NOTES') {
+              console.log(`[FormView] ✅ Found NOTES field in form! Base state:`, baseFieldStates[field.fieldCode]);
+            }
           }
         });
       });
+    }
+    
+    console.log('[FormView] Base field states:', Object.keys(baseFieldStates));
+    console.log('[FormView] All field codes in form:', allFieldCodes);
+    if (!allFieldCodes.includes('NOTES') && !allFieldCodes.some(code => code.toUpperCase() === 'NOTES')) {
+      console.warn('[FormView] ⚠️ NOTES field code not found in form! Available codes:', allFieldCodes);
     }
 
     // Use RuleEvaluationService to evaluate all rules
@@ -1014,6 +1084,11 @@ export class FormViewComponent implements OnInit {
         if (state.value !== undefined) {
           this.dynamicFieldStates[fieldCode].value = state.value;
         }
+        if (fieldCode === 'NOTES') {
+          console.log(`[FormView] ✅ Updated NOTES state:`, this.dynamicFieldStates[fieldCode]);
+        } else {
+          console.log(`[FormView] Updated state for ${fieldCode}:`, this.dynamicFieldStates[fieldCode]);
+        }
       } else {
         this.dynamicFieldStates[fieldCode] = {
           isVisible: state.isVisible,
@@ -1021,8 +1096,30 @@ export class FormViewComponent implements OnInit {
           isReadOnly: state.isReadOnly,
           value: state.value
         };
+        if (fieldCode === 'NOTES') {
+          console.log(`[FormView] ✅ Created NOTES state:`, this.dynamicFieldStates[fieldCode]);
+        } else {
+          console.log(`[FormView] Created new state for ${fieldCode}:`, this.dynamicFieldStates[fieldCode]);
+        }
       }
     });
+    
+    // Also ensure all fields in tabs have dynamic states initialized (even if not in evaluatedStates)
+    if (this.tabs) {
+      this.tabs.forEach(tab => {
+        tab.fields?.forEach(field => {
+          if (field.fieldCode && !this.dynamicFieldStates[field.fieldCode]) {
+            // Initialize state for fields that weren't in evaluatedStates
+            this.dynamicFieldStates[field.fieldCode] = {
+              isVisible: field.isVisible ?? true,
+              isRequired: field.isMandatory ?? false,
+              isReadOnly: field.isEditable === false
+            };
+            console.log(`[FormView] Initialized missing state for ${field.fieldCode}:`, this.dynamicFieldStates[field.fieldCode]);
+          }
+        });
+      });
+    }
 
     // Update fieldValues with any computed values from rules
     Object.keys(evaluatedStates).forEach(fieldCode => {
@@ -1038,6 +1135,28 @@ export class FormViewComponent implements OnInit {
     });
 
     console.log('[FormView] Form rules evaluated, dynamic states:', this.dynamicFieldStates);
+    console.log('[FormView] Field visibility states:', 
+      Object.keys(this.dynamicFieldStates).map(code => ({
+        code,
+        visible: this.dynamicFieldStates[code].isVisible,
+        required: this.dynamicFieldStates[code].isRequired,
+        readOnly: this.dynamicFieldStates[code].isReadOnly
+      }))
+    );
+    
+    // Check if NOTES field exists in form
+    const notesField = this.findFieldByCode('NOTES');
+    if (notesField) {
+      console.log('[FormView] ✅ NOTES field found in form:', notesField);
+      console.log('[FormView] NOTES field visibility:', this.isFieldVisible(notesField));
+    } else {
+      console.warn('[FormView] ⚠️ NOTES field NOT found in form structure!');
+      console.log('[FormView] Available fields:', this.tabs?.flatMap(tab => tab.fields?.map(f => f.fieldCode) || []) || []);
+    }
+    
+    // Force change detection to update UI
+    this.cdr.markForCheck();
+    this.cdr.detectChanges();
   }
 
   /**
@@ -1123,6 +1242,11 @@ export class FormViewComponent implements OnInit {
     // Try type conversion for numbers and booleans
     const v1 = this.convertValue(value1);
     const v2 = this.convertValue(value2);
+
+    // For string comparisons, use case-insensitive and trimmed comparison
+    if (typeof v1 === 'string' && typeof v2 === 'string') {
+      return v1.trim().toLowerCase() === v2.trim().toLowerCase();
+    }
 
     if (operator === '===') {
       return v1 === v2;
@@ -1217,8 +1341,12 @@ export class FormViewComponent implements OnInit {
    * Helper to find a field by its code across all tabs
    */
   private findFieldByCode(code: string): FormFieldDto | undefined {
+    if (!this.tabs) return undefined;
     for (const tab of this.tabs) {
-      const field = tab.fields?.find(f => f.fieldCode === code);
+      const field = tab.fields?.find(f => 
+        f.fieldCode === code || 
+        (f.fieldCode && f.fieldCode.toUpperCase() === code.toUpperCase())
+      );
       if (field) return field;
     }
     return undefined;
@@ -1448,11 +1576,23 @@ export class FormViewComponent implements OnInit {
    * Check if field is visible (base + dynamic rules)
    */
   isFieldVisible(field: FormFieldDto): boolean {
+    if (!field.fieldCode) {
+      return field.isVisible ?? true;
+    }
+    
     const dynamicState = this.dynamicFieldStates[field.fieldCode];
     if (dynamicState && dynamicState.isVisible !== undefined) {
-      return dynamicState.isVisible;
+      const isVisible = dynamicState.isVisible;
+      if (field.fieldCode === 'NOTES') {
+        console.log(`[FormView] NOTES field visibility check: ${isVisible}`, dynamicState);
+      }
+      return isVisible;
     }
-    return field.isVisible ?? true;
+    const baseVisible = field.isVisible ?? true;
+    if (field.fieldCode === 'NOTES') {
+      console.log(`[FormView] NOTES field visibility (base): ${baseVisible}`);
+    }
+    return baseVisible;
   }
 
   /**

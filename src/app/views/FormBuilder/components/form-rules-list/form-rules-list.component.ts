@@ -131,6 +131,25 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         this.loadFormFields();
       }
     });
+
+    // Check for query parameters (e.g., fieldCode from fields list)
+    this.route.queryParams.subscribe(queryParams => {
+      if (queryParams['fieldCode']) {
+        // Wait for fields to load, then open modal with pre-selected field
+        setTimeout(() => {
+          if (this.formFields.length > 0) {
+            this.openRuleModalWithField(queryParams['fieldCode']);
+          } else {
+            // If fields not loaded yet, wait a bit more
+            setTimeout(() => {
+              if (this.formFields.length > 0) {
+                this.openRuleModalWithField(queryParams['fieldCode']);
+              }
+            }, 500);
+          }
+        }, 300);
+      }
+    });
   }
 
   ngOnDestroy(): void {
@@ -331,6 +350,68 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     }
 
     this.showRuleModal = true;
+  }
+
+  openRuleModalWithField(fieldCode: string): void {
+    // Ensure fields are loaded before opening modal
+    if (this.formFields.length === 0) {
+      this.loadFormFields();
+      // Wait for fields to load
+      setTimeout(() => {
+        this.openRuleModalWithField(fieldCode);
+      }, 500);
+      return;
+    }
+
+    // Check if field exists
+    const field = this.formFields.find(f => f.fieldCode === fieldCode);
+    if (!field) {
+      console.warn(`[FormRulesList] Field with code ${fieldCode} not found`);
+      // Still open modal, but without pre-selection
+      this.openRuleModal();
+      return;
+    }
+
+    // Open modal in create mode
+    this.editingRule = null;
+    this.initRuleForm();
+
+    // Pre-select the field in condition
+    const conditionGroup = this.ruleForm.get('condition') as FormGroup;
+    conditionGroup.patchValue({
+      field: fieldCode,
+      operator: 'Equals',
+      value: '',
+      valueType: 'constant'
+    });
+
+    // Pre-select the field in first action as target
+    this.addAction();
+    const actionsArray = this.ruleForm.get('actions') as FormArray;
+    if (actionsArray.length > 0) {
+      const firstAction = actionsArray.at(0) as FormGroup;
+      firstAction.patchValue({
+        type: 'SetVisible',
+        fieldCode: fieldCode,
+        value: true
+      });
+    }
+
+    // Set a default rule name
+    this.ruleForm.patchValue({
+      ruleName: `Rule for ${field.fieldName || fieldCode}`,
+      executionOrder: 1,
+      isActive: true
+    });
+
+    this.showRuleModal = true;
+
+    // Clear query parameter from URL
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {},
+      replaceUrl: true
+    });
   }
 
   closeRuleModal(): void {

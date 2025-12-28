@@ -39,7 +39,18 @@ export class RuleEvaluationService {
    * Evaluate a single field condition
    */
   evaluateFieldCondition(condition: Condition, fieldValues: Record<string, any>): boolean {
-    const fieldValue = fieldValues[condition.field];
+    // Try exact match first, then case-insensitive match
+    let fieldValue = fieldValues[condition.field];
+    if (fieldValue === undefined && condition.field) {
+      // Try case-insensitive match
+      const fieldKey = Object.keys(fieldValues).find(key => 
+        key.toUpperCase() === condition.field.toUpperCase()
+      );
+      if (fieldKey) {
+        fieldValue = fieldValues[fieldKey];
+        console.log(`[RuleEvaluationService] Found field value using case-insensitive match: ${fieldKey} = ${fieldValue}`);
+      }
+    }
     
     // Get compare value - if valueType is 'field', get value from fieldValues
     let conditionValue = condition.value;
@@ -81,6 +92,11 @@ export class RuleEvaluationService {
     // Try type conversion for numbers and booleans
     const v1 = this.convertValue(value1);
     const v2 = this.convertValue(value2);
+
+    // For string comparisons, use case-insensitive and trimmed comparison
+    if (typeof v1 === 'string' && typeof v2 === 'string') {
+      return v1.trim().toLowerCase() === v2.trim().toLowerCase();
+    }
 
     if (operator === '===') {
       return v1 === v2;
@@ -155,8 +171,12 @@ export class RuleEvaluationService {
     }
 
     const conditionMet = this.evaluateCondition(rule.condition, fieldValues);
+    
+    console.log(`[RuleEvaluationService] Rule "${rule.ruleName}": condition field="${rule.condition.field}", value="${rule.condition.value}", conditionMet=${conditionMet}`);
+    console.log(`[RuleEvaluationService] Field value for "${rule.condition.field}":`, fieldValues[rule.condition.field]);
 
     if (conditionMet && rule.actions) {
+      console.log(`[RuleEvaluationService] Applying ${rule.actions.length} actions for rule "${rule.ruleName}"`);
       this.applyActions(rule.actions, fieldValues, fieldStates);
     }
   }
@@ -193,13 +213,26 @@ export class RuleEvaluationService {
         isMandatory: false,
         isReadOnly: false
       };
+      console.log(`[RuleEvaluationService] Initialized field state for "${action.fieldCode}"`);
     }
 
     const state = fieldStates[action.fieldCode];
 
     switch (action.type) {
       case 'SetVisible':
-        state.isVisible = action.value !== undefined ? action.value : true;
+        // For SetVisible, if value is null, undefined, or false, default to true
+        // Only set to false if explicitly false
+        let newVisibility: boolean;
+        if (action.value === false) {
+          newVisibility = false;
+        } else if (action.value === true) {
+          newVisibility = true;
+        } else {
+          // If value is null, undefined, or any other value, default to true for SetVisible
+          newVisibility = true;
+        }
+        console.log(`[RuleEvaluationService] Setting visibility for "${action.fieldCode}" to ${newVisibility} (action.value was: ${action.value})`);
+        state.isVisible = newVisibility;
         break;
       case 'SetReadOnly':
         state.isReadOnly = action.value !== undefined ? action.value : true;
@@ -249,6 +282,10 @@ export class RuleEvaluationService {
       fieldStates[key] = { ...baseFieldStates[key] };
     });
 
+    console.log('[RuleEvaluationService] Starting rule evaluation with', rules.length, 'rules');
+    console.log('[RuleEvaluationService] Base field states:', Object.keys(fieldStates));
+    console.log('[RuleEvaluationService] Field values:', fieldValues);
+
     // Sort rules by executionOrder (lower order first)
     const sortedRules = [...rules]
       .filter(rule => rule.isActive)
@@ -258,6 +295,13 @@ export class RuleEvaluationService {
     for (const rule of sortedRules) {
       this.executeRule(rule, fieldValues, fieldStates);
     }
+
+    console.log('[RuleEvaluationService] Final field states:', Object.keys(fieldStates).map(key => ({
+      fieldCode: key,
+      isVisible: fieldStates[key].isVisible,
+      isMandatory: fieldStates[key].isMandatory,
+      isReadOnly: fieldStates[key].isReadOnly
+    })));
 
     return fieldStates;
   }
