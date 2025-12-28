@@ -24,6 +24,15 @@ export const navItems: INavData[] = [
     ]
   },
   {
+    title: true,
+    name: 'Projects'
+  },
+  {
+    name: 'Projects',
+    url: '/projects',
+    iconComponent: { name: 'cil-briefcase' }
+  },
+  {
     name: 'Logout',
     url: '/logout',
     iconComponent: { name: 'cil-lock-locked' }

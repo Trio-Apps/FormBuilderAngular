@@ -38,6 +38,13 @@ export const routes: Routes = [
         loadChildren: () => import('./views/dashboard/routes').then(m => m.routes)
       },
 
+      // ===== Projects =====
+      {
+        path: 'projects',
+        loadComponent: () => import('./views/projects/components/projects-list/projects-list.component')
+          .then(m => m.ProjectsListComponent)
+      },
+
       // ===== Form Builder System =====
       {
         path: 'form-builder',
