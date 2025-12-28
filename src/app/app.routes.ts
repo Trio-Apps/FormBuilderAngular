@@ -114,6 +114,13 @@ export const routes: Routes = [
               .then(m => m.FieldTypesListComponent) 
           },
           
+          // إدارة أنواع المستندات (Document Types)
+          { 
+            path: 'document-types', 
+            loadComponent: () => import('./views/document-types/document-types-list/document-types-list.component')
+              .then(m => m.DocumentTypesListComponent) 
+          },
+          
           // إدارة Document Settings لنموذج معين (مثال: form-builder/document-settings/5)
           { 
             path: 'document-settings/:id', 
