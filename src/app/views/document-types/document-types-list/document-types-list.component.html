@@ -9,15 +9,12 @@
         <div class="nav-title-section">
           <h1 class="page-title">Document Types Management</h1>
           <p class="page-subtitle">
-            Manage document types and their menu configurations
+            Manage all document types across forms
           </p>
         </div>
       </div>
       <div class="nav-right">
-        <button class="btn-icon" (click)="loadDocumentTypes()" [disabled]="loading.documentTypes" title="Refresh">
-          <i class="pi pi-refresh"></i>
-        </button>
-        <button class="btn-primary" (click)="openAddDocumentTypeModal()" [disabled]="loading.documentTypes">
+        <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.documentTypes">
           <i class="pi pi-plus"></i>
           <span>New Document Type</span>
         </button>
@@ -42,299 +39,218 @@
 
   <!-- Main Content -->
   <div class="main-content">
-    <!-- Stats Cards -->
-    <div class="stats-row" *ngIf="!loading.documentTypes">
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-primary">
-          <i class="pi pi-file"></i>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ documentTypes.length }}</div>
-          <div class="stat-label">Total Document Types</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-success">
-          <i class="pi pi-check-circle"></i>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ getActiveDocumentTypesCount() }}</div>
-          <div class="stat-label">Active Types</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-info">
-          <i class="pi pi-sitemap"></i>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ getDocumentTypesByFormCount() }}</div>
-          <div class="stat-label">With Form Assignment</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Document Types Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-file"></i>
-          Document Types List
-        </h3>
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input
-              type="text"
-              placeholder="Search document types..."
-              class="search-input"
-              [(ngModel)]="searchTerm"
-              (input)="filterDocumentTypes()"
-            />
-          </div>
-          <div class="results-count">
-            {{ filteredDocumentTypes.length }} document type(s) found
-          </div>
+    <!-- Document Types Section -->
+    <div class="document-types-section">
+      <div class="section-header">
+        <h3>Document Types List</h3>
+        <div class="header-actions">
+          <button pButton 
+            icon="pi pi-filter" 
+            class="p-button-text p-button-sm header-icon-btn" 
+            pTooltip="Filter"
+            tooltipPosition="top"></button>
+          <button pButton 
+            icon="pi pi-download" 
+            class="p-button-text p-button-sm header-icon-btn" 
+            pTooltip="Download"
+            tooltipPosition="top"></button>
         </div>
       </div>
 
-      <!-- Loading State -->
-      <div *ngIf="loading.documentTypes" class="loading-state">
-        <div class="spinner-wrapper">
-          <i class="pi pi-spin pi-spinner"></i>
-        </div>
+      <div *ngIf="loading.documentTypes" class="loading-container">
+        <i class="pi pi-spin pi-spinner"></i>
         <p>Loading document types...</p>
       </div>
 
-      <!-- Empty State -->
-      <div *ngIf="!loading.documentTypes && filteredDocumentTypes.length === 0" class="empty-state">
+      <div *ngIf="!loading.documentTypes && documentTypes.length === 0" class="empty-state">
         <div class="empty-icon">
-          <i class="pi pi-inbox"></i>
+          <i class="pi pi-file"></i>
         </div>
-        <h3>No Document Types Found</h3>
-        <p>Get started by adding your first document type.</p>
-        <button class="btn-primary" (click)="openAddDocumentTypeModal()">
-          <i class="pi pi-plus"></i>
-          <span>Add Document Type</span>
-        </button>
+        <h4>No Document Types Configured</h4>
+        <p>There are no document types yet. Click "Add Document Type" to create one.</p>
+        <button pButton label="Add Document Type" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
       </div>
 
-      <!-- Document Types Table -->
-      <div *ngIf="!loading.documentTypes && filteredDocumentTypes.length > 0" class="table-wrapper">
-        <p-table [value]="filteredDocumentTypes" styleClass="p-datatable-sm document-types-table">
-          <ng-template pTemplate="header">
-            <tr>
-              <th style="width: 50px"></th>
-              <th>Name</th>
-              <th>Code</th>
-              <th>Form</th>
-              <th>Menu Caption</th>
-              <th>Menu Order</th>
-              <th>Status</th>
-              <th class="text-end">Actions</th>
-            </tr>
-          </ng-template>
-          <ng-template pTemplate="body" let-documentType>
-            <tr class="align-middle">
-              <td class="icon-cell">
+      <p-table *ngIf="!loading.documentTypes && documentTypes.length > 0" 
+        [value]="getPaginatedDocumentTypes()" 
+        [paginator]="false"
+        styleClass="p-datatable-sm document-types-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>#</th>
+            <th>Document Name</th>
+            <th>Document Code</th>
+            <th>Menu Caption</th>
+            <th>Form</th>
+            <th>Parent Menu</th>
+            <th>Menu Order</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-documentType let-rowIndex="rowIndex">
+          <tr>
+            <td>{{ first + rowIndex + 1 }}</td>
+            <td>
+              <div class="document-name-cell">
                 <i class="pi pi-file"></i>
-              </td>
-              <td class="name-cell">
-                <div class="doc-name">{{ documentType.name || '-' }}</div>
-              </td>
-              <td class="code-cell">
-                <span class="badge-code">{{ documentType.code || '-' }}</span>
-              </td>
-              <td class="form-cell">
-                <span class="badge-pill" *ngIf="documentType.formBuilderId">{{ getFormName(documentType.formBuilderId) }}</span>
-                <span class="text-muted" *ngIf="!documentType.formBuilderId">-</span>
-              </td>
-              <td class="menu-cell">
-                {{ documentType.menuCaption || '-' }}
-              </td>
-              <td class="order-cell text-center">
-                {{ documentType.menuOrder || 0 }}
-              </td>
-              <td class="status-cell">
-                <span class="status-badge" [ngClass]="documentType.isActive ? 'status-active' : 'status-inactive'">
-                  {{ documentType.isActive ? 'Active' : 'Inactive' }}
-                </span>
-              </td>
-              <td class="actions-cell text-end">
-                <div class="actions-menu">
-                  <button class="action-btn action-edit" (click)="openEditDocumentTypeModal(documentType)" title="Edit">
-                    <i class="pi pi-pencil"></i>
-                  </button>
-                  <button
-                    type="button"
-                    class="action-btn"
-                    [class.action-activate]="!documentType.isActive"
-                    [class.action-deactivate]="documentType.isActive"
-                    (click)="toggleDocumentTypeStatus(documentType); $event.stopPropagation()"
-                    [title]="documentType.isActive ? 'Deactivate' : 'Activate'"
-                    [disabled]="loading.documentTypes"
-                  >
-                    <i class="pi" [class.pi-power-off]="documentType.isActive" [class.pi-check]="!documentType.isActive"></i>
-                  </button>
-                  <button class="action-btn action-delete" (click)="deleteDocumentType(documentType.id)" title="Delete">
-                    <i class="pi pi-trash"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </ng-template>
-        </p-table>
-      </div>
-    </div>
-  </div>
-
-  <!-- Document Type Modal -->
-  <div *ngIf="showDocumentTypeModal" class="modal-overlay" (click)="closeDocumentTypeModal()">
-    <div class="modal-content" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h2>
-          <i class="pi" [class.pi-plus]="!editingDocumentType" [class.pi-pencil]="!!editingDocumentType"></i>
-          {{editingDocumentType ? 'Edit Document Type' : 'Add New Document Type'}}
-        </h2>
-        <button class="btn-close" (click)="closeDocumentTypeModal()">
-          <i class="pi pi-times"></i>
-        </button>
-      </div>
-
-      <form [formGroup]="documentTypeForm" (ngSubmit)="saveDocumentType()">
-        <div class="modal-body">
-          <!-- Basic Information -->
-          <div class="form-section">
-            <h3><i class="pi pi-info-circle"></i> Basic Information</h3>
-
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('name')">
-                <label for="name">
-                  Name <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('name')" class="error-text">
-                    {{getFieldErrorMessage('name')}}
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  formControlName="name"
-                  placeholder="Enter document type name"
-                  [maxlength]="200"
-                />
+                <span>{{ documentType.name }}</span>
               </div>
-
-              <div class="form-group" [class.invalid]="isFieldInvalid('code')">
-                <label for="code">
-                  Code <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('code')" class="error-text">
-                    {{getFieldErrorMessage('code')}}
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  id="code"
-                  formControlName="code"
-                  placeholder="Enter document type code"
-                  [maxlength]="100"
-                />
+            </td>
+            <td><code>{{ documentType.code }}</code></td>
+            <td>{{ documentType.menuCaption || '-' }}</td>
+            <td>{{ getFormName() }}</td>
+            <td>{{ getParentMenuName(documentType.parentMenuId) }}</td>
+            <td>{{ documentType.menuOrder || 0 }}</td>
+            <td>
+              <span *ngIf="documentType.isActive" class="badge badge-success">
+                <i class="pi pi-check"></i>
+                Active
+              </span>
+              <span *ngIf="!documentType.isActive" class="badge badge-danger">
+                <i class="pi pi-times"></i>
+                Inactive
+              </span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button pButton 
+                  icon="pi pi-eye" 
+                  class="p-button-text p-button-sm action-btn" 
+                  pTooltip="View"
+                  tooltipPosition="top"></button>
+                <button pButton 
+                  icon="pi pi-pencil" 
+                  class="p-button-text p-button-sm action-btn" 
+                  (click)="openEditModal(documentType)"
+                  pTooltip="Edit"
+                  tooltipPosition="top"></button>
+                <button pButton 
+                  icon="pi pi-trash" 
+                  class="p-button-text p-button-sm action-btn action-btn-danger" 
+                  (click)="deleteDocumentType(documentType)"
+                  pTooltip="Delete"
+                  tooltipPosition="top"></button>
               </div>
-            </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label for="formBuilderId">Form Builder</label>
-                <select id="formBuilderId" formControlName="formBuilderId">
-                  <option [value]="null">None (No Form Assignment)</option>
-                  <option *ngFor="let form of forms" [value]="form.id">
-                    {{ form.formName }} ({{ form.formCode }})
-                  </option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Menu Configuration -->
-          <div class="form-section">
-            <h3><i class="pi pi-bars"></i> Menu Configuration</h3>
-
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('menuCaption')">
-                <label for="menuCaption">
-                  Menu Caption <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('menuCaption')" class="error-text">
-                    {{getFieldErrorMessage('menuCaption')}}
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  id="menuCaption"
-                  formControlName="menuCaption"
-                  placeholder="Enter menu caption"
-                  [maxlength]="200"
-                />
-              </div>
-
-              <div class="form-group" [class.invalid]="isFieldInvalid('menuOrder')">
-                <label for="menuOrder">
-                  Menu Order
-                  <span *ngIf="isFieldInvalid('menuOrder')" class="error-text">
-                    {{getFieldErrorMessage('menuOrder')}}
-                  </span>
-                </label>
-                <input
-                  type="number"
-                  id="menuOrder"
-                  formControlName="menuOrder"
-                  min="0"
-                  placeholder="Menu display order"
-                />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label for="parentMenuId">Parent Menu ID</label>
-                <input
-                  type="number"
-                  id="parentMenuId"
-                  formControlName="parentMenuId"
-                  min="0"
-                  placeholder="Optional parent menu ID"
-                />
-              </div>
-            </div>
-          </div>
-
-          <!-- Active Status -->
-          <div class="form-section">
-            <h3><i class="pi pi-info-circle"></i> Status</h3>
-            <div class="form-row">
-              <div class="form-group checkbox-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" formControlName="isActive" id="isActive">
-                  <span class="checkmark"></span>
-                  Active
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="closeDocumentTypeModal()" [disabled]="loading.save">
-            Cancel
-          </button>
-
-          <button type="submit" class="btn btn-primary" [disabled]="documentTypeForm.invalid || loading.save">
-            <i class="pi" [class.pi-save]="editingDocumentType" [class.pi-plus]="!editingDocumentType"></i>
-            {{editingDocumentType ? 'Update Document Type' : 'Create Document Type'}}
-            <span *ngIf="loading.save" class="spinner-small"></span>
-          </button>
-        </div>
-      </form>
+      <p-paginator 
+        *ngIf="!loading.documentTypes && documentTypes.length > 0"
+        [first]="first"
+        [rows]="rows"
+        [totalRecords]="totalRecords"
+        [rowsPerPageOptions]="[10, 20, 50]"
+        (onPageChange)="onPageChange($event)"
+        styleClass="document-types-paginator">
+      </p-paginator>
     </div>
   </div>
 </div>
+
+<!-- Document Type Modal -->
+<p-dialog
+  [(visible)]="showModal"
+  [modal]="true"
+  [header]="(editingDocumentType ? 'Edit Document Type' : 'Create Document Type')"
+  [style]="{ width: '700px' }"
+  [draggable]="false"
+  [resizable]="false"
+  (onHide)="closeModal()">
+  <form [formGroup]="documentTypeForm" (ngSubmit)="saveDocumentType()">
+    <div class="form-grid">
+      <div class="form-group" [class.invalid]="isFieldInvalid('name')">
+        <label for="name">
+          Document Name <span class="text-danger">*</span>
+          <span *ngIf="isFieldInvalid('name')" class="error-text">
+            {{getFieldErrorMessage('name')}}
+          </span>
+        </label>
+        <input type="text" id="name" pInputText formControlName="name" placeholder="Enter document name" />
+      </div>
+
+      <div class="form-group" [class.invalid]="isFieldInvalid('code')">
+        <label for="code">
+          Document Code <span class="text-danger">*</span>
+          <span *ngIf="isFieldInvalid('code')" class="error-text">
+            {{getFieldErrorMessage('code')}}
+          </span>
+        </label>
+        <input type="text" id="code" pInputText formControlName="code" placeholder="Enter document code" />
+      </div>
+
+      <div class="form-group">
+        <label for="formBuilderId">
+          Form
+        </label>
+        <input 
+          type="text" 
+          id="formBuilderId" 
+          class="p-inputtext w-full" 
+          [value]="getFormName()"
+          readonly
+          disabled
+        />
+        <small class="form-text text-muted">
+          Document type is linked to this form.
+        </small>
+      </div>
+
+      <div class="form-group" [class.invalid]="isFieldInvalid('menuCaption')">
+        <label for="menuCaption">
+          Menu Caption <span class="text-danger">*</span>
+          <span *ngIf="isFieldInvalid('menuCaption')" class="error-text">
+            {{getFieldErrorMessage('menuCaption')}}
+          </span>
+        </label>
+        <input type="text" id="menuCaption" pInputText formControlName="menuCaption" placeholder="Enter menu caption" />
+      </div>
+
+      <div class="form-group">
+        <label for="menuOrder">Menu Order</label>
+        <p-inputNumber id="menuOrder" formControlName="menuOrder" [showButtons]="true" [min]="0" styleClass="w-full"></p-inputNumber>
+      </div>
+
+      <div class="form-group">
+        <label for="parentMenuId">Parent Menu</label>
+        <select 
+          id="parentMenuId" 
+          formControlName="parentMenuId" 
+          class="p-inputtext w-full"
+          [disabled]="loadingParentOptions">
+          <option [ngValue]="null">No Parent (Root)</option>
+          <option 
+            *ngFor="let option of parentMenuOptions" 
+            [ngValue]="option.id">
+            {{ getParentMenuDisplayName(option) }}
+          </option>
+        </select>
+        <small class="form-text text-muted" *ngIf="!loadingParentOptions">
+          Select a parent menu to create a hierarchical structure. Leave as "No Parent" for root level.
+        </small>
+        <small class="form-text text-muted" *ngIf="loadingParentOptions">
+          <i class="pi pi-spin pi-spinner"></i> Loading parent menu options...
+        </small>
+      </div>
+
+      <div class="form-group checkbox-group">
+        <p-checkbox formControlName="isActive" inputId="isActive" label="Is Active"></p-checkbox>
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeModal()" [disabled]="loading.save"></button>
+      <button type="submit" pButton 
+        [label]="(editingDocumentType ? 'Update' : 'Create') + ' Document Type'" 
+        [icon]="editingDocumentType ? 'pi pi-save' : 'pi pi-plus'"
+        [disabled]="documentTypeForm.invalid || loading.save"
+        [loading]="loading.save"></button>
+    </div>
+  </form>
+</p-dialog>
+
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
 

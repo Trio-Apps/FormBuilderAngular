@@ -79,6 +79,13 @@ export const routes: Routes = [
               .then(m => m.FormRulesListComponent) 
           },
           
+          // إدارة Document Type لنموذج معين (مثال: form-builder/document-type/5)
+          { 
+            path: 'document-type/:formId', 
+            loadComponent: () => import('./views/FormBuilder/components/document-type/document-type.component')
+              .then(m => m.DocumentTypeComponent) 
+          },
+          
           // حقول تبويب معين (مثال: form-builder/fields/10)
           { 
             path: 'fields/:tabId', 
@@ -114,18 +121,11 @@ export const routes: Routes = [
               .then(m => m.FieldTypesListComponent) 
           },
           
-          // إدارة أنواع المستندات (Document Types)
+          // إدارة أنواع المستندات (Document Types) - مرتبطة بفورم معين
           { 
-            path: 'document-types', 
+            path: 'document-types/:formId', 
             loadComponent: () => import('./views/document-types/document-types-list/document-types-list.component')
               .then(m => m.DocumentTypesListComponent) 
-          },
-          
-          // إدارة Document Settings لنموذج معين (مثال: form-builder/document-settings/5)
-          { 
-            path: 'document-settings/:id', 
-            loadComponent: () => import('./views/FormBuilder/components/document-settings/document-settings.component')
-              .then(m => m.DocumentSettingsComponent) 
           },
           
           // NOTE: Field options are now managed directly inside the Fields screen

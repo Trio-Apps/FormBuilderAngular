@@ -1,0 +1,502 @@
+<div class="fields-page-container">
+ 
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/form-builder/forms" title="Back to Forms">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Document Type</h1>
+          <p class="page-subtitle" *ngIf="form">Form: {{ form.formName }} ({{ form.formCode }})</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadDocumentType()" [disabled]="loadingState" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openModal()" [disabled]="loadingState">
+          <i class="pi" [class.pi-plus]="!documentType" [class.pi-pencil]="!!documentType"></i>
+          <span>{{ documentType ? 'Edit Document Type' : 'Create Document Type' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Forms</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-file"></i>
+        <span>Document Type</span>
+      </span>
+    </nav>
+  </div>
+
+  <div class="main-content">
+    <div class="loading-container" *ngIf="loadingState && !documentType">
+      <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+      <p>Loading document type...</p>
+    </div>
+
+    <div *ngIf="!loadingState || documentType" class="document-type-card">
+      <div *ngIf="!documentType" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-file"></i>
+        </div>
+        <h3>No Document Type Configured</h3>
+        <p>This form doesn't have a document type yet. Click "Create Document Type" to configure one.</p>
+        <button class="btn-primary" (click)="openModal()" style="padding: 14px 32px; font-size: 15px; border-radius: 12px;">
+          <i class="pi pi-plus"></i>
+          <span>Create Document Type</span>
+        </button>
+      </div>
+
+      <div *ngIf="documentType" class="document-type-info">
+        <div class="info-header">
+          <div class="header-content">
+            <div class="header-icon">
+              <i class="pi pi-file"></i>
+            </div>
+            <div class="header-text">
+              <h2>{{ documentType.name }}</h2>
+              <p class="header-subtitle">{{ documentType.code }}</p>
+            </div>
+          </div>
+          <div class="header-actions">
+            <div class="status-badge" [class.status-active]="documentType.isActive" [class.status-inactive]="!documentType.isActive">
+              <i class="pi" [class.pi-check-circle]="documentType.isActive" [class.pi-times-circle]="!documentType.isActive"></i>
+              <span>{{ documentType.isActive ? 'Active' : 'Inactive' }}</span>
+            </div>
+            <button pButton label="Add Document Type" icon="pi pi-plus" class="p-button-primary p-button-sm" (click)="openAddModal()"></button>
+          </div>
+        </div>
+
+        <div class="info-table-container">
+          <p-table [value]="[documentType]" styleClass="p-datatable-striped p-datatable-sm info-table">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>
+                  <i class="pi pi-tag"></i>
+                  <span>Document Name</span>
+                </th>
+                <th>
+                  <i class="pi pi-code"></i>
+                  <span>Document Code</span>
+                </th>
+                <th>
+                  <i class="pi pi-bars"></i>
+                  <span>Menu Caption</span>
+                </th>
+                <th>
+                  <i class="pi pi-sort"></i>
+                  <span>Menu Order</span>
+                </th>
+                <th>
+                  <i class="pi pi-sitemap"></i>
+                  <span>Parent Menu</span>
+                </th>
+                <th>
+                  <i class="pi pi-cog"></i>
+                  <span>Actions</span>
+                </th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-docType>
+              <tr>
+                <td>
+                  <div class="table-cell-content">
+                    <span class="table-value">{{ docType.name }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="table-cell-content">
+                    <code class="table-code">{{ docType.code }}</code>
+                  </div>
+                </td>
+                <td>
+                  <div class="table-cell-content">
+                    <span class="table-value">{{ docType.menuCaption || '-' }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="table-cell-content">
+                    <span class="table-value">{{ docType.menuOrder || 0 }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="table-cell-content">
+                    <span class="table-value">{{ getParentMenuName(docType.parentMenuId) }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="table-actions">
+                    <button pButton 
+                      icon="pi pi-pencil" 
+                      class="p-button-text p-button-sm p-button-rounded p-button-primary" 
+                      (click)="openEditModal(docType)"
+                      pTooltip="Edit Document Type"
+                      tooltipPosition="top"></button>
+                    <button pButton 
+                      icon="pi pi-trash" 
+                      class="p-button-text p-button-sm p-button-rounded p-button-danger" 
+                      (click)="deleteDocumentType(docType)"
+                      pTooltip="Delete Document Type"
+                      tooltipPosition="top"></button>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </div>
+
+      <!-- Document Series Section -->
+      <div *ngIf="documentType" class="document-series-section">
+        <div class="section-header">
+          <div class="section-title-wrapper">
+            <div class="section-icon">
+              <i class="pi pi-list"></i>
+            </div>
+            <div>
+              <h3>Document Series</h3>
+              <p class="section-subtitle">Manage numbering series for this document type</p>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button pButton 
+              icon="pi pi-refresh" 
+              class="p-button-text p-button-sm p-button-rounded" 
+              (click)="loadDocumentSeries()" 
+              [disabled]="loadingSeries"
+              pTooltip="Refresh Series"
+              tooltipPosition="top"></button>
+            <button pButton label="Add Series" icon="pi pi-plus" class="p-button-primary p-button-sm" 
+              (click)="openSeriesModal()" [disabled]="loadingSeries"></button>
+          </div>
+        </div>
+
+        <div *ngIf="loadingSeries" class="loading-container">
+          <i class="pi pi-spin pi-spinner"></i>
+          <p>Loading document series...</p>
+        </div>
+
+        <div *ngIf="!loadingSeries && documentSeries.length === 0" class="empty-state">
+          <div class="empty-icon">
+            <i class="pi pi-list"></i>
+          </div>
+          <h4>No Document Series Configured</h4>
+          <p>This document type doesn't have any series yet. Click "Add Series" to create one.</p>
+          <button pButton label="Add Series" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openSeriesModal()"></button>
+        </div>
+
+        <div *ngIf="!loadingSeries && documentSeries.length > 0" class="series-table-container">
+          <p-table 
+            [value]="documentSeries" 
+            [paginator]="false"
+            styleClass="p-datatable-sm series-table">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>
+                  <i class="pi pi-code"></i>
+                  <span>Series Code</span>
+                </th>
+                <th>
+                  <i class="pi pi-briefcase"></i>
+                  <span>Project</span>
+                </th>
+                <th>
+                  <i class="pi pi-sort-numeric-up"></i>
+                  <span>Next Number</span>
+                </th>
+                <th>
+                  <i class="pi pi-star"></i>
+                  <span>Default</span>
+                </th>
+                <th>
+                  <i class="pi pi-circle-fill"></i>
+                  <span>Status</span>
+                </th>
+                <th>
+                  <i class="pi pi-cog"></i>
+                  <span>Actions</span>
+                </th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-series>
+              <tr class="series-row">
+                <td>
+                  <div class="series-code-cell">
+                    <i class="pi pi-hashtag"></i>
+                    <code class="series-code">{{ series.seriesCode }}</code>
+                  </div>
+                </td>
+                <td>
+                  <div class="project-cell">
+                    <i class="pi pi-briefcase"></i>
+                    <span class="project-name">{{ series.projectName || (series.projectId ? 'Project #' + series.projectId : 'All Projects') }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="number-cell">
+                    <span class="number-badge">{{ series.nextNumber }}</span>
+                  </div>
+                </td>
+                <td>
+                  <span *ngIf="series.isDefault" class="badge badge-default">
+                    <i class="pi pi-star-fill"></i>
+                    <span>Default</span>
+                  </span>
+                  <span *ngIf="!series.isDefault" class="badge badge-secondary">
+                    <i class="pi pi-star"></i>
+                    <span>Not Default</span>
+                  </span>
+                </td>
+                <td>
+                  <span [class]="series.isActive ? 'badge badge-success' : 'badge badge-danger'">
+                    <i class="pi" [class.pi-check-circle]="series.isActive" [class.pi-times-circle]="!series.isActive"></i>
+                    <span>{{ series.isActive ? 'Active' : 'Inactive' }}</span>
+                  </span>
+                </td>
+                <td>
+                  <div class="series-actions">
+                    <button pButton 
+                      icon="pi pi-pencil" 
+                      class="p-button-text p-button-sm p-button-rounded p-button-primary" 
+                      (click)="openSeriesModal(true, series)"
+                      pTooltip="Edit Series"
+                      tooltipPosition="top"></button>
+                    <button pButton 
+                      [icon]="series.isActive ? 'pi pi-power-off' : 'pi pi-check'" 
+                      class="p-button-text p-button-sm p-button-rounded" 
+                      [class.p-button-warning]="series.isActive"
+                      [class.p-button-success]="!series.isActive"
+                      (click)="toggleSeriesStatus(series)"
+                      [pTooltip]="series.isActive ? 'Deactivate Series' : 'Activate Series'"
+                      tooltipPosition="top"></button>
+                    <button pButton 
+                      icon="pi pi-trash" 
+                      class="p-button-text p-button-sm p-button-rounded p-button-danger" 
+                      (click)="deleteDocumentSeries(series)"
+                      pTooltip="Delete Series"
+                      tooltipPosition="top"></button>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p-dialog
+  [(visible)]="showModal"
+  [modal]="true"
+  [header]="(editing ? 'Edit Document Type' : 'Create Document Type')"
+  [style]="{ width: '600px' }"
+  [draggable]="false"
+  [resizable]="false"
+  (onHide)="closeModal()">
+  <form [formGroup]="documentTypeForm" (ngSubmit)="saveDocumentType()">
+    <div class="form-grid">
+      <div class="form-group" [class.invalid]="isFieldInvalid('name')">
+        <label for="name">
+          Document Name <span class="text-danger">*</span>
+          <span *ngIf="isFieldInvalid('name')" class="error-text">
+            {{getFieldErrorMessage('name')}}
+          </span>
+        </label>
+        <input type="text" id="name" name="name" pInputText formControlName="name" placeholder="Enter document name" />
+      </div>
+
+      <div class="form-group" [class.invalid]="isFieldInvalid('code')">
+        <label for="code">
+          Document Code <span class="text-danger">*</span>
+          <span *ngIf="isFieldInvalid('code')" class="error-text">
+            {{getFieldErrorMessage('code')}}
+          </span>
+        </label>
+        <input type="text" id="code" name="code" pInputText formControlName="code" placeholder="Enter document code" />
+      </div>
+
+      <div class="form-group" [class.invalid]="isFieldInvalid('menuCaption')">
+        <label for="menuCaption">
+          Menu Caption <span class="text-danger">*</span>
+          <span *ngIf="isFieldInvalid('menuCaption')" class="error-text">
+            {{getFieldErrorMessage('menuCaption')}}
+          </span>
+        </label>
+        <input type="text" id="menuCaption" name="menuCaption" pInputText formControlName="menuCaption" placeholder="Enter menu caption" />
+      </div>
+
+      <div class="form-group">
+        <label for="menuOrder">Menu Order</label>
+        <p-inputNumber id="menuOrder" name="menuOrder" formControlName="menuOrder" [showButtons]="true" [min]="0" styleClass="w-full"></p-inputNumber>
+      </div>
+
+      <div class="form-group">
+        <label for="parentMenuId">Parent Menu</label>
+        <select 
+          id="parentMenuId" 
+          name="parentMenuId"
+          formControlName="parentMenuId" 
+          class="p-inputtext w-full">
+          <option [ngValue]="null">No Parent (Root)</option>
+          <option 
+            *ngFor="let option of parentMenuOptions" 
+            [ngValue]="option.id">
+            {{ getParentMenuDisplayName(option) }}
+          </option>
+        </select>
+        <small class="form-text text-muted" *ngIf="!loadingParentOptions">
+          Select a parent menu to create a hierarchical structure. Leave as "No Parent" for root level.
+        </small>
+        <small class="form-text text-muted" *ngIf="loadingParentOptions">
+          <i class="pi pi-spin pi-spinner"></i> Loading parent menu options...
+        </small>
+      </div>
+
+      <div class="form-group checkbox-group">
+        <p-checkbox formControlName="isActive" inputId="isActive" label="Is Active"></p-checkbox>
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeModal()" [disabled]="loading.save"></button>
+      <button type="submit" pButton 
+        [label]="(editing ? 'Update' : 'Create') + ' Document Type'" 
+        [icon]="editing ? 'pi pi-save' : 'pi pi-plus'"
+        [disabled]="documentTypeForm.invalid || loading.save"
+        [loading]="loading.save"></button>
+    </div>
+  </form>
+</p-dialog>
+
+<!-- Document Series Modal -->
+<p-dialog
+  [(visible)]="showSeriesModal"
+  [modal]="true"
+  [header]="(editingSeries ? 'Edit Document Series' : 'Create Document Series')"
+  [style]="{ width: '600px' }"
+  [draggable]="false"
+  [resizable]="false"
+  (onHide)="closeSeriesModal()">
+  <form [formGroup]="seriesForm" (ngSubmit)="saveDocumentSeries()">
+    <div class="form-grid">
+      <div class="form-group" [class.invalid]="isSeriesFieldInvalid('projectId')">
+        <label for="projectId">
+          Project <span class="text-danger">*</span>
+          <span *ngIf="isSeriesFieldInvalid('projectId')" class="error-text">
+            {{getSeriesFieldErrorMessage('projectId')}}
+          </span>
+        </label>
+        <select 
+          id="projectId" 
+          name="projectId"
+          formControlName="projectId" 
+          class="p-inputtext w-full"
+          [class.ng-invalid]="isSeriesFieldInvalid('projectId')">
+          <option [ngValue]="null" disabled>Select a Project</option>
+          <option *ngFor="let project of projects" [ngValue]="project.id">
+            {{ project.projectName || ('Project #' + project.id) }}
+          </option>
+        </select>
+        <small class="form-text text-muted" *ngIf="!loadingProjects && projects.length === 0">
+          <i class="pi pi-exclamation-triangle"></i> No active projects available. Please create a project first.
+        </small>
+        <small class="form-text text-muted" *ngIf="!loadingProjects && projects.length > 0">
+          <i class="pi pi-info-circle"></i> Select a project for this document series
+        </small>
+        <small class="form-text text-muted" *ngIf="loadingProjects">
+          <i class="pi pi-spin pi-spinner"></i> Loading projects...
+        </small>
+      </div>
+
+      <div class="form-group" [class.invalid]="isSeriesFieldInvalid('seriesCode')">
+        <label for="seriesCode">
+          Series Code (Prefix) <span class="text-danger">*</span>
+          <span *ngIf="isSeriesFieldInvalid('seriesCode')" class="error-text">
+            {{getSeriesFieldErrorMessage('seriesCode')}}
+          </span>
+        </label>
+        <input 
+          type="text" 
+          id="seriesCode" 
+          name="seriesCode"
+          pInputText 
+          formControlName="seriesCode" 
+          placeholder="e.g., LC-AND1-2025"
+          class="w-full"
+          [class.ng-invalid]="isSeriesFieldInvalid('seriesCode')" />
+        <small class="form-text text-muted">
+          <i class="pi pi-info-circle"></i> Prefix for document numbering (e.g., LC-AND1-2025)
+        </small>
+      </div>
+
+      <div class="form-group" [class.invalid]="isSeriesFieldInvalid('nextNumber')">
+        <label for="nextNumber">
+          Next Number <span class="text-danger">*</span>
+          <span *ngIf="isSeriesFieldInvalid('nextNumber')" class="error-text">
+            {{getSeriesFieldErrorMessage('nextNumber')}}
+          </span>
+        </label>
+        <p-inputNumber 
+          id="nextNumber" 
+          name="nextNumber"
+          formControlName="nextNumber" 
+          [showButtons]="true" 
+          [min]="1" 
+          styleClass="w-full"
+          [class.ng-invalid]="isSeriesFieldInvalid('nextNumber')">
+        </p-inputNumber>
+        <small class="form-text text-muted">
+          <i class="pi pi-info-circle"></i> Starting number for the series
+        </small>
+      </div>
+
+      <div class="form-group checkbox-group">
+        <div class="checkbox-wrapper">
+          <p-checkbox 
+            formControlName="isDefault" 
+            inputId="isDefault" 
+            [binary]="true"
+            label="Is Default">
+          </p-checkbox>
+          <small class="form-text text-muted">
+            <i class="pi pi-info-circle"></i> Only one default series per project
+          </small>
+        </div>
+      </div>
+
+      <div class="form-group checkbox-group">
+        <div class="checkbox-wrapper">
+          <p-checkbox 
+            formControlName="isActive" 
+            inputId="seriesIsActive" 
+            [binary]="true"
+            label="Is Active">
+          </p-checkbox>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" 
+        (click)="closeSeriesModal()" [disabled]="saving"></button>
+      <button type="submit" pButton 
+        [label]="(editingSeries ? 'Update' : 'Create') + ' Series'" 
+        [icon]="editingSeries ? 'pi pi-save' : 'pi pi-plus'"
+        [disabled]="seriesForm.invalid || saving"
+        [loading]="saving"></button>
+    </div>
+  </form>
+</p-dialog>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>

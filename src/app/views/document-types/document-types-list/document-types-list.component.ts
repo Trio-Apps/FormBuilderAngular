@@ -1,6 +1,6 @@
-import { Component, OnInit, ChangeDetectorRef, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { RouterLink, ActivatedRoute } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { FormsService } from '../../FormBuilder/services/forms.service';
@@ -10,8 +10,16 @@ import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
+import { DialogModule } from 'primeng/dialog';
+import { InputTextModule } from 'primeng/inputtext';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { CheckboxModule } from 'primeng/checkbox';
+import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
+import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
+import { forkJoin, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 
 @Component({
   selector: 'app-document-types-list',
@@ -24,7 +32,13 @@ import { TranslationService } from '../../../core/services/translation.service';
     ToastModule,
     ConfirmDialogModule,
     TooltipModule,
-    TableModule
+    DialogModule,
+    InputTextModule,
+    InputNumberModule,
+    CheckboxModule,
+    ButtonModule,
+    TableModule,
+    PaginatorModule
   ],
   templateUrl: './document-types-list.component.html',
   styleUrls: ['./document-types-list.component.scss'],
@@ -34,27 +48,36 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   // Data Arrays
   documentTypes: DocumentType[] = [];
   filteredDocumentTypes: DocumentType[] = [];
-  forms: FormBuilderDto[] = [];
+  formBuilderId!: number; // Form ID from route parameter
+  currentForm: FormBuilderDto | null = null;
 
   // Loading States
   loading = {
     documentTypes: false,
-    forms: false,
     save: false,
-    delete: false
+    delete: false,
+    forms: false
   };
 
   // Document Type Modal
-  showDocumentTypeModal = false;
+  showModal = false;
+  documentTypeForm!: FormGroup;
   editingDocumentType: DocumentType | null = null;
 
-  // Reactive Form
-  documentTypeForm: FormGroup;
+  // Parent Menu Options
+  parentMenuOptions: DocumentType[] = [];
+  loadingParentOptions = false;
 
   // Search Filter
   searchTerm = '';
 
+  // Pagination
+  first = 0;
+  rows = 10;
+  totalRecords = 0;
+
   constructor(
+    private route: ActivatedRoute,
     private documentTypesService: DocumentTypesService,
     private formsService: FormsService,
     private fb: FormBuilder,
@@ -63,11 +86,10 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     private confirmationService: ConfirmationService,
     public translationService: TranslationService
   ) {
-    // Initialize the form
+    // Initialize the form (formBuilderId will be set from route parameter)
     this.documentTypeForm = this.fb.group({
       name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(200)]],
       code: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
-      formBuilderId: [null],
       menuCaption: ['', [Validators.required, Validators.maxLength(200)]],
       menuOrder: [0, [Validators.min(0)]],
       parentMenuId: [null],
@@ -83,48 +105,91 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       this.translationService.setLanguage('en');
       localStorage.setItem('adminLanguagePreference', 'en');
     }
-
-    this.loadDocumentTypes();
-    this.loadForms();
+    
+    // Get formId from route parameter
+    this.route.params.subscribe(params => {
+      const formId = +params['formId'];
+      if (formId) {
+        this.formBuilderId = formId;
+        this.loadForm();
+        this.loadDocumentTypes();
+      } else {
+        // If no formId in route, show error or load all
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: 'Error', 
+          detail: 'Form ID is required' 
+        });
+      }
+    });
   }
 
   ngOnDestroy(): void {
     // Cleanup if needed
   }
 
-  switchLanguage(lang: 'en' | 'ar'): void {
-    this.translationService.setLanguage(lang);
-    localStorage.setItem('adminLanguagePreference', lang);
-  }
-
-  loadDocumentTypes(): void {
-    this.loading.documentTypes = true;
-    this.documentTypesService.getAllDocumentTypes().subscribe({
-      next: (types: DocumentType[]) => {
-        this.documentTypes = types;
-        this.filteredDocumentTypes = [...types];
-        this.loading.documentTypes = false;
+  loadForm(): void {
+    if (!this.formBuilderId) return;
+    
+    this.loading.forms = true;
+    this.formsService.getFormById(this.formBuilderId).subscribe({
+      next: (form) => {
+        this.currentForm = form;
+        this.loading.forms = false;
         this.cdr.detectChanges();
       },
       error: () => {
-        this.documentTypes = [];
-        this.filteredDocumentTypes = [];
-        this.loading.documentTypes = false;
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load document types' });
+        this.currentForm = null;
+        this.loading.forms = false;
+        this.cdr.detectChanges();
       }
     });
   }
 
-  loadForms(): void {
-    this.loading.forms = true;
-    this.formsService.getForms(1, 1000).subscribe({
-      next: (paged) => {
-        this.forms = paged.items || [];
-        this.loading.forms = false;
+  loadDocumentTypes(): void {
+    if (!this.formBuilderId) return;
+    
+    this.loading.documentTypes = true;
+    // Load document types filtered by formBuilderId
+    this.documentTypesService.getAllDocumentTypes().subscribe({
+      next: (types: DocumentType[]) => {
+        // Filter document types by formBuilderId
+        this.documentTypes = types.filter(t => t.formBuilderId === this.formBuilderId);
+        this.filteredDocumentTypes = [...this.documentTypes];
+        this.totalRecords = this.filteredDocumentTypes.length;
+        this.loading.documentTypes = false;
+        this.cdr.detectChanges();
       },
-      error: () => {
-        this.forms = [];
-        this.loading.forms = false;
+      error: (error: any) => {
+        console.error('Error loading document types:', error);
+        this.documentTypes = [];
+        this.filteredDocumentTypes = [];
+        this.loading.documentTypes = false;
+        
+        let errorMessage = 'Failed to load document types';
+        if (error?.error?.message) {
+          errorMessage = error.error.message;
+        } else if (error?.error?.detail) {
+          errorMessage = error.error.detail;
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+        
+        if (error?.status === 400) {
+          errorMessage = 'Bad request. Please check the API endpoint configuration.';
+        } else if (error?.status === 404) {
+          errorMessage = 'Document types endpoint not found.';
+        } else if (error?.status === 0) {
+          errorMessage = 'Cannot connect to server. Please ensure the backend server is running.';
+        }
+        
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: `Error (${error?.status || 'Unknown'})`, 
+          detail: errorMessage,
+          life: 8000
+        });
+        this.cdr.detectChanges();
       }
     });
   }
@@ -132,30 +197,47 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   filterDocumentTypes(): void {
     if (!this.searchTerm.trim()) {
       this.filteredDocumentTypes = [...this.documentTypes];
+      this.totalRecords = this.filteredDocumentTypes.length;
       return;
     }
 
     const term = this.searchTerm.toLowerCase();
     this.filteredDocumentTypes = this.documentTypes.filter(type =>
-      type.name.toLowerCase().includes(term) ||
-      type.code.toLowerCase().includes(term) ||
-      (type.menuCaption && type.menuCaption.toLowerCase().includes(term)) ||
-      (type.formBuilderName && type.formBuilderName.toLowerCase().includes(term))
+      type.name?.toLowerCase().includes(term) ||
+      type.code?.toLowerCase().includes(term) ||
+      type.menuCaption?.toLowerCase().includes(term)
     );
+    this.totalRecords = this.filteredDocumentTypes.length;
+  }
+
+  getFormName(): string {
+    return this.currentForm ? (this.currentForm.formName || this.currentForm.formCode || `Form #${this.formBuilderId}`) : (this.formBuilderId ? `Form #${this.formBuilderId}` : '-');
+  }
+
+  onPageChange(event: any): void {
+    this.first = event.first;
+    this.rows = event.rows;
+  }
+
+  getPaginatedDocumentTypes(): DocumentType[] {
+    return this.filteredDocumentTypes.slice(this.first, this.first + this.rows);
+  }
+
+  getParentMenuName(parentMenuId?: number): string {
+    if (!parentMenuId) return '-';
+    const parent = this.documentTypes.find(t => t.id === parentMenuId);
+    return parent ? (parent.name || `Document Type #${parentMenuId}`) : `Document Type #${parentMenuId}`;
   }
 
   getActiveDocumentTypesCount(): number {
     return this.documentTypes.filter(t => t.isActive).length;
   }
 
-  getDocumentTypesByFormCount(): number {
-    return this.documentTypes.filter(t => t.formBuilderId).length;
-  }
-
-  openAddDocumentTypeModal(): void {
+  openAddModal(): void {
     this.editingDocumentType = null;
-    this.showDocumentTypeModal = true;
-
+    this.showModal = true;
+    this.loadParentMenuOptions();
+    
     this.documentTypeForm.reset({
       name: '',
       code: '',
@@ -167,14 +249,14 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     });
   }
 
-  openEditDocumentTypeModal(documentType: DocumentType): void {
+  openEditModal(documentType: DocumentType): void {
     this.editingDocumentType = documentType;
-    this.showDocumentTypeModal = true;
-
+    this.showModal = true;
+    this.loadParentMenuOptions();
+    
     this.documentTypeForm.patchValue({
       name: documentType.name || '',
       code: documentType.code || '',
-      formBuilderId: documentType.formBuilderId || null,
       menuCaption: documentType.menuCaption || '',
       menuOrder: documentType.menuOrder || 0,
       parentMenuId: documentType.parentMenuId || null,
@@ -182,8 +264,40 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     });
   }
 
-  closeDocumentTypeModal(): void {
-    this.showDocumentTypeModal = false;
+  loadParentMenuOptions(): void {
+    this.loadingParentOptions = true;
+    this.documentTypesService.getActiveDocumentTypes().subscribe({
+      next: (types: DocumentType[]) => {
+        // Filter out the current document type to prevent circular reference when editing
+        if (this.editingDocumentType && this.editingDocumentType.id) {
+          this.parentMenuOptions = types.filter(t => t.id !== this.editingDocumentType!.id);
+        } else {
+          this.parentMenuOptions = types;
+        }
+        this.loadingParentOptions = false;
+        this.cdr.detectChanges();
+      },
+      error: (error: any) => {
+        console.error('Error loading parent menu options:', error);
+        this.parentMenuOptions = [];
+        this.loadingParentOptions = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  getParentMenuDisplayName(docType: DocumentType): string {
+    if (!docType) return '';
+    const name = docType.name || '';
+    const caption = docType.menuCaption || '';
+    if (caption && caption !== name) {
+      return `${name} (${caption})`;
+    }
+    return name;
+  }
+
+  closeModal(): void {
+    this.showModal = false;
     this.editingDocumentType = null;
     this.documentTypeForm.reset();
   }
@@ -196,112 +310,268 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     }
 
     this.loading.save = true;
-    const documentTypeData = this.documentTypeForm.value;
+    const formData = this.documentTypeForm.value;
 
-    if (this.editingDocumentType) {
-      // Update existing document type
-      const documentTypeId = Number(this.editingDocumentType.id);
-      if (isNaN(documentTypeId)) {
+    if (!formData.name || !formData.name.trim()) {
+      this.loading.save = false;
+      this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Document name is required' });
+      return;
+    }
+
+    if (!formData.code || !formData.code.trim()) {
+      this.loading.save = false;
+      this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Document code is required' });
+      return;
+    }
+
+    if (!formData.menuCaption || !formData.menuCaption.trim()) {
+      this.loading.save = false;
+      this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Menu caption is required' });
+      return;
+    }
+
+    if (!this.formBuilderId) {
+      this.loading.save = false;
+      this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Form ID is required' });
+      return;
+    }
+
+    if (this.editingDocumentType && this.editingDocumentType.id) {
+      // Handle select value: ngValue returns actual null or number
+      const parentMenuIdValue = formData.parentMenuId;
+      const newParentMenuId = (parentMenuIdValue !== null && parentMenuIdValue !== undefined)
+        ? Number(parentMenuIdValue) 
+        : undefined;
+      
+      const currentParentMenuId = this.editingDocumentType.parentMenuId || undefined;
+      
+      // Check if parentMenuId is being changed and if this document type has children
+      if (newParentMenuId !== currentParentMenuId) {
+        // Check if this document type has children that would be affected
+        this.documentTypesService.hasChildDocumentTypes(this.editingDocumentType.id).subscribe({
+          next: (hasChildren: boolean) => {
+            if (hasChildren) {
+              this.loading.save = false;
+              this.messageService.add({
+                severity: 'warn',
+                summary: 'Cannot Update Parent Menu',
+                detail: 'This document type is used as a parent menu for other document types. You cannot change its parent menu relationship.',
+                life: 8000
+              });
+              return;
+            }
+            
+            // Proceed with update
+            this.performUpdate(formData, newParentMenuId);
+          },
+          error: (error: any) => {
+            console.error('Error checking for child document types:', error);
+            // If check fails, proceed with update but handle errors
+            this.performUpdate(formData, newParentMenuId);
+          }
+        });
+      } else {
+        // No change to parentMenuId, proceed with update
+        this.performUpdate(formData, newParentMenuId);
+      }
+    } else {
+      // Creating new document type
+      if (!this.formBuilderId) {
         this.loading.save = false;
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Invalid document type ID' });
+        this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Form ID is required' });
         return;
       }
 
-      const updateDto: UpdateDocumentTypeDto = {
-        name: documentTypeData.name?.trim() || undefined,
-        code: documentTypeData.code?.trim() || undefined,
-        formBuilderId: documentTypeData.formBuilderId || undefined,
-        menuCaption: documentTypeData.menuCaption?.trim() || undefined,
-        menuOrder: documentTypeData.menuOrder || undefined,
-        parentMenuId: documentTypeData.parentMenuId || undefined,
-        isActive: documentTypeData.isActive !== false
-      };
-
-      this.documentTypesService.updateDocumentType(documentTypeId, updateDto).subscribe({
-        next: () => {
-          this.loading.save = false;
-          this.loadDocumentTypes();
-          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Document type updated successfully' });
-          this.closeDocumentTypeModal();
-          this.cdr.detectChanges();
-        },
-        error: (error) => {
-          this.loading.save = false;
-          console.error('Error updating document type:', error);
-          const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to update document type';
-          this.messageService.add({ severity: 'error', summary: 'Error', detail: errorMessage });
-        }
-      });
-    } else {
-      // Create new document type
       const createDto: CreateDocumentTypeDto = {
-        name: documentTypeData.name.trim(),
-        code: documentTypeData.code.trim(),
-        formBuilderId: documentTypeData.formBuilderId || undefined,
-        menuCaption: documentTypeData.menuCaption.trim(),
-        menuOrder: documentTypeData.menuOrder || 0,
-        parentMenuId: documentTypeData.parentMenuId || undefined,
-        isActive: documentTypeData.isActive !== false
+        name: formData.name.trim(),
+        code: formData.code.trim(),
+        formBuilderId: this.formBuilderId,
+        menuCaption: formData.menuCaption.trim(),
+        menuOrder: formData.menuOrder !== null && formData.menuOrder !== undefined ? Number(formData.menuOrder) : 0
       };
+      
+      console.log('[DocumentTypesList] Creating document type with DTO:', createDto);
+
+      // Only add parentMenuId if it has a valid value
+      const parentMenuIdValue = formData.parentMenuId;
+      if (parentMenuIdValue !== null && parentMenuIdValue !== undefined) {
+        const parentId = Number(parentMenuIdValue);
+        if (!isNaN(parentId) && parentId > 0) {
+          createDto.parentMenuId = parentId;
+        }
+      }
+
+      // Set isActive (default to true if not specified)
+      createDto.isActive = formData.isActive !== false;
 
       this.documentTypesService.createDocumentType(createDto).subscribe({
         next: () => {
           this.loading.save = false;
-          this.loadDocumentTypes();
           this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Document type created successfully' });
-          this.closeDocumentTypeModal();
-          this.cdr.detectChanges();
+          this.closeModal();
+          this.loadDocumentTypes();
         },
-        error: (error) => {
+        error: (error: any) => {
           this.loading.save = false;
           console.error('Error creating document type:', error);
-          const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to create document type';
-          this.messageService.add({ severity: 'error', summary: 'Error', detail: errorMessage });
+          let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to create document type';
+          
+          if (error?.error?.detail) {
+            errorMessage = error.error.detail;
+          } else if (error?.error?.errors) {
+            const errors = error.error.errors;
+            if (typeof errors === 'object') {
+              const errorArray: string[] = [];
+              for (const key in errors) {
+                if (errors.hasOwnProperty(key)) {
+                  const propErrors = errors[key];
+                  if (Array.isArray(propErrors)) {
+                    errorArray.push(`${key}: ${propErrors.join(', ')}`);
+                  } else {
+                    errorArray.push(`${key}: ${propErrors}`);
+                  }
+                }
+              }
+              errorMessage = errorArray.length > 0 ? errorArray.join('; ') : 'Validation error';
+            }
+          }
+          
+          this.messageService.add({ 
+            severity: 'error', 
+            summary: 'Error', 
+            detail: errorMessage,
+            life: 8000
+          });
         }
       });
     }
   }
 
-  deleteDocumentType(id: number): void {
-    this.confirmationService.confirm({
-      message: 'Are you sure you want to delete this document type?',
-      header: 'Confirm Deletion',
-      icon: 'pi pi-exclamation-triangle',
-      acceptButtonStyleClass: 'p-button-danger',
-      accept: () => {
-        this.loading.delete = true;
-        this.documentTypesService.deleteDocumentType(id).subscribe({
-          next: () => {
-            this.loading.delete = false;
-            this.loadDocumentTypes();
-            this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Document type deleted successfully' });
-          },
-          error: (error) => {
-            this.loading.delete = false;
-            console.error('Error deleting document type:', error);
-            const errorMessage = error?.error?.message || error?.message || 'Failed to delete document type';
-            this.messageService.add({ severity: 'error', summary: 'Error', detail: errorMessage });
-          }
+  private performUpdate(formData: any, parentMenuId?: number): void {
+    if (!this.editingDocumentType) return;
+
+    // Handle parentMenuId: if undefined (no parent selected), set to null explicitly to remove parent relationship
+    const updateParentMenuId = parentMenuId !== undefined ? parentMenuId : null;
+
+    const updateDto: UpdateDocumentTypeDto = {
+      name: formData.name?.trim() || undefined,
+      code: formData.code?.trim() || undefined,
+      formBuilderId: formData.formBuilderId ? Number(formData.formBuilderId) : undefined,
+      menuCaption: formData.menuCaption?.trim() || undefined,
+      menuOrder: formData.menuOrder !== null && formData.menuOrder !== undefined ? Number(formData.menuOrder) : undefined,
+      parentMenuId: updateParentMenuId,
+      isActive: formData.isActive !== false
+    };
+
+    this.documentTypesService.updateDocumentType(this.editingDocumentType.id, updateDto).subscribe({
+      next: () => {
+        this.loading.save = false;
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Document type updated successfully' });
+        this.closeModal();
+        this.loadDocumentTypes();
+      },
+      error: (error: any) => {
+        this.loading.save = false;
+        console.error('Error updating document type:', error);
+        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to update document type';
+        
+        const errorText = errorMessage.toLowerCase();
+        if (errorText.includes('foreign key') || errorText.includes('constraint') || errorText.includes('parentmenuid')) {
+          errorMessage = 'Cannot update this document type because it is used as a parent menu for other document types.';
+        }
+        
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: errorMessage,
+          life: 8000
         });
       }
     });
   }
 
-  toggleDocumentTypeStatus(documentType: DocumentType): void {
-    const newStatus = !documentType.isActive;
-    this.documentTypesService.toggleDocumentTypeStatus(documentType.id, newStatus).subscribe({
-      next: () => {
-        this.loadDocumentTypes();
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Success',
-          detail: `Document type ${newStatus ? 'activated' : 'deactivated'} successfully`
-        });
+  deleteDocumentType(documentType: DocumentType): void {
+    if (!documentType || !documentType.id) return;
+
+    this.loading.delete = true;
+    this.documentTypesService.hasChildDocumentTypes(documentType.id).subscribe({
+      next: (hasChildren: boolean) => {
+        this.loading.delete = false;
+        
+        if (hasChildren) {
+          // Get child document types to show count
+          this.documentTypesService.getDocumentTypesByParentMenuId(documentType.id).subscribe({
+            next: (children: DocumentType[]) => {
+              const childrenCount = children.length;
+              
+              this.confirmationService.confirm({
+                message: `This document type is used as a parent menu for ${childrenCount} other document type(s). The parent relationship will be automatically removed from all child document types before deletion. Do you want to proceed?`,
+                header: 'Delete Document Type with Children',
+                icon: 'pi pi-exclamation-triangle',
+                acceptButtonStyleClass: 'p-button-danger',
+                rejectButtonStyleClass: 'p-button-secondary',
+                accept: () => {
+                  this.performDeletion(documentType.id!);
+                }
+              });
+            },
+            error: () => {
+              this.confirmAndDelete(documentType);
+            }
+          });
+          return;
+        }
+
+        // No children, proceed with normal deletion
+        this.confirmAndDelete(documentType);
       },
-      error: (error) => {
-        console.error('Error toggling document type status:', error);
-        const errorMessage = error?.error?.message || error?.message || 'Failed to update document type status';
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: errorMessage });
+      error: () => {
+        this.loading.delete = false;
+        this.confirmAndDelete(documentType);
+      }
+    });
+  }
+
+  private confirmAndDelete(documentType: DocumentType): void {
+    this.confirmationService.confirm({
+      message: `Are you sure you want to delete the document type "${documentType.name}"? This action cannot be undone.`,
+      header: 'Confirm Deletion',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.performDeletion(documentType.id!);
+      }
+    });
+  }
+
+  private performDeletion(id: number): void {
+    this.loading.delete = true;
+    this.documentTypesService.deleteDocumentType(id).subscribe({
+      next: () => {
+        this.loading.delete = false;
+        this.messageService.add({ 
+          severity: 'success', 
+          summary: 'Success', 
+          detail: 'Document type deleted successfully' 
+        });
+        this.loadDocumentTypes();
+      },
+      error: (error: any) => {
+        this.loading.delete = false;
+        console.error('Error deleting document type:', error);
+        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to delete document type';
+        
+        const errorText = errorMessage.toLowerCase();
+        if (errorText.includes('foreign key') || errorText.includes('constraint')) {
+          errorMessage = 'Cannot delete this document type. It may have associated records.';
+        }
+        
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: errorMessage,
+          life: 10000
+        });
       }
     });
   }
@@ -330,12 +600,6 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
         this.markFormGroupTouched(control);
       }
     });
-  }
-
-  getFormName(formBuilderId?: number): string {
-    if (!formBuilderId) return '-';
-    const form = this.forms.find(f => f.id === formBuilderId);
-    return form?.formName || '-';
   }
 }
 

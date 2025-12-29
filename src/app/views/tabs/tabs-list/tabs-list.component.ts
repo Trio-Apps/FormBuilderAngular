@@ -4,8 +4,10 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FieldsService } from '../../FormBuilder/services/fields.service';
+import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { FormTabDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { DocumentType, CreateDocumentTypeDto, UpdateDocumentTypeDto } from '../../FormBuilder/form-builder/models/document-types.model';
 import { Subscription } from 'rxjs';
 import { TranslationService } from '../../../core/services/translation.service';
 
@@ -13,10 +15,12 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { InputTextModule } from 'primeng/inputtext';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { DialogModule } from 'primeng/dialog';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
+import { CheckboxModule } from 'primeng/checkbox';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 
 @Component({
@@ -29,10 +33,12 @@ import { TranslatePipe } from '../../../core/pipes/translate.pipe';
     ButtonModule,
     TableModule,
     InputTextModule,
+    InputNumberModule,
     DialogModule,
     ToastModule,
     ConfirmDialogModule,
     TooltipModule,
+    CheckboxModule,
     TranslatePipe
   ],
   templateUrl: './tabs-list.component.html',
