@@ -9,7 +9,7 @@
 
 /* Top Navbar - Enhanced with Gradient */
 .top-navbar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
   color: white;
   padding: 0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
@@ -297,7 +297,7 @@
       .header-icon {
         width: 64px;
         height: 64px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
         border-radius: 16px;
         display: flex;
         align-items: center;
@@ -502,7 +502,7 @@
       .section-icon {
         width: 48px;
         height: 48px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
         border-radius: 12px;
         display: flex;
         align-items: center;
@@ -534,6 +534,26 @@
       display: flex;
       align-items: center;
       gap: 0.75rem;
+      
+      .project-filter-select {
+        min-width: 200px;
+        padding: 8px 12px;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        font-size: 14px;
+        background: white;
+        
+        &:focus {
+          outline: none;
+          border-color: #286A61;
+          box-shadow: 0 0 0 2px rgba(40, 106, 97, 0.1);
+        }
+        
+        &:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+      }
     }
   }
   
@@ -594,7 +614,7 @@
     
     ::ng-deep .series-table {
       .p-datatable-thead > tr > th {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
         color: white;
         font-weight: 700;
         font-size: 12px;
@@ -681,7 +701,7 @@
             justify-content: center;
             
             .number-badge {
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
               color: white;
               padding: 0.5rem 1rem;
               border-radius: 12px;
@@ -966,7 +986,7 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   
   .p-dialog-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
     color: white;
     padding: 1.5rem;
     border-bottom: none;

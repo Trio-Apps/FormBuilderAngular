@@ -168,6 +168,17 @@
             </div>
           </div>
           <div class="header-actions">
+            <select 
+              class="p-inputtext project-filter-select"
+              [(ngModel)]="selectedProjectFilter"
+              (change)="onProjectFilterChange()"
+              [ngModelOptions]="{standalone: true}"
+              [disabled]="loadingSeries || projects.length === 0">
+              <option [ngValue]="null">All Projects</option>
+              <option *ngFor="let project of projects" [ngValue]="project.id">
+                {{ project.projectName }}
+              </option>
+            </select>
             <button pButton 
               icon="pi pi-refresh" 
               class="p-button-text p-button-sm p-button-rounded" 
@@ -196,7 +207,7 @@
 
         <div *ngIf="!loadingSeries && documentSeries.length > 0" class="series-table-container">
           <p-table 
-            [value]="documentSeries" 
+            [value]="filteredDocumentSeries" 
             [paginator]="false"
             styleClass="p-datatable-sm series-table">
             <ng-template pTemplate="header">

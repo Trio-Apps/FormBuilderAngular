@@ -81,6 +81,10 @@ export class DocumentTypeComponent implements OnInit, OnDestroy {
 
   // Search Filter
   searchTerm = '';
+  
+  // Series Filter
+  selectedProjectFilter: number | null = null;
+  filteredDocumentSeries: DocumentSeries[] = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -595,6 +599,20 @@ export class DocumentTypeComponent implements OnInit, OnDestroy {
     return !!(field && field.invalid && (field.dirty || field.touched));
   }
 
+  filterSeriesByProject(): void {
+    if (!this.selectedProjectFilter) {
+      this.filteredDocumentSeries = [...this.documentSeries];
+    } else {
+      this.filteredDocumentSeries = this.documentSeries.filter(
+        s => s.projectId === this.selectedProjectFilter
+      );
+    }
+  }
+
+  onProjectFilterChange(): void {
+    this.filterSeriesByProject();
+  }
+
   getSeriesFieldErrorMessage(fieldName: string): string {
     const field = this.seriesForm.get(fieldName);
     if (field && field.errors) {
@@ -635,9 +653,22 @@ export class DocumentTypeComponent implements OnInit, OnDestroy {
     }
     
     this.loadingSeries = true;
-    this.documentTypesService.getDocumentSeriesByDocumentTypeId(this.documentType.id).subscribe({
-      next: (series: DocumentSeries[]) => {
-        this.documentSeries = series || [];
+    // Load both series and projects in parallel
+    forkJoin({
+      series: this.documentTypesService.getDocumentSeriesByDocumentTypeId(this.documentType.id),
+      projects: this.documentSettingsService.getActiveProjects()
+    }).subscribe({
+      next: ({ series, projects }) => {
+        // Map series with project names
+        this.documentSeries = (series || []).map((s: DocumentSeries) => {
+          const project = projects.find((p: Project) => p.id === s.projectId);
+          return {
+            ...s,
+            projectName: project?.projectName || `Project #${s.projectId}`
+          };
+        });
+        // Apply filter after loading
+        this.filterSeriesByProject();
         this.loadingSeries = false;
         this.cdr.detectChanges();
       },

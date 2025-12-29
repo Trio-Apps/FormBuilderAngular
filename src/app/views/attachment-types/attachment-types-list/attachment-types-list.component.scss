@@ -8,7 +8,7 @@
 
 // Reuse the unified layout used by Fields & Tabs pages
 .top-navbar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
   color: white;
   padding: 0;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -219,7 +219,7 @@
     color: white;
 
     &.stat-icon-primary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
     }
 
     &.stat-icon-success {
@@ -1274,9 +1274,9 @@
     }
 
     &.language-tab-active {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
       color: white;
-      border-bottom-color: #667eea;
+      border-bottom-color: #00EBB5;
       font-weight: 600;
     }
   }

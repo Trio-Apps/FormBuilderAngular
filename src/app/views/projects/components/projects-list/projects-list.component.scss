@@ -34,7 +34,7 @@
 /* ================= NAVBAR ================= */
 
 .top-navbar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  background: linear-gradient(135deg, #286A61 0%, #00EBB5 50%, #00EBB5 100%);
   color: white;
   position: sticky;
   top: 0;
@@ -270,7 +270,7 @@
       left: 0;
       right: 0;
       height: 4px;
-      background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+      background: linear-gradient(90deg, #286A61 0%, #00EBB5 50%, #00EBB5 100%);
       transform: scaleX(0);
       transform-origin: left;
       transition: transform 0.3s ease;
@@ -304,7 +304,7 @@
       flex-shrink: 0;
 
       &.stat-icon-primary {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
       }
 
       &.stat-icon-success {
@@ -385,7 +385,7 @@
 
       i {
         font-size: 22px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -532,7 +532,7 @@
       i {
         font-size: 22px;
         color: #667eea;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        background: linear-gradient(135deg, #286A61 0%, #00EBB5 50%, #00EBB5 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -773,6 +773,7 @@
     font-weight: 500;
   }
 
+
   ::ng-deep .p-checkbox {
     .p-checkbox-box {
       width: 26px;
@@ -853,7 +854,7 @@
     }
 
     &:not(.p-button-secondary) {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
       border: none;
       box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
       color: white;
@@ -875,7 +876,7 @@
 
 ::ng-deep .p-dialog {
   .p-dialog-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
     color: white;
     padding: 20px 24px;
     border-radius: 12px 12px 0 0;
@@ -927,7 +928,7 @@
     }
 
     &.p-highlight {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
       border-color: #667eea;
       color: white;
       box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
