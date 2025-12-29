@@ -1231,6 +1231,58 @@
   border: 1px solid #e0e0e0;
 }
 
+// Extensions Empty State
+.extensions-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+
+  i {
+    font-size: 32px;
+    color: #d1d5db;
+    margin-bottom: 8px;
+  }
+}
+
+// Remove extension button in grid
+.extension-item {
+  position: relative;
+
+  .btn-remove-extension {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: #fee2e2;
+    color: #dc2626;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    font-size: 10px;
+
+    &:hover {
+      background: #fca5a5;
+      color: #991b1b;
+    }
+  }
+
+  &:hover .btn-remove-extension {
+    opacity: 1;
+  }
+}
+
 .extensions-label {
   display: flex;
   align-items: center;
@@ -1331,7 +1383,12 @@
 }
 
 .custom-extension-input {
+  flex: 2;
+}
+
+.custom-extension-maxsize-input {
   flex: 1;
+  max-width: 150px;
   padding: 10px 12px;
   border: 2px solid #e0e0e0;
   border-radius: 8px;

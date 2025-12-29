@@ -1,0 +1,304 @@
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/form-builder/forms" title="Back to Forms">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Attachment Types Management</h1>
+          <p class="page-subtitle">
+            Manage file attachment types and their allowed extensions
+          </p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadAttachmentTypes()" [disabled]="loading.attachmentTypes" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openAddAttachmentTypeModal()" [disabled]="loading.attachmentTypes">
+          <i class="pi pi-plus"></i>
+          <span>New Attachment Type</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Forms</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-paperclip"></i>
+        <span>Attachment Types</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading.attachmentTypes">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-paperclip"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ attachmentTypes.length }}</div>
+          <div class="stat-label">Total Attachment Types</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveAttachmentTypesCount() }}</div>
+          <div class="stat-label">Active Types</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attachment Types Table Card -->
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-paperclip"></i>
+          Attachment Types List
+        </h3>
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              placeholder="Search attachment types..."
+              class="search-input"
+              [(ngModel)]="searchTerm"
+              (input)="filterAttachmentTypes()"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="loading.attachmentTypes" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>Loading attachment types...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!loading.attachmentTypes && filteredAttachmentTypes.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-inbox"></i>
+        </div>
+        <h3>No Attachment Types Found</h3>
+        <p>Get started by adding your first attachment type.</p>
+        <button class="btn-primary" (click)="openAddAttachmentTypeModal()">
+          <i class="pi pi-plus"></i>
+          <span>Add Attachment Type</span>
+        </button>
+      </div>
+
+      <!-- Attachment Types Table -->
+      <div *ngIf="!loading.attachmentTypes && filteredAttachmentTypes.length > 0" class="table-wrapper">
+        <table class="fields-table">
+          <thead>
+            <tr>
+              <th class="col-order">ID</th>
+              <th class="col-name">Name</th>
+              <th class="col-code">Code</th>
+              <th class="col-type">Description</th>
+              <th class="col-options">Max Size (MB)</th>
+              <th class="col-status">Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let attachmentType of filteredAttachmentTypes">
+              <td class="col-order">
+                <span class="order-number">{{ attachmentType.id }}</span>
+              </td>
+              <td class="col-name">
+                <div class="field-name-wrapper">
+                  <div class="field-name-main">{{ attachmentType.name || '-' }}</div>
+                </div>
+              </td>
+              <td class="col-code">
+                <code class="code-badge">{{ attachmentType.code || '-' }}</code>
+              </td>
+              <td class="col-type">
+                <span class="type-badge">
+                  {{ attachmentType.description || '-' }}
+                </span>
+              </td>
+              <td class="col-options">
+                <span class="size-badge">{{ attachmentType.maxSizeMB }} MB</span>
+              </td>
+              <td class="col-status">
+                <span class="status-badge" [class.status-active]="attachmentType.isActive" [class.status-inactive]="!attachmentType.isActive">
+                  <i class="pi" [class.pi-check-circle]="attachmentType.isActive" [class.pi-times-circle]="!attachmentType.isActive"></i>
+                  {{ attachmentType.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <div class="actions-menu">
+                  <button class="action-btn action-edit" (click)="openEditAttachmentTypeModal(attachmentType)" title="Edit">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button
+                    type="button"
+                    class="action-btn"
+                    [class.action-activate]="!attachmentType.isActive"
+                    [class.action-deactivate]="attachmentType.isActive"
+                    (click)="toggleAttachmentTypeStatus(attachmentType); $event.stopPropagation()"
+                    [title]="attachmentType.isActive ? 'Deactivate' : 'Activate'"
+                    [disabled]="loading.attachmentTypes"
+                  >
+                    <i class="pi" [class.pi-power-off]="attachmentType.isActive" [class.pi-check]="!attachmentType.isActive"></i>
+                  </button>
+                  <button class="action-btn action-delete" (click)="deleteAttachmentType(attachmentType.id)" title="Delete">
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attachment Type Modal -->
+  <p-dialog
+    [(visible)]="showAttachmentTypeModal"
+    [modal]="true"
+    [style]="{ width: '600px' }"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="closeAttachmentTypeModal()"
+    [header]="editing ? 'Edit Attachment Type' : 'Add New Attachment Type'"
+  >
+    <form [formGroup]="attachmentTypeForm" (ngSubmit)="saveAttachmentType()">
+      <div class="dialog-body">
+        <!-- Basic Information -->
+        <div class="form-section">
+          <h3><i class="pi pi-info-circle"></i> Basic Information</h3>
+
+          <div class="form-row">
+            <div class="form-group" [class.invalid]="isFieldInvalid('name')">
+              <label for="name">
+                Name <span class="text-danger">*</span>
+                <span *ngIf="isFieldInvalid('name')" class="error-text">
+                  {{ getFieldErrorMessage('name') }}
+                </span>
+              </label>
+              <input
+                type="text"
+                id="name"
+                name="name"
+                formControlName="name"
+                pInputText
+                placeholder="Enter attachment type name"
+                [class.p-invalid]="isFieldInvalid('name')"
+              />
+            </div>
+
+            <div class="form-group" [class.invalid]="isFieldInvalid('code')">
+              <label for="code">
+                Code <span class="text-danger">*</span>
+                <span *ngIf="isFieldInvalid('code')" class="error-text">
+                  {{ getFieldErrorMessage('code') }}
+                </span>
+              </label>
+              <input
+                type="text"
+                id="code"
+                name="code"
+                formControlName="code"
+                pInputText
+                placeholder="Enter unique code"
+                [class.p-invalid]="isFieldInvalid('code')"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group" [class.invalid]="isFieldInvalid('description')">
+              <label for="description">
+                Description
+                <span *ngIf="isFieldInvalid('description')" class="error-text">
+                  {{ getFieldErrorMessage('description') }}
+                </span>
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                formControlName="description"
+                rows="3"
+                placeholder="Enter description (optional)"
+                [class.p-invalid]="isFieldInvalid('description')"
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group" [class.invalid]="isFieldInvalid('maxSizeMB')">
+              <label for="maxSizeMB">
+                Max File Size (MB) <span class="text-danger">*</span>
+                <span *ngIf="isFieldInvalid('maxSizeMB')" class="error-text">
+                  {{ getFieldErrorMessage('maxSizeMB') }}
+                </span>
+              </label>
+              <p-inputNumber
+                id="maxSizeMB"
+                name="maxSizeMB"
+                formControlName="maxSizeMB"
+                [min]="1"
+                [max]="1000"
+                [showButtons]="true"
+                [useGrouping]="false"
+                placeholder="Enter max file size in MB"
+                [class.p-invalid]="isFieldInvalid('maxSizeMB')"
+              ></p-inputNumber>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Status -->
+        <div class="form-section">
+          <h3><i class="pi pi-info-circle"></i> Status</h3>
+          <div class="form-row">
+            <div class="form-group checkbox-group">
+              <p-checkbox
+                formControlName="isActive"
+                label="Active"
+                [binary]="true"
+                inputId="isActive"
+                name="isActive"
+              ></p-checkbox>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <ng-template pTemplate="footer">
+      <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-text" (click)="closeAttachmentTypeModal()" [disabled]="loading.save"></button>
+      <button type="button" pButton [label]="editing ? 'Update Attachment Type' : 'Create Attachment Type'" [icon]="editing ? 'pi pi-save' : 'pi pi-plus'" class="p-button-primary" (click)="saveAttachmentType()" [disabled]="attachmentTypeForm.invalid || loading.save">
+        <span *ngIf="loading.save" class="spinner-small"></span>
+      </button>
+    </ng-template>
+  </p-dialog>
+</div>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

@@ -128,6 +128,13 @@ export const routes: Routes = [
               .then(m => m.DocumentTypesListComponent) 
           },
           
+          // إدارة أنواع المرفقات (Attachment Types)
+          { 
+            path: 'attachment-types', 
+            loadComponent: () => import('./views/attachment-types/attachment-types-list/attachment-types-list.component')
+              .then(m => m.AttachmentTypesListComponent) 
+          },
+          
           // NOTE: Field options are now managed directly inside the Fields screen
           // If you need a separate management screen again, you can add routes here.
         ]

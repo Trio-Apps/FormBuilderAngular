@@ -18,6 +18,8 @@ import { ButtonModule } from 'primeng/button';
 import { Subscription } from 'rxjs';
 import { TranslationService } from '../../../core/services/translation.service';
 import { environment } from '../../../environments/environment';
+import { AttachmentTypesService } from '../../FormBuilder/services/attachment-types.service';
+import { CreateAttachmentTypeDto } from '../../FormBuilder/form-builder/models/attachment-types.model';
 
 @Component({
   selector: 'app-fields-list',
@@ -104,6 +106,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   selectedFileExtensions: string[] = [];
   customFileExtensions: string[] = []; // Custom extensions added by admin
   newCustomExtension: string = ''; // Input for new custom extension
+  newCustomExtensionMaxSize: number = 10; // Max size in MB for new custom extension
+
 
   // Field DataSource Options
   dataSourceType: 'Static' | 'Api' | 'LookupTable' = 'Static';
@@ -154,6 +158,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     private fieldOptionsService: FieldOptionsService,
     private gridService: GridService,
     private fieldDataSourceService: FieldDataSourceService,
+    private attachmentTypesService: AttachmentTypesService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
@@ -354,12 +359,14 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     );
   }
 
+
   openAddFieldModal(): void {
     this.editingField = null;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.selectedFileExtensions = []; // Reset file extensions
     this.customFileExtensions = []; // Reset custom extensions
     this.newCustomExtension = ''; // Reset input
+    this.newCustomExtensionMaxSize = 10; // Reset max size
     this.selectedGridId = null; // Reset grid selection
     this.availableGrids = []; // Reset grids list
     this.resetDataSourceConfig(); // Reset DataSource config
@@ -582,11 +589,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     // Save file extensions to form if file type is selected
     if (this.isFileFieldType()) {
+      console.log('[saveField] File field type detected, calling saveFileExtensionsToForm()');
       this.saveFileExtensionsToForm();
+      console.log('[saveField] defaultValueJson after saveFileExtensionsToForm:', this.fieldForm.get('defaultValueJson')?.value);
     }
 
     this.loading.save = true;
     const fieldData = this.fieldForm.value;
+    console.log('[saveField] Field data before save:', {
+      defaultValueJson: fieldData.defaultValueJson,
+      defaultValue: fieldData.defaultValue,
+      fieldTypeId: fieldData.fieldTypeId
+    });
 
     if (this.editingField) {
       const updateDto: UpdateFormFieldDto = {
@@ -618,6 +632,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
       if (!this.editingField) return;
 
+      console.log('[saveField] Update DTO:', updateDto);
+      console.log('[saveField] Update DTO defaultValueJson:', updateDto.defaultValueJson);
+      
       this.fieldsService.updateField(this.editingField.id, updateDto).subscribe({
         next: (updatedField) => {
           // Save field options if field type has options
@@ -668,7 +685,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         isMandatory: fieldData.isMandatory ?? true,
         isEditable: fieldData.isEditable ?? true,
         isVisible: fieldData.isVisible ?? true,
-        defaultValueJson: fieldData.defaultValue || fieldData.defaultValueJson || undefined,
+        defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || undefined,
         regexPattern: fieldData.regexPattern || undefined,
         validationMessage: fieldData.validationMessage || undefined,
         foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
@@ -682,6 +699,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
       };
 
+      console.log('[saveField] Create DTO:', createDto);
+      console.log('[saveField] Create DTO defaultValueJson:', createDto.defaultValueJson);
+      
       this.fieldsService.createField(createDto).subscribe({
         next: (newField) => {
           // Save field options if field type has options
@@ -1079,18 +1099,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    * Save selected extensions to form's defaultValueJson
    */
   saveFileExtensionsToForm(): void {
-    const allExtensions = [...this.selectedFileExtensions, ...this.customFileExtensions];
+    // Only save selected extensions from custom extensions
+    const selectedCustomExtensions = this.selectedFileExtensions.filter(ext => 
+      this.customFileExtensions.includes(ext)
+    );
+    
     const fileConfig = {
-      allowedExtensions: allExtensions,
-      customExtensions: this.customFileExtensions,
-      allowedMimeTypes: this.selectedFileExtensions.map(ext => {
-        const extInfo = this.availableFileExtensions.find(e => e.value === ext);
-        return extInfo ? extInfo.mimeType : '';
-      }).filter(mime => mime !== '')
+      allowedExtensions: selectedCustomExtensions,
+      customExtensions: this.customFileExtensions
     };
+    
+    const jsonString = JSON.stringify(fileConfig);
+    console.log('[saveFileExtensionsToForm] Saving file config:', fileConfig);
+    console.log('[saveFileExtensionsToForm] JSON string:', jsonString);
+    
     this.fieldForm.patchValue({
-      defaultValueJson: JSON.stringify(fileConfig)
+      defaultValueJson: jsonString
     });
+    
+    console.log('[saveFileExtensionsToForm] Form defaultValueJson after patch:', this.fieldForm.get('defaultValueJson')?.value);
   }
 
   /**
@@ -1102,18 +1129,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       try {
         const fileConfig = JSON.parse(defaultValueJson);
         if (fileConfig.allowedExtensions && Array.isArray(fileConfig.allowedExtensions)) {
-          // Separate predefined and custom extensions
-          const allExtensions = fileConfig.allowedExtensions;
-          this.selectedFileExtensions = allExtensions.filter((ext: string) =>
-            this.availableFileExtensions.some(e => e.value === ext)
-          );
-          this.customFileExtensions = allExtensions.filter((ext: string) =>
-            !this.availableFileExtensions.some(e => e.value === ext)
-          );
-        }
-        // Also load customExtensions if exists (for backward compatibility)
-        if (fileConfig.customExtensions && Array.isArray(fileConfig.customExtensions)) {
-          this.customFileExtensions = fileConfig.customExtensions;
+          // All extensions are custom now
+          this.customFileExtensions = fileConfig.allowedExtensions.map((ext: string) => 
+            String(ext).toLowerCase().trim().replace(/^\./, '')
+          ).filter((ext: string) => ext.length > 0);
+          // Selected extensions are the same as custom extensions (all are selected by default)
+          this.selectedFileExtensions = [...this.customFileExtensions];
+        } else if (fileConfig.customExtensions && Array.isArray(fileConfig.customExtensions)) {
+          this.customFileExtensions = fileConfig.customExtensions.map((ext: string) => 
+            String(ext).toLowerCase().trim().replace(/^\./, '')
+          ).filter((ext: string) => ext.length > 0);
+          this.selectedFileExtensions = [...this.customFileExtensions];
         }
       } catch (e) {
         // Not a valid JSON, ignore
@@ -1135,31 +1161,37 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    * Get accepted file types string for input accept attribute
    */
   getAcceptedFileTypes(): string {
-    const allExtensions = [...this.selectedFileExtensions, ...this.customFileExtensions];
+    const allExtensions = this.selectedFileExtensions.filter(ext => this.customFileExtensions.includes(ext));
     if (allExtensions.length === 0) {
       return '*'; // Accept all if no restrictions
     }
-    const mimeTypes = this.selectedFileExtensions.map(ext => {
-      const extInfo = this.availableFileExtensions.find(e => e.value === ext);
-      return extInfo ? extInfo.mimeType : '';
-    }).filter(mime => mime !== '');
 
-    const customExts = this.customFileExtensions.map(ext => `.${ext.toLowerCase()}`);
-
-    return [...mimeTypes, ...customExts].join(',');
+    const customExts = allExtensions.map(ext => `.${ext.toLowerCase()}`);
+    return customExts.join(',');
   }
 
   /**
    * Add custom file extension
    */
   addCustomExtension(): void {
+    console.log('[addCustomExtension] Called with newCustomExtension:', this.newCustomExtension);
+    
+    if (!this.newCustomExtension || !this.newCustomExtension.trim()) {
+      console.log('[addCustomExtension] Empty input, returning');
+      return;
+    }
+
     const ext = this.newCustomExtension.trim().toLowerCase().replace(/^\./, ''); // Remove leading dot if exists
+    console.log('[addCustomExtension] Processed extension:', ext);
+    
     if (!ext) {
+      console.log('[addCustomExtension] Extension is empty after processing, returning');
       return;
     }
 
     // Validate extension (alphanumeric and some special chars)
     if (!/^[a-z0-9]+$/i.test(ext)) {
+      console.log('[addCustomExtension] Extension validation failed');
       this.messageService.add({
         severity: 'warn',
         summary: 'Invalid Extension',
@@ -1168,8 +1200,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Check if already exists
-    if (this.customFileExtensions.includes(ext) || this.selectedFileExtensions.includes(ext)) {
+    // Check if already exists in local list
+    if (this.customFileExtensions.includes(ext)) {
+      console.log('[addCustomExtension] Extension already exists in local list:', ext);
       this.messageService.add({
         severity: 'warn',
         summary: 'Already Exists',
@@ -1178,9 +1211,93 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.customFileExtensions.push(ext);
-    this.newCustomExtension = '';
-    this.saveFileExtensionsToForm();
+    // Check if attachment type already exists in database by code
+    this.attachmentTypesService.getAttachmentTypeByCode(ext).subscribe({
+      next: (existingType) => {
+        // Extension already exists in database
+        console.log('[addCustomExtension] Attachment type already exists in database:', existingType);
+        // Still add to local lists if it exists in database but not in local list
+        this.customFileExtensions.push(ext);
+        if (!this.selectedFileExtensions.includes(ext)) {
+          this.selectedFileExtensions.push(ext);
+        }
+        this.newCustomExtension = '';
+        this.saveFileExtensionsToForm();
+        this.cdr.detectChanges();
+        this.messageService.add({
+          severity: 'info',
+          summary: 'Info',
+          detail: 'Extension already exists in database, added to list'
+        });
+      },
+      error: (error) => {
+        // 404 means it doesn't exist, which is what we want
+        if (error.status === 404 || error.message?.includes('not found')) {
+          // Create new attachment type in database
+          const createDto: CreateAttachmentTypeDto = {
+            name: ext.toUpperCase(),
+            code: ext.toLowerCase(),
+            description: `File extension: .${ext.toUpperCase()}`,
+            maxSizeMB: this.newCustomExtensionMaxSize || 10,
+            isActive: true
+          };
+
+          console.log('[addCustomExtension] Creating attachment type:', createDto);
+          
+          this.attachmentTypesService.createAttachmentType(createDto).subscribe({
+            next: (createdType) => {
+              console.log('[addCustomExtension] Attachment type created successfully:', createdType);
+              
+              // Add extension to custom list
+              this.customFileExtensions.push(ext);
+              console.log('[addCustomExtension] Added to customFileExtensions. Current list:', this.customFileExtensions);
+              
+              // Automatically select the newly added extension
+              if (!this.selectedFileExtensions.includes(ext)) {
+                this.selectedFileExtensions.push(ext);
+                console.log('[addCustomExtension] Added to selectedFileExtensions. Current list:', this.selectedFileExtensions);
+              }
+              
+              // Clear input
+              this.newCustomExtension = '';
+              this.newCustomExtensionMaxSize = 10; // Reset to default
+              
+              // Save to form
+              console.log('[addCustomExtension] Calling saveFileExtensionsToForm()');
+              this.saveFileExtensionsToForm();
+              
+              // Force change detection
+              this.cdr.detectChanges();
+              
+              this.messageService.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: `Extension "${ext.toUpperCase()}" added successfully`
+              });
+              
+              console.log('[addCustomExtension] Completed successfully');
+            },
+            error: (createError) => {
+              console.error('[addCustomExtension] Error creating attachment type:', createError);
+              const errorMessage = createError?.error?.message || createError?.message || 'Failed to create attachment type';
+              this.messageService.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: errorMessage
+              });
+            }
+          });
+        } else {
+          // Other error occurred
+          console.error('[addCustomExtension] Error checking attachment type:', error);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to check if extension exists'
+          });
+        }
+      }
+    });
   }
 
   /**
@@ -1189,8 +1306,58 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   removeCustomExtension(ext: string): void {
     const index = this.customFileExtensions.indexOf(ext);
     if (index > -1) {
+      // Try to delete attachment type from database
+      this.attachmentTypesService.getAttachmentTypeByCode(ext).subscribe({
+        next: (attachmentType) => {
+          // Attachment type exists, delete it
+          console.log('[removeCustomExtension] Deleting attachment type:', attachmentType);
+          this.attachmentTypesService.deleteAttachmentType(attachmentType.id).subscribe({
+            next: () => {
+              console.log('[removeCustomExtension] Attachment type deleted successfully');
+              this.removeExtensionFromLocalLists(ext);
+            },
+            error: (deleteError) => {
+              console.error('[removeCustomExtension] Error deleting attachment type:', deleteError);
+              // Still remove from local lists even if delete fails
+              this.removeExtensionFromLocalLists(ext);
+              const errorMessage = deleteError?.error?.message || deleteError?.message || 'Failed to delete attachment type from database';
+              this.messageService.add({
+                severity: 'warn',
+                summary: 'Warning',
+                detail: `Extension removed from list, but ${errorMessage}`
+              });
+            }
+          });
+        },
+        error: (error) => {
+          // 404 means it doesn't exist in database, just remove from local lists
+          if (error.status === 404 || error.message?.includes('not found')) {
+            console.log('[removeCustomExtension] Attachment type not found in database, removing from local lists only');
+            this.removeExtensionFromLocalLists(ext);
+          } else {
+            console.error('[removeCustomExtension] Error checking attachment type:', error);
+            // Still remove from local lists
+            this.removeExtensionFromLocalLists(ext);
+          }
+        }
+      });
+    }
+  }
+
+  /**
+   * Helper method to remove extension from local lists
+   */
+  private removeExtensionFromLocalLists(ext: string): void {
+    const index = this.customFileExtensions.indexOf(ext);
+    if (index > -1) {
       this.customFileExtensions.splice(index, 1);
+      // Also remove from selected if it was selected
+      const selectedIndex = this.selectedFileExtensions.indexOf(ext);
+      if (selectedIndex > -1) {
+        this.selectedFileExtensions.splice(selectedIndex, 1);
+      }
       this.saveFileExtensionsToForm();
+      this.cdr.detectChanges();
     }
   }
 

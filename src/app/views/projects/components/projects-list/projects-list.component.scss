@@ -748,7 +748,7 @@
     font-family: inherit;
 
     &:focus {
-      border-color: #667eea;
+      border-color: #0a133d;
       outline: none;
       box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
     }
@@ -775,28 +775,52 @@
 
   ::ng-deep .p-checkbox {
     .p-checkbox-box {
-      width: 24px;
-      height: 24px;
-      border: 2px solid #d1d5db;
+      width: 26px;
+      height: 26px;
+      border: 3px solid #213fc4;
       border-radius: 6px;
-      transition: all 0.3s ease;
+      transition: all 0.2s ease;
       background: white;
+      position: relative;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
       &:hover {
-        border-color: #667eea;
-        background: #f3f4f6;
+        border-color: #1433bd;
+        background: #f0f4ff;
+        box-shadow: 0 2px 6px rgba(102, 126, 234, 0.2);
       }
 
       &.p-highlight {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-color: #667eea;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border-color: #10b981;
+        box-shadow: 0 3px 10px rgba(16, 185, 129, 0.4), 0 0 0 3px rgba(16, 185, 129, 0.1);
       }
 
       .p-checkbox-icon {
-        color: white;
+        color: rgb(30, 19, 122);
+        font-size: 18px;
         font-weight: 900;
+        line-height: 1;
+        display: block;
+        text-align: center;
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
       }
+    }
+
+    .p-checkbox-label {
+      margin-left: 12px;
+      font-weight: 600;
+      color: #07122b;
+      font-size: 15px;
+      cursor: pointer;
+      letter-spacing: 0.2px;
     }
   }
 }

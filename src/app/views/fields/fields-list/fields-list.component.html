@@ -399,20 +399,7 @@
                 {{ translateLabel('fields.allowedFileExtensions') }}
               </label>
 
-              <!-- Predefined Extensions -->
-              <div class="extensions-grid">
-                <div *ngFor="let ext of availableFileExtensions" class="extension-item"
-                  [class.selected]="isExtensionSelected(ext.value)" (click)="toggleFileExtension(ext.value)">
-                  <input type="checkbox" [checked]="isExtensionSelected(ext.value)"
-                    (change)="toggleFileExtension(ext.value)" [id]="'ext-' + ext.value" />
-                  <label [for]="'ext-' + ext.value" class="extension-label">
-                    <span class="extension-value">.{{ ext.value.toUpperCase() }}</span>
-                    <span class="extension-name">{{ getExtensionLabel(ext) }}</span>
-                  </label>
-                </div>
-              </div>
-
-              <!-- Custom Extensions -->
+              <!-- Add Custom Extension -->
               <div class="custom-extensions-section">
                 <label class="custom-extensions-label">
                   <i class="pi pi-plus-circle"></i>
@@ -420,30 +407,38 @@
                 </label>
                 <div class="add-custom-extension">
                   <input type="text" class="form-control custom-extension-input" [(ngModel)]="newCustomExtension"
-                    [placeholder]="translateLabel('fields.enterExtension')" (keyup.enter)="addCustomExtension()"
+                    [ngModelOptions]="{standalone: true}" [placeholder]="translateLabel('fields.enterExtension')" (keyup.enter)="addCustomExtension()"
                     maxlength="10" />
+                  <input type="number" class="form-control custom-extension-maxsize-input" [(ngModel)]="newCustomExtensionMaxSize"
+                    [ngModelOptions]="{standalone: true}" placeholder="Max Size (MB)" min="1" max="1000" step="1" />
                   <button type="button" class="btn-add-extension" (click)="addCustomExtension()"
-                    [disabled]="!newCustomExtension.trim()">
+                    [disabled]="!newCustomExtension || !newCustomExtension.trim()">
                     <i class="pi pi-plus"></i>
                     {{ translateLabel('common.add') }}
                   </button>
                 </div>
+              </div>
 
-                <!-- Custom Extensions List -->
-                <div class="custom-extensions-list" *ngIf="customFileExtensions.length > 0">
-                  <div *ngFor="let ext of customFileExtensions" class="custom-extension-item">
-                    <span class="custom-extension-value">.{{ ext.toUpperCase() }}</span>
-                    <button type="button" class="btn-remove-custom-extension" (click)="removeCustomExtension(ext)"
+              <!-- Allowed Extensions List (from custom extensions) -->
+              <div class="extensions-grid" *ngIf="customFileExtensions.length > 0">
+                <div *ngFor="let ext of customFileExtensions" class="extension-item"
+                  [class.selected]="isExtensionSelected(ext)" (click)="toggleFileExtension(ext)">
+                  <input type="checkbox" [checked]="isExtensionSelected(ext)"
+                    (change)="toggleFileExtension(ext)" [id]="'ext-' + ext" />
+                  <label [for]="'ext-' + ext" class="extension-label">
+                    <span class="extension-value">.{{ ext.toUpperCase() }}</span>
+                    <button type="button" class="btn-remove-custom-extension" (click)="removeCustomExtension(ext); $event.stopPropagation()"
                       [title]="translateLabel('common.delete')">
                       <i class="pi pi-times"></i>
                     </button>
-                  </div>
+                  </label>
                 </div>
               </div>
 
-              <small class="form-text text-muted">
-                {{ translateLabel('fields.selectAllowedExtensions') }}
-              </small>
+              <div class="extensions-empty" *ngIf="customFileExtensions.length === 0">
+                <i class="pi pi-inbox"></i>
+                <span>{{ translateLabel('fields.selectAllowedExtensions') }}</span>
+              </div>
             </div>
 
             <div class="file-input-preview">
