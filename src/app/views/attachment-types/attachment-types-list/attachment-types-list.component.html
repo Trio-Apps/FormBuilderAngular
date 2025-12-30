@@ -274,16 +274,20 @@
 
         <!-- Active Status -->
         <div class="form-section">
-          <h3><i class="pi pi-info-circle"></i> Status</h3>
-          <div class="form-row">
-            <div class="form-group checkbox-group">
-              <p-checkbox
-                formControlName="isActive"
-                label="Active"
-                [binary]="true"
-                inputId="isActive"
-                name="isActive"
-              ></p-checkbox>
+          <div class="form-group active-status-group">
+            <label class="active-status-label">ACTIVE STATUS</label>
+            <div class="checkbox-wrapper">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  formControlName="isActive"
+                  id="isActive"
+                  class="status-checkbox"
+                  [checked]="attachmentTypeForm.get('isActive')?.value"
+                />
+                <span class="checkbox-custom"></span>
+                <span class="status-text">{{ attachmentTypeForm.get('isActive')?.value === true ? 'Active' : 'Inactive' }}</span>
+              </label>
             </div>
           </div>
         </div>

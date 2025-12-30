@@ -71,7 +71,8 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         const userRole = this.authService.role();
         const currentPath = event.urlAfterRedirects || event.url;
         
-        if (userRole === 'Administration' && (currentPath === '/' || currentPath === '/document-types')) {
+        // Only redirect root path to dashboard, allow /document-types for admin
+        if (userRole === 'Administration' && currentPath === '/') {
           this.router.navigate(['/dashboard']);
         }
       });

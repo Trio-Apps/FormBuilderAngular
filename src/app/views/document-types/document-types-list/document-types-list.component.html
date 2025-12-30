@@ -258,6 +258,7 @@
               formControlName="isActive"
               id="isActive"
               class="toggle-input"
+              [checked]="documentTypeForm.get('isActive')?.value"
             />
             <span class="toggle-slider"></span>
           </label>
@@ -475,6 +476,7 @@
                 formControlName="isActive"
                 id="seriesIsActive"
                 class="toggle-input"
+                [checked]="seriesForm.get('isActive')?.value"
               />
               <span class="toggle-slider"></span>
             </label>

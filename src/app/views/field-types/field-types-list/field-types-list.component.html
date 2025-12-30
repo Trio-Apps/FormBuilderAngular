@@ -341,13 +341,19 @@
 
           <!-- Active Status - Always visible -->
           <div class="form-section">
-            <h3><i class="pi pi-info-circle"></i> Status</h3>
-            <div class="form-row">
-              <div class="form-group checkbox-group">
+            <div class="form-group active-status-group">
+              <label class="active-status-label">ACTIVE STATUS</label>
+              <div class="checkbox-wrapper">
                 <label class="checkbox-label">
-                  <input type="checkbox" formControlName="isActive" id="isActive">
-                  <span class="checkmark"></span>
-                  Active
+                  <input
+                    type="checkbox"
+                    formControlName="isActive"
+                    id="isActive"
+                    class="status-checkbox"
+                    [checked]="fieldTypeForm.get('isActive')?.value"
+                  />
+                  <span class="checkbox-custom"></span>
+                  <span class="status-text">{{ fieldTypeForm.get('isActive')?.value === true ? 'Active' : 'Inactive' }}</span>
                 </label>
               </div>
             </div>

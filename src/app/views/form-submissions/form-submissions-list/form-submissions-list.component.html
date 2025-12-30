@@ -392,9 +392,9 @@
       <div *ngIf="loading.fields" class="loading-fields-state">
         <i class="pi pi-spin pi-spinner"></i>
         <p>Loading fields...</p>
-      </div>
+    </div>
 
-      <!-- Fields Section (shown after tab is selected) -->
+    <!-- Fields Section (shown after tab is selected) -->
       <div *ngIf="!loading.fields && fields.length > 0" class="google-form-fields">
       <form [formGroup]="fieldsForm">
           <div *ngFor="let field of fields" class="form-field-wrapper">

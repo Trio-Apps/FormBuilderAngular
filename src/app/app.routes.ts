@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './auth/auth.guard';
 import { loginGuard } from './auth/login.guard';
 import { dashboardGuard } from './auth/dashboard.guard';
+import { adminGuard } from './auth/admin.guard';
 
 export const routes: Routes = [
   // ===== المسارات العامة =====
@@ -47,11 +48,12 @@ export const routes: Routes = [
           .then(m => m.ProjectsListComponent)
       },
 
-      // ===== Document Types =====
+      // ===== Document Types ===== (Admin only)
       {
         path: 'document-types',
         loadComponent: () => import('./views/document-types/document-types-list/document-types-list.component')
-          .then(m => m.DocumentTypesListComponent)
+          .then(m => m.DocumentTypesListComponent),
+        canActivate: [adminGuard] // Only Administration role can access
       },
 
       // ===== Form Submissions by Document Type =====

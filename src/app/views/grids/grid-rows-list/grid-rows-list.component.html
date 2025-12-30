@@ -364,17 +364,19 @@
       </div>
 
       <!-- Status Toggle -->
-      <div class="mb-3">
-        <label class="form-label d-block">{{ translateLabel('common.status') || 'Status' }}</label>
-        <div class="form-check form-switch">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            id="isActive"
-            formControlName="isActive"
-          />
-          <label class="form-check-label" for="isActive">
-            {{ rowForm.get('isActive')?.value ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
+      <div class="form-group active-status-group">
+        <label class="active-status-label">{{ translateLabel('common.status') || 'ACTIVE STATUS' }}</label>
+        <div class="checkbox-wrapper">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              id="isActive"
+              formControlName="isActive"
+              class="status-checkbox"
+              [checked]="rowForm.get('isActive')?.value"
+            />
+            <span class="checkbox-custom"></span>
+            <span class="status-text">{{ rowForm.get('isActive')?.value ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}</span>
           </label>
         </div>
       </div>

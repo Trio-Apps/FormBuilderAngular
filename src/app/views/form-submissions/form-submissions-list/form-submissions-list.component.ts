@@ -169,7 +169,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         this.selectedTabId = null;
         this.fields = [];
         this.fieldFiles = {};
-        this.fieldsForm = this.fb.group({});
+    this.fieldsForm = this.fb.group({});
         this.loading.fields = false;
       }
     });
@@ -765,20 +765,20 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         if (formBuilderIdControl) {
           formBuilderIdControl.disable();
         }
-        this.addSubmissionForm.patchValue({
-          formBuilderId: this.documentType.formBuilderId,
+      this.addSubmissionForm.patchValue({
+        formBuilderId: this.documentType.formBuilderId,
           tabId: null,
-          status: 'Draft'
-        });
-        this.onFormSelected(this.documentType.formBuilderId);
-      } else {
+        status: 'Draft'
+      });
+      this.onFormSelected(this.documentType.formBuilderId);
+    } else {
         // Form doesn't exist in active/published forms, allow user to select
         console.warn(`[openAddSubmissionModal] FormBuilderId ${this.documentType.formBuilderId} from documentType not found in active forms list`);
         if (formBuilderIdControl) {
           formBuilderIdControl.enable();
         }
-        this.addSubmissionForm.reset({
-          formBuilderId: null,
+      this.addSubmissionForm.reset({
+        formBuilderId: null,
           tabId: null,
           seriesId: null,
           status: 'Draft'
@@ -886,9 +886,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     if (tabId === null || tabId === undefined) {
       console.log('[onTabSelected] tabId is null/undefined, clearing fields');
       this.selectedTabId = null;
-      this.fields = [];
-      this.fieldFiles = {};
-      this.fieldsForm = this.fb.group({});
+    this.fields = [];
+    this.fieldFiles = {};
+    this.fieldsForm = this.fb.group({});
       this.loading.fields = false;
       return;
     }
@@ -1314,7 +1314,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
               valueDto.valueJson = JSON.stringify(fieldValue);
               valueDto.valueString = "";
             } else {
-              valueDto.valueString = String(fieldValue);
+            valueDto.valueString = String(fieldValue);
               valueDto.valueJson = "";
             }
             break;
@@ -1474,7 +1474,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
     // Explicit mapping: Textbox => text input
     if (fieldTypeName === 'textbox' || fieldTypeName.includes('text box')) {
-      return 'string';
+    return 'string';
     }
 
     // 1) Types with options (select / radio / checkbox)
