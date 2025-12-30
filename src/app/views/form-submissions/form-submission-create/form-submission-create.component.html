@@ -1,0 +1,261 @@
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" [routerLink]="['/document-types', documentTypeId, 'submissions']" title="Back to Submissions">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Create New Submission</h1>
+          <p class="page-subtitle">{{ documentType?.name || 'Form Submission' }}</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-primary" (click)="saveSubmission()" [disabled]="submissionForm.invalid || fieldsForm.invalid || loading.create">
+          <i class="pi pi-save"></i>
+          <span>Save Submission</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a [routerLink]="['/document-types']" class="breadcrumb-link">
+        <i class="pi pi-file"></i>
+        <span>Document Types</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a [routerLink]="['/document-types', documentTypeId, 'submissions']" class="breadcrumb-link">
+        <i class="pi pi-list"></i>
+        <span>{{ documentType?.name || 'Submissions' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-plus"></i>
+        <span>New Submission</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="form-container">
+      <form [formGroup]="submissionForm" (ngSubmit)="saveSubmission()">
+        <!-- Tabs Navigation -->
+        <div class="tabs-navigation" *ngIf="tabs && tabs.length > 0">
+          <ul class="nav-tabs-list">
+            <li *ngFor="let tab of tabs; let i = index" class="nav-tab-item" [class.active]="i === activeTabIndex">
+              <button type="button" class="nav-tab-button" (click)="setActiveTab(i)">
+                {{ getTabName(tab) }}
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Form Display Section -->
+        <div *ngIf="selectedFormId && selectedTabId" class="form-display-section">
+          <!-- Form Header -->
+          <div class="form-header-section" *ngIf="selectedFormId">
+            <h2 class="form-title">{{ getFormName(selectedFormId) }}</h2>
+          </div>
+
+          <!-- Loading Fields State -->
+          <div *ngIf="loading.fields" class="loading-fields-state">
+            <i class="pi pi-spin pi-spinner"></i>
+            <p>Loading fields...</p>
+          </div>
+
+          <!-- Fields Section -->
+          <div *ngIf="!loading.fields && fields.length > 0" class="google-form-fields">
+            <form [formGroup]="fieldsForm">
+              <div *ngFor="let field of fields" class="form-field-wrapper">
+                <!-- Field Label -->
+                <label class="field-label" [for]="isFileField(field) ? 'file-' + field.id : 'field_' + field.id">
+                  {{ getFieldDisplayName(field) }}
+                  <span *ngIf="isRequired(field)" class="required-indicator">*</span>
+                </label>
+
+                <!-- Field Hint Text -->
+                <div class="field-hint" *ngIf="getFieldHintText(field)">
+                  {{ getFieldHintText(field) }}
+                </div>
+
+                <!-- Field Input -->
+                <div class="field-input-wrapper">
+                  <!-- Text Input -->
+                  <input
+                    *ngIf="getFieldType(field) === 'string' && !isFileField(field)"
+                    type="text"
+                    [id]="'field_' + field.id"
+                    [formControlName]="'field_' + field.id"
+                    class="form-input"
+                    [placeholder]="getFieldPlaceholder(field)">
+
+                  <!-- Number Input -->
+                  <p-inputNumber
+                    *ngIf="getFieldType(field) === 'number'"
+                    [id]="'field_' + field.id"
+                    [formControlName]="'field_' + field.id"
+                    [showButtons]="false"
+                    [useGrouping]="false"
+                    [placeholder]="getFieldPlaceholder(field)"
+                    styleClass="form-input-number">
+                  </p-inputNumber>
+
+                  <!-- Date Input -->
+                  <input
+                    *ngIf="getFieldType(field) === 'date'"
+                    type="date"
+                    [id]="'field_' + field.id"
+                    [formControlName]="'field_' + field.id"
+                    class="form-input">
+
+                  <!-- Textarea -->
+                  <textarea
+                    *ngIf="getFieldType(field) === 'textarea'"
+                    [id]="'field_' + field.id"
+                    [formControlName]="'field_' + field.id"
+                    class="form-textarea"
+                    [rows]="4"
+                    [placeholder]="getFieldPlaceholder(field)">
+                  </textarea>
+
+                  <!-- Select / Dropdown -->
+                  <select
+                    *ngIf="getFieldType(field) === 'select'"
+                    [id]="'field_' + field.id"
+                    [formControlName]="'field_' + field.id"
+                    class="form-select">
+                    <option [value]="''" [disabled]="isRequired(field)">
+                      {{ getFieldPlaceholder(field) }}
+                    </option>
+                    <option *ngFor="let opt of getFieldOptions(field)" [value]="opt.optionValue">
+                      {{ opt.optionText || opt.optionValue }}
+                    </option>
+                  </select>
+
+                  <!-- Radio Buttons -->
+                  <div *ngIf="getFieldType(field) === 'radio'" class="radio-group">
+                    <div class="radio-option" *ngFor="let opt of getFieldOptions(field)">
+                      <input
+                        type="radio"
+                        [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
+                        [name]="'radio-' + field.id"
+                        [value]="opt.optionValue"
+                        [formControlName]="'field_' + field.id">
+                      <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
+                        {{ opt.optionText || opt.optionValue }}
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Checkbox (Multiple Selection) -->
+                  <div *ngIf="getFieldType(field) === 'checkbox'" class="checkbox-group">
+                    <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field)">
+                      <input
+                        type="checkbox"
+                        [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
+                        [value]="opt.optionValue"
+                        (change)="onCheckboxChange(field, opt.optionValue, $event)">
+                      <label [for]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)" class="checkbox-label">
+                        {{ opt.optionText || opt.optionValue }}
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Boolean/Switch Field -->
+                  <div *ngIf="getFieldType(field) === 'boolean'" class="checkbox-wrapper">
+                    <p-checkbox
+                      [id]="'field_' + field.id"
+                      [formControlName]="'field_' + field.id"
+                      [binary]="true">
+                    </p-checkbox>
+                    <label [for]="'field_' + field.id" class="checkbox-label">
+                      {{ getFieldDisplayName(field) }}
+                    </label>
+                  </div>
+
+                  <!-- File Upload Field -->
+                  <div *ngIf="isFileField(field)" class="file-upload-wrapper">
+                    <!-- Allowed Extensions Info -->
+                    <div class="allowed-extensions-info" *ngIf="getAllowedExtensions(field).length > 0">
+                      <i class="pi pi-info-circle"></i>
+                      <span>
+                        Allowed extensions: <strong>{{ formatAllowedExtensions(getAllowedExtensions(field)) }}</strong>
+                      </span>
+                    </div>
+
+                    <div class="file-upload-area">
+                      <input
+                        type="file"
+                        [id]="'file-' + field.id"
+                        class="file-input-hidden"
+                        (change)="onFileSelected($event, field)"
+                        [multiple]="field.fieldType?.allowMultiple || false"
+                        [accept]="getAcceptedFileTypes(field)">
+                      <label [for]="'file-' + field.id" class="file-upload-label">
+                        <i class="pi pi-cloud-upload"></i>
+                        <span>Choose file{{ field.fieldType?.allowMultiple ? 's' : '' }} to upload</span>
+                      </label>
+
+                      <div class="file-size-info" *ngIf="getMaxFileSize(field) > 0">
+                        <small>Max size: <strong>{{ formatFileSize(getMaxFileSize(field)) }}</strong></small>
+                      </div>
+                    </div>
+
+                    <!-- Uploaded Files List -->
+                    <div class="uploaded-files-list" *ngIf="getFieldFiles(field.id!).length > 0">
+                      <div class="uploaded-file-item" *ngFor="let file of getFieldFiles(field.id!); let i = index">
+                        <i class="pi pi-file"></i>
+                        <div class="file-info">
+                          <div class="file-name">{{ file.name }}</div>
+                          <div class="file-size">{{ (file.size / 1024).toFixed(2) }} KB</div>
+                        </div>
+                        <button
+                          type="button"
+                          class="remove-file-btn"
+                          (click)="removeFile(field.id!, i)"
+                          title="Remove file">
+                          <i class="pi pi-times"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Validation Messages -->
+                <div *ngIf="fieldsForm.get('field_' + field.id)?.invalid && fieldsForm.get('field_' + field.id)?.touched" class="field-error">
+                  This field is required
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <!-- Empty Fields State -->
+          <div *ngIf="selectedTabId && !loading.fields && fields.length === 0" class="empty-fields-state">
+            <i class="pi pi-inbox"></i>
+            <p>No fields available in this tab.</p>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <button type="button" class="btn-cancel" (click)="goBack()">
+            Cancel
+          </button>
+          <button type="submit" class="btn-submit" [disabled]="submissionForm.invalid || fieldsForm.invalid || loading.create">
+            <span *ngIf="!loading.create">Save</span>
+            <span *ngIf="loading.create">
+              <i class="pi pi-spin pi-spinner"></i> Saving...
+            </span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<p-toast></p-toast>

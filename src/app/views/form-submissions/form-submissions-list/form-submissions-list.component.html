@@ -15,7 +15,7 @@
         <button class="btn-icon" (click)="loadSubmissions()" [disabled]="loading.submissions" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openAddSubmissionModal()" [disabled]="loading.submissions || !documentType">
+        <button class="btn-primary" [routerLink]="['/document-types', documentTypeId, 'submissions', 'new']" [disabled]="loading.submissions || !documentType">
           <i class="pi pi-plus"></i>
           <span>New Submission</span>
         </button>
@@ -84,7 +84,7 @@
           label="Create New Submission" 
           icon="pi pi-plus" 
           class="p-button-primary btn-primary" 
-          (click)="openAddSubmissionModal()"
+          [routerLink]="['/document-types', documentTypeId, 'submissions', 'new']"
           [disabled]="loading.submissions || !documentType">
         </button>
       </div>

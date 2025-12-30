@@ -63,6 +63,13 @@ export const routes: Routes = [
           .then(m => m.FormSubmissionsListComponent)
       },
 
+      // ===== Create New Form Submission =====
+      {
+        path: 'document-types/:documentTypeId/submissions/new',
+        loadComponent: () => import('./views/form-submissions/form-submission-create/form-submission-create.component')
+          .then(m => m.FormSubmissionCreateComponent)
+      },
+
       // ===== Form Builder System =====
       {
         path: 'form-builder',

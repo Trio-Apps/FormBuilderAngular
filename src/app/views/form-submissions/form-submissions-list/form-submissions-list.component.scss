@@ -70,21 +70,26 @@
       .form-textarea,
       .form-select {
         width: 100%;
-        padding: 10px 0;
-        border: none;
-        border-bottom: 1px solid #dadce0;
-        font-size: 14px;
-        color: #202124;
-        background: transparent;
-        transition: border-color 0.2s ease;
+        padding: 14px 16px;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        font-size: 15px;
+        color: #1f2937;
+        background: #f9fafb;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        font-family: inherit;
 
         &:focus {
           outline: none;
-          border-bottom: 2px solid #1a73e8;
+          border-color: #00EBB5;
+          background: #ffffff;
+          box-shadow: 0 0 0 4px rgba(0, 235, 181, 0.1);
+          transform: translateY(-1px);
         }
 
         &::placeholder {
-          color: #9aa0a6;
+          color: #9ca3af;
+          font-weight: 400;
         }
       }
 
