@@ -1,12 +1,13 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './auth/auth.guard';
 import { loginGuard } from './auth/login.guard';
+import { dashboardGuard } from './auth/dashboard.guard';
 
 export const routes: Routes = [
   // ===== المسارات العامة =====
   { 
     path: '', 
-    redirectTo: 'dashboard', 
+    redirectTo: 'document-types', 
     pathMatch: 'full' 
   },
   
@@ -32,10 +33,11 @@ export const routes: Routes = [
         .then(m => m.DefaultLayoutComponent),
     canActivate: [authGuard], // يمنع المستخدمين غير المسجلين
     children: [
-      // ===== Dashboard =====
+      // ===== Dashboard ===== (Admin only)
       {
         path: 'dashboard',
-        loadChildren: () => import('./views/dashboard/routes').then(m => m.routes)
+        loadChildren: () => import('./views/dashboard/routes').then(m => m.routes),
+        canActivate: [dashboardGuard] // Only Administration role can access
       },
 
       // ===== Projects =====
@@ -50,6 +52,13 @@ export const routes: Routes = [
         path: 'document-types',
         loadComponent: () => import('./views/document-types/document-types-list/document-types-list.component')
           .then(m => m.DocumentTypesListComponent)
+      },
+
+      // ===== Form Submissions by Document Type =====
+      {
+        path: 'document-types/:documentTypeId/submissions',
+        loadComponent: () => import('./views/form-submissions/form-submissions-list/form-submissions-list.component')
+          .then(m => m.FormSubmissionsListComponent)
       },
 
       // ===== Form Builder System =====

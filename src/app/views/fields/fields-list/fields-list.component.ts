@@ -634,7 +634,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
       console.log('[saveField] Update DTO:', updateDto);
       console.log('[saveField] Update DTO defaultValueJson:', updateDto.defaultValueJson);
-      
+
       this.fieldsService.updateField(this.editingField.id, updateDto).subscribe({
         next: (updatedField) => {
           // Save field options if field type has options
@@ -701,7 +701,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
       console.log('[saveField] Create DTO:', createDto);
       console.log('[saveField] Create DTO defaultValueJson:', createDto.defaultValueJson);
-      
+
       this.fieldsService.createField(createDto).subscribe({
         next: (newField) => {
           // Save field options if field type has options
@@ -1217,12 +1217,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         // Extension already exists in database
         console.log('[addCustomExtension] Attachment type already exists in database:', existingType);
         // Still add to local lists if it exists in database but not in local list
-        this.customFileExtensions.push(ext);
+    this.customFileExtensions.push(ext);
         if (!this.selectedFileExtensions.includes(ext)) {
           this.selectedFileExtensions.push(ext);
         }
-        this.newCustomExtension = '';
-        this.saveFileExtensionsToForm();
+    this.newCustomExtension = '';
+    this.saveFileExtensionsToForm();
         this.cdr.detectChanges();
         this.messageService.add({
           severity: 'info',

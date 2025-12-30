@@ -1,0 +1,428 @@
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/document-types" title="Back to Document Types">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">{{ documentType?.name || 'Form Submissions' }}</h1>
+          <p class="page-subtitle">Manage form submissions for this document type</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadSubmissions()" [disabled]="loading.submissions" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openAddSubmissionModal()" [disabled]="loading.submissions || !documentType">
+          <i class="pi pi-plus"></i>
+          <span>New Submission</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/document-types" class="breadcrumb-link">
+        <i class="pi pi-file"></i>
+        <span>Document Types</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-list"></i>
+        <span>{{ documentType?.name || 'Form Submissions' }}</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Form Submissions Section -->
+    <div class="document-types-section">
+      <div class="section-header">
+        <h3>Form Submissions List</h3>
+        <div class="header-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              placeholder="Search submissions..."
+              class="search-input"
+              [(ngModel)]="searchTerm"
+              (input)="onSearchChange()"
+            />
+          </div>
+          <select
+            class="status-filter-select"
+            [(ngModel)]="statusFilter"
+            (change)="onStatusFilterChange()">
+            <option [ngValue]="null">All Statuses</option>
+            <option [ngValue]="'Draft'">Draft</option>
+            <option [ngValue]="'Submitted'">Submitted</option>
+            <option [ngValue]="'Approved'">Approved</option>
+            <option [ngValue]="'Rejected'">Rejected</option>
+            <option [ngValue]="'Pending Approval'">Pending Approval</option>
+          </select>
+        </div>
+      </div>
+
+      <div *ngIf="loading.submissions" class="loading-container">
+        <i class="pi pi-spin pi-spinner"></i>
+        <p>Loading form submissions...</p>
+      </div>
+
+      <div *ngIf="!loading.submissions && filteredSubmissions.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-file"></i>
+        </div>
+        <h4>No Form Submissions Found</h4>
+        <p>There are no form submissions for this document type yet.</p>
+        <button pButton 
+          label="Create New Submission" 
+          icon="pi pi-plus" 
+          class="p-button-primary btn-primary" 
+          (click)="openAddSubmissionModal()"
+          [disabled]="loading.submissions || !documentType">
+        </button>
+      </div>
+
+      <p-table *ngIf="!loading.submissions && filteredSubmissions.length > 0" 
+        [value]="getPaginatedSubmissions()" 
+        [paginator]="false"
+        styleClass="p-datatable-sm document-types-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>#</th>
+            <th>Document Number</th>
+            <th>Form Name</th>
+            <th>Series Code</th>
+            <th>Submitted By</th>
+            <th>Submitted Date</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-submission let-rowIndex="rowIndex">
+          <tr>
+            <td>{{ first + rowIndex + 1 }}</td>
+            <td>
+              <div class="document-name-cell">
+                <i class="pi pi-file"></i>
+                <span>{{ submission.documentNumber || '-' }}</span>
+              </div>
+            </td>
+            <td>{{ submission.formName || '-' }}</td>
+            <td><code>{{ submission.seriesCode || '-' }}</code></td>
+            <td>{{ submission.submittedByUserName || submission.submittedByUserId || '-' }}</td>
+            <td>{{ formatDate(submission.submittedDate) }}</td>
+            <td>
+              <span [ngClass]="'badge ' + getStatusClass(submission.status)">
+                <i class="pi pi-circle-fill"></i>
+                {{ submission.status }}
+              </span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button pButton 
+                  icon="pi pi-pencil" 
+                  class="p-button-text p-button-sm action-btn" 
+                  (click)="openEditModal(submission)"
+                  pTooltip="Edit"
+                  tooltipPosition="top"></button>
+                <button pButton 
+                  icon="pi pi-trash" 
+                  class="p-button-text p-button-sm action-btn action-btn-danger" 
+                  (click)="deleteSubmission(submission)"
+                  pTooltip="Delete"
+                  tooltipPosition="top"></button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+
+      <p-paginator 
+        *ngIf="!loading.submissions && filteredSubmissions.length > 0"
+        [first]="first"
+        [rows]="rows"
+        [totalRecords]="totalRecords"
+        [rowsPerPageOptions]="[10, 20, 50]"
+        (onPageChange)="onPageChange($event)"
+        styleClass="document-types-paginator">
+      </p-paginator>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Submission Modal -->
+<p-dialog
+  [(visible)]="showSubmissionModal"
+  [header]="'Edit Form Submission'"
+  [modal]="true"
+  [style]="{ width: '600px' }"
+  [draggable]="false"
+  [resizable]="false"
+  [autoZIndex]="true"
+  [baseZIndex]="10001"
+  (onHide)="closeSubmissionModal()">
+  <form [formGroup]="submissionForm" (ngSubmit)="saveSubmission()">
+    <div class="form-group">
+      <label for="documentNumber">
+        Document Number
+      </label>
+      <input type="text" id="documentNumber" pInputText formControlName="documentNumber" placeholder="Enter document number" />
+    </div>
+
+    <div class="form-group">
+      <label for="status">
+        Status <span class="text-danger">*</span>
+      </label>
+      <select
+        id="status"
+        formControlName="status"
+        class="p-inputtext w-full">
+        <option value="Draft">Draft</option>
+        <option value="Submitted">Submitted</option>
+        <option value="Approved">Approved</option>
+        <option value="Rejected">Rejected</option>
+        <option value="Pending Approval">Pending Approval</option>
+      </select>
+    </div>
+
+    <div class="dialog-footer">
+      <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeSubmissionModal()" [disabled]="loading.save"></button>
+      <button type="submit" pButton 
+        label="Update Submission" 
+        icon="pi pi-save"
+        [disabled]="submissionForm.invalid || loading.save"
+        [loading]="loading.save"></button>
+    </div>
+  </form>
+</p-dialog>
+
+<!-- Field Value Modal -->
+<p-dialog
+  [(visible)]="showFieldValueModal"
+  [header]="editingFieldValue ? 'Edit Field Value' : 'Add Field Value'"
+  [modal]="true"
+  [style]="{ width: '600px' }"
+  [draggable]="false"
+  [resizable]="false"
+  [autoZIndex]="true"
+  [baseZIndex]="10002"
+  (onHide)="closeFieldValueModal()">
+  <form [formGroup]="fieldValueForm" (ngSubmit)="saveFieldValue()">
+    <div class="form-group">
+      <label for="fieldId">
+        Field ID <span class="text-danger">*</span>
+      </label>
+      <input 
+        type="number" 
+        id="fieldId" 
+        pInputText 
+        formControlName="fieldId" 
+        placeholder="Enter field ID"
+        [disabled]="!!editingFieldValue" />
+    </div>
+
+    <div class="form-group">
+      <label for="fieldCode">
+        Field Code <span class="text-danger">*</span>
+      </label>
+      <input 
+        type="text" 
+        id="fieldCode" 
+        pInputText 
+        formControlName="fieldCode" 
+        placeholder="Enter field code"
+        [disabled]="!!editingFieldValue" />
+    </div>
+
+    <div class="form-group">
+      <label for="valueString">Value String</label>
+      <input 
+        type="text" 
+        id="valueString" 
+        pInputText 
+        formControlName="valueString" 
+        placeholder="Enter string value" />
+    </div>
+
+    <div class="form-group">
+      <label for="valueNumber">Value Number</label>
+      <p-inputNumber 
+        id="valueNumber" 
+        formControlName="valueNumber" 
+        placeholder="Enter number value"
+        [showButtons]="false"
+        [useGrouping]="false">
+      </p-inputNumber>
+    </div>
+
+    <div class="form-group">
+      <label for="valueDate">Value Date</label>
+      <input 
+        type="datetime-local" 
+        id="valueDate" 
+        pInputText 
+        formControlName="valueDate" 
+        placeholder="Select date" />
+    </div>
+
+    <div class="form-group checkbox-group">
+      <label for="valueBool">Value Boolean</label>
+      <p-checkbox 
+        id="valueBool" 
+        formControlName="valueBool" 
+        [binary]="true"
+        label="True">
+      </p-checkbox>
+    </div>
+
+    <div class="form-group">
+      <label for="valueJson">Value JSON</label>
+      <textarea 
+        id="valueJson" 
+        pInputText 
+        formControlName="valueJson" 
+        placeholder="Enter JSON value"
+        rows="4"
+        class="w-full">
+      </textarea>
+    </div>
+
+    <div class="dialog-footer">
+      <button 
+        type="button" 
+        pButton 
+        label="Cancel" 
+        icon="pi pi-times" 
+        class="p-button-secondary" 
+        (click)="closeFieldValueModal()" 
+        [disabled]="loading.saveFieldValue">
+      </button>
+      <button 
+        type="submit" 
+        pButton 
+        [label]="editingFieldValue ? 'Update Field Value' : 'Create Field Value'" 
+        icon="pi pi-save"
+        [disabled]="fieldValueForm.invalid || loading.saveFieldValue"
+        [loading]="loading.saveFieldValue">
+      </button>
+    </div>
+  </form>
+</p-dialog>
+
+<!-- Add New Submission Modal -->
+<p-dialog
+  [(visible)]="showAddSubmissionModal"
+  header="Create New Form Submission"
+  [modal]="true"
+  [style]="{ width: '600px' }"
+  [draggable]="false"
+  [resizable]="false"
+  [autoZIndex]="true"
+  [baseZIndex]="10003"
+  (onHide)="closeAddSubmissionModal()">
+  <form [formGroup]="addSubmissionForm" (ngSubmit)="createSubmission()">
+    <div class="form-group">
+      <label for="formBuilderId">
+        Form <span class="text-danger">*</span>
+      </label>
+      <select
+        id="formBuilderId"
+        formControlName="formBuilderId"
+        class="p-inputtext w-full"
+        [disabled]="!!documentType?.formBuilderId || loading.forms">
+        <option [ngValue]="null">
+          {{ loading.forms ? 'Loading forms...' : 'Select a form...' }}
+        </option>
+        <option *ngFor="let form of forms" [ngValue]="form.id">
+          {{ form.formName }} ({{ form.formCode }})
+        </option>
+      </select>
+      <div *ngIf="loading.forms" class="form-text">
+        <i class="pi pi-spin pi-spinner"></i> Loading forms...
+      </div>
+      <div *ngIf="forms.length === 0 && !loading.forms" class="form-text text-danger">
+        No active forms available. Please create a form first.
+      </div>
+      <div *ngIf="addSubmissionForm.get('formBuilderId')?.invalid && addSubmissionForm.get('formBuilderId')?.touched" class="form-text text-danger">
+        Form is required
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="seriesId">
+        Document Series <span class="text-danger">*</span>
+      </label>
+      <select
+        id="seriesId"
+        formControlName="seriesId"
+        class="p-inputtext w-full"
+        [disabled]="loading.series">
+        <option [ngValue]="null">
+          {{ loading.series ? 'Loading series...' : 'Select a series...' }}
+        </option>
+        <option *ngFor="let series of documentSeries" [ngValue]="series.id">
+          {{ series.seriesCode }} (Project #{{ series.projectId }})
+        </option>
+      </select>
+      <div *ngIf="loading.series" class="form-text">
+        <i class="pi pi-spin pi-spinner"></i> Loading series...
+      </div>
+      <div *ngIf="documentSeries.length === 0 && !loading.series" class="form-text text-danger">
+        No active series available. Please create a series first.
+      </div>
+      <div *ngIf="addSubmissionForm.get('seriesId')?.invalid && addSubmissionForm.get('seriesId')?.touched" class="form-text text-danger">
+        Document Series is required
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="status">
+        Status <span class="text-danger">*</span>
+      </label>
+      <select
+        id="status"
+        formControlName="status"
+        class="p-inputtext w-full">
+        <option value="Draft">Draft</option>
+        <option value="Submitted">Submitted</option>
+        <option value="Approved">Approved</option>
+        <option value="Rejected">Rejected</option>
+        <option value="Pending Approval">Pending Approval</option>
+      </select>
+      <div *ngIf="addSubmissionForm.get('status')?.invalid && addSubmissionForm.get('status')?.touched" class="form-text text-danger">
+        Status is required
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <button 
+        type="button" 
+        pButton 
+        label="Cancel" 
+        icon="pi pi-times" 
+        class="p-button-secondary" 
+        (click)="closeAddSubmissionModal()" 
+        [disabled]="loading.create">
+      </button>
+      <button 
+        type="submit" 
+        pButton 
+        label="Create Submission" 
+        icon="pi pi-save"
+        [disabled]="addSubmissionForm.invalid || loading.create"
+        [loading]="loading.create">
+      </button>
+    </div>
+  </form>
+</p-dialog>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

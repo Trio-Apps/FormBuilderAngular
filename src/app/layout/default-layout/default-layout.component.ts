@@ -1,8 +1,9 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { RouterLink, RouterOutlet } from '@angular/router';
+import { RouterLink, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { NgScrollbar } from 'ngx-scrollbar';
 import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
+import { filter } from 'rxjs/operators';
 
 import { IconDirective } from '@coreui/icons-angular';
 import {
@@ -21,6 +22,8 @@ import {
 import { DefaultFooterComponent, DefaultHeaderComponent } from './';
 import { navItems } from './_nav';
 import { AuthService } from '../../auth/auth.service';
+import { DocumentTypesService } from '../../views/FormBuilder/services/document-types.service';
+import { DocumentType } from '../../views/FormBuilder/form-builder/models/document-types.model';
 
 @Component({
   selector: 'app-dashboard',
@@ -48,16 +51,52 @@ import { AuthService } from '../../auth/auth.service';
 export class DefaultLayoutComponent implements OnInit, OnDestroy {
   public navItems: INavData[] = [];
   private roleSubscription?: Subscription;
+  private routerSubscription?: Subscription;
+  documentTypes: DocumentType[] = [];
 
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private router: Router,
+    private documentTypesService: DocumentTypesService
+  ) {}
 
   ngOnInit(): void {
-    this.filterNavItemsByRole();
+    // Load document types first, then filter nav items
+    this.loadDocumentTypes();
+    
+    // Redirect to dashboard if Admin and on root/document-types
+    this.routerSubscription = this.router.events
+      .pipe(filter(event => event instanceof NavigationEnd))
+      .subscribe((event: any) => {
+        const userRole = this.authService.role();
+        const currentPath = event.urlAfterRedirects || event.url;
+        
+        if (userRole === 'Administration' && (currentPath === '/' || currentPath === '/document-types')) {
+          this.router.navigate(['/dashboard']);
+        }
+      });
+  }
+
+  loadDocumentTypes(): void {
+    this.documentTypesService.getAllDocumentTypes().subscribe({
+      next: (types: DocumentType[]) => {
+        this.documentTypes = types || [];
+        this.filterNavItemsByRole();
+      },
+      error: (error) => {
+        console.error('Error loading document types for navigation:', error);
+        this.documentTypes = [];
+        this.filterNavItemsByRole();
+      }
+    });
   }
 
   ngOnDestroy(): void {
     if (this.roleSubscription) {
       this.roleSubscription.unsubscribe();
+    }
+    if (this.routerSubscription) {
+      this.routerSubscription.unsubscribe();
     }
   }
 
@@ -71,8 +110,8 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     }
 
     // If role is "User" or any other role, filter items
-    // Hide: Form Builder section and Projects section
-    // Show: Dashboard, Document Types, Logout
+    // Hide: Dashboard, Form Builder section and Projects section
+    // Show: Document Types, Logout
     const filteredItems: INavData[] = [];
     let skipNext = false;
 
@@ -85,10 +124,9 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         continue;
       }
 
-      // Always show Dashboard
+      // Hide Dashboard for User role
       if (item.name === 'Dashboard') {
-        filteredItems.push(item);
-        continue;
+        continue; // Skip Dashboard
       }
 
       // Hide Form Builder section
@@ -107,9 +145,37 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         continue;
       }
 
-      // Show Document Types
+      // Show Document Types dropdown with dynamic children
       if (item.name === 'Document Types') {
-        filteredItems.push(item);
+        // Create dynamic children from document types
+        const documentTypeChildren: any[] = this.documentTypes
+          .filter(dt => dt.isActive !== false) // Only show active document types
+          .map(dt => ({
+            name: dt.name || `Document Type #${dt.id}`,
+            url: `/document-types/${dt.id}/submissions`, // Route to submissions page for this document type
+            iconComponent: { name: 'cil-file' },
+            ...(dt.code ? {
+              badge: {
+                color: 'info',
+                text: dt.code
+              }
+            } : {})
+          }));
+
+        // If no document types, show default "Manage Document Types"
+        if (documentTypeChildren.length === 0) {
+          documentTypeChildren.push({
+            name: 'Manage Document Types',
+            url: '/document-types',
+            iconComponent: { name: 'cil-list' }
+          });
+        }
+
+        // Create Document Types dropdown item with dynamic children
+        filteredItems.push({
+          ...item,
+          children: documentTypeChildren
+        });
         continue;
       }
 

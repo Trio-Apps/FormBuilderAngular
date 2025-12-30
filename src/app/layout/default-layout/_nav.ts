@@ -29,8 +29,14 @@ export const navItems: INavData[] = [
   },
   {
     name: 'Document Types',
-    url: '/document-types',
-    iconComponent: { name: 'cil-file' }
+    iconComponent: { name: 'cil-file' },
+    children: [
+      {
+        name: 'Manage Document Types',
+        url: '/document-types',
+        iconComponent: { name: 'cil-list' }
+      }
+    ]
   },
   {
     title: true,
