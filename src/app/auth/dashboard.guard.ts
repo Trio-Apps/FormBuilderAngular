@@ -8,13 +8,13 @@ export const dashboardGuard = () => {
   
   const userRole = authService.role();
   
-  // Only allow Administration role to access Dashboard
-  if (authService.isAuthenticated() && userRole === 'Administration') {
-    return true;
-  } else {
-    // Redirect User role to Document Types
-    router.navigate(['/document-types']);
-    return false;
-  }
+  // // Only allow Administration role to access Dashboard
+  // if (authService.isAuthenticated() && userRole === 'Administration') {
+  //   return true;
+  // } else {
+  //   // Redirect User role to Document Types
+  //   router.navigate(['/document-types']);
+  //   return false;
+  // }
 };
 

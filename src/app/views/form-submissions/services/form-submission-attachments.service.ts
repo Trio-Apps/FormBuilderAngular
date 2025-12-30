@@ -1,0 +1,259 @@
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
+import { environment } from '../../../environments/environment';
+
+export interface FormSubmissionAttachmentDto {
+  id: number;
+  submissionId: number;
+  submissionDocumentNumber?: string;
+  fieldId: number;
+  fieldCode?: string;
+  fieldName?: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  contentType: string;
+  uploadedDate: Date;
+  fileSizeFormatted?: string;
+  downloadUrl?: string;
+}
+
+export interface CreateFormSubmissionAttachmentDto {
+  submissionId: number;
+  fieldId: number;
+  fieldCode: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  contentType: string;
+}
+
+export interface UpdateFormSubmissionAttachmentDto {
+  fileName?: string;
+  filePath?: string;
+  fileSize?: number;
+  contentType?: string;
+}
+
+export interface BulkAttachmentsDto {
+  submissionId: number;
+  attachments: CreateFormSubmissionAttachmentDto[];
+}
+
+export interface AttachmentStatsDto {
+  submissionId: number;
+  totalAttachments: number;
+  totalSize: number;
+  totalSizeFormatted: string;
+  attachmentsByType: { [key: string]: number };
+}
+
+export interface AttachmentUploadResultDto {
+  attachmentId: number;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  contentType: string;
+  uploadedDate: Date;
+  success: boolean;
+  message?: string;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class FormSubmissionAttachmentsService {
+  private baseUrl = `${environment.apiUrl}/FormSubmissionAttachments`;
+
+  constructor(private http: HttpClient) {}
+
+  getAll(): Observable<FormSubmissionAttachmentDto[]> {
+    return this.http.get<any>(this.baseUrl).pipe(
+      map(response => response.data || response),
+      catchError(this.handleError)
+    );
+  }
+
+  getById(id: number): Observable<FormSubmissionAttachmentDto> {
+    return this.http.get<any>(`${this.baseUrl}/${id}`).pipe(
+      map(response => response.data || response),
+      catchError(this.handleError)
+    );
+  }
+
+  getBySubmissionId(submissionId: number): Observable<FormSubmissionAttachmentDto[]> {
+    return this.http.get<any>(`${this.baseUrl}/submission/${submissionId}`).pipe(
+      map(response => response.data || response),
+      catchError(this.handleError)
+    );
+  }
+
+  getByFieldId(fieldId: number): Observable<FormSubmissionAttachmentDto[]> {
+    return this.http.get<any>(`${this.baseUrl}/field/${fieldId}`).pipe(
+      map(response => response.data || response),
+      catchError(this.handleError)
+    );
+  }
+
+  getBySubmissionAndField(submissionId: number, fieldId: number): Observable<FormSubmissionAttachmentDto[]> {
+    return this.http.get<any>(`${this.baseUrl}/submission/${submissionId}/field/${fieldId}`).pipe(
+      map(response => response.data || response),
+      catchError(this.handleError)
+    );
+  }
+
+  getAttachmentStats(submissionId: number): Observable<AttachmentStatsDto> {
+    return this.http.get<any>(`${this.baseUrl}/submission/${submissionId}/stats`).pipe(
+      map(response => response.data || response),
+      catchError(this.handleError)
+    );
+  }
+
+  exists(id: number): Observable<boolean> {
+    return this.http.get<any>(`${this.baseUrl}/${id}/exists`).pipe(
+      map(response => response.data || response),
+      catchError(this.handleError)
+    );
+  }
+
+  downloadFile(id: number): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/${id}/download`, { responseType: 'blob' }).pipe(
+      catchError(this.handleError)
+    );
+  }
+
+  create(dto: CreateFormSubmissionAttachmentDto): Observable<FormSubmissionAttachmentDto> {
+    return this.http.post<any>(this.baseUrl, dto).pipe(
+      map(response => response.data || response),
+      catchError(this.handleError)
+    );
+  }
+
+  createBulk(bulkDto: BulkAttachmentsDto): Observable<FormSubmissionAttachmentDto[]> {
+    return this.http.post<any>(`${this.baseUrl}/bulk`, bulkDto).pipe(
+      map(response => response.data || response),
+      catchError(this.handleError)
+    );
+  }
+
+  uploadFile(file: File, submissionId: number, fieldId: number, fieldCode: string): Observable<FormSubmissionAttachmentDto> {
+    const formData = new FormData();
+    // Backend expects properties matching UploadAttachmentRequest DTO
+    // ASP.NET Core model binding accepts both camelCase and PascalCase
+    formData.append('file', file); // Try camelCase first (most common)
+    formData.append('submissionId', submissionId.toString());
+    formData.append('fieldId', fieldId.toString());
+    formData.append('fieldCode', fieldCode);
+
+    console.log('[FormSubmissionAttachmentsService] uploadFile - Uploading file:', {
+      fileName: file.name,
+      fileSize: file.size,
+      contentType: file.type,
+      submissionId,
+      fieldId,
+      fieldCode
+    });
+
+    return this.http.post<any>(`${this.baseUrl}/upload`, formData).pipe(
+      map(response => {
+        console.log('[FormSubmissionAttachmentsService] uploadFile - Response:', response);
+        return response.data || response;
+      }),
+      catchError((error) => {
+        console.error('[FormSubmissionAttachmentsService] uploadFile - Error:', error);
+        console.error('[FormSubmissionAttachmentsService] uploadFile - Error details:', {
+          status: error.status,
+          statusText: error.statusText,
+          error: error.error,
+          url: error.url
+        });
+        if (error.error) {
+          console.error('[FormSubmissionAttachmentsService] uploadFile - Error response body:', JSON.stringify(error.error, null, 2));
+        }
+        return this.handleError(error);
+      })
+    );
+  }
+
+  uploadMultipleFiles(files: File[], submissionId: number, fieldId: number, fieldCode: string): Observable<AttachmentUploadResultDto[]> {
+    const formData = new FormData();
+    // Backend expects properties matching UploadMultipleAttachmentsRequest DTO
+    // ASP.NET Core model binding accepts both camelCase and PascalCase
+    files.forEach(file => {
+      formData.append('files', file); // Try camelCase first (most common)
+    });
+    formData.append('submissionId', submissionId.toString());
+    formData.append('fieldId', fieldId.toString());
+    formData.append('fieldCode', fieldCode);
+
+    console.log('[FormSubmissionAttachmentsService] uploadMultipleFiles - Uploading files:', {
+      fileCount: files.length,
+      files: files.map(f => ({ name: f.name, size: f.size, type: f.type })),
+      submissionId,
+      fieldId,
+      fieldCode
+    });
+
+    return this.http.post<any>(`${this.baseUrl}/upload-multiple`, formData).pipe(
+      map(response => {
+        console.log('[FormSubmissionAttachmentsService] uploadMultipleFiles - Response:', response);
+        return response.data || response;
+      }),
+      catchError((error) => {
+        console.error('[FormSubmissionAttachmentsService] uploadMultipleFiles - Error:', error);
+        console.error('[FormSubmissionAttachmentsService] uploadMultipleFiles - Error details:', {
+          status: error.status,
+          statusText: error.statusText,
+          error: error.error,
+          url: error.url
+        });
+        if (error.error) {
+          console.error('[FormSubmissionAttachmentsService] uploadMultipleFiles - Error response body:', JSON.stringify(error.error, null, 2));
+        }
+        return this.handleError(error);
+      })
+    );
+  }
+
+  update(id: number, dto: UpdateFormSubmissionAttachmentDto): Observable<void> {
+    return this.http.put<any>(`${this.baseUrl}/${id}`, dto).pipe(
+      map(() => void 0),
+      catchError(this.handleError)
+    );
+  }
+
+  delete(id: number): Observable<void> {
+    return this.http.delete<any>(`${this.baseUrl}/${id}`).pipe(
+      map(() => void 0),
+      catchError(this.handleError)
+    );
+  }
+
+  deleteBySubmissionId(submissionId: number): Observable<void> {
+    return this.http.delete<any>(`${this.baseUrl}/submission/${submissionId}`).pipe(
+      map(() => void 0),
+      catchError(this.handleError)
+    );
+  }
+
+  deleteBySubmissionAndField(submissionId: number, fieldId: number): Observable<void> {
+    return this.http.delete<any>(`${this.baseUrl}/submission/${submissionId}/field/${fieldId}`).pipe(
+      map(() => void 0),
+      catchError(this.handleError)
+    );
+  }
+
+  private handleError(error: any): Observable<never> {
+    console.error('An error occurred:', error);
+    let errorMessage = 'An unknown error occurred!';
+    if (error.error && error.error.message) {
+      errorMessage = error.error.message;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    return throwError(() => new Error(errorMessage));
+  }
+}
+

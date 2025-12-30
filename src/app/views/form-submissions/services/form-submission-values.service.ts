@@ -167,15 +167,28 @@ export class FormSubmissionValuesService {
    * Create bulk form submission values
    */
   createBulk(dto: BulkFormSubmissionValuesDto): Observable<FormSubmissionValueDto[]> {
+    console.log('[FormSubmissionValuesService] createBulk - Sending DTO:', JSON.stringify(dto, null, 2));
+    console.log('[FormSubmissionValuesService] createBulk - Values count:', dto.values?.length || 0);
+    
     return this.http.post<any>(`${this.baseUrl}/bulk`, dto).pipe(
       map((response: any) => {
+        console.log('[FormSubmissionValuesService] createBulk - Response:', response);
         if (response && typeof response === 'object' && !Array.isArray(response)) {
           return response.data || response.items || response.result || [];
         }
         return Array.isArray(response) ? response : [];
       }),
       catchError((error) => {
-        console.error('Error creating bulk form submission values:', error);
+        console.error('[FormSubmissionValuesService] Error creating bulk form submission values:', error);
+        console.error('[FormSubmissionValuesService] Error details:', {
+          status: error.status,
+          statusText: error.statusText,
+          error: error.error,
+          url: error.url
+        });
+        if (error.error) {
+          console.error('[FormSubmissionValuesService] Error response body:', JSON.stringify(error.error, null, 2));
+        }
         throw error;
       })
     );

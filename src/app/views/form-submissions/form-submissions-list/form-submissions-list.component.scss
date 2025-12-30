@@ -6,6 +6,434 @@
   background: #f5f7fa;
 }
 
+// Google Forms Style Form Display
+.form-display-section {
+  background: #f0ebf8;
+  border-radius: 12px;
+  padding: 24px;
+  margin: 20px 0;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.form-header-section {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+
+  .form-title {
+    font-size: 32px;
+    font-weight: 400;
+    color: #202124;
+    margin: 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #dadce0;
+  }
+}
+
+.google-form-fields {
+  .form-field-wrapper {
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+
+    .field-label {
+      display: block;
+      font-size: 16px;
+      font-weight: 400;
+      color: #202124;
+      margin-bottom: 8px;
+      line-height: 1.5;
+
+      .required-indicator {
+        color: #d93025;
+        margin-left: 4px;
+      }
+    }
+
+    .field-hint {
+      font-size: 14px;
+      color: #5f6368;
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+
+    .field-input-wrapper {
+      margin-top: 8px;
+
+      .form-input,
+      .form-textarea,
+      .form-select {
+        width: 100%;
+        padding: 10px 0;
+        border: none;
+        border-bottom: 1px solid #dadce0;
+        font-size: 14px;
+        color: #202124;
+        background: transparent;
+        transition: border-color 0.2s ease;
+
+        &:focus {
+          outline: none;
+          border-bottom: 2px solid #1a73e8;
+        }
+
+        &::placeholder {
+          color: #9aa0a6;
+        }
+      }
+
+      .form-textarea {
+        resize: vertical;
+        min-height: 100px;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        padding: 12px;
+        margin-top: 8px;
+
+        &:focus {
+          border: 2px solid #1a73e8;
+        }
+      }
+
+      .form-select {
+        padding: 10px 0;
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235f6368' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right center;
+        padding-right: 24px;
+        appearance: none;
+      }
+
+      ::ng-deep .form-input-number {
+        width: 100%;
+
+        .p-inputnumber-input {
+          width: 100%;
+          padding: 10px 0;
+          border: none;
+          border-bottom: 1px solid #dadce0;
+          font-size: 14px;
+          color: #202124;
+          background: transparent;
+
+          &:focus {
+            outline: none;
+            border-bottom: 2px solid #1a73e8;
+          }
+        }
+      }
+
+      .radio-group {
+        margin-top: 8px;
+
+        .radio-option {
+          display: flex;
+          align-items: center;
+          margin-bottom: 12px;
+          padding: 8px 0;
+
+          input[type="radio"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+            accent-color: #1a73e8;
+          }
+
+          .radio-label {
+            font-size: 14px;
+            color: #202124;
+            cursor: pointer;
+            margin: 0;
+            flex: 1;
+          }
+        }
+      }
+
+      .checkbox-group {
+        margin-top: 8px;
+
+        .checkbox-option {
+          display: flex;
+          align-items: center;
+          margin-bottom: 12px;
+          padding: 8px 0;
+
+          input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+            accent-color: #1a73e8;
+          }
+
+          .checkbox-label {
+            font-size: 14px;
+            color: #202124;
+            cursor: pointer;
+            margin: 0;
+            flex: 1;
+          }
+        }
+      }
+
+      .checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 8px;
+
+        ::ng-deep .p-checkbox {
+          .p-checkbox-box {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #5f6368;
+            border-radius: 4px;
+
+            &.p-highlight {
+              background: #1a73e8;
+              border-color: #1a73e8;
+            }
+          }
+        }
+
+        .checkbox-label {
+          font-size: 14px;
+          color: #202124;
+          cursor: pointer;
+          margin: 0;
+        }
+      }
+
+      // File Upload Styles
+      .file-upload-wrapper {
+        margin-top: 12px;
+
+        .allowed-extensions-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 12px;
+          padding: 10px 12px;
+          background: #e3f2fd;
+          border-radius: 6px;
+          font-size: 13px;
+          color: #1976d2;
+          border: 1px solid #90caf9;
+
+          i {
+            font-size: 16px;
+          }
+
+          strong {
+            font-weight: 600;
+            color: #0d47a1;
+          }
+        }
+
+        .file-upload-area {
+          position: relative;
+          display: block;
+          width: 100%;
+
+          .file-input-hidden {
+            position: absolute;
+            width: 0.1px;
+            height: 0.1px;
+            opacity: 0;
+            overflow: hidden;
+            z-index: -1;
+            pointer-events: none;
+          }
+
+          .file-upload-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            background: #ffffff;
+            border: 2px dashed #dadce0;
+            border-radius: 8px;
+            color: #5f6368;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-height: 48px;
+            width: 100%;
+            box-sizing: border-box;
+
+            &:hover {
+              border-color: #1a73e8;
+              background: #f8f9fa;
+              color: #1a73e8;
+            }
+
+            &:active {
+              transform: scale(0.98);
+            }
+
+            i {
+              font-size: 20px;
+            }
+          }
+
+          .file-size-info {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #5f6368;
+
+            strong {
+              font-weight: 600;
+            }
+          }
+        }
+
+        .uploaded-files-list {
+          margin-top: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+
+          .uploaded-file-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+            transition: all 0.2s ease;
+
+            &:hover {
+              background: #f0f0f0;
+              border-color: #dadce0;
+            }
+
+            i.pi-file {
+              color: #1a73e8;
+              font-size: 18px;
+            }
+
+            .file-info {
+              flex: 1;
+
+              .file-name {
+                font-size: 14px;
+                color: #202124;
+                font-weight: 500;
+                word-break: break-word;
+              }
+
+              .file-size {
+                font-size: 12px;
+                color: #5f6368;
+              }
+            }
+
+            .remove-file-btn {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 6px;
+              background: transparent;
+              border: none;
+              color: #ea4335;
+              cursor: pointer;
+              border-radius: 4px;
+              transition: all 0.2s ease;
+
+              &:hover {
+                background: #fce8e6;
+                color: #c5221f;
+              }
+
+              i {
+                font-size: 16px;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    .field-error {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #d93025;
+    }
+  }
+}
+
+.empty-fields-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #5f6368;
+  font-size: 14px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+
+  i {
+    font-size: 48px;
+    color: #dadce0;
+    margin-bottom: 16px;
+    display: block;
+  }
+}
+
+.loading-fields-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+
+  i {
+    font-size: 48px;
+    color: #1a73e8;
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  p {
+    color: #5f6368;
+    font-size: 16px;
+    margin: 0;
+  }
+}
+
+.select-tab-message {
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #1976d2;
+
+  i {
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+  }
+}
+
 // Reuse the unified layout used by Fields & Tabs pages
 .top-navbar {
   background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);

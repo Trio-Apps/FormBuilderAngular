@@ -224,8 +224,7 @@
         id="fieldId" 
         pInputText 
         formControlName="fieldId" 
-        placeholder="Enter field ID"
-        [disabled]="!!editingFieldValue" />
+        placeholder="Enter field ID" />
     </div>
 
     <div class="form-group">
@@ -237,8 +236,7 @@
         id="fieldCode" 
         pInputText 
         formControlName="fieldCode" 
-        placeholder="Enter field code"
-        [disabled]="!!editingFieldValue" />
+        placeholder="Enter field code" />
     </div>
 
     <div class="form-group">
@@ -321,13 +319,14 @@
   [(visible)]="showAddSubmissionModal"
   header="Create New Form Submission"
   [modal]="true"
-  [style]="{ width: '600px' }"
+  [style]="{ width: '90%', maxWidth: '1200px' }"
   [draggable]="false"
   [resizable]="false"
   [autoZIndex]="true"
   [baseZIndex]="10003"
   (onHide)="closeAddSubmissionModal()">
   <form [formGroup]="addSubmissionForm" (ngSubmit)="createSubmission()">
+    <!-- Form Selection -->
     <div class="form-group">
       <label for="formBuilderId">
         Form <span class="text-danger">*</span>
@@ -336,7 +335,7 @@
         id="formBuilderId"
         formControlName="formBuilderId"
         class="p-inputtext w-full"
-        [disabled]="!!documentType?.formBuilderId || loading.forms">
+        (change)="onFormSelected($any($event.target).value ? +$any($event.target).value : null)">
         <option [ngValue]="null">
           {{ loading.forms ? 'Loading forms...' : 'Select a form...' }}
         </option>
@@ -355,6 +354,231 @@
       </div>
     </div>
 
+    <!-- Tab Selection (shown after form is selected) -->
+    <div class="form-group" *ngIf="selectedFormId && tabs.length > 0">
+      <label for="tabId">
+        Tab <span class="text-danger">*</span>
+      </label>
+      <select
+        id="tabId"
+        formControlName="tabId"
+        class="p-inputtext w-full"
+        [attr.disabled]="loading.tabs ? '' : null">
+        <option [ngValue]="null">
+          {{ loading.tabs ? 'Loading tabs...' : 'Select a tab...' }}
+        </option>
+        <option *ngFor="let tab of tabs" [ngValue]="tab.id">
+          {{ tab.tabName }} ({{ tab.tabCode }})
+        </option>
+      </select>
+      <div *ngIf="loading.tabs" class="form-text">
+        <i class="pi pi-spin pi-spinner"></i> Loading tabs...
+      </div>
+    </div>
+
+    <!-- Debug Info (remove in production) -->
+    <!-- <div style="padding: 10px; background: #fff3cd; margin: 10px 0; border-radius: 4px; font-size: 12px;">
+      Debug: selectedFormId={{ selectedFormId }}, selectedTabId={{ selectedTabId }}, fields.length={{ fields.length }}, loading.fields={{ loading.fields }}
+    </div> -->
+
+    <!-- Form Display Section (Google Forms Style) -->
+    <div *ngIf="selectedFormId && selectedTabId" class="form-display-section">
+      <!-- Form Header -->
+      <div class="form-header-section">
+        <h2 class="form-title">{{ getFormName(selectedFormId) }}</h2>
+      </div>
+
+      <!-- Loading Fields State -->
+      <div *ngIf="loading.fields" class="loading-fields-state">
+        <i class="pi pi-spin pi-spinner"></i>
+        <p>Loading fields...</p>
+      </div>
+
+      <!-- Fields Section (shown after tab is selected) -->
+      <div *ngIf="!loading.fields && fields.length > 0" class="google-form-fields">
+      <form [formGroup]="fieldsForm">
+          <div *ngFor="let field of fields" class="form-field-wrapper">
+            <!-- Field Label -->
+            <label class="field-label" [for]="isFileField(field) ? 'file-' + field.id : 'field_' + field.id">
+            {{ getFieldDisplayName(field) }}
+              <span *ngIf="isRequired(field)" class="required-indicator">*</span>
+          </label>
+
+            <!-- Field Hint Text -->
+            <div class="field-hint" *ngIf="getFieldHintText(field)">
+              {{ getFieldHintText(field) }}
+          </div>
+
+            <!-- Field Input -->
+            <div class="field-input-wrapper">
+              <!-- Debug Info (remove in production) -->
+              <!-- <div style="padding: 8px; background: #fff3cd; margin-bottom: 8px; border-radius: 4px; font-size: 11px;">
+                Debug: typeName="{{ field.fieldType?.typeName }}", hasOptions={{ field.fieldType?.hasOptions }}, allowMultiple={{ field.fieldType?.allowMultiple }}, detectedType="{{ getFieldType(field) }}", optionsCount={{ getFieldOptions(field).length }}
+              </div> -->
+
+              <!-- Text Input -->
+          <input
+                *ngIf="getFieldType(field) === 'string' && !isFileField(field)"
+            type="text"
+            [id]="'field_' + field.id"
+            [formControlName]="'field_' + field.id"
+                class="form-input"
+                [placeholder]="getFieldPlaceholder(field)">
+
+              <!-- Number Input -->
+          <p-inputNumber
+                *ngIf="getFieldType(field) === 'number'"
+            [id]="'field_' + field.id"
+            [formControlName]="'field_' + field.id"
+            [showButtons]="false"
+            [useGrouping]="false"
+                [placeholder]="getFieldPlaceholder(field)"
+                styleClass="form-input-number">
+          </p-inputNumber>
+
+              <!-- Date Input -->
+          <input
+                *ngIf="getFieldType(field) === 'date'"
+                type="date"
+                [id]="'field_' + field.id"
+                [formControlName]="'field_' + field.id"
+                class="form-input">
+
+              <!-- Textarea -->
+              <textarea
+                *ngIf="getFieldType(field) === 'textarea'"
+                [id]="'field_' + field.id"
+                [formControlName]="'field_' + field.id"
+                class="form-textarea"
+                [rows]="4"
+                [placeholder]="getFieldPlaceholder(field)">
+              </textarea>
+
+              <!-- Select / Dropdown -->
+              <select
+                *ngIf="getFieldType(field) === 'select'"
+            [id]="'field_' + field.id"
+            [formControlName]="'field_' + field.id"
+                class="form-select">
+                <option [value]="''" [disabled]="isRequired(field)">
+                  {{ getFieldPlaceholder(field) }}
+                </option>
+                <option *ngFor="let opt of getFieldOptions(field)" [value]="opt.optionValue">
+                  {{ opt.optionText || opt.optionValue }}
+                </option>
+              </select>
+
+              <!-- Radio Buttons -->
+              <div *ngIf="getFieldType(field) === 'radio'" class="radio-group">
+                <div class="radio-option" *ngFor="let opt of getFieldOptions(field)">
+                  <input
+                    type="radio"
+                    [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
+                    [name]="'radio-' + field.id"
+                    [value]="opt.optionValue"
+                    [formControlName]="'field_' + field.id">
+                  <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
+                    {{ opt.optionText || opt.optionValue }}
+                  </label>
+                </div>
+              </div>
+
+              <!-- Checkbox (Multiple Selection) -->
+              <div *ngIf="getFieldType(field) === 'checkbox'" class="checkbox-group">
+                <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field)">
+                  <input
+                    type="checkbox"
+                    [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
+                    [value]="opt.optionValue"
+                    (change)="onCheckboxChange(field, opt.optionValue, $event)">
+                  <label [for]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)" class="checkbox-label">
+                    {{ opt.optionText || opt.optionValue }}
+                  </label>
+                </div>
+              </div>
+
+          <!-- Boolean/Switch Field -->
+              <div *ngIf="getFieldType(field) === 'boolean'" class="checkbox-wrapper">
+            <p-checkbox
+              [id]="'field_' + field.id"
+              [formControlName]="'field_' + field.id"
+              [binary]="true">
+            </p-checkbox>
+            <label [for]="'field_' + field.id" class="checkbox-label">
+              {{ getFieldDisplayName(field) }}
+            </label>
+          </div>
+
+              <!-- File Upload Field -->
+              <div *ngIf="isFileField(field)" class="file-upload-wrapper">
+                <!-- Allowed Extensions Info -->
+                <div class="allowed-extensions-info" *ngIf="getAllowedExtensions(field).length > 0">
+                  <i class="pi pi-info-circle"></i>
+                  <span>
+                    Allowed extensions: <strong>{{ formatAllowedExtensions(getAllowedExtensions(field)) }}</strong>
+                  </span>
+                </div>
+
+                <div class="file-upload-area">
+                  <input
+                    type="file"
+                    [id]="'file-' + field.id"
+                    class="file-input-hidden"
+                    (change)="onFileSelected($event, field)"
+                    [multiple]="field.fieldType?.allowMultiple || false"
+                    [accept]="getAcceptedFileTypes(field)">
+                  <label [for]="'file-' + field.id" class="file-upload-label">
+                    <i class="pi pi-cloud-upload"></i>
+                    <span>Choose file{{ field.fieldType?.allowMultiple ? 's' : '' }} to upload</span>
+                  </label>
+
+                  <div class="file-size-info" *ngIf="getMaxFileSize(field) > 0">
+                    <small>Max size: <strong>{{ formatFileSize(getMaxFileSize(field)) }}</strong></small>
+                  </div>
+                </div>
+
+                <!-- Uploaded Files List -->
+                <div class="uploaded-files-list" *ngIf="getFieldFiles(field.id!).length > 0">
+                  <div class="uploaded-file-item" *ngFor="let file of getFieldFiles(field.id!); let i = index">
+                    <i class="pi pi-file"></i>
+                    <div class="file-info">
+                      <div class="file-name">{{ file.name }}</div>
+                      <div class="file-size">{{ (file.size / 1024).toFixed(2) }} KB</div>
+                    </div>
+                    <button
+                      type="button"
+                      class="remove-file-btn"
+                      (click)="removeFile(field.id!, i)"
+                      title="Remove file">
+                      <i class="pi pi-times"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          <!-- Validation Messages -->
+            <div *ngIf="fieldsForm.get('field_' + field.id)?.invalid && fieldsForm.get('field_' + field.id)?.touched" class="field-error">
+            This field is required
+          </div>
+        </div>
+      </form>
+      </div>
+
+      <!-- Empty Fields State -->
+      <div *ngIf="selectedTabId && !loading.fields && fields.length === 0" class="empty-fields-state">
+        <i class="pi pi-inbox"></i>
+        <p>No fields available in this tab.</p>
+      </div>
+    </div>
+
+    <!-- Show message if tab is not selected yet -->
+    <div *ngIf="selectedFormId && !selectedTabId && tabs.length > 0" class="select-tab-message">
+      <i class="pi pi-info-circle"></i>
+      <p>Please select a tab to view and fill the form fields.</p>
+    </div>
+
+    <!-- Document Series Selection -->
     <div class="form-group">
       <label for="seriesId">
         Document Series <span class="text-danger">*</span>
@@ -362,8 +586,7 @@
       <select
         id="seriesId"
         formControlName="seriesId"
-        class="p-inputtext w-full"
-        [disabled]="loading.series">
+        class="p-inputtext w-full">
         <option [ngValue]="null">
           {{ loading.series ? 'Loading series...' : 'Select a series...' }}
         </option>
@@ -382,6 +605,7 @@
       </div>
     </div>
 
+    <!-- Status Selection -->
     <div class="form-group">
       <label for="status">
         Status <span class="text-danger">*</span>
