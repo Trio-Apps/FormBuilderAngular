@@ -39,6 +39,7 @@ import { TranslationService } from '../../../../core/services/translation.servic
     CheckboxModule,
     TranslatePipe
   ],
+
   templateUrl: './projects-list.component.html',
   styleUrls: ['./projects-list.component.scss'],
   providers: [MessageService, ConfirmationService]

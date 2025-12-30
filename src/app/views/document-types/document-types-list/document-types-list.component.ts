@@ -4,7 +4,9 @@ import { RouterLink, ActivatedRoute } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { FormsService } from '../../FormBuilder/services/forms.service';
-import { DocumentType, CreateDocumentTypeDto, UpdateDocumentTypeDto } from '../../FormBuilder/form-builder/models/document-types.model';
+import { ProjectsService } from '../../projects/services/projects.service';
+import { DocumentType, CreateDocumentTypeDto, UpdateDocumentTypeDto, DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../FormBuilder/form-builder/models/document-types.model';
+import { ProjectDto } from '../../projects/models/project-dto.model';
 import { FormBuilderDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -48,15 +50,26 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   // Data Arrays
   documentTypes: DocumentType[] = [];
   filteredDocumentTypes: DocumentType[] = [];
-  formBuilderId!: number; // Form ID from route parameter
+  forms: FormBuilderDto[] = []; // All forms for selection
   currentForm: FormBuilderDto | null = null;
+  
+  // Document Series Management
+  documentSeries: DocumentSeries[] = [];
+  projects: ProjectDto[] = [];
+  showSeriesModal = false;
+  showSeriesFormModal = false;
+  seriesForm!: FormGroup;
+  editingSeries: DocumentSeries | null = null;
+  currentDocumentTypeForSeries: DocumentType | null = null;
 
   // Loading States
   loading = {
     documentTypes: false,
     save: false,
     delete: false,
-    forms: false
+    forms: false,
+    series: false,
+    projects: false
   };
 
   // Document Type Modal
@@ -80,19 +93,31 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private documentTypesService: DocumentTypesService,
     private formsService: FormsService,
+    private projectsService: ProjectsService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public translationService: TranslationService
   ) {
-    // Initialize the form (formBuilderId will be set from route parameter)
+    // Initialize the form
     this.documentTypeForm = this.fb.group({
+      formBuilderId: [null, [Validators.required]], // Form selection is required
       name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(200)]],
       code: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
       menuCaption: ['', [Validators.required, Validators.maxLength(200)]],
       menuOrder: [0, [Validators.min(0)]],
       parentMenuId: [null],
+      isActive: [true]
+    });
+    
+    // Initialize series form
+    this.seriesForm = this.fb.group({
+      documentTypeId: [null, [Validators.required]],
+      projectId: [null, [Validators.required]],
+      seriesCode: ['', [Validators.required, Validators.minLength(1), Validators.maxLength(50)]],
+      nextNumber: [1, [Validators.required, Validators.min(1)]],
+      isDefault: [false],
       isActive: [true]
     });
   }
@@ -106,55 +131,50 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       localStorage.setItem('adminLanguagePreference', 'en');
     }
     
-    // Get formId from route parameter
-    this.route.params.subscribe(params => {
-      const formId = +params['formId'];
-      if (formId) {
-        this.formBuilderId = formId;
-        this.loadForm();
-        this.loadDocumentTypes();
-      } else {
-        // If no formId in route, show error or load all
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Error', 
-          detail: 'Form ID is required' 
-        });
-      }
-    });
+    // Load all forms, document types, and projects
+    this.loadForms();
+    this.loadDocumentTypes();
+    this.loadProjects();
+    
+    // No need to get formId from route anymore
   }
 
   ngOnDestroy(): void {
     // Cleanup if needed
   }
 
-  loadForm(): void {
-    if (!this.formBuilderId) return;
-    
+  loadForms(): void {
     this.loading.forms = true;
-    this.formsService.getFormById(this.formBuilderId).subscribe({
-      next: (form) => {
-        this.currentForm = form;
+    // Disable formBuilderId while loading
+    this.documentTypeForm.get('formBuilderId')?.disable();
+    
+    // Get all forms with large page size
+    this.formsService.getForms(1, 1000).subscribe({
+      next: (result) => {
+        // Load only published and active forms
+        this.forms = (result.items || []).filter((f: FormBuilderDto) => f.isPublished && f.isActive);
         this.loading.forms = false;
+        // Enable formBuilderId after loading
+        this.documentTypeForm.get('formBuilderId')?.enable();
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.currentForm = null;
+      error: (error: any) => {
+        console.error('Error loading forms:', error);
+        this.forms = [];
         this.loading.forms = false;
+        // Enable formBuilderId even on error
+        this.documentTypeForm.get('formBuilderId')?.enable();
         this.cdr.detectChanges();
       }
     });
   }
 
   loadDocumentTypes(): void {
-    if (!this.formBuilderId) return;
-    
+    // Load all document types (not filtered by form)
     this.loading.documentTypes = true;
-    // Load document types filtered by formBuilderId
     this.documentTypesService.getAllDocumentTypes().subscribe({
       next: (types: DocumentType[]) => {
-        // Filter document types by formBuilderId
-        this.documentTypes = types.filter(t => t.formBuilderId === this.formBuilderId);
+        this.documentTypes = types || [];
         this.filteredDocumentTypes = [...this.documentTypes];
         this.totalRecords = this.filteredDocumentTypes.length;
         this.loading.documentTypes = false;
@@ -210,8 +230,11 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.totalRecords = this.filteredDocumentTypes.length;
   }
 
-  getFormName(): string {
-    return this.currentForm ? (this.currentForm.formName || this.currentForm.formCode || `Form #${this.formBuilderId}`) : (this.formBuilderId ? `Form #${this.formBuilderId}` : '-');
+  getFormName(formBuilderId?: number): string {
+    if (!formBuilderId) return '-';
+    const form = this.forms.find(f => f.id === formBuilderId);
+    if (!form) return `Form #${formBuilderId}`;
+    return `${form.formName} (${form.formCode})`;
   }
 
   onPageChange(event: any): void {
@@ -247,6 +270,10 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       parentMenuId: null,
       isActive: true
     });
+    
+    // Enable form controls
+    this.documentTypeForm.get('formBuilderId')?.enable();
+    this.documentTypeForm.get('parentMenuId')?.enable();
   }
 
   openEditModal(documentType: DocumentType): void {
@@ -255,6 +282,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.loadParentMenuOptions();
     
     this.documentTypeForm.patchValue({
+      formBuilderId: documentType.formBuilderId || null,
       name: documentType.name || '',
       code: documentType.code || '',
       menuCaption: documentType.menuCaption || '',
@@ -262,10 +290,17 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       parentMenuId: documentType.parentMenuId || null,
       isActive: documentType.isActive !== false
     });
+    
+    // Enable form controls
+    this.documentTypeForm.get('formBuilderId')?.enable();
+    this.documentTypeForm.get('parentMenuId')?.enable();
   }
 
   loadParentMenuOptions(): void {
     this.loadingParentOptions = true;
+    // Disable parentMenuId while loading
+    this.documentTypeForm.get('parentMenuId')?.disable();
+    
     this.documentTypesService.getActiveDocumentTypes().subscribe({
       next: (types: DocumentType[]) => {
         // Filter out the current document type to prevent circular reference when editing
@@ -275,12 +310,16 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
           this.parentMenuOptions = types;
         }
         this.loadingParentOptions = false;
+        // Enable parentMenuId after loading
+        this.documentTypeForm.get('parentMenuId')?.enable();
         this.cdr.detectChanges();
       },
       error: (error: any) => {
         console.error('Error loading parent menu options:', error);
         this.parentMenuOptions = [];
         this.loadingParentOptions = false;
+        // Enable parentMenuId even on error
+        this.documentTypeForm.get('parentMenuId')?.enable();
         this.cdr.detectChanges();
       }
     });
@@ -300,6 +339,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.showModal = false;
     this.editingDocumentType = null;
     this.documentTypeForm.reset();
+    // Ensure controls are enabled when closing
+    this.documentTypeForm.get('formBuilderId')?.enable();
+    this.documentTypeForm.get('parentMenuId')?.enable();
   }
 
   saveDocumentType(): void {
@@ -330,9 +372,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (!this.formBuilderId) {
+    if (!formData.formBuilderId) {
       this.loading.save = false;
-      this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Form ID is required' });
+      this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Form selection is required' });
       return;
     }
 
@@ -376,16 +418,16 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       }
     } else {
       // Creating new document type
-      if (!this.formBuilderId) {
+      if (!formData.formBuilderId) {
         this.loading.save = false;
-        this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Form ID is required' });
+        this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Form selection is required' });
         return;
       }
 
       const createDto: CreateDocumentTypeDto = {
         name: formData.name.trim(),
         code: formData.code.trim(),
-        formBuilderId: this.formBuilderId,
+        formBuilderId: Number(formData.formBuilderId),
         menuCaption: formData.menuCaption.trim(),
         menuOrder: formData.menuOrder !== null && formData.menuOrder !== undefined ? Number(formData.menuOrder) : 0
       };
@@ -600,6 +642,324 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
         this.markFormGroupTouched(control);
       }
     });
+  }
+
+  // ==================== DOCUMENT SERIES MANAGEMENT ====================
+
+  loadProjects(): void {
+    if (this.loading.projects) {
+      return; // Already loading
+    }
+    
+    this.loading.projects = true;
+    this.projectsService.getProjects(1, 1000).subscribe({
+      next: (result) => {
+        this.projects = (result.items || []).filter((p: ProjectDto) => p.isActive !== false);
+        this.loading.projects = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Error loading projects:', error);
+        this.projects = [];
+        this.loading.projects = false;
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Warning',
+          detail: 'Failed to load projects. Please refresh the page.'
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  openManageSeriesModal(documentType: DocumentType): void {
+    if (!documentType || !documentType.id) {
+      this.messageService.add({ 
+        severity: 'warn', 
+        summary: 'Warning', 
+        detail: 'Please save the document type first before managing series' 
+      });
+      return;
+    }
+    
+    // Ensure projects are loaded before opening modal
+    if (this.projects.length === 0 && !this.loading.projects) {
+      this.loadProjects();
+    }
+    
+    this.currentDocumentTypeForSeries = documentType;
+    this.loadDocumentSeries(documentType.id);
+    this.showSeriesModal = true;
+  }
+
+  loadDocumentSeries(documentTypeId: number): void {
+    this.loading.series = true;
+    this.documentTypesService.getDocumentSeriesByDocumentTypeId(documentTypeId).subscribe({
+      next: (series: DocumentSeries[]) => {
+        this.documentSeries = series || [];
+        this.loading.series = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Error loading document series:', error);
+        this.documentSeries = [];
+        this.loading.series = false;
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: 'Error', 
+          detail: 'Failed to load document series' 
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  openAddSeriesModal(): void {
+    if (!this.currentDocumentTypeForSeries || !this.currentDocumentTypeForSeries.id) {
+      return;
+    }
+    
+    // Ensure projects are loaded
+    if (this.projects.length === 0 && !this.loading.projects) {
+      this.loadProjects();
+    }
+    
+    this.editingSeries = null;
+    this.showSeriesFormModal = true;
+    this.seriesForm.reset({
+      documentTypeId: this.currentDocumentTypeForSeries.id,
+      projectId: null,
+      seriesCode: '',
+      nextNumber: 1,
+      isDefault: false,
+      isActive: true
+    });
+    
+    // Enable projectId control
+    this.seriesForm.get('projectId')?.enable();
+  }
+
+  openEditSeriesModal(series: DocumentSeries): void {
+    this.editingSeries = series;
+    this.showSeriesFormModal = true;
+    this.seriesForm.patchValue({
+      documentTypeId: series.documentTypeId,
+      projectId: series.projectId,
+      seriesCode: series.seriesCode,
+      nextNumber: series.nextNumber || 1,
+      isDefault: series.isDefault || false,
+      isActive: series.isActive !== false
+    });
+  }
+
+  saveSeries(): void {
+    if (this.seriesForm.invalid) {
+      this.markFormGroupTouched(this.seriesForm);
+      this.messageService.add({ 
+        severity: 'warn', 
+        summary: 'Validation', 
+        detail: 'Please fill all required fields correctly' 
+      });
+      return;
+    }
+
+    this.loading.series = true;
+    const formData = this.seriesForm.value;
+
+    if (this.editingSeries && this.editingSeries.id) {
+      // Update existing series
+      const updateDto: UpdateDocumentSeriesDto = {
+        projectId: formData.projectId,
+        seriesCode: formData.seriesCode.trim(),
+        nextNumber: formData.nextNumber,
+        isDefault: formData.isDefault,
+        isActive: formData.isActive
+      };
+
+      this.documentTypesService.updateDocumentSeries(this.editingSeries.id, updateDto).subscribe({
+        next: () => {
+          this.loading.series = false;
+          this.messageService.add({ 
+            severity: 'success', 
+            summary: 'Success', 
+            detail: 'Document series updated successfully' 
+          });
+          this.closeSeriesFormModal();
+          if (this.currentDocumentTypeForSeries?.id) {
+            this.loadDocumentSeries(this.currentDocumentTypeForSeries.id);
+          }
+        },
+        error: (error: any) => {
+          this.loading.series = false;
+          console.error('Error updating document series:', error);
+          let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to update document series';
+          this.messageService.add({ 
+            severity: 'error', 
+            summary: 'Error', 
+            detail: errorMessage 
+          });
+          this.cdr.detectChanges();
+        }
+      });
+    } else {
+      // Create new series
+      const createDto: CreateDocumentSeriesDto = {
+        documentTypeId: formData.documentTypeId,
+        projectId: formData.projectId,
+        seriesCode: formData.seriesCode.trim(),
+        nextNumber: formData.nextNumber || 1,
+        isDefault: formData.isDefault || false,
+        isActive: formData.isActive !== false
+      };
+
+      this.documentTypesService.createDocumentSeries(createDto).subscribe({
+        next: () => {
+          this.loading.series = false;
+          this.messageService.add({ 
+            severity: 'success', 
+            summary: 'Success', 
+            detail: 'Document series created successfully' 
+          });
+          this.closeSeriesFormModal();
+          if (this.currentDocumentTypeForSeries?.id) {
+            this.loadDocumentSeries(this.currentDocumentTypeForSeries.id);
+          }
+        },
+        error: (error: any) => {
+          this.loading.series = false;
+          console.error('Error creating document series:', error);
+          let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to create document series';
+          this.messageService.add({ 
+            severity: 'error', 
+            summary: 'Error', 
+            detail: errorMessage 
+          });
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  deleteDocumentSeries(series: DocumentSeries): void {
+    if (!series || !series.id) return;
+
+    this.confirmationService.confirm({
+      message: `Are you sure you want to delete the document series "${series.seriesCode}"? This action cannot be undone.`,
+      header: 'Confirm Deletion',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.loading.series = true;
+        this.documentTypesService.deleteDocumentSeries(series.id!).subscribe({
+          next: () => {
+            this.loading.series = false;
+            this.messageService.add({ 
+              severity: 'success', 
+              summary: 'Success', 
+              detail: 'Document series deleted successfully' 
+            });
+            if (this.currentDocumentTypeForSeries?.id) {
+              this.loadDocumentSeries(this.currentDocumentTypeForSeries.id);
+            }
+          },
+          error: (error: any) => {
+            this.loading.series = false;
+            console.error('Error deleting document series:', error);
+            let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to delete document series';
+            this.messageService.add({ 
+              severity: 'error', 
+              summary: 'Error', 
+              detail: errorMessage 
+            });
+            this.cdr.detectChanges();
+          }
+        });
+      }
+    });
+  }
+
+  toggleSeriesStatus(series: DocumentSeries): void {
+    if (!series || !series.id) return;
+
+    const newStatus = !series.isActive;
+    this.loading.series = true;
+    this.documentTypesService.toggleDocumentSeriesStatus(series.id, newStatus).subscribe({
+      next: () => {
+        this.loading.series = false;
+        this.messageService.add({ 
+          severity: 'success', 
+          summary: 'Success', 
+          detail: `Document series ${newStatus ? 'activated' : 'deactivated'} successfully` 
+        });
+        if (this.currentDocumentTypeForSeries?.id) {
+          this.loadDocumentSeries(this.currentDocumentTypeForSeries.id);
+        }
+      },
+      error: (error: any) => {
+        this.loading.series = false;
+        console.error('Error toggling document series status:', error);
+        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to toggle document series status';
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: 'Error', 
+          detail: errorMessage 
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  setSeriesAsDefault(series: DocumentSeries): void {
+    if (!series || !series.id) return;
+
+    this.loading.series = true;
+    this.documentTypesService.setDocumentSeriesAsDefault(series.id).subscribe({
+      next: () => {
+        this.loading.series = false;
+        this.messageService.add({ 
+          severity: 'success', 
+          summary: 'Success', 
+          detail: 'Document series set as default successfully' 
+        });
+        if (this.currentDocumentTypeForSeries?.id) {
+          this.loadDocumentSeries(this.currentDocumentTypeForSeries.id);
+        }
+      },
+      error: (error: any) => {
+        this.loading.series = false;
+        console.error('Error setting document series as default:', error);
+        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to set document series as default';
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: 'Error', 
+          detail: errorMessage 
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  getProjectName(projectId: number): string {
+    const project = this.projects.find(p => p.id === projectId);
+    return project ? project.name : `Project #${projectId}`;
+  }
+
+  closeSeriesModal(): void {
+    this.showSeriesModal = false;
+    this.showSeriesFormModal = false;
+    this.editingSeries = null;
+    this.currentDocumentTypeForSeries = null;
+    this.seriesForm.reset();
+    // Ensure projectId control is enabled when closing
+    this.seriesForm.get('projectId')?.enable();
+  }
+
+  closeSeriesFormModal(): void {
+    this.showSeriesFormModal = false;
+    this.editingSeries = null;
+    this.seriesForm.reset();
+    // Ensure projectId control is enabled when closing
+    this.seriesForm.get('projectId')?.enable();
   }
 }
 

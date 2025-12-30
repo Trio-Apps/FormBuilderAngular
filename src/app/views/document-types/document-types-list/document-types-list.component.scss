@@ -595,3 +595,92 @@
     border-top: 2px solid #e2e8f0;
   }
 }
+
+// Active Status Toggle Switch
+.active-status-group {
+  margin-top: 20px;
+  margin-bottom: 20px;
+
+  .active-status-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #2c3e50;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+    line-height: 1.2;
+  }
+
+  .toggle-switch-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toggle-status-text {
+    font-size: 14px;
+    font-weight: 400;
+    color: #2c3e50;
+    margin: 0;
+  }
+
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    cursor: pointer;
+    flex-shrink: 0;
+
+    .toggle-input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+
+      &:checked + .toggle-slider {
+        background-color: #00EBB5;
+
+        &::before {
+          transform: translateX(20px);
+          background-color: #f0f9ff;
+          border: 1.5px solid #00EBB5;
+        }
+      }
+    }
+
+    .toggle-slider {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #d1d5db;
+      border-radius: 12px;
+      transition: background-color 0.3s ease;
+
+      &::before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        border-radius: 50%;
+        transition: all 0.3s ease;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      }
+    }
+
+    &:hover .toggle-slider {
+      background-color: #cbd5e1;
+    }
+
+    .toggle-input:checked + .toggle-slider {
+      &:hover {
+        background-color: #00d4a3;
+      }
+    }
+  }
+}

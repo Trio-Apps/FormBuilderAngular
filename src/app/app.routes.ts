@@ -45,6 +45,13 @@ export const routes: Routes = [
           .then(m => m.ProjectsListComponent)
       },
 
+      // ===== Document Types =====
+      {
+        path: 'document-types',
+        loadComponent: () => import('./views/document-types/document-types-list/document-types-list.component')
+          .then(m => m.DocumentTypesListComponent)
+      },
+
       // ===== Form Builder System =====
       {
         path: 'form-builder',
@@ -79,12 +86,6 @@ export const routes: Routes = [
               .then(m => m.FormRulesListComponent) 
           },
           
-          // إدارة Document Type لنموذج معين (مثال: form-builder/document-type/5)
-          { 
-            path: 'document-type/:formId', 
-            loadComponent: () => import('./views/FormBuilder/components/document-type/document-type.component')
-              .then(m => m.DocumentTypeComponent) 
-          },
           
           // حقول تبويب معين (مثال: form-builder/fields/10)
           { 

@@ -25,8 +25,18 @@ export const navItems: INavData[] = [
   },
   {
     title: true,
+    name: 'Documents Setup'
+  },
+  {
+    name: 'Document Types',
+    url: '/document-types',
+    iconComponent: { name: 'cil-file' }
+  },
+  {
+    title: true,
     name: 'Projects'
   },
+  
   {
     name: 'Projects',
     url: '/projects',
