@@ -258,7 +258,7 @@ export class FormsService {
     fieldValues: Record<string, any>
   ): Observable<{ valid: boolean; errors: string[] }> {
     return this.http.post<any>(`${environment.apiUrl}/FormRules/validate`, {
-      formId,
+      formBuilderId: formId, // API expects formBuilderId, not formId
       fieldValues
     }).pipe(
       map((response: any) => {

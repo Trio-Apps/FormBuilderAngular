@@ -124,7 +124,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.submissionForm = this.fb.group({
       formBuilderId: [null], // Will be set from documentType
       tabId: [null, [Validators.required]],
-      status: ['Draft']
+      status: ['Submitted'] // Default status is Submitted
     });
 
     // Fields form
@@ -1659,7 +1659,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       documentTypeId: this.documentTypeId,
       seriesId: defaultSeries.id, // Fixed value - use default series
       submittedByUserId: userId,
-      status: formData.status || 'Draft'
+      status: formData.status || 'Submitted' // Default status is Submitted
     };
 
     this.loading.create = true;

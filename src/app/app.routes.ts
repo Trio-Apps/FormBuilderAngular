@@ -48,12 +48,12 @@ export const routes: Routes = [
           .then(m => m.ProjectsListComponent)
       },
 
-      // ===== Document Types ===== (Admin only)
+      // ===== Document Types ===== (Available for all authenticated users)
       {
         path: 'document-types',
         loadComponent: () => import('./views/document-types/document-types-list/document-types-list.component')
           .then(m => m.DocumentTypesListComponent),
-        canActivate: [adminGuard] // Only Administration role can access
+        canActivate: [authGuard] // All authenticated users can access
       },
 
       // ===== Form Submissions by Document Type =====

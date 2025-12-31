@@ -131,7 +131,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     // Initialize forms
     this.submissionForm = this.fb.group({
       documentNumber: [''],
-      status: ['Draft', [Validators.required]]
+      status: ['Submitted', [Validators.required]] // Default status is Submitted
     });
 
     this.fieldValueForm = this.fb.group({
@@ -148,7 +148,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       formBuilderId: [null, [Validators.required]],
       tabId: [null, [Validators.required]],
       seriesId: [null, [Validators.required]],
-      status: ['Draft', [Validators.required]]
+      status: ['Submitted', [Validators.required]] // Default status is Submitted
     });
 
     // Subscribe to tabId changes to update selectedTabId
@@ -347,7 +347,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   openEditModal(submission: FormSubmissionDto): void {
     this.submissionForm.patchValue({
       documentNumber: submission.documentNumber || '',
-      status: submission.status || 'Draft'
+      status: submission.status || 'Submitted' // Default status is Submitted
     });
     this.selectedSubmission = submission as any;
     this.showSubmissionModal = true;
@@ -358,7 +358,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     this.selectedSubmission = null;
     this.submissionForm.reset({
       documentNumber: '',
-      status: 'Draft'
+      status: 'Submitted' // Default status is Submitted
     });
   }
 
@@ -768,7 +768,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       this.addSubmissionForm.patchValue({
         formBuilderId: this.documentType.formBuilderId,
           tabId: null,
-        status: 'Draft'
+        status: 'Submitted' // Default status is Submitted
       });
       this.onFormSelected(this.documentType.formBuilderId);
     } else {
@@ -781,7 +781,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         formBuilderId: null,
           tabId: null,
           seriesId: null,
-          status: 'Draft'
+          status: 'Submitted' // Default status is Submitted
         });
         this.messageService.add({
           severity: 'warn',
@@ -799,7 +799,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         formBuilderId: null,
         tabId: null,
         seriesId: null,
-        status: 'Draft'
+        status: 'Submitted' // Default status is Submitted
       });
     }
 
@@ -853,7 +853,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       formBuilderId: this.documentType?.formBuilderId || null,
       tabId: null,
       seriesId: null,
-      status: 'Draft'
+      status: 'Submitted' // Default status is Submitted
     });
     
     this.updateFormControlDisabledStates();
@@ -1159,7 +1159,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       documentTypeId: this.documentTypeId,
       seriesId: seriesId,
       submittedByUserId: userId,
-      status: formData.status || 'Draft'
+      status: formData.status || 'Submitted' // Default status is Submitted
     };
 
     console.log('[createSubmission] Creating submission with:', createDto);

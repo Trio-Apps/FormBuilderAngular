@@ -1058,9 +1058,7 @@ export class FormViewComponent implements OnInit {
               isMandatory: field.isMandatory ?? false,
               isReadOnly: field.isEditable === false
             };
-            if (field.fieldCode === 'NOTES' || field.fieldCode.toUpperCase() === 'NOTES') {
-              console.log(`[FormView] ✅ Found NOTES field in form! Base state:`, baseFieldStates[field.fieldCode]);
-            }
+            // Removed NOTES-specific logging - it's optional
           }
         });
       });
@@ -1068,9 +1066,7 @@ export class FormViewComponent implements OnInit {
     
     console.log('[FormView] Base field states:', Object.keys(baseFieldStates));
     console.log('[FormView] All field codes in form:', allFieldCodes);
-    if (!allFieldCodes.includes('NOTES') && !allFieldCodes.some(code => code.toUpperCase() === 'NOTES')) {
-      console.warn('[FormView] ⚠️ NOTES field code not found in form! Available codes:', allFieldCodes);
-    }
+    // Removed NOTES field warning - it's optional and may not exist in all forms
 
     // Use RuleEvaluationService to evaluate all rules
     const evaluatedStates = this.ruleEvaluationService.evaluateAllRules(
@@ -1089,11 +1085,7 @@ export class FormViewComponent implements OnInit {
         if (state.value !== undefined) {
           this.dynamicFieldStates[fieldCode].value = state.value;
         }
-        if (fieldCode === 'NOTES') {
-          console.log(`[FormView] ✅ Updated NOTES state:`, this.dynamicFieldStates[fieldCode]);
-        } else {
-          console.log(`[FormView] Updated state for ${fieldCode}:`, this.dynamicFieldStates[fieldCode]);
-        }
+        // Removed NOTES-specific logging
       } else {
         this.dynamicFieldStates[fieldCode] = {
           isVisible: state.isVisible,
@@ -1101,11 +1093,7 @@ export class FormViewComponent implements OnInit {
           isReadOnly: state.isReadOnly,
           value: state.value
         };
-        if (fieldCode === 'NOTES') {
-          console.log(`[FormView] ✅ Created NOTES state:`, this.dynamicFieldStates[fieldCode]);
-        } else {
-          console.log(`[FormView] Created new state for ${fieldCode}:`, this.dynamicFieldStates[fieldCode]);
-        }
+        // Removed NOTES-specific logging
       }
     });
     
@@ -1148,16 +1136,6 @@ export class FormViewComponent implements OnInit {
         readOnly: this.dynamicFieldStates[code].isReadOnly
       }))
     );
-    
-    // Check if NOTES field exists in form
-    const notesField = this.findFieldByCode('NOTES');
-    if (notesField) {
-      console.log('[FormView] ✅ NOTES field found in form:', notesField);
-      console.log('[FormView] NOTES field visibility:', this.isFieldVisible(notesField));
-    } else {
-      console.warn('[FormView] ⚠️ NOTES field NOT found in form structure!');
-      console.log('[FormView] Available fields:', this.tabs?.flatMap(tab => tab.fields?.map(f => f.fieldCode) || []) || []);
-    }
     
     // Force change detection to update UI
     this.cdr.markForCheck();
@@ -1588,15 +1566,11 @@ export class FormViewComponent implements OnInit {
     const dynamicState = this.dynamicFieldStates[field.fieldCode];
     if (dynamicState && dynamicState.isVisible !== undefined) {
       const isVisible = dynamicState.isVisible;
-      if (field.fieldCode === 'NOTES') {
-        console.log(`[FormView] NOTES field visibility check: ${isVisible}`, dynamicState);
-      }
+      // Removed NOTES-specific logging
       return isVisible;
     }
     const baseVisible = field.isVisible ?? true;
-    if (field.fieldCode === 'NOTES') {
-      console.log(`[FormView] NOTES field visibility (base): ${baseVisible}`);
-    }
+    // Removed NOTES-specific logging
     return baseVisible;
   }
 
@@ -1876,7 +1850,7 @@ export class FormViewComponent implements OnInit {
   /**
    * Handle file selection (supports single or multiple files)
    */
-  onFileSelected(event: Event, field: FormFieldDto): void {
+  async onFileSelected(event: Event, field: FormFieldDto): Promise<void> {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0 || !field.id) {
       return;
@@ -1944,16 +1918,16 @@ export class FormViewComponent implements OnInit {
 
     // Upload files
     if (allowMultiple && filesToUpload.length > 1) {
-      this.uploadMultipleFiles(filesToUpload, field);
+      await this.uploadMultipleFiles(filesToUpload, field);
     } else {
-      this.uploadFile(filesToUpload[0], field);
+      await this.uploadFile(filesToUpload[0], field);
     }
   }
 
   /**
    * Upload file to server
    */
-  uploadFile(file: File, field: FormFieldDto): void {
+  async uploadFile(file: File, field: FormFieldDto): Promise<void> {
     if (!field.id) {
       console.error('[FormView] Field ID is missing');
       const currentLang = this.translationService.getCurrentLanguage();
@@ -1963,16 +1937,91 @@ export class FormViewComponent implements OnInit {
       return;
     }
 
-    // Note: submissionId will be set from the upload response
-    // For now, we allow upload even if submissionId is 0 (backend should handle creating submission)
-    // The submissionId will be updated from the response after successful upload
-
     this.uploadingFiles[field.id] = true;
     this.uploadProgress[field.id] = 0;
     this.fileUploadErrors[field.id] = '';
 
-    // If submissionId is not set, use form ID as fallback (backend should handle this)
-    const submissionIdToUse = this.submissionId || this.form?.id || 0;
+    // Create submission with Submitted status by default
+    let submissionIdToUse = this.submissionId;
+    if (submissionIdToUse === 0 && this.form?.id) {
+      try {
+        const queryParams = this.route.snapshot.queryParams;
+        const documentTypeId = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1;
+        const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 1;
+        const submittedByUserId = queryParams['userId'] || 'public-user';
+
+        // Try createSubmission first with Submitted status
+        let submission: FormSubmissionDto | undefined;
+        try {
+          const createDto: CreateFormSubmissionDto = {
+            formBuilderId: this.form.id,
+            documentTypeId: documentTypeId,
+            seriesId: 1, // Default series
+            submittedByUserId: submittedByUserId,
+            status: 'Submitted' // Default status is Submitted
+          };
+          submission = await this.formSubmissionsService.createSubmission(createDto).toPromise();
+        } catch (submitError: any) {
+          console.warn('[FormView] createSubmission failed, trying createDraft:', submitError);
+          // Try createDraft as fallback, then update status
+          try {
+            submission = await this.formSubmissionsService.createDraft(
+              this.form.id,
+              projectId,
+              submittedByUserId
+            ).toPromise();
+            
+            // Update status to Submitted if draft was created
+            if (submission && submission.id && submission.status === 'Draft') {
+              try {
+                await this.formSubmissionsService.updateStatus(submission.id, 'Submitted').toPromise();
+                submission.status = 'Submitted'; // Update local object
+              } catch (statusError) {
+                console.warn('[FormView] Failed to update status to Submitted:', statusError);
+              }
+            }
+          } catch (draftError: any) {
+            console.error('[FormView] createDraft also failed:', draftError);
+            this.uploadingFiles[field.id] = false;
+            const currentLang = this.translationService.getCurrentLanguage();
+            this.fileUploadErrors[field.id] = currentLang === 'ar'
+              ? 'خدمة رفع الملفات غير متاحة حالياً. يرجى التواصل مع المسؤول.'
+              : 'File upload service is currently unavailable. Please contact the administrator.';
+            return;
+          }
+        }
+
+        if (submission && submission.id) {
+          submissionIdToUse = submission.id;
+          this.submissionId = submission.id;
+        } else {
+          this.uploadingFiles[field.id] = false;
+          const currentLang = this.translationService.getCurrentLanguage();
+          this.fileUploadErrors[field.id] = currentLang === 'ar'
+            ? 'فشل إنشاء submission'
+            : 'Failed to create submission';
+          return;
+        }
+      } catch (error: any) {
+        console.error('[FormView] Error creating submission:', error);
+        this.uploadingFiles[field.id] = false;
+        const currentLang = this.translationService.getCurrentLanguage();
+        const errorMsg = error?.error?.message || error?.message || 'Unknown error';
+        this.fileUploadErrors[field.id] = currentLang === 'ar'
+          ? `فشل إنشاء submission: ${errorMsg}`
+          : `Failed to create submission: ${errorMsg}`;
+        return;
+      }
+    }
+
+    if (submissionIdToUse === 0) {
+      this.uploadingFiles[field.id] = false;
+      const currentLang = this.translationService.getCurrentLanguage();
+      this.fileUploadErrors[field.id] = currentLang === 'ar'
+        ? 'معرف النموذج مفقود'
+        : 'Form ID is missing';
+      return;
+    }
 
     // Simulate progress (since HttpClient doesn't provide upload progress by default)
     // In a real scenario, you might want to use HttpEventType.UploadProgress
@@ -2043,7 +2092,7 @@ export class FormViewComponent implements OnInit {
   /**
    * Upload multiple files to server
    */
-  uploadMultipleFiles(files: File[], field: FormFieldDto): void {
+  async uploadMultipleFiles(files: File[], field: FormFieldDto): Promise<void> {
     if (!field.id) {
       console.error('[FormView] Field ID is missing');
       const currentLang = this.translationService.getCurrentLanguage();
@@ -2053,16 +2102,91 @@ export class FormViewComponent implements OnInit {
       return;
     }
 
-    // Note: submissionId will be set from the upload response
-    // For now, we allow upload even if submissionId is 0 (backend should handle creating submission)
-    // The submissionId will be updated from the response after successful upload
-
     this.uploadingFiles[field.id] = true;
     this.uploadProgress[field.id] = 0;
     this.fileUploadErrors[field.id] = '';
 
-    // If submissionId is not set, use form ID as fallback (backend should handle this)
-    const submissionIdToUse = this.submissionId || this.form?.id || 0;
+    // Create submission with Submitted status by default
+    let submissionIdToUse = this.submissionId;
+    if (submissionIdToUse === 0 && this.form?.id) {
+      try {
+        const queryParams = this.route.snapshot.queryParams;
+        const documentTypeId = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1;
+        const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 1;
+        const submittedByUserId = queryParams['userId'] || 'public-user';
+
+        // Try createSubmission first with Submitted status
+        let submission: FormSubmissionDto | undefined;
+        try {
+          const createDto: CreateFormSubmissionDto = {
+            formBuilderId: this.form.id,
+            documentTypeId: documentTypeId,
+            seriesId: 1, // Default series
+            submittedByUserId: submittedByUserId,
+            status: 'Submitted' // Default status is Submitted
+          };
+          submission = await this.formSubmissionsService.createSubmission(createDto).toPromise();
+        } catch (submitError: any) {
+          console.warn('[FormView] createSubmission failed, trying createDraft:', submitError);
+          // Try createDraft as fallback, then update status
+          try {
+            submission = await this.formSubmissionsService.createDraft(
+              this.form.id,
+              projectId,
+              submittedByUserId
+            ).toPromise();
+            
+            // Update status to Submitted if draft was created
+            if (submission && submission.id && submission.status === 'Draft') {
+              try {
+                await this.formSubmissionsService.updateStatus(submission.id, 'Submitted').toPromise();
+                submission.status = 'Submitted'; // Update local object
+              } catch (statusError) {
+                console.warn('[FormView] Failed to update status to Submitted:', statusError);
+              }
+            }
+          } catch (draftError: any) {
+            console.error('[FormView] createDraft also failed:', draftError);
+            this.uploadingFiles[field.id] = false;
+            const currentLang = this.translationService.getCurrentLanguage();
+            this.fileUploadErrors[field.id] = currentLang === 'ar'
+              ? 'خدمة رفع الملفات غير متاحة حالياً. يرجى التواصل مع المسؤول.'
+              : 'File upload service is currently unavailable. Please contact the administrator.';
+            return;
+          }
+        }
+
+        if (submission && submission.id) {
+          submissionIdToUse = submission.id;
+          this.submissionId = submission.id;
+        } else {
+          this.uploadingFiles[field.id] = false;
+          const currentLang = this.translationService.getCurrentLanguage();
+          this.fileUploadErrors[field.id] = currentLang === 'ar'
+            ? 'فشل إنشاء submission'
+            : 'Failed to create submission';
+          return;
+        }
+      } catch (error: any) {
+        console.error('[FormView] Error creating submission:', error);
+        this.uploadingFiles[field.id] = false;
+        const currentLang = this.translationService.getCurrentLanguage();
+        const errorMsg = error?.error?.message || error?.message || 'Unknown error';
+        this.fileUploadErrors[field.id] = currentLang === 'ar'
+          ? `فشل إنشاء submission: ${errorMsg}`
+          : `Failed to create submission: ${errorMsg}`;
+        return;
+      }
+    }
+
+    if (submissionIdToUse === 0) {
+      this.uploadingFiles[field.id] = false;
+      const currentLang = this.translationService.getCurrentLanguage();
+      this.fileUploadErrors[field.id] = currentLang === 'ar'
+        ? 'معرف النموذج مفقود'
+        : 'Form ID is missing';
+      return;
+    }
 
     // Simulate progress for multiple files
     const progressInterval = setInterval(() => {
@@ -2809,20 +2933,59 @@ export class FormViewComponent implements OnInit {
 
       // Step 1: Create submission record if not exists
       if (currentSubmissionId === 0) {
-        const createDto: CreateFormSubmissionDto = {
-          formBuilderId: this.form.id,
-          documentTypeId: documentTypeId,
-          seriesId: seriesId,
-          submittedByUserId: submittedByUserId,
-          status: 'Submitted'
-        };
+        let submission: FormSubmissionDto | undefined;
+        let submissionError: any = null;
+        
+        // Create submission with Submitted status by default
+        try {
+          const createDto: CreateFormSubmissionDto = {
+            formBuilderId: this.form.id,
+            documentTypeId: documentTypeId,
+            seriesId: seriesId,
+            submittedByUserId: submittedByUserId,
+            status: 'Submitted' // Default status is Submitted
+          };
+          submission = await this.formSubmissionsService.createSubmission(createDto).toPromise();
+        } catch (submitError: any) {
+          submissionError = submitError;
+          console.warn('[FormView] createSubmission failed, trying createDraft:', submitError);
+          
+          // Try createDraft as fallback, then update status
+          try {
+            submission = await this.formSubmissionsService.createDraft(
+              this.form.id,
+              projectId,
+              submittedByUserId
+            ).toPromise();
+            
+            // Update status to Submitted if draft was created
+            if (submission && submission.id && submission.status === 'Draft') {
+              try {
+                await this.formSubmissionsService.updateStatus(submission.id, 'Submitted').toPromise();
+                submission.status = 'Submitted'; // Update local object
+              } catch (statusError) {
+                console.warn('[FormView] Failed to update status to Submitted:', statusError);
+                // Continue anyway - submission is created
+              }
+            }
+          } catch (draftError: any) {
+            console.error('[FormView] createDraft also failed:', draftError);
+            submissionError = draftError;
+          }
+        }
 
-        const submission = await this.formSubmissionsService.createSubmission(createDto).toPromise();
         if (submission && submission.id) {
           currentSubmissionId = submission.id;
           this.submissionId = submission.id;
         } else {
-          throw new Error('Failed to create submission');
+          // API endpoints not available - show user-friendly message
+          const currentLang = this.translationService.getCurrentLanguage();
+          const errorMessage = currentLang === 'ar'
+            ? 'عذراً، خدمة حفظ النماذج غير متاحة حالياً. يرجى التواصل مع المسؤول.'
+            : 'Sorry, the form submission service is currently unavailable. Please contact the administrator.';
+          
+          alert(errorMessage);
+          throw new Error('Form submission API endpoints not available (404)');
         }
       }
 
