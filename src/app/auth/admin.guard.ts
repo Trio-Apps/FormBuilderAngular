@@ -21,12 +21,11 @@ export const adminGuard = () => {
     return true;
   } else {
     console.log('[adminGuard] Access denied, redirecting...');
-    // Redirect to login if not authenticated, or to dashboard if not admin
+    // Return UrlTree instead of using router.navigate() to avoid transition conflicts
     if (!isAuthenticated) {
-      router.navigate(['/pages/login']);
+      return router.createUrlTree(['/pages/login']);
     } else {
-      router.navigate(['/dashboard']);
+      return router.createUrlTree(['/dashboard']);
     }
-    return false;
   }
 };

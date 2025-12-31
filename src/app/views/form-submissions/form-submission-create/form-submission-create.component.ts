@@ -10,7 +10,11 @@ import { DocumentType, DocumentSeries } from '../../FormBuilder/form-builder/mod
 import { FormsService } from '../../FormBuilder/services/forms.service';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FieldsService } from '../../FormBuilder/services/fields.service';
-import { FormBuilderDto, FormTabDto, FormFieldDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { FieldDataSourceService } from '../../FormBuilder/services/field-data-source.service';
+import { RuleEvaluationService, FieldState } from '../../FormBuilder/services/rule-evaluation.service';
+import { FormRulesService } from '../../FormBuilder/services/form-rules.service';
+import { buildContext, getContextFieldCodes, requiresContext } from '../../FormBuilder/utils/field-data-source-helpers';
+import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { InputTextModule } from 'primeng/inputtext';
@@ -20,6 +24,7 @@ import { CheckboxModule } from 'primeng/checkbox';
 import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
 import { Subscription, forkJoin } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
 @Component({
   selector: 'app-form-submission-create',
@@ -50,11 +55,33 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   selectedFormId: number | null = null;
   selectedTabId: number | null = null;
   activeTabIndex = 0;
+  currentForm: FormBuilderDto | null = null;
 
   // Forms
   submissionForm!: FormGroup;
   fieldsForm!: FormGroup;
   fieldFiles: { [fieldId: number]: File[] } = {};
+
+  // Field DataSource state
+  fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
+  loadingFieldOptions: { [fieldId: number]: boolean } = {}; // Loading state for each field
+  private _cachedMappedOptions: { [fieldId: number]: any[] } = {}; // Cache for mapped DataSource options
+  private _cachedStaticOptions: { [fieldId: number]: any[] } = {}; // Cache for static options
+  private _loggedFieldOptions: { [fieldId: number]: boolean } = {}; // Track logged fields to avoid console spam
+
+  // Form Rules state - Dynamic field states based on rules
+  dynamicFieldStates: {
+    [fieldCode: string]: {
+      isVisible?: boolean;
+      isRequired?: boolean;
+      isReadOnly?: boolean;
+      value?: any;
+    }
+  } = {};
+  fieldValues: { [fieldCode: string]: any } = {}; // Track field values for rule evaluation
+
+  // Track which fields depend on context for reloading options
+  private contextDependencies: { [fieldId: number]: string[] } = {}; // fieldId -> array of context field codes
 
   // Document Series
   documentSeries: DocumentSeries[] = [];
@@ -71,6 +98,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   };
 
   private routeSubscription?: Subscription;
+  private fieldsFormValueChangesSubscription?: Subscription;
+  private isEvaluatingRules = false; // Flag to prevent infinite loops
 
   constructor(
     private route: ActivatedRoute,
@@ -82,6 +111,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     private formsService: FormsService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
+    private fieldDataSourceService: FieldDataSourceService,
+    private ruleEvaluationService: RuleEvaluationService,
+    private formRulesService: FormRulesService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
@@ -127,6 +159,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.routeSubscription) {
       this.routeSubscription.unsubscribe();
+    }
+    if (this.fieldsFormValueChangesSubscription) {
+      this.fieldsFormValueChangesSubscription.unsubscribe();
     }
   }
 
@@ -192,6 +227,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         const formId = this.documentType!.formBuilderId!;
         const formExists = this.forms.some(f => f.id === formId);
         if (formExists) {
+          this.currentForm = this.forms.find(f => f.id === formId) || null;
+          if (this.currentForm) {
+            this.loadFormRules(this.currentForm.id!);
+          }
           this.onFormSelected(formId);
         } else {
           this.messageService.add({
@@ -263,12 +302,20 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       this.fields = [];
       this.fieldFiles = {};
       this.fieldsForm = this.fb.group({});
+      // Clear caches when clearing tab
+      this._cachedMappedOptions = {};
+      this._cachedStaticOptions = {};
+      this._loggedFieldOptions = {};
       this.loading.fields = false;
       return;
     }
 
     this.selectedTabId = tabId;
     this.submissionForm.patchValue({ tabId: tabId });
+    // Clear caches when switching tabs
+    this._cachedMappedOptions = {};
+    this._cachedStaticOptions = {};
+    this._loggedFieldOptions = {};
     this.loadFields(tabId);
   }
 
@@ -305,47 +352,304 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
+    console.log('[FormSubmissionCreate] Loading form with fields (including fieldDataSource) for form:', this.selectedFormId, 'tab:', tabId);
     this.loading.fields = true;
-    this.fieldsService.getFields(this.selectedFormId, tabId).subscribe({
-      next: (fields: FormFieldDto[]) => {
-        this.fields = fields.filter(f => f.isActive).sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
+    
+    // First, get formCode from currentForm or load form to get formCode
+    const formCode = this.currentForm?.formCode;
+    
+    if (formCode) {
+      // Use getFormByCode (like FormViewComponent) to get complete form with tabs, fields, and fieldDataSource
+      console.log('[FormSubmissionCreate] Loading form by code:', formCode);
+      this.formsService.getFormByCode(formCode).subscribe({
+        next: (form: FormBuilderDto | null) => {
+          if (!form) {
+            console.error('[FormSubmissionCreate] Form not found by code:', formCode);
+            this.loadFieldsFallback(tabId);
+            return;
+          }
+          
+          console.log('[FormSubmissionCreate] Form loaded by code:', form?.id);
+          console.log('[FormSubmissionCreate] Form tabs count:', form.tabs?.length || 0);
+          console.log('[FormSubmissionCreate] Form tab IDs:', form.tabs?.map(t => t.id) || []);
+          
+          // Find the selected tab in the form
+          const selectedTab = form.tabs?.find(tab => tab.id === tabId);
+          
+          if (!selectedTab) {
+            console.warn('[FormSubmissionCreate] Tab not found in form loaded by code, using fallback');
+            this.loadFieldsFallback(tabId);
+            return;
+          }
+          
+          // Extract fields from the tab (these should include fieldDataSource)
+          const fields = selectedTab.fields || [];
+          
+          if (fields.length === 0) {
+            console.warn('[FormSubmissionCreate] Tab from form has no fields, using fallback');
+            this.loadFieldsFallback(tabId);
+            return;
+          }
+          
+          console.log('[FormSubmissionCreate] Fields loaded from form (by code):', fields.length);
+          
+          // Log fieldDataSource info
+          const fieldsWithDataSource = fields.filter(f => f.fieldDataSource && f.fieldDataSource.isActive);
+          console.log(`[FormSubmissionCreate] Tab ${tabId} has ${fields.length} fields, ${fieldsWithDataSource.length} with DataSource`);
+          fieldsWithDataSource.forEach(f => {
+            console.log(`[FormSubmissionCreate] - Field ${f.id} (${f.fieldCode || 'no-code'}):`, {
+              sourceType: f.fieldDataSource?.sourceType,
+              apiUrl: f.fieldDataSource?.apiUrl
+            });
+          });
+          
+          this.processFields(fields);
+        },
+        error: (error) => {
+          console.error('[FormSubmissionCreate] Error loading form by code:', error);
+          this.loadFieldsFallback(tabId);
+        }
+      });
+    } else {
+      // Fallback: load form by ID, then load fields separately
+      console.warn('[FormSubmissionCreate] No formCode available, using fallback method');
+      this.loadFieldsFallback(tabId);
+    }
+  }
+
+  /**
+   * Fallback method to load fields when form doesn't contain tabs/fields
+   * Loads fields from fieldsService and tries to enrich with fieldDataSource from form
+   */
+  private loadFieldsFallback(tabId: number): void {
+    if (!this.selectedFormId) {
+      console.error('[FormSubmissionCreate] Cannot load fields: selectedFormId is null');
+      this.loading.fields = false;
+      return;
+    }
+
+    console.log('[FormSubmissionCreate] Loading fields using fallback method');
+    
+    // Load fields from fieldsService
+    const formId = this.selectedFormId; // Store in local variable for TypeScript
+    this.fieldsService.getFields(formId, tabId).subscribe({
+      next: (fieldsFromService: FormFieldDto[]) => {
+        console.log('[FormSubmissionCreate] Fields loaded from fieldsService:', fieldsFromService.length);
         
-        // Build dynamic form for fields
-        const formControls: { [key: string]: any } = {};
-        this.fields.forEach(field => {
-          if (field.id) {
-            const fieldKey = `field_${field.id}`;
-            if (!this.isFileField(field)) {
-              const validators: any[] = [];
-              if (field.isMandatory) {
-                validators.push(Validators.required);
-              }
-              
-              const fieldType = this.getFieldType(field);
-              let defaultValue: any = field.defaultValueJson || null;
-              
-              if (fieldType === 'checkbox') {
-                defaultValue = [];
-              } else if (fieldType === 'boolean') {
-                defaultValue = (field.defaultValueJson === 'true' || field.defaultValueJson === 'True') ? true : false;
-              }
-              
-              formControls[fieldKey] = [defaultValue, validators];
+        // Try to enrich fields with fieldDataSource from form
+        // First, try to load form by ID to get fieldDataSource
+        if (!formId) {
+          this.processFields(fieldsFromService);
+          return;
+        }
+        this.formsService.getFormById(formId).subscribe({
+          next: (form: FormBuilderDto) => {
+            // Try to match fields and copy fieldDataSource
+            if (form.tabs) {
+              form.tabs.forEach(tab => {
+                if (tab.fields) {
+                  tab.fields.forEach(formField => {
+                    const matchingField = fieldsFromService.find(f => f.id === formField.id);
+                    if (matchingField && formField.fieldDataSource) {
+                      console.log(`[FormSubmissionCreate] Enriching field ${matchingField.id} with fieldDataSource from form`);
+                      matchingField.fieldDataSource = formField.fieldDataSource;
+                    }
+                  });
+                }
+              });
             }
+            
+            this.processFields(fieldsFromService);
+          },
+          error: (error) => {
+            console.warn('[FormSubmissionCreate] Could not load form to enrich fields with DataSource:', error);
+            // Continue without fieldDataSource enrichment
+            this.processFields(fieldsFromService);
           }
         });
-        this.fieldsForm = this.fb.group(formControls);
-        
-        this.loading.fields = false;
-        this.cdr.detectChanges();
       },
       error: (error) => {
-        console.error('Error loading fields:', error);
-        this.fields = [];
+        console.error('[FormSubmissionCreate] Error loading fields from service:', error);
         this.loading.fields = false;
-        this.cdr.detectChanges();
       }
     });
+  }
+
+  private processFields(fields: FormFieldDto[]): void {
+    console.log('[FormSubmissionCreate] Processing fields:', fields?.length || 0);
+    
+    // Log detailed info about ALL fields with DataSource
+    if (fields && fields.length > 0) {
+      console.log('[FormSubmissionCreate] All fields details:', fields.map(f => ({
+        id: f.id,
+        fieldCode: f.fieldCode,
+        fieldName: f.fieldName,
+        fieldType: f.fieldTypeName || f.fieldType?.typeName,
+        hasDataSource: !!f.fieldDataSource,
+        dataSourceType: f.fieldDataSource?.sourceType,
+        dataSourceActive: f.fieldDataSource?.isActive,
+        dataSourceApiUrl: f.fieldDataSource?.apiUrl,
+        hasOptions: !!(f.fieldOptions && f.fieldOptions.length > 0),
+        optionsCount: f.fieldOptions?.length || 0
+      })));
+      
+      // Log fields with DataSource separately
+      const fieldsWithDataSource = fields.filter(f => f.fieldDataSource && f.fieldDataSource.isActive);
+      console.log('[FormSubmissionCreate] Fields WITH active DataSource:', fieldsWithDataSource.length);
+      fieldsWithDataSource.forEach(f => {
+        console.log(`[FormSubmissionCreate] - Field ${f.id} (${f.fieldCode || 'no-code'}):`, {
+          sourceType: f.fieldDataSource?.sourceType,
+          apiUrl: f.fieldDataSource?.apiUrl,
+          valuePath: f.fieldDataSource?.valuePath,
+          textPath: f.fieldDataSource?.textPath
+        });
+      });
+    }
+    
+    this.fields = fields.filter(f => f.isActive).sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
+    console.log('[FormSubmissionCreate] Active fields after filtering:', this.fields.length);
+    
+    // Count fields with DataSource
+    const fieldsWithDataSource = this.fields.filter(f => f.fieldDataSource && f.fieldDataSource.isActive);
+    console.log('[FormSubmissionCreate] Fields with active DataSource:', fieldsWithDataSource.length);
+    
+    // Initialize dynamic field states for loaded fields
+    this.fields.forEach(field => {
+      if (field.fieldCode) {
+        if (!this.dynamicFieldStates[field.fieldCode]) {
+          this.dynamicFieldStates[field.fieldCode] = {};
+        }
+        this.dynamicFieldStates[field.fieldCode].isVisible = field.isVisible ?? true;
+        this.dynamicFieldStates[field.fieldCode].isRequired = field.isMandatory ?? false;
+        this.dynamicFieldStates[field.fieldCode].isReadOnly = field.isEditable === false;
+      }
+    });
+    
+    // Load options from DataSource for fields that need it
+    this.fields.forEach(field => {
+      if (field.id) {
+        const fieldType = this.getFieldType(field);
+        const isOptionsField = ['select', 'radio', 'checkbox'].includes(fieldType);
+        
+        // Log field DataSource info
+        if (field.fieldDataSource) {
+          console.log(`[FormSubmissionCreate] ✅ Field ${field.id} (${field.fieldCode || 'no-code'}) has DataSource:`, {
+            fieldType: fieldType,
+            isOptionsField: isOptionsField,
+            sourceType: field.fieldDataSource.sourceType,
+            isActive: field.fieldDataSource.isActive,
+            apiUrl: field.fieldDataSource.apiUrl,
+            valuePath: field.fieldDataSource.valuePath,
+            textPath: field.fieldDataSource.textPath,
+            httpMethod: field.fieldDataSource.httpMethod
+          });
+        } else {
+          console.log(`[FormSubmissionCreate] ❌ Field ${field.id} (${field.fieldCode || 'no-code'}) has NO DataSource`, {
+            fieldType: fieldType,
+            isOptionsField: isOptionsField,
+            hasOptions: !!(field.fieldOptions && field.fieldOptions.length > 0),
+            optionsCount: field.fieldOptions?.length || 0
+          });
+        }
+        
+        // Only load DataSource options for fields that need options
+        if (isOptionsField) {
+          this.loadFieldOptionsFromDataSource(field);
+        }
+      }
+    });
+    
+    // Build dynamic form for fields
+    const formControls: { [key: string]: any } = {};
+    this.fields.forEach(field => {
+      if (field.id) {
+        const fieldKey = `field_${field.id}`;
+        if (!this.isFileField(field)) {
+          const validators: any[] = [];
+          const dynamicState = this.dynamicFieldStates[field.fieldCode || ''];
+          const isRequired = dynamicState?.isRequired ?? field.isMandatory ?? false;
+          
+          if (isRequired) {
+            validators.push(Validators.required);
+          }
+          
+          const fieldType = this.getFieldType(field);
+          let defaultValue: any = field.defaultValueJson || null;
+          
+          if (fieldType === 'checkbox') {
+            defaultValue = [];
+          } else if (fieldType === 'boolean') {
+            defaultValue = (field.defaultValueJson === 'true' || field.defaultValueJson === 'True') ? true : false;
+          }
+          
+          formControls[fieldKey] = [defaultValue, validators];
+        }
+      }
+    });
+    this.fieldsForm = this.fb.group(formControls);
+    
+    try {
+      // Unsubscribe from previous subscription if exists
+      if (this.fieldsFormValueChangesSubscription) {
+        this.fieldsFormValueChangesSubscription.unsubscribe();
+      }
+      
+      // Subscribe to form value changes to track field values for rule evaluation
+      // Use debounceTime to prevent infinite loops and improve performance
+      this.fieldsFormValueChangesSubscription = this.fieldsForm.valueChanges.pipe(
+        debounceTime(300), // Wait 300ms after user stops typing
+        distinctUntilChanged() // Only emit if value actually changed
+      ).subscribe(() => {
+        // Prevent infinite loops
+        if (this.isEvaluatingRules) {
+          return;
+        }
+        
+        try {
+          this.updateFieldValues();
+          // Use setTimeout to defer rule evaluation and avoid infinite loops
+          setTimeout(() => {
+            if (!this.isEvaluatingRules) {
+              this.evaluateFormRules();
+            }
+          }, 0);
+        } catch (error) {
+          console.error('[FormSubmissionCreate] Error in form value changes subscription:', error);
+        }
+      });
+      
+      // Initial rule evaluation (wrap in try-catch to prevent blocking)
+      // Use setTimeout to defer initial evaluation and avoid infinite loops
+      setTimeout(() => {
+        try {
+          this.updateFieldValues();
+          if (!this.isEvaluatingRules) {
+            this.evaluateFormRules();
+          }
+        } catch (error) {
+          console.error('[FormSubmissionCreate] Error in initial rule evaluation:', error);
+          // Continue even if rule evaluation fails
+        }
+      }, 0);
+    } catch (error) {
+      console.error('[FormSubmissionCreate] Error initializing form and rules:', error);
+      // Continue even if initialization fails
+    }
+    
+    console.log('[FormSubmissionCreate] Fields loading completed. Fields count:', this.fields.length);
+    // Always set loading to false, even if there were errors
+    this.loading.fields = false;
+    // Use setTimeout to defer change detection and avoid infinite loops
+    setTimeout(() => {
+      this.cdr.markForCheck();
+    }, 0);
+  }
+
+  /**
+   * Check if field is loading options from DataSource
+   */
+  isLoadingFieldOptions(field: FormFieldDto): boolean {
+    return field.id ? (this.loadingFieldOptions[field.id] || false) : false;
   }
 
   isFileField(field: FormFieldDto): boolean {
@@ -354,32 +658,352 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   }
 
   getFieldType(field: FormFieldDto): string {
-    const fieldTypeName = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase().trim();
+    // Prefer explicit FieldType configuration if available
     const ft = field.fieldType;
-    const hasOptions = ft?.hasOptions ?? (field.fieldOptions && field.fieldOptions.length > 0);
-    const allowMultiple = ft?.allowMultiple ?? false;
+    const typeName = (field.fieldTypeName || ft?.typeName || '').toLowerCase().trim();
+    const dataType = (ft?.dataType || '').toLowerCase().trim();
 
-    if (fieldTypeName === 'grid') return 'grid';
-    if (fieldTypeName === 'textbox' || fieldTypeName.includes('text box')) return 'string';
-    if (fieldTypeName === 'textarea') return 'textarea';
-    if (fieldTypeName === 'number') return 'number';
-    if (fieldTypeName === 'date') return 'date';
-    if (fieldTypeName === 'email') return 'email';
-    if (fieldTypeName === 'boolean' || fieldTypeName === 'switch') return 'boolean';
-    if (this.isFileField(field)) return 'file';
+    // Check for Grid type first
+    if (typeName === 'grid') {
+      return 'grid';
+    }
 
-    if (hasOptions || (field.fieldOptions && field.fieldOptions.length > 0)) {
-      if (fieldTypeName.includes('checkbox') || allowMultiple === true) return 'checkbox';
-      if (fieldTypeName.includes('radio')) return 'radio';
+    // Explicit mapping: Textbox => text input
+    if (typeName === 'textbox' || typeName.includes('text box')) {
+      return 'text';
+    }
+
+    // 1) Types with options (select / radio / checkbox)
+    if (ft?.hasOptions) {
+      // لو النوع اسمه يحتوي "checkbox" أو "check box" خليه مربعات اختيار
+      if (typeName.includes('checkbox') || typeName.includes('check box')) {
+        return 'checkbox';
+      }
+
+      // لو النوع اسمه يحتوي "radio" خليه radio buttons (التحقق أولاً)
+      if (typeName.includes('radio')) {
+        return 'radio';
+      }
+
+      // التحقق من fieldTypeName مباشرة (قد يكون "Radio" بحروف كبيرة)
+      const fieldTypeNameLower = (field.fieldTypeName || '').toLowerCase();
+      if (fieldTypeNameLower.includes('radio')) {
+        return 'radio';
+      }
+
+      // إذا كان allowMultiple = false و hasOptions = true وليس select صراحة
+      // (Radio buttons تسمح باختيار واحد فقط، بينما Select قد يكون single أو multiple)
+      if (ft.allowMultiple === false && !typeName.includes('select') && !fieldTypeNameLower.includes('select')) {
+        return 'radio';
+      }
+
+      // أي نوع آخر فيه اختيارات (hasOptions = true) يكون Dropdown
       return 'select';
     }
 
-    return 'string';
+    // 2) Non-options fields based on dataType / name
+    const combined = `${typeName} ${dataType}`.toLowerCase();
+
+    // Email first
+    if (combined.includes('email')) return 'email';
+
+    // Number
+    if (combined.includes('number') || combined.includes('numeric') || dataType === 'int' || dataType === 'decimal') {
+      return 'number';
+    }
+
+    // Date
+    if (combined.includes('date') || dataType === 'date' || dataType === 'datetime') {
+      return 'date';
+    }
+
+    // File
+    if (combined.includes('file') || dataType === 'file') {
+      return 'file';
+    }
+
+    // Grid / Line Items Grid
+    if (combined.includes('grid') || typeName.includes('grid') || typeName.includes('line items') || typeName.includes('lineitems')) {
+      return 'grid';
+    }
+
+    // Switch / boolean
+    if (combined.includes('switch') || combined.includes('toggle') || dataType === 'bool' || dataType === 'boolean') {
+      return 'switch';
+    }
+
+    // Long text / textarea
+    if (combined.includes('textarea') || (combined.includes('text') && (ft?.maxLength || 0) > 255)) {
+      return 'textarea';
+    }
+
+    // Default to short text input
+    return 'text';
   }
 
   getFieldOptions(field: FormFieldDto): any[] {
-    if (!field.fieldOptions || field.fieldOptions.length === 0) return [];
-    return field.fieldOptions.filter(opt => opt.isActive !== false);
+    if (!field.id) {
+      return field.fieldOptions || [];
+    }
+
+    // If options are still loading from DataSource, return empty array (will be updated when loading completes)
+    if (this.loadingFieldOptions[field.id]) {
+      return [];
+    }
+
+    // If options are loaded from DataSource, use them
+    if (this.fieldDataSourceOptions[field.id] && this.fieldDataSourceOptions[field.id].length > 0) {
+      // Convert FieldOptionResponse to FieldOptionDto format for compatibility
+      const dataSource = field.fieldDataSource;
+      const textPath = dataSource?.textPath || '';
+      const valuePath = dataSource?.valuePath || '';
+
+      // Check cache first to avoid recreating array on every call
+      if (this._cachedMappedOptions[field.id]) {
+        return this._cachedMappedOptions[field.id];
+      }
+
+      if (!this._loggedFieldOptions[field.id]) {
+        console.log(`[FormSubmissionCreate] Mapping ${this.fieldDataSourceOptions[field.id].length} options for field ${field.id}`);
+        console.log(`[FormSubmissionCreate] - Config: textPath="${textPath}", valuePath="${valuePath}"`);
+        if (this.fieldDataSourceOptions[field.id].length > 0) {
+          console.log(`[FormSubmissionCreate] - First option sample:`, JSON.stringify(this.fieldDataSourceOptions[field.id][0]));
+        }
+        this._loggedFieldOptions[field.id] = true;
+      }
+
+      const mappedOptions = this.fieldDataSourceOptions[field.id]
+        .filter(opt => opt !== null && opt !== undefined) // Filter out null/undefined options
+        .map((opt, index) => {
+          // Try to extract text and value from the option
+          // Use 'any' to handle dynamic properties that might exist in the response
+          const optAny = opt as any;
+          let text = '';
+          let value = '';
+
+          // Check if this is a FieldOptionDto (static options from database) or FieldOptionResponse (from DataSource)
+          // FieldOptionDto has: optionText, optionValue
+          // FieldOptionResponse has: text, value (or custom paths)
+          const isStaticOption = 'optionText' in optAny || 'optionValue' in optAny;
+          
+          if (isStaticOption) {
+            // This is a static option from database (FieldOptionDto format)
+            // Use optionText and optionValue directly
+            if (optAny.optionText !== undefined && optAny.optionText !== null) {
+              text = String(optAny.optionText).trim();
+            }
+            if (optAny.optionValue !== undefined && optAny.optionValue !== null) {
+              value = String(optAny.optionValue);
+            }
+            // Also check foreignOptionText for multilingual support
+            if (!text && optAny.foreignOptionText) {
+              text = String(optAny.foreignOptionText).trim();
+            }
+          } else {
+            // This is a DataSource option (FieldOptionResponse format)
+            // Try to use the configured textPath from DataSource (case-insensitive)
+            if (textPath) {
+              const textPathLower = textPath.toLowerCase().trim();
+              const keys = Object.keys(optAny || {});
+              const matchingKey = keys.find(k => k.toLowerCase().trim() === textPathLower);
+              if (matchingKey && optAny[matchingKey] !== undefined && optAny[matchingKey] !== null) {
+                const val = optAny[matchingKey];
+                if (typeof val === 'object') {
+                  text = JSON.stringify(val);
+                } else {
+                  text = String(val).trim();
+                }
+              }
+            }
+
+            // Try to use the configured valuePath from DataSource (case-insensitive)
+            if (valuePath) {
+              const valuePathLower = valuePath.toLowerCase().trim();
+              const keys = Object.keys(optAny || {});
+              const matchingKey = keys.find(k => k.toLowerCase().trim() === valuePathLower);
+              if (matchingKey && optAny[matchingKey] !== undefined && optAny[matchingKey] !== null) {
+                const val = optAny[matchingKey];
+                if (typeof val === 'object') {
+                  value = JSON.stringify(val);
+                } else {
+                  value = String(val);
+                }
+              }
+            }
+
+            // Fallback: Check for text property (case-insensitive) - only if textPath didn't work
+            if (!text) {
+              if (opt.text !== undefined && opt.text !== null) {
+                text = String(opt.text).trim();
+              } else if (optAny.Text !== undefined && optAny.Text !== null) {
+                text = String(optAny.Text).trim();
+              } else if (optAny.label !== undefined && optAny.label !== null) {
+                text = String(optAny.label).trim();
+              } else if (optAny.name !== undefined && optAny.name !== null) {
+                text = String(optAny.name).trim();
+              }
+            }
+
+            // Fallback: Check for value property (case-insensitive) - only if valuePath didn't work
+            if (!value) {
+              if (opt.value !== undefined && opt.value !== null) {
+                value = String(opt.value);
+              } else if (optAny.Value !== undefined && optAny.Value !== null) {
+                value = String(optAny.Value);
+              } else if (optAny.id !== undefined && optAny.id !== null) {
+                value = String(optAny.id);
+              } else if (optAny.Id !== undefined && optAny.Id !== null) {
+                value = String(optAny.Id);
+              }
+            }
+
+            // If still no value, try to use the first property that looks like an ID
+            if (!value && optAny) {
+              const keys = Object.keys(optAny);
+              const idKey = keys.find(k => {
+                const kLower = k.toLowerCase();
+                return kLower === 'id' ||
+                  kLower === 'value' ||
+                  kLower === 'key' ||
+                  kLower === 'optionvalue';
+              });
+              if (idKey && optAny[idKey] !== undefined && optAny[idKey] !== null) {
+                value = String(optAny[idKey]);
+              }
+            }
+
+            // If still no text, try to use the first string property that's not value/id
+            if (!text && optAny) {
+              const keys = Object.keys(optAny);
+              const textKey = keys.find(k => {
+                const kLower = k.toLowerCase();
+                return kLower !== 'id' &&
+                  kLower !== 'value' &&
+                  kLower !== 'key' &&
+                  kLower !== 'optionvalue' &&
+                  typeof optAny[k] === 'string' &&
+                  String(optAny[k]).trim() !== '';
+              });
+              if (textKey) {
+                text = String(optAny[textKey]).trim();
+              }
+            }
+
+            // Priority: text > value > index-based fallback
+            let displayText = text;
+            if (!displayText && value) {
+              displayText = value;
+            } else if (!displayText && !value) {
+              // Last resort: use index (but this shouldn't happen if backend is working correctly)
+              displayText = `Option ${index + 1}`;
+              console.warn(`[FormSubmissionCreate] Option at index ${index} has no text or value, using fallback: "${displayText}"`, {
+                option: opt,
+                availableKeys: Object.keys(opt || {}),
+                optionString: JSON.stringify(opt)
+              });
+            }
+
+            return {
+              optionValue: value || String(index),
+              optionText: displayText,
+              foreignOptionText: displayText, // DataSource doesn't provide separate Arabic text
+              isActive: true
+            };
+          }
+
+          // For static options, return as-is
+          return {
+            optionValue: value || String(index),
+            optionText: text || String(index),
+            foreignOptionText: optAny.foreignOptionText || text || String(index),
+            isActive: true
+          };
+        });
+      
+      // Cache the mapped options to avoid recreating array on every call
+      this._cachedMappedOptions[field.id] = mappedOptions;
+      return mappedOptions;
+    }
+
+    // Otherwise, use static options from field.fieldOptions
+    // IMPORTANT: Even if field has Api/LookupTable DataSource, use static options as fallback
+    // if DataSource failed or returned no options
+    const staticOptions = field.fieldOptions || [];
+    
+    // Check if DataSource failed or returned no options
+    const dataSource = field.fieldDataSource;
+    const hasExternalDataSource = dataSource && 
+                                 dataSource.isActive && 
+                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable');
+    const dataSourceFailed = hasExternalDataSource && 
+                            (!this.fieldDataSourceOptions[field.id] || this.fieldDataSourceOptions[field.id].length === 0);
+
+    // If DataSource failed, use static options as fallback
+    if (dataSourceFailed && staticOptions.length > 0) {
+      console.log(`[FormSubmissionCreate] Using static options as fallback for field ${field.id} (${field.fieldCode || 'no-code'}) - DataSource returned no options`);
+    }
+
+    // Only warn if no options at all (no static and no DataSource)
+    if (staticOptions.length === 0 && !this._loggedFieldOptions[field.id]) {
+      if (field.fieldDataSource && field.fieldDataSource.isActive) {
+        // DataSource is active but no options loaded - this is expected if DataSource failed
+        // Only log if we're sure there's a problem
+        const dataSourceOptions = this.fieldDataSourceOptions[field.id];
+        const hasDataSourceOptions = dataSourceOptions && dataSourceOptions.length > 0;
+        
+        console.warn(`[FormSubmissionCreate] ⚠️ Field ${field.id} (${field.fieldCode || 'no-code'}) has no options.`, {
+          hasDataSource: !!field.fieldDataSource,
+          dataSourceType: field.fieldDataSource?.sourceType,
+          dataSourceActive: field.fieldDataSource?.isActive,
+          hasDataSourceOptions: hasDataSourceOptions,
+          dataSourceOptionsCount: dataSourceOptions?.length || 0,
+          hasStaticOptions: staticOptions.length > 0,
+          staticOptionsCount: staticOptions.length,
+          isLoading: this.loadingFieldOptions[field.id] || false
+        });
+        
+        // If DataSource is active but no options loaded, check if it's still loading
+        if (!hasDataSourceOptions && this.loadingFieldOptions[field.id]) {
+          console.log(`[FormSubmissionCreate] Field ${field.id} options are still loading...`);
+        }
+      }
+      this._loggedFieldOptions[field.id] = true;
+    }
+
+    // Check cache first to avoid recreating array on every call
+    if (this._cachedStaticOptions[field.id]) {
+      return this._cachedStaticOptions[field.id];
+    }
+
+    // Ensure static options also have proper text
+    const processedOptions = staticOptions
+      .filter(opt => opt !== null && opt !== undefined)
+      .map((opt, index) => {
+        // Create a copy to avoid mutating the original
+        const option = { ...opt };
+
+        // Ensure optionText is never undefined
+        if (!option.optionText || String(option.optionText).trim() === '') {
+          if (option.optionValue && String(option.optionValue).trim() !== '') {
+            option.optionText = String(option.optionValue);
+          } else if (option.foreignOptionText && String(option.foreignOptionText).trim() !== '') {
+            option.optionText = String(option.foreignOptionText);
+          } else {
+            option.optionText = `Option ${index + 1}`;
+          }
+        }
+
+        // Ensure optionValue is never undefined
+        if (!option.optionValue || String(option.optionValue).trim() === '') {
+          option.optionValue = String(index);
+        }
+
+        return option;
+      });
+
+    // Cache the processed options to avoid recreating array on every call
+    this._cachedStaticOptions[field.id] = processedOptions;
+    return processedOptions;
   }
 
   getFieldPlaceholder(field: FormFieldDto): string {
@@ -407,7 +1031,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   }
 
   isRequired(field: FormFieldDto): boolean {
+    const dynamicState = this.dynamicFieldStates[field.fieldCode || ''];
+    if (dynamicState?.isRequired !== undefined) {
+      return dynamicState.isRequired;
+    }
     return field.isMandatory === true;
+  }
+
+  isFieldVisible(field: FormFieldDto): boolean {
+    const dynamicState = this.dynamicFieldStates[field.fieldCode || ''];
+    if (dynamicState?.isVisible !== undefined) {
+      return dynamicState.isVisible;
+    }
+    return field.isVisible ?? true;
   }
 
   onFileSelected(event: any, field: FormFieldDto): void {
@@ -433,6 +1069,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     return this.fieldFiles[fieldId] || [];
   }
 
+  /**
+   * Track by function for options to prevent unnecessary re-renders
+   */
+  trackByOptionValue(index: number, option: any): any {
+    return option?.optionValue || option?.value || option?.id || index;
+  }
+
   onCheckboxChange(field: FormFieldDto, optionValue: string, event: any): void {
     if (!field.id) return;
     const fieldKey = `field_${field.id}`;
@@ -455,6 +1098,15 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     
     control.setValue(newValue);
     control.markAsTouched();
+    
+    // Update field values and evaluate rules
+    this.updateFieldValues();
+    // Use setTimeout to defer rule evaluation and avoid infinite loops
+    setTimeout(() => {
+      if (!this.isEvaluatingRules) {
+        this.evaluateFormRules();
+      }
+    }, 0);
   }
 
   getAllowedExtensions(field: FormFieldDto): string[] {
@@ -480,6 +1132,406 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   getAcceptedFileTypes(field: FormFieldDto): string {
     const extensions = this.getAllowedExtensions(field);
     return extensions.join(',');
+  }
+
+  // ===== Field DataSource Helpers =====
+
+  /**
+   * Load field options from DataSource if available
+   */
+  loadFieldOptionsFromDataSource(field: FormFieldDto, context?: Record<string, any>): void {
+    if (!field.id) {
+      console.log(`[FormSubmissionCreate] Skipping DataSource load: field has no ID`);
+      return;
+    }
+
+    // Check if field has options type (select, radio, checkbox)
+    const fieldType = this.getFieldType(field);
+    console.log(`[FormSubmissionCreate] Checking DataSource for field ${field.id} (${field.fieldCode || 'no-code'}), type: ${fieldType}`);
+    
+    if (!['select', 'radio', 'checkbox'].includes(fieldType)) {
+      console.log(`[FormSubmissionCreate] Field ${field.id} is not an options field, skipping DataSource`);
+      return;
+    }
+
+    // Check if field has a DataSource configuration
+    const dataSource = field.fieldDataSource;
+    if (!dataSource) {
+      console.log(`[FormSubmissionCreate] Field ${field.id} has no DataSource configuration`);
+      this.fieldDataSourceOptions[field.id] = [];
+      return;
+    }
+    
+    if (!dataSource.isActive) {
+      console.log(`[FormSubmissionCreate] Field ${field.id} DataSource is not active`);
+      this.fieldDataSourceOptions[field.id] = [];
+      return;
+    }
+
+    console.log(`[FormSubmissionCreate] Field ${field.id} has DataSource:`, {
+      sourceType: dataSource.sourceType,
+      isActive: dataSource.isActive,
+      apiUrl: dataSource.apiUrl,
+      valuePath: dataSource.valuePath,
+      textPath: dataSource.textPath
+    });
+
+    // Only load from API/LookupTable, not Static
+    if (dataSource.sourceType === 'Static') {
+      console.log(`[FormSubmissionCreate] Field ${field.id} has Static DataSource, using static options`);
+      this.fieldDataSourceOptions[field.id] = [];
+      return;
+    }
+
+    // For Api or LookupTable, load options dynamically
+    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable') {
+      console.log(`[FormSubmissionCreate] Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`);
+      this.loadingFieldOptions[field.id] = true;
+      
+      // Disable control while loading
+      this.updateFieldDisabledState(field);
+
+      // Build context if not provided and DataSource requires it
+      let finalContext = context;
+      if (!finalContext && requiresContext(dataSource)) {
+        finalContext = buildContext(dataSource, this.fieldValues);
+        console.log(`[FormSubmissionCreate] Built context for field ${field.id}:`, finalContext);
+      }
+
+      // Track context dependencies for this field
+      const contextFields = getContextFieldCodes(dataSource);
+      if (contextFields.length > 0) {
+        this.contextDependencies[field.id] = contextFields;
+        console.log(`[FormSubmissionCreate] Field ${field.id} depends on context fields:`, contextFields);
+      }
+
+      this.fieldDataSourceService.getFieldOptions(field.id, finalContext).subscribe({
+        next: (options: FieldOptionResponse[]) => {
+          console.log(`[FormSubmissionCreate] Received options for field ${field.id}:`, {
+            optionsCount: options?.length || 0,
+            options: options,
+            isArray: Array.isArray(options)
+          });
+          
+          if (options && options.length > 0) {
+            this.fieldDataSourceOptions[field.id] = options;
+            // Clear cache when DataSource options are updated
+            delete this._cachedMappedOptions[field.id];
+            delete this._cachedStaticOptions[field.id];
+            delete this._loggedFieldOptions[field.id];
+            console.log(`[FormSubmissionCreate] ✅ Loaded ${options.length} options for field ${field.id} from ${dataSource.sourceType}`);
+          } else {
+            this.fieldDataSourceOptions[field.id] = [];
+            // Clear cache when DataSource returns empty
+            delete this._cachedMappedOptions[field.id];
+            delete this._cachedStaticOptions[field.id];
+            delete this._loggedFieldOptions[field.id];
+            console.warn(`[FormSubmissionCreate] ⚠️ DataSource returned no options for field ${field.id}, will use static options`);
+          }
+          this.loadingFieldOptions[field.id] = false;
+          
+          // Update control disabled state
+          this.updateFieldDisabledState(field);
+          
+          // Don't call markForCheck or detectChanges - Angular will detect changes automatically
+          // Calling markForCheck here causes infinite loops
+        },
+        error: (error) => {
+          console.error(`[FormSubmissionCreate] ❌ Error loading options from ${dataSource.sourceType} DataSource for field ${field.id}:`, {
+            error: error,
+            status: error?.status,
+            statusText: error?.statusText,
+            message: error?.message,
+            url: error?.url,
+            errorDetails: error?.error
+          });
+          this.fieldDataSourceOptions[field.id] = [];
+          // Clear cache on error
+          delete this._cachedMappedOptions[field.id];
+          delete this._cachedStaticOptions[field.id];
+          delete this._loggedFieldOptions[field.id];
+          this.loadingFieldOptions[field.id] = false;
+          
+          // Update control disabled state
+          this.updateFieldDisabledState(field);
+          
+          // Don't call markForCheck or detectChanges - Angular will detect changes automatically
+          // Calling markForCheck here causes infinite loops
+        }
+      });
+    } else {
+      console.warn(`[FormSubmissionCreate] Unknown DataSource type: ${dataSource.sourceType} for field ${field.id}`);
+      this.fieldDataSourceOptions[field.id] = [];
+    }
+  }
+
+  /**
+   * Update field control disabled state based on loading status
+   */
+  private updateFieldDisabledState(field: FormFieldDto): void {
+    if (!field.id || !this.fieldsForm) {
+      return;
+    }
+    
+    const fieldKey = `field_${field.id}`;
+    const control = this.fieldsForm.get(fieldKey);
+    if (!control) {
+      return;
+    }
+    
+    const isLoading = this.loadingFieldOptions[field.id] || false;
+    
+    if (isLoading && !control.disabled) {
+      control.disable({ emitEvent: false });
+    } else if (!isLoading && control.disabled && !this.isFieldReadOnly(field)) {
+      control.enable({ emitEvent: false });
+    }
+  }
+
+  /**
+   * Check if field is read-only
+   */
+  private isFieldReadOnly(field: FormFieldDto): boolean {
+    const dynamicState = this.dynamicFieldStates[field.fieldCode || ''];
+    if (dynamicState?.isReadOnly !== undefined) {
+      return dynamicState.isReadOnly;
+    }
+    return field.isEditable === false;
+  }
+
+  // ===== Form Rules Helpers =====
+
+  /**
+   * Load form rules
+   */
+  loadFormRules(formId: number): void {
+    if (!formId) return;
+
+    this.formRulesService.getRulesByFormId(formId).subscribe({
+      next: (rules) => {
+        if (this.currentForm) {
+          this.currentForm.formRules = rules;
+          // Use setTimeout to defer rule evaluation and avoid infinite loops
+          setTimeout(() => {
+            if (!this.isEvaluatingRules) {
+              this.evaluateFormRules();
+            }
+          }, 0);
+        }
+      },
+      error: (error) => {
+        console.warn('Error loading form rules:', error);
+        // Continue without rules
+        if (this.currentForm) {
+          this.currentForm.formRules = [];
+        }
+        this.resetDynamicFieldStates();
+      }
+    });
+  }
+
+  /**
+   * Update field values from form for rule evaluation
+   */
+  updateFieldValues(): void {
+    if (!this.fieldsForm) {
+      return;
+    }
+    
+    this.fields.forEach(field => {
+      if (field.id && field.fieldCode) {
+        const fieldKey = `field_${field.id}`;
+        const control = this.fieldsForm.get(fieldKey);
+        if (control) {
+          this.fieldValues[field.fieldCode] = control.value;
+          this.fieldValues[String(field.id)] = control.value;
+        }
+      }
+    });
+  }
+
+  /**
+   * Evaluate all form rules and apply actions
+   */
+  evaluateFormRules(): void {
+    // Prevent infinite loops
+    if (this.isEvaluatingRules) {
+      return;
+    }
+    
+    try {
+      this.isEvaluatingRules = true;
+      
+      if (!this.currentForm) {
+        return;
+      }
+      
+      // If formRules is not loaded yet, initialize it as empty array
+      if (!this.currentForm.formRules) {
+        this.currentForm.formRules = [];
+      }
+      
+      if (this.currentForm.formRules.length === 0) {
+        return;
+      }
+
+      // Reset dynamic states to base field states
+      try {
+        this.resetDynamicFieldStates();
+      } catch (error) {
+        console.error('[FormSubmissionCreate] Error resetting dynamic field states:', error);
+        // Continue even if reset fails
+      }
+
+      // Build base field states
+      const baseFieldStates: Record<string, FieldState> = {};
+      this.fields.forEach(field => {
+        if (field.fieldCode) {
+          baseFieldStates[field.fieldCode] = {
+            isVisible: field.isVisible ?? true,
+            isMandatory: field.isMandatory ?? false,
+            isReadOnly: field.isEditable === false
+          };
+        }
+      });
+
+      // Use RuleEvaluationService to evaluate all rules
+      let evaluatedStates: Record<string, FieldState>;
+      try {
+        evaluatedStates = this.ruleEvaluationService.evaluateAllRules(
+          this.currentForm.formRules,
+          this.fieldValues,
+          baseFieldStates
+        );
+      } catch (error) {
+        console.error('[FormSubmissionCreate] Error evaluating rules:', error);
+        // Return early if rule evaluation fails
+        return;
+      }
+
+      // Update dynamicFieldStates with evaluated states
+      Object.keys(evaluatedStates).forEach(fieldCode => {
+        const state = evaluatedStates[fieldCode];
+        if (this.dynamicFieldStates[fieldCode]) {
+          this.dynamicFieldStates[fieldCode].isVisible = state.isVisible;
+          this.dynamicFieldStates[fieldCode].isRequired = state.isMandatory;
+          this.dynamicFieldStates[fieldCode].isReadOnly = state.isReadOnly;
+          if (state.value !== undefined) {
+            this.dynamicFieldStates[fieldCode].value = state.value;
+          }
+        } else {
+          this.dynamicFieldStates[fieldCode] = {
+            isVisible: state.isVisible,
+            isRequired: state.isMandatory,
+            isReadOnly: state.isReadOnly,
+            value: state.value
+          };
+        }
+      });
+
+      // Also ensure all fields have dynamic states initialized
+      this.fields.forEach(field => {
+        if (field.fieldCode && !this.dynamicFieldStates[field.fieldCode]) {
+          this.dynamicFieldStates[field.fieldCode] = {
+            isVisible: field.isVisible ?? true,
+            isRequired: field.isMandatory ?? false,
+            isReadOnly: field.isEditable === false
+          };
+        }
+      });
+
+      // Update form validators based on dynamic states
+      try {
+        this.updateFormValidators();
+      } catch (error) {
+        console.error('[FormSubmissionCreate] Error updating form validators:', error);
+      }
+
+      // Reload options for fields that depend on context
+      try {
+        this.reloadContextDependentOptions();
+      } catch (error) {
+        console.error('[FormSubmissionCreate] Error reloading context dependent options:', error);
+      }
+
+      // Don't call detectChanges or markForCheck here - it causes infinite loops
+      // Change detection will happen automatically when form values change
+    } catch (error) {
+      console.error('[FormSubmissionCreate] Unexpected error in evaluateFormRules:', error);
+      // Don't throw, just log the error
+    } finally {
+      this.isEvaluatingRules = false;
+    }
+  }
+
+  /**
+   * Reset dynamic field states to base field configuration
+   */
+  private resetDynamicFieldStates(): void {
+    this.fields.forEach(field => {
+      if (field.fieldCode) {
+        if (!this.dynamicFieldStates[field.fieldCode]) {
+          this.dynamicFieldStates[field.fieldCode] = {};
+        }
+        this.dynamicFieldStates[field.fieldCode].isVisible = field.isVisible ?? true;
+        this.dynamicFieldStates[field.fieldCode].isRequired = field.isMandatory ?? false;
+        this.dynamicFieldStates[field.fieldCode].isReadOnly = field.isEditable === false;
+      }
+    });
+  }
+
+  /**
+   * Update form validators based on dynamic field states
+   */
+  private updateFormValidators(): void {
+    if (!this.fieldsForm) {
+      return;
+    }
+    
+    this.fields.forEach(field => {
+      if (field.id && field.fieldCode) {
+        const fieldKey = `field_${field.id}`;
+        const control = this.fieldsForm.get(fieldKey);
+        if (control) {
+          const dynamicState = this.dynamicFieldStates[field.fieldCode];
+          const isRequired = dynamicState?.isRequired ?? field.isMandatory ?? false;
+
+          // Check if validators need to change
+          const hasRequiredValidator = control.hasError('required') || control.validator === Validators.required;
+          
+          if (isRequired && !hasRequiredValidator) {
+            control.setValidators([Validators.required]);
+            control.updateValueAndValidity({ emitEvent: false }); // Don't emit events to prevent loops
+          } else if (!isRequired && hasRequiredValidator) {
+            control.clearValidators();
+            control.updateValueAndValidity({ emitEvent: false }); // Don't emit events to prevent loops
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Reload options for fields that depend on context fields
+   */
+  private reloadContextDependentOptions(): void {
+    Object.keys(this.contextDependencies).forEach(fieldIdStr => {
+      const fieldId = Number(fieldIdStr);
+      const contextFields = this.contextDependencies[fieldId];
+      const field = this.fields.find(f => f.id === fieldId);
+
+      if (field && contextFields.length > 0) {
+        // Check if any context field value changed
+        const contextChanged = contextFields.some(contextFieldCode => {
+          const currentValue = this.fieldValues[contextFieldCode];
+          return currentValue !== null && currentValue !== undefined && currentValue !== '';
+        });
+
+        if (contextChanged) {
+          this.loadFieldOptionsFromDataSource(field);
+        }
+      }
+    });
   }
 
   private markFormGroupTouched(formGroup: FormGroup): void {

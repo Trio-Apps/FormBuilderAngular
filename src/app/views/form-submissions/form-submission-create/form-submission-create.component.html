@@ -71,9 +71,12 @@
           <!-- Fields Section -->
           <div *ngIf="!loading.fields && fields.length > 0" class="google-form-fields">
             <form [formGroup]="fieldsForm">
-              <div *ngFor="let field of fields" class="form-field-wrapper">
+              <ng-container *ngFor="let field of fields">
+                <div *ngIf="isFieldVisible(field)" class="form-field-wrapper">
                 <!-- Field Label -->
-                <label class="field-label" [for]="isFileField(field) ? 'file-' + field.id : 'field_' + field.id">
+                <label 
+                  class="field-label" 
+                  [attr.for]="(getFieldType(field) === 'radio' || getFieldType(field) === 'checkbox' || getFieldType(field) === 'boolean') ? null : (isFileField(field) ? 'file-' + field.id : 'field_' + field.id)">
                   {{ getFieldDisplayName(field) }}
                   <span *ngIf="isRequired(field)" class="required-indicator">*</span>
                 </label>
@@ -130,31 +133,40 @@
                     [formControlName]="'field_' + field.id"
                     class="form-select">
                     <option [value]="''" [disabled]="isRequired(field)">
-                      {{ getFieldPlaceholder(field) }}
+                      {{ isLoadingFieldOptions(field) ? 'Loading...' : getFieldPlaceholder(field) }}
                     </option>
-                    <option *ngFor="let opt of getFieldOptions(field)" [value]="opt.optionValue">
+                    <option *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue" [value]="opt.optionValue">
                       {{ opt.optionText || opt.optionValue }}
                     </option>
                   </select>
 
                   <!-- Radio Buttons -->
                   <div *ngIf="getFieldType(field) === 'radio'" class="radio-group">
-                    <div class="radio-option" *ngFor="let opt of getFieldOptions(field)">
+                    <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
+                      Loading options...
+                    </div>
+                    <div class="radio-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
                       <input
                         type="radio"
                         [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
-                        [name]="'radio-' + field.id"
+                        [name]="'field_' + field.id"
                         [value]="opt.optionValue"
                         [formControlName]="'field_' + field.id">
                       <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
                         {{ opt.optionText || opt.optionValue }}
                       </label>
                     </div>
+                    <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)" class="no-options">
+                      No options available
+                    </p>
                   </div>
 
                   <!-- Checkbox (Multiple Selection) -->
                   <div *ngIf="getFieldType(field) === 'checkbox'" class="checkbox-group">
-                    <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field)">
+                    <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
+                      Loading options...
+                    </div>
+                    <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
                       <input
                         type="checkbox"
                         [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
@@ -164,12 +176,15 @@
                         {{ opt.optionText || opt.optionValue }}
                       </label>
                     </div>
+                    <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)" class="no-options">
+                      No options available
+                    </p>
                   </div>
 
                   <!-- Boolean/Switch Field -->
                   <div *ngIf="getFieldType(field) === 'boolean'" class="checkbox-wrapper">
                     <p-checkbox
-                      [id]="'field_' + field.id"
+                      [inputId]="'field_' + field.id"
                       [formControlName]="'field_' + field.id"
                       [binary]="true">
                     </p-checkbox>
@@ -230,7 +245,8 @@
                 <div *ngIf="fieldsForm.get('field_' + field.id)?.invalid && fieldsForm.get('field_' + field.id)?.touched" class="field-error">
                   This field is required
                 </div>
-              </div>
+                </div>
+              </ng-container>
             </form>
           </div>
 

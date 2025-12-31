@@ -65,7 +65,7 @@ export class LoginComponent implements OnInit {
 
   ngOnInit(): void {
     if (this.authService.isAuthenticated()) {
-      this.router.navigate(['/dashboard']);
+      this.redirectBasedOnRole();
     }
   }
 
@@ -84,7 +84,10 @@ export class LoginComponent implements OnInit {
       next: (response: any) => {
         if (response && response.token) {
           this.successMessage = 'Login successful! Redirecting...';
-          setTimeout(() => this.router.navigate(['/dashboard']), 1000);
+          // Wait a bit for the session to be set, then redirect based on role
+          setTimeout(() => {
+            this.redirectBasedOnRole();
+          }, 1000);
         } else {
           this.errorMessage = response.errorMessage || 'Login failed';
         }
@@ -95,6 +98,27 @@ export class LoginComponent implements OnInit {
         this.isLoading = false;
       }
     });
+  }
+
+  private redirectBasedOnRole(): void {
+    const userRole = this.authService.role();
+    
+    if (userRole === 'Administration') {
+      // Admin users go to dashboard
+      this.router.navigate(['/dashboard']).catch(err => {
+        console.error('Navigation error:', err);
+        // Fallback to document-types if dashboard fails
+        this.router.navigate(['/document-types']);
+      });
+    } else {
+      // Regular users go to document-types (or form-builder if document-types requires admin)
+      // Check if document-types requires admin, if so, go to form-builder
+      this.router.navigate(['/form-builder']).catch(err => {
+        console.error('Navigation error:', err);
+        // Fallback to document-types
+        this.router.navigate(['/document-types']);
+      });
+    }
   }
 
   clearForm() {

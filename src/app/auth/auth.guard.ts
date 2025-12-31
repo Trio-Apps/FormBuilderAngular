@@ -9,7 +9,7 @@ export const authGuard = () => {
   if (authService.isAuthenticated()) {
     return true;
   } else {
-    router.navigate(['/pages/login']);
-    return false;
+    // Return UrlTree instead of using router.navigate() to avoid transition conflicts
+    return router.createUrlTree(['/pages/login']);
   }
 };
