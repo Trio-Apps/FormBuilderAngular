@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto } from '../services/form-submissions.service';
-import { FormSubmissionValuesService, BulkFormSubmissionValuesDto, CreateFormSubmissionValueDto } from '../services/form-submission-values.service';
+import { FormSubmissionValuesService, BulkFormSubmissionValuesDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto } from '../services/form-submission-values.service';
 import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { DocumentType, DocumentSeries } from '../../FormBuilder/form-builder/models/document-types.model';
@@ -47,6 +47,8 @@ import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   documentTypeId!: number;
   documentType: DocumentType | null = null;
+  submissionId: number | null = null; // For edit mode
+  isEditMode = false; // Flag to determine if we're editing
 
   // Forms, Tabs, Fields
   forms: FormBuilderDto[] = [];
@@ -140,9 +142,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       localStorage.setItem('adminLanguagePreference', 'en');
     }
 
-    // Get documentTypeId from route
+    // Get documentTypeId and submissionId from route
     this.routeSubscription = this.route.params.subscribe(params => {
       this.documentTypeId = +params['documentTypeId'];
+      this.submissionId = params['submissionId'] ? +params['submissionId'] : null;
+      this.isEditMode = !!this.submissionId;
+      
       if (this.documentTypeId && !isNaN(this.documentTypeId)) {
         this.loadDocumentType();
       } else {
@@ -350,6 +355,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     if (!this.selectedFormId || !tabId) {
       this.loading.fields = false;
       return;
+    }
+    
+    // If edit mode, load submission data after fields are loaded
+    if (this.isEditMode && this.submissionId) {
+      // Load submission data will be called after fields are loaded
+      setTimeout(() => {
+        this.loadSubmissionForEdit();
+      }, 100);
     }
 
     console.log('[FormSubmissionCreate] Loading form with fields (including fieldDataSource) for form:', this.selectedFormId, 'tab:', tabId);
@@ -1592,6 +1605,80 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
   }
 
+  /**
+   * Load submission data for edit mode
+   */
+  loadSubmissionForEdit(): void {
+    if (!this.submissionId) return;
+    
+    // Load field values
+    this.formSubmissionValuesService.getBySubmissionId(this.submissionId).subscribe({
+      next: (fieldValues) => {
+        console.log('[FormSubmissionCreate] Loaded field values for edit:', fieldValues);
+        // Store field values to populate form after fields are loaded
+        (this as any)._pendingFieldValues = fieldValues;
+        
+        // If fields are already loaded, populate form
+        if (this.fields.length > 0) {
+          this.populateFormWithFieldValues(fieldValues);
+        }
+      },
+      error: (error) => {
+        console.error('[FormSubmissionCreate] Error loading field values:', error);
+      }
+    });
+  }
+
+  /**
+   * Populate form with existing field values
+   */
+  populateFormWithFieldValues(fieldValues: any[]): void {
+    if (!fieldValues || fieldValues.length === 0) return;
+    
+    const formValues: any = {};
+    
+    fieldValues.forEach(fv => {
+      const field = this.fields.find(f => f.id === fv.fieldId);
+      if (!field || !field.fieldCode) return;
+      
+      let value: any = null;
+      
+      // Determine value based on field type
+      if (fv.valueString !== null && fv.valueString !== undefined && fv.valueString !== '') {
+        value = fv.valueString;
+      } else if (fv.valueNumber !== null && fv.valueNumber !== undefined) {
+        value = fv.valueNumber;
+      } else if (fv.valueDate) {
+        const dateValue = new Date(fv.valueDate);
+        // Format for datetime-local input
+        const year = dateValue.getFullYear();
+        const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+        const day = String(dateValue.getDate()).padStart(2, '0');
+        const hours = String(dateValue.getHours()).padStart(2, '0');
+        const minutes = String(dateValue.getMinutes()).padStart(2, '0');
+        value = `${year}-${month}-${day}T${hours}:${minutes}`;
+      } else if (fv.valueBool !== null && fv.valueBool !== undefined) {
+        value = fv.valueBool;
+      } else if (fv.valueJson) {
+        try {
+          const parsed = JSON.parse(fv.valueJson);
+          value = typeof parsed === 'string' ? parsed : fv.valueJson;
+        } catch {
+          value = fv.valueJson;
+        }
+      }
+      
+      if (value !== null && value !== undefined) {
+        const fieldKey = `field_${field.id}`;
+        formValues[fieldKey] = value;
+      }
+    });
+    
+    // Patch form values
+    this.fieldsForm.patchValue(formValues);
+    this.cdr.detectChanges();
+  }
+
   saveSubmission(): void {
     if (this.submissionForm.invalid) {
       this.markFormGroupTouched(this.submissionForm);
@@ -1663,6 +1750,16 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     };
 
     this.loading.create = true;
+    
+    // If edit mode, update existing submission
+    if (this.isEditMode && this.submissionId) {
+      // Skip status update - just save the data
+      // Status can be updated separately if needed
+      this.saveSubmissionData(this.submissionId);
+      return;
+    }
+    
+    // Create new submission
     this.formSubmissionsService.createSubmission(createDto).subscribe({
       next: (submission: FormSubmissionDto) => {
         this.saveSubmissionData(submission.id);
@@ -1687,8 +1784,37 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     console.log('[FormSubmissionCreate] ===== Starting saveSubmissionData =====');
     console.log('[FormSubmissionCreate] Submission ID:', submissionId);
+    console.log('[FormSubmissionCreate] Is Edit Mode:', this.isEditMode);
     console.log('[FormSubmissionCreate] Fields count:', this.fields.length);
     console.log('[FormSubmissionCreate] Form values:', this.fieldsForm.getRawValue());
+
+    // If edit mode, load existing field values first
+    if (this.isEditMode) {
+      this.formSubmissionValuesService.getBySubmissionId(submissionId).subscribe({
+        next: (existingValues) => {
+          console.log('[FormSubmissionCreate] Existing field values:', existingValues);
+          this.saveSubmissionDataWithExisting(submissionId, existingValues);
+        },
+        error: (error) => {
+          console.error('[FormSubmissionCreate] Error loading existing values:', error);
+          // Continue with create mode if loading fails
+          this.saveSubmissionDataWithExisting(submissionId, []);
+        }
+      });
+      return;
+    }
+
+    // Create mode - proceed normally
+    this.saveSubmissionDataWithExisting(submissionId, []);
+  }
+
+  saveSubmissionDataWithExisting(submissionId: number, existingValues: any[]): void {
+    const fieldValues: CreateFormSubmissionValueDto[] = [];
+    const attachments: CreateFormSubmissionAttachmentDto[] = [];
+    const updateObservablesList: any[] = [];
+
+    console.log('[FormSubmissionCreate] ===== Processing fields with existing values =====');
+    console.log('[FormSubmissionCreate] Existing values count:', existingValues.length);
 
     // Process field values
     this.fields.forEach(field => {
@@ -1813,8 +1939,42 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           }
         }
 
-        console.log(`[FormSubmissionCreate] ✅ Added value DTO for field ${field.id}:`, valueDto);
-        fieldValues.push(valueDto);
+        // Check if field value already exists (edit mode)
+        const existingValue = existingValues.find((ev: any) => ev.fieldId === field.id);
+        
+        if (existingValue) {
+          // Update existing value
+          console.log(`[FormSubmissionCreate] 🔄 Updating existing value for field ${field.id}`);
+          const updateDto: UpdateFormSubmissionValueDto = {};
+          
+          // Set appropriate value based on type
+          if (valueDto.valueString !== null && valueDto.valueString !== undefined) {
+            updateDto.valueString = valueDto.valueString;
+          }
+          if (valueDto.valueNumber !== null && valueDto.valueNumber !== undefined) {
+            updateDto.valueNumber = valueDto.valueNumber;
+          }
+          if (valueDto.valueDate) {
+            updateDto.valueDate = valueDto.valueDate;
+          }
+          if (valueDto.valueBool !== null && valueDto.valueBool !== undefined) {
+            updateDto.valueBool = valueDto.valueBool;
+          }
+          if (valueDto.valueJson) {
+            updateDto.valueJson = valueDto.valueJson;
+          }
+          
+          // Add to update list
+          updateObservablesList.push({
+            submissionId: submissionId,
+            fieldId: field.id,
+            dto: updateDto
+          });
+        } else {
+          // Create new value
+          console.log(`[FormSubmissionCreate] ✅ Adding new value DTO for field ${field.id}:`, valueDto);
+          fieldValues.push(valueDto);
+        }
       } else {
         console.log(`[FormSubmissionCreate] ⚠️ Skipping field ${field.id} - no value`);
       }
@@ -1847,6 +2007,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // Save field values and upload files
     const saveObservables: any[] = [];
 
+    // Add update observables first (if edit mode)
+    updateObservablesList.forEach((update: any) => {
+      saveObservables.push(
+        this.formSubmissionValuesService.updateByField(update.submissionId, update.fieldId, update.dto)
+      );
+    });
+
+    // Add create bulk if there are new values
     if (fieldValues.length > 0) {
       const bulkDto: BulkFormSubmissionValuesDto = {
         submissionId: submissionId,
@@ -1874,7 +2042,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       this.messageService.add({
         severity: 'success',
         summary: 'Success',
-        detail: 'Form submission created successfully'
+        detail: this.isEditMode ? 'Form submission updated successfully' : 'Form submission created successfully'
       });
       setTimeout(() => this.goBack(), 1000);
       return;
@@ -1886,7 +2054,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'success',
           summary: 'Success',
-          detail: 'Form submission created successfully'
+          detail: this.isEditMode ? 'Form submission updated successfully' : 'Form submission created successfully'
         });
         setTimeout(() => this.goBack(), 1000);
       },

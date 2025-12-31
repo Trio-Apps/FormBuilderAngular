@@ -7,14 +7,14 @@
           <i class="pi pi-arrow-left"></i>
         </button>
         <div class="nav-title-section">
-          <h1 class="page-title">Create New Submission</h1>
+          <h1 class="page-title">{{ isEditMode ? 'Edit Submission' : 'Create New Submission' }}</h1>
           <p class="page-subtitle">{{ documentType?.name || 'Form Submission' }}</p>
         </div>
       </div>
       <div class="nav-right">
         <button class="btn-primary" (click)="saveSubmission()" [disabled]="submissionForm.invalid || fieldsForm.invalid || loading.create">
           <i class="pi pi-save"></i>
-          <span>Save Submission</span>
+          <span>{{ isEditMode ? 'Update Submission' : 'Save Submission' }}</span>
         </button>
       </div>
     </div>
@@ -34,8 +34,8 @@
       </a>
       <i class="pi pi-angle-right breadcrumb-separator"></i>
       <span class="breadcrumb-current">
-        <i class="pi pi-plus"></i>
-        <span>New Submission</span>
+        <i [class]="isEditMode ? 'pi pi-pencil' : 'pi pi-plus'"></i>
+        <span>{{ isEditMode ? 'Edit Submission' : 'New Submission' }}</span>
       </span>
     </nav>
   </div>

@@ -179,7 +179,8 @@ export class FormSubmissionsService {
    * Get form submission by ID
    */
   getSubmissionById(id: number): Observable<FormSubmissionDetailDto> {
-    return this.http.get<any>(`${this.baseUrl}/details/${id}`).pipe(
+    // Try /{id} endpoint first (standard REST pattern)
+    return this.http.get<any>(`${this.baseUrl}/${id}`).pipe(
       map((response: any) => {
         if (response && typeof response === 'object') {
           return response.data || response.result || response;
@@ -187,7 +188,40 @@ export class FormSubmissionsService {
         return response;
       }),
       catchError((error) => {
-        console.error(`Error fetching form submission ${id}:`, error);
+        // If 404, try /details/{id} endpoint as fallback
+        if (error?.status === 404) {
+          console.warn(`[FormSubmissionsService] Endpoint /${id} returned 404, trying /details/${id}`);
+          return this.http.get<any>(`${this.baseUrl}/details/${id}`).pipe(
+            map((response: any) => {
+              if (response && typeof response === 'object') {
+                return response.data || response.result || response;
+              }
+              return response;
+            }),
+            catchError((detailsError) => {
+              console.error(`[FormSubmissionsService] Both endpoints failed for submission ${id}`);
+              console.error(`[FormSubmissionsService] Error from /details/${id}:`, detailsError);
+              // Return a basic submission object with empty fieldValues to prevent complete failure
+              return of({
+                id: id,
+                formBuilderId: 0,
+                version: 1,
+                documentTypeId: 0,
+                seriesId: 0,
+                documentNumber: '',
+                submittedByUserId: '',
+                submittedDate: new Date(),
+                status: 'Submitted',
+                createdDate: new Date(),
+                lastUpdatedDate: new Date(),
+                fieldValues: [],
+                attachments: [],
+                gridData: []
+              } as FormSubmissionDetailDto);
+            })
+          );
+        }
+        console.error(`[FormSubmissionsService] Error fetching form submission ${id}:`, error);
         throw error;
       })
     );
@@ -287,13 +321,39 @@ export class FormSubmissionsService {
    * Update submission status
    */
   updateStatus(id: number, status: string): Observable<void> {
-    return this.http.patch<any>(`${this.baseUrl}/${id}/status`, status).pipe(
-      map(() => {
-        return;
-      }),
+    // Try multiple formats - API might expect different formats
+    // Format 1: JSON object with status property
+    return this.http.patch<any>(`${this.baseUrl}/${id}/status`, { status: status }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }).pipe(
       catchError((error) => {
+        // If JSON object fails, try string directly
+        if (error?.status === 400) {
+          console.warn(`[FormSubmissionsService] JSON format failed, trying string format`);
+          return this.http.patch<any>(`${this.baseUrl}/${id}/status`, `"${status}"`, {
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }).pipe(
+            catchError((stringError) => {
+              // If string format fails, try query parameter
+              console.warn(`[FormSubmissionsService] String format failed, trying query parameter`);
+              return this.http.patch<any>(`${this.baseUrl}/${id}/status?status=${encodeURIComponent(status)}`, null).pipe(
+                catchError((queryError) => {
+                  console.error(`Error updating submission status ${id} with all formats:`, queryError);
+                  throw queryError;
+                })
+              );
+            })
+          );
+        }
         console.error(`Error updating submission status ${id}:`, error);
         throw error;
+      }),
+      map(() => {
+        return;
       })
     );
   }

@@ -19,6 +19,13 @@ export const routes: Routes = [
       .then(m => m.FormViewComponent)
   },
   
+  // ===== صفحة نجاح إرسال النموذج =====
+  {
+    path: 'forms/submission/success',
+    loadComponent: () => import('./views/public-form/form-submission-success/form-submission-success.component')
+      .then(m => m.FormSubmissionSuccessComponent)
+  },
+  
   // ===== الصفحات العامة (Login, Register, etc.) =====
   {
     path: 'pages',
@@ -66,6 +73,13 @@ export const routes: Routes = [
       // ===== Create New Form Submission =====
       {
         path: 'document-types/:documentTypeId/submissions/new',
+        loadComponent: () => import('./views/form-submissions/form-submission-create/form-submission-create.component')
+          .then(m => m.FormSubmissionCreateComponent)
+      },
+
+      // ===== Edit Form Submission =====
+      {
+        path: 'document-types/:documentTypeId/submissions/:submissionId/edit',
         loadComponent: () => import('./views/form-submissions/form-submission-create/form-submission-create.component')
           .then(m => m.FormSubmissionCreateComponent)
       },

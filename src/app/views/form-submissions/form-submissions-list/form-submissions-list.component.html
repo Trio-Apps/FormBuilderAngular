@@ -162,13 +162,21 @@
   [(visible)]="showSubmissionModal"
   [header]="'Edit Form Submission'"
   [modal]="true"
-  [style]="{ width: '600px' }"
+  [style]="{ width: '90%', maxWidth: '1000px' }"
   [draggable]="false"
   [resizable]="false"
   [autoZIndex]="true"
   [baseZIndex]="10001"
   (onHide)="closeSubmissionModal()">
-  <form [formGroup]="submissionForm" (ngSubmit)="saveSubmission()">
+  <div *ngIf="loading.fieldValues" class="loading-container">
+    <i class="pi pi-spin pi-spinner"></i>
+    <p>Loading submission details...</p>
+  </div>
+  
+  <form [formGroup]="submissionForm" (ngSubmit)="saveSubmission()" *ngIf="!loading.fieldValues">
+    <!-- Basic Submission Info -->
+    <div class="form-section">
+      <h4>Submission Information</h4>
     <div class="form-group">
       <label for="documentNumber">
         Document Number
@@ -190,6 +198,80 @@
         <option value="Rejected">Rejected</option>
         <option value="Pending Approval">Pending Approval</option>
       </select>
+      </div>
+    </div>
+
+    <!-- Field Values -->
+    <div class="form-section" *ngIf="selectedSubmission && !loading.fieldValues">
+      <h4>Field Values</h4>
+      <div *ngIf="!selectedSubmission.fieldValues || selectedSubmission.fieldValues.length === 0" class="text-muted">
+        <p>No field values found for this submission.</p>
+        <p class="text-small">Field values count: {{ selectedSubmission?.fieldValues?.length || 0 }}</p>
+      </div>
+      <form [formGroup]="editSubmissionValuesForm" *ngIf="selectedSubmission.fieldValues && selectedSubmission.fieldValues.length > 0">
+        <div class="field-values-container">
+          <div *ngFor="let fieldValue of selectedSubmission.fieldValues" class="field-value-item">
+            <div class="form-group">
+              <label>
+                {{ getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || ('Field #' + fieldValue.fieldId) }}
+                <span *ngIf="isFieldRequired(fieldValue.fieldId)" class="text-danger">*</span>
+              </label>
+              
+              <!-- Text/String Input -->
+              <input 
+                *ngIf="getFieldTypeById(fieldValue.fieldId) === 'text' || getFieldTypeById(fieldValue.fieldId) === 'string'"
+                type="text" 
+                pInputText 
+                [formControlName]="'field_' + fieldValue.fieldId"
+                [placeholder]="'Enter ' + (getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'value')" />
+              
+              <!-- Number Input -->
+              <p-inputNumber 
+                *ngIf="getFieldTypeById(fieldValue.fieldId) === 'number'"
+                [formControlName]="'field_' + fieldValue.fieldId"
+                [placeholder]="'Enter ' + (getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'value')"
+                [showButtons]="false"
+                [useGrouping]="false">
+              </p-inputNumber>
+              
+              <!-- Date Input -->
+              <input 
+                *ngIf="getFieldTypeById(fieldValue.fieldId) === 'date'"
+                type="datetime-local" 
+                pInputText 
+                [formControlName]="'field_' + fieldValue.fieldId"
+                [placeholder]="'Select date'" />
+              
+              <!-- Boolean Checkbox -->
+              <div *ngIf="getFieldTypeById(fieldValue.fieldId) === 'boolean'" class="checkbox-wrapper">
+                <p-checkbox 
+                  [formControlName]="'field_' + fieldValue.fieldId"
+                  [binary]="true">
+                </p-checkbox>
+                <label class="checkbox-label">{{ getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'Value' }}</label>
+              </div>
+              
+              <!-- Textarea for JSON/Long Text -->
+              <textarea 
+                *ngIf="getFieldTypeById(fieldValue.fieldId) === 'json' || getFieldTypeById(fieldValue.fieldId) === 'textarea'"
+                pInputText 
+                [formControlName]="'field_' + fieldValue.fieldId"
+                [placeholder]="'Enter ' + (getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'value')"
+                rows="3"
+                class="w-full">
+              </textarea>
+              
+              <!-- Default: Text Input -->
+              <input 
+                *ngIf="!getFieldTypeById(fieldValue.fieldId)"
+                type="text" 
+                pInputText 
+                [formControlName]="'field_' + fieldValue.fieldId"
+                [placeholder]="'Enter ' + (getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'value')" />
+            </div>
+          </div>
+        </div>
+      </form>
     </div>
 
     <div class="dialog-footer">

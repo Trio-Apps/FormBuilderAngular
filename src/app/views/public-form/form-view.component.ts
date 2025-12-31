@@ -1,6 +1,6 @@
 import { Component, OnInit, HostListener, ViewChildren, QueryList, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormsService } from '../FormBuilder/services/forms.service';
 import { TabsService } from '../FormBuilder/services/tabs.service';
 import { FieldsService } from '../FormBuilder/services/fields.service';
@@ -8,8 +8,11 @@ import { FileUploadService, FormSubmissionAttachmentDto } from '../FormBuilder/s
 import { FieldDataSourceService } from '../FormBuilder/services/field-data-source.service';
 import { RuleEvaluationService, FieldState } from '../FormBuilder/services/rule-evaluation.service';
 import { FormRulesService } from '../FormBuilder/services/form-rules.service';
-import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto } from '../form-submissions/services/form-submissions.service';
+import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto, SaveFormSubmissionDataDto, SaveFormSubmissionValueDto, SaveFormSubmissionAttachmentDto, SaveFormSubmissionGridDto } from '../form-submissions/services/form-submissions.service';
 import { FormSubmissionValuesService, CreateFormSubmissionValueDto, BulkFormSubmissionValuesDto } from '../form-submissions/services/form-submission-values.service';
+import { DocumentTypesService } from '../FormBuilder/services/document-types.service';
+import { DocumentSeries, CreateDocumentSeriesDto } from '../FormBuilder/form-builder/models/document-types.model';
+import { StorageService } from '../../auth/storage.service';
 import { buildContext, getContextFieldCodes, requiresContext } from '../FormBuilder/utils/field-data-source-helpers';
 import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse, FormRule, RuleCondition, FieldCondition, RuleAction } from '../FormBuilder/form-builder/models/form-builder-dto.model';
 import { TranslationService } from '../../core/services/translation.service';
@@ -47,6 +50,7 @@ export class FormViewComponent implements OnInit {
   filePreviewUrls: { [attachmentId: number]: string } = {}; // File preview URLs for images/PDFs
   showPreviewModal: boolean = false;
   previewFile: FormSubmissionAttachmentDto | null = null;
+  pendingFiles: { [fieldId: number]: File[] } = {}; // Files selected but not yet uploaded (waiting for submission)
 
   // Field DataSource state
   fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
@@ -76,6 +80,7 @@ export class FormViewComponent implements OnInit {
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     private formsService: FormsService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
@@ -86,6 +91,8 @@ export class FormViewComponent implements OnInit {
     public translationService: TranslationService,
     private formSubmissionsService: FormSubmissionsService,
     private formSubmissionValuesService: FormSubmissionValuesService,
+    private documentTypesService: DocumentTypesService,
+    private storageService: StorageService,
     private cdr: ChangeDetectorRef
   ) { }
 
@@ -1916,11 +1923,59 @@ export class FormViewComponent implements OnInit {
     // Clear any previous errors
     this.fileUploadErrors[field.id] = '';
 
-    // Upload files
-    if (allowMultiple && filesToUpload.length > 1) {
-      await this.uploadMultipleFiles(filesToUpload, field);
+    // Check if submission exists - if yes, upload immediately; if no, save files for later
+    if (this.submissionId > 0) {
+      // Submission exists - upload files immediately
+      if (allowMultiple && filesToUpload.length > 1) {
+        await this.uploadMultipleFiles(filesToUpload, field);
+      } else {
+        await this.uploadFile(filesToUpload[0], field);
+      }
     } else {
-      await this.uploadFile(filesToUpload[0], field);
+      // No submission yet - save files locally and upload when form is submitted
+      if (!this.pendingFiles[field.id!]) {
+        this.pendingFiles[field.id!] = [];
+      }
+      this.pendingFiles[field.id!].push(...filesToUpload);
+      
+      // Show files in UI (create temporary attachment objects for preview)
+      if (!this.uploadedFiles[field.id!]) {
+        this.uploadedFiles[field.id!] = [];
+      }
+      
+      for (const file of filesToUpload) {
+        // Create a temporary attachment object for preview (not yet uploaded)
+        if (field.id) {
+          const tempAttachment: FormSubmissionAttachmentDto = {
+            id: Math.floor(Date.now() + Math.random() * 1000000), // Temporary unique ID
+            submissionId: 0,
+            fieldId: field.id,
+            fieldCode: field.fieldCode || '',
+            fileName: file.name,
+            fileSize: file.size,
+            contentType: file.type,
+            filePath: '', // Will be set after upload
+            uploadedDate: new Date().toISOString()
+          };
+          this.uploadedFiles[field.id].push(tempAttachment);
+          
+          // Create preview URL for images
+          if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (e: any) => {
+              if (tempAttachment.id) {
+                this.filePreviewUrls[tempAttachment.id] = e.target.result;
+                this.cdr.detectChanges();
+              }
+            };
+            reader.readAsDataURL(file);
+          }
+        }
+      }
+      
+      const currentLang = this.translationService.getCurrentLanguage();
+      const fileCount = filesToUpload.length;
+      console.log(`[FormView] ${fileCount} file(s) saved for later upload. Submission will be created on form submit.`);
     }
   }
 
@@ -1950,45 +2005,48 @@ export class FormViewComponent implements OnInit {
         const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 1;
         const submittedByUserId = queryParams['userId'] || 'public-user';
 
-        // Try createSubmission first with Submitted status
+        // Use createSubmission (same as onSubmit method)
+        // Check if user is authenticated (has token) - if yes, use authenticated user ID
+        const token = this.storageService.getToken();
+        const finalUserId = token ? (this.storageService.getUsername() || submittedByUserId) : submittedByUserId;
+        
         let submission: FormSubmissionDto | undefined;
         try {
           const createDto: CreateFormSubmissionDto = {
             formBuilderId: this.form.id,
             documentTypeId: documentTypeId,
             seriesId: 1, // Default series
-            submittedByUserId: submittedByUserId,
-            status: 'Submitted' // Default status is Submitted
+            submittedByUserId: finalUserId,
+            status: 'Submitted'
           };
-          submission = await this.formSubmissionsService.createSubmission(createDto).toPromise();
-        } catch (submitError: any) {
-          console.warn('[FormView] createSubmission failed, trying createDraft:', submitError);
-          // Try createDraft as fallback, then update status
-          try {
-            submission = await this.formSubmissionsService.createDraft(
-              this.form.id,
-              projectId,
-              submittedByUserId
-            ).toPromise();
-            
-            // Update status to Submitted if draft was created
-            if (submission && submission.id && submission.status === 'Draft') {
-              try {
-                await this.formSubmissionsService.updateStatus(submission.id, 'Submitted').toPromise();
-                submission.status = 'Submitted'; // Update local object
-              } catch (statusError) {
-                console.warn('[FormView] Failed to update status to Submitted:', statusError);
-              }
-            }
-          } catch (draftError: any) {
-            console.error('[FormView] createDraft also failed:', draftError);
-            this.uploadingFiles[field.id] = false;
-            const currentLang = this.translationService.getCurrentLanguage();
+          
+          submission = await new Promise<FormSubmissionDto>((resolve, reject) => {
+            this.formSubmissionsService.createSubmission(createDto).subscribe({
+              next: (result) => resolve(result),
+              error: (err) => reject(err)
+            });
+          });
+        } catch (createError: any) {
+          console.error('[FormView] Error creating submission for file upload:', createError);
+          this.uploadingFiles[field.id] = false;
+          const currentLang = this.translationService.getCurrentLanguage();
+          const apiUrl = environment.apiUrl || 'Not configured';
+          
+          if (createError?.status === 404) {
             this.fileUploadErrors[field.id] = currentLang === 'ar'
-              ? 'خدمة رفع الملفات غير متاحة حالياً. يرجى التواصل مع المسؤول.'
-              : 'File upload service is currently unavailable. Please contact the administrator.';
-            return;
+              ? `خدمة حفظ النماذج غير متاحة (404).\n\nAPI URL: ${apiUrl}\nEndpoint المطلوب: POST /FormSubmissions\n\nملاحظة: ${token ? 'يوجد token لكن الـ endpoint غير موجود' : 'لا يوجد token - قد يتطلب الـ endpoint authentication'}`
+              : `Form submission service is not available (404).\n\nAPI URL: ${apiUrl}\nRequired endpoint: POST /FormSubmissions\n\nNote: ${token ? 'Token exists but endpoint not found' : 'No token - endpoint may require authentication'}`;
+          } else if (createError?.status === 401) {
+            this.fileUploadErrors[field.id] = currentLang === 'ar'
+              ? `غير مصرح لك بإنشاء submission. يرجى تسجيل الدخول أولاً.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`
+              : `You are not authorized to create submission. Please login first.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`;
+          } else {
+            const errorMsg = createError?.error?.message || createError?.errorMessage || createError?.message || 'Failed to create submission';
+            this.fileUploadErrors[field.id] = currentLang === 'ar' 
+              ? `فشل إنشاء submission: ${errorMsg}`
+              : `Failed to create submission: ${errorMsg}`;
           }
+          return;
         }
 
         if (submission && submission.id) {
@@ -2115,45 +2173,48 @@ export class FormViewComponent implements OnInit {
         const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 1;
         const submittedByUserId = queryParams['userId'] || 'public-user';
 
-        // Try createSubmission first with Submitted status
+        // Use createSubmission (same as onSubmit method)
+        // Check if user is authenticated (has token) - if yes, use authenticated user ID
+        const token = this.storageService.getToken();
+        const finalUserId = token ? (this.storageService.getUsername() || submittedByUserId) : submittedByUserId;
+        
         let submission: FormSubmissionDto | undefined;
         try {
           const createDto: CreateFormSubmissionDto = {
             formBuilderId: this.form.id,
             documentTypeId: documentTypeId,
             seriesId: 1, // Default series
-            submittedByUserId: submittedByUserId,
-            status: 'Submitted' // Default status is Submitted
+            submittedByUserId: finalUserId,
+            status: 'Submitted'
           };
-          submission = await this.formSubmissionsService.createSubmission(createDto).toPromise();
-        } catch (submitError: any) {
-          console.warn('[FormView] createSubmission failed, trying createDraft:', submitError);
-          // Try createDraft as fallback, then update status
-          try {
-            submission = await this.formSubmissionsService.createDraft(
-              this.form.id,
-              projectId,
-              submittedByUserId
-            ).toPromise();
-            
-            // Update status to Submitted if draft was created
-            if (submission && submission.id && submission.status === 'Draft') {
-              try {
-                await this.formSubmissionsService.updateStatus(submission.id, 'Submitted').toPromise();
-                submission.status = 'Submitted'; // Update local object
-              } catch (statusError) {
-                console.warn('[FormView] Failed to update status to Submitted:', statusError);
-              }
-            }
-          } catch (draftError: any) {
-            console.error('[FormView] createDraft also failed:', draftError);
-            this.uploadingFiles[field.id] = false;
-            const currentLang = this.translationService.getCurrentLanguage();
+          
+          submission = await new Promise<FormSubmissionDto>((resolve, reject) => {
+            this.formSubmissionsService.createSubmission(createDto).subscribe({
+              next: (result) => resolve(result),
+              error: (err) => reject(err)
+            });
+          });
+        } catch (createError: any) {
+          console.error('[FormView] Error creating submission for file upload:', createError);
+          this.uploadingFiles[field.id] = false;
+          const currentLang = this.translationService.getCurrentLanguage();
+          const apiUrl = environment.apiUrl || 'Not configured';
+          
+          if (createError?.status === 404) {
             this.fileUploadErrors[field.id] = currentLang === 'ar'
-              ? 'خدمة رفع الملفات غير متاحة حالياً. يرجى التواصل مع المسؤول.'
-              : 'File upload service is currently unavailable. Please contact the administrator.';
-            return;
+              ? `خدمة حفظ النماذج غير متاحة (404).\n\nAPI URL: ${apiUrl}\nEndpoint المطلوب: POST /FormSubmissions\n\nملاحظة: ${token ? 'يوجد token لكن الـ endpoint غير موجود' : 'لا يوجد token - قد يتطلب الـ endpoint authentication'}`
+              : `Form submission service is not available (404).\n\nAPI URL: ${apiUrl}\nRequired endpoint: POST /FormSubmissions\n\nNote: ${token ? 'Token exists but endpoint not found' : 'No token - endpoint may require authentication'}`;
+          } else if (createError?.status === 401) {
+            this.fileUploadErrors[field.id] = currentLang === 'ar'
+              ? `غير مصرح لك بإنشاء submission. يرجى تسجيل الدخول أولاً.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`
+              : `You are not authorized to create submission. Please login first.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`;
+          } else {
+            const errorMsg = createError?.error?.message || createError?.errorMessage || createError?.message || 'Failed to create submission';
+            this.fileUploadErrors[field.id] = currentLang === 'ar' 
+              ? `فشل إنشاء submission: ${errorMsg}`
+              : `Failed to create submission: ${errorMsg}`;
           }
+          return;
         }
 
         if (submission && submission.id) {
@@ -2922,77 +2983,272 @@ export class FormViewComponent implements OnInit {
     this.isSubmitting = true;
 
     try {
-      // Get documentTypeId and seriesId from query params or use defaults
-      const queryParams = this.route.snapshot.queryParams;
-      const documentTypeId = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1; // Default to 1 if not provided
-      const seriesId = queryParams['seriesId'] ? +queryParams['seriesId'] : 1; // Default to 1 if not provided
-      const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 1; // Default to 1 if not provided
-      const submittedByUserId = queryParams['userId'] || 'public-user'; // Default user ID
+      // Get documentTypeId from query params, or load it from form
+      const routeQueryParams = this.route.snapshot.queryParams;
+      let documentTypeId: number | null = routeQueryParams['documentTypeId'] ? +routeQueryParams['documentTypeId'] : null;
+      
+      // If documentTypeId not in query params, try to get it from form
+      if (!documentTypeId && this.form && this.form.id) {
+        try {
+          console.log('[FormView] Loading document type for form:', this.form.id);
+          const documentType = await this.documentTypesService.getDocumentTypeByFormId(this.form.id).toPromise();
+          if (documentType && documentType.id) {
+            documentTypeId = documentType.id;
+            console.log('[FormView] ✅ Found document type:', documentTypeId);
+          }
+        } catch (docTypeError: any) {
+          console.warn('[FormView] Could not load document type from form (may require auth):', docTypeError);
+        }
+      }
+      
+      // Final fallback: use default 1 (but this may fail if document type doesn't exist)
+      if (!documentTypeId || documentTypeId <= 0) {
+        documentTypeId = routeQueryParams['documentTypeId'] ? +routeQueryParams['documentTypeId'] : 1;
+        console.warn('[FormView] Using fallback documentTypeId:', documentTypeId);
+      }
+      
+      const seriesId = routeQueryParams['seriesId'] ? +routeQueryParams['seriesId'] : 1; // Default to 1 if not provided
+      const projectId = routeQueryParams['projectId'] ? +routeQueryParams['projectId'] : 1; // Default to 1 if not provided
+      const submittedByUserId = routeQueryParams['userId'] || 'public-user'; // Default user ID
+
+      console.log('[FormView] Using documentTypeId:', documentTypeId, 'projectId:', projectId);
 
       let currentSubmissionId = this.submissionId;
 
-      // Step 1: Create submission record if not exists
+      // Step 1: Load document series first (same as FormSubmissionCreateComponent)
+      let actualSeriesId: number | null = null;
       if (currentSubmissionId === 0) {
-        let submission: FormSubmissionDto | undefined;
-        let submissionError: any = null;
-        
-        // Create submission with Submitted status by default
         try {
+          // Load document series from API
+          const documentSeries = await this.documentTypesService.getDocumentSeriesByDocumentTypeId(documentTypeId).toPromise();
+          
+          if (documentSeries && documentSeries.length > 0) {
+            // First priority: Use active series
+            const activeSeries = documentSeries.filter((s: DocumentSeries) => s.isActive);
+            
+            if (activeSeries.length > 0) {
+              // Use default series or first available active series
+              const defaultSeries = activeSeries.find((s: DocumentSeries) => s.isDefault) || activeSeries[0];
+              if (defaultSeries && defaultSeries.id) {
+                actualSeriesId = defaultSeries.id;
+              }
+            } else {
+              // Second priority: Use any series (even if inactive) - better than default 1
+              const firstSeries = documentSeries.find((s: DocumentSeries) => s.id) || documentSeries[0];
+              if (firstSeries && firstSeries.id) {
+                actualSeriesId = firstSeries.id;
+                console.warn('[FormView] No active series found, using first available series (may be inactive):', actualSeriesId);
+              }
+            }
+          }
+          
+          // If no series found, try to create one automatically (only if documentTypeId is valid)
+          if (!actualSeriesId || actualSeriesId === 0) {
+            if (documentTypeId && documentTypeId > 0) {
+              console.log('[FormView] No document series found, attempting to create one automatically...');
+              try {
+                // Generate a series code based on document type and project
+                const seriesCode = `SERIES-${documentTypeId}-${projectId}-${Date.now().toString().slice(-6)}`;
+                
+                const createSeriesDto: CreateDocumentSeriesDto = {
+                  documentTypeId: documentTypeId,
+                  projectId: projectId,
+                  seriesCode: seriesCode,
+                  nextNumber: 1,
+                  isDefault: true,
+                  isActive: true
+                };
+                
+                console.log('[FormView] Creating document series:', createSeriesDto);
+              
+              const newSeries = await new Promise<DocumentSeries>((resolve, reject) => {
+                this.documentTypesService.createDocumentSeries(createSeriesDto).subscribe({
+                  next: (result) => resolve(result),
+                  error: (err) => reject(err)
+                });
+              });
+              
+              if (newSeries && newSeries.id) {
+                actualSeriesId = newSeries.id;
+                console.log('[FormView] ✅ Document series created successfully:', actualSeriesId);
+              } else {
+                throw new Error('Failed to create document series - no ID returned');
+              }
+              } catch (createSeriesError: any) {
+                console.warn('[FormView] Failed to create document series automatically:', createSeriesError);
+                // Fallback: use seriesId from query params or default
+                actualSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
+                console.warn('[FormView] Using fallback seriesId:', actualSeriesId);
+                
+                // Show user-friendly error message
+                const currentLang = this.translationService.getCurrentLanguage();
+                if (createSeriesError?.status === 401) {
+                  const errorMsg = currentLang === 'ar'
+                    ? 'تحذير: لا يمكن إنشاء Document Series تلقائياً (يتطلب تسجيل الدخول). سيتم استخدام القيمة الافتراضية.'
+                    : 'Warning: Cannot create Document Series automatically (requires authentication). Using default value.';
+                  console.warn('[FormView]', errorMsg);
+                } else {
+                  const errorMsg = currentLang === 'ar'
+                    ? `تحذير: فشل إنشاء Document Series تلقائياً: ${createSeriesError?.error?.message || createSeriesError?.message || 'Unknown error'}. سيتم استخدام القيمة الافتراضية.`
+                    : `Warning: Failed to create Document Series automatically: ${createSeriesError?.error?.message || createSeriesError?.message || 'Unknown error'}. Using default value.`;
+                  console.warn('[FormView]', errorMsg);
+                }
+              }
+            } else {
+              // documentTypeId is invalid, use fallback
+              actualSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
+              console.warn('[FormView] Invalid documentTypeId, cannot create series. Using fallback seriesId:', actualSeriesId);
+            }
+          }
+        } catch (seriesError: any) {
+          console.warn('[FormView] Error loading document series (may require auth), trying to create one...', seriesError);
+          
+          // Try to create a series if loading failed (only if documentTypeId is valid)
+          if (documentTypeId && documentTypeId > 0) {
+            try {
+              const seriesCode = `SERIES-${documentTypeId}-${projectId}-${Date.now().toString().slice(-6)}`;
+              
+              const createSeriesDto: CreateDocumentSeriesDto = {
+                documentTypeId: documentTypeId,
+                projectId: projectId,
+                seriesCode: seriesCode,
+                nextNumber: 1,
+                isDefault: true,
+                isActive: true
+              };
+              
+              console.log('[FormView] Creating document series after load error:', createSeriesDto);
+              
+              const newSeries = await new Promise<DocumentSeries>((resolve, reject) => {
+                this.documentTypesService.createDocumentSeries(createSeriesDto).subscribe({
+                  next: (result) => resolve(result),
+                  error: (err) => reject(err)
+                });
+              });
+              
+              if (newSeries && newSeries.id) {
+                actualSeriesId = newSeries.id;
+                console.log('[FormView] ✅ Document series created successfully after load error:', actualSeriesId);
+              } else {
+                throw new Error('Failed to create document series - no ID returned');
+              }
+            } catch (createSeriesError: any) {
+              console.warn('[FormView] Failed to create document series, using fallback:', createSeriesError);
+              // Use seriesId from query params or default to 1
+              actualSeriesId = (seriesId && seriesId > 0) ? seriesId : 1;
+            }
+          } else {
+            // documentTypeId is invalid, use fallback
+            actualSeriesId = (seriesId && seriesId > 0) ? seriesId : 1;
+            console.warn('[FormView] Invalid documentTypeId, cannot create series. Using fallback:', actualSeriesId);
+          }
+        }
+      } else {
+        // If submission already exists, use existing seriesId
+        actualSeriesId = seriesId || 1;
+      }
+      
+      // Ensure we have a valid seriesId
+      if (!actualSeriesId || actualSeriesId <= 0) {
+        actualSeriesId = 1; // Final fallback
+      }
+      
+      console.log('[FormView] Final seriesId to use:', actualSeriesId);
+
+      // Step 2: Create submission (same as FormSubmissionCreateComponent)
+      let submission: FormSubmissionDto | undefined;
+      if (currentSubmissionId === 0) {
+        // Check if user is authenticated (has token) - if yes, use authenticated user ID
+        const token = this.storageService.getToken();
+        const finalUserId = token ? (this.storageService.getUsername() || submittedByUserId) : submittedByUserId;
+        
+        // Use createSubmission (same as FormSubmissionCreateComponent)
+        // Note: This endpoint may require authentication
+        try {
+          if (!this.form || !this.form.id) {
+            throw new Error('Form or form.id is missing');
+          }
+          
           const createDto: CreateFormSubmissionDto = {
             formBuilderId: this.form.id,
             documentTypeId: documentTypeId,
-            seriesId: seriesId,
-            submittedByUserId: submittedByUserId,
-            status: 'Submitted' // Default status is Submitted
+            seriesId: actualSeriesId,
+            submittedByUserId: finalUserId,
+            status: 'Submitted'
           };
-          submission = await this.formSubmissionsService.createSubmission(createDto).toPromise();
-        } catch (submitError: any) {
-          submissionError = submitError;
-          console.warn('[FormView] createSubmission failed, trying createDraft:', submitError);
           
-          // Try createDraft as fallback, then update status
-          try {
-            submission = await this.formSubmissionsService.createDraft(
-              this.form.id,
-              projectId,
-              submittedByUserId
-            ).toPromise();
-            
-            // Update status to Submitted if draft was created
-            if (submission && submission.id && submission.status === 'Draft') {
-              try {
-                await this.formSubmissionsService.updateStatus(submission.id, 'Submitted').toPromise();
-                submission.status = 'Submitted'; // Update local object
-              } catch (statusError) {
-                console.warn('[FormView] Failed to update status to Submitted:', statusError);
-                // Continue anyway - submission is created
-              }
-            }
-          } catch (draftError: any) {
-            console.error('[FormView] createDraft also failed:', draftError);
-            submissionError = draftError;
+          console.log('[FormView] Creating submission:', {
+            formBuilderId: createDto.formBuilderId,
+            documentTypeId: createDto.documentTypeId,
+            seriesId: createDto.seriesId,
+            submittedByUserId: createDto.submittedByUserId,
+            hasToken: !!token
+          });
+          
+          submission = await new Promise<FormSubmissionDto>((resolve, reject) => {
+            this.formSubmissionsService.createSubmission(createDto).subscribe({
+              next: (result) => resolve(result),
+              error: (err) => reject(err)
+            });
+          });
+          
+          if (submission && submission.id) {
+            currentSubmissionId = submission.id;
+            this.submissionId = submission.id;
+            console.log('[FormView] ✅ Submission created successfully:', submission.id);
+          } else {
+            throw new Error('Failed to create submission - no ID returned');
           }
-        }
-
-        if (submission && submission.id) {
-          currentSubmissionId = submission.id;
-          this.submissionId = submission.id;
-        } else {
-          // API endpoints not available - show user-friendly message
+        } catch (createError: any) {
+          console.error('[FormView] Error creating submission:', createError);
           const currentLang = this.translationService.getCurrentLanguage();
-          const errorMessage = currentLang === 'ar'
-            ? 'عذراً، خدمة حفظ النماذج غير متاحة حالياً. يرجى التواصل مع المسؤول.'
-            : 'Sorry, the form submission service is currently unavailable. Please contact the administrator.';
+          const apiUrl = environment.apiUrl || 'Not configured';
           
-          alert(errorMessage);
-          throw new Error('Form submission API endpoints not available (404)');
+          if (createError?.status === 404) {
+            const errorMsg = currentLang === 'ar'
+              ? `خدمة حفظ النماذج غير متاحة (404).\n\nAPI URL: ${apiUrl}\nEndpoint المطلوب: POST /FormSubmissions\n\nملاحظة: ${token ? 'يوجد token لكن الـ endpoint غير موجود' : 'لا يوجد token - قد يتطلب الـ endpoint authentication'}`
+              : `Form submission service is not available (404).\n\nAPI URL: ${apiUrl}\nRequired endpoint: POST /FormSubmissions\n\nNote: ${token ? 'Token exists but endpoint not found' : 'No token - endpoint may require authentication'}`;
+            alert(errorMsg);
+          } else if (createError?.status === 401) {
+            const errorMsg = currentLang === 'ar'
+              ? `غير مصرح لك بإنشاء submission. يرجى تسجيل الدخول أولاً.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`
+              : `You are not authorized to create submission. Please login first.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`;
+            alert(errorMsg);
+          } else {
+            const errorMsg = createError?.error?.message || createError?.errorMessage || createError?.message || 'Failed to create submission';
+            alert(currentLang === 'ar' 
+              ? `فشل إنشاء submission: ${errorMsg}`
+              : `Failed to create submission: ${errorMsg}`);
+          }
+          
+          this.isSubmitting = false;
+          return;
+        }
+        
+        // Final check - if still no submission, fail
+        if (!submission || !submission.id) {
+          const currentLang = this.translationService.getCurrentLanguage();
+          alert(currentLang === 'ar'
+            ? 'فشل إنشاء submission - لا يمكن المتابعة'
+            : 'Failed to create submission - cannot continue');
+          this.isSubmitting = false;
+          return;
         }
       }
 
-      // Step 2: Save all grid data
-      await this.saveAllGridsData().toPromise();
+      // Ensure currentSubmissionId is set correctly
+      if (currentSubmissionId === 0 && submission && submission.id) {
+        currentSubmissionId = submission.id;
+        this.submissionId = submission.id;
+        console.log('[FormView] Updated currentSubmissionId from submission:', currentSubmissionId);
+      }
 
-      // Step 3: Prepare and save field values
+      console.log('[FormView] ===== After submission creation =====');
+      console.log('[FormView] Final currentSubmissionId:', currentSubmissionId);
+      console.log('[FormView] this.submissionId:', this.submissionId);
+      console.log('[FormView] submission?.id:', submission?.id);
+
+      // Step 2: Prepare field values (same as FormSubmissionCreateComponent)
       const fieldValues: CreateFormSubmissionValueDto[] = [];
       
       if (this.tabs && this.tabs.length > 0) {
@@ -3094,15 +3350,29 @@ export class FormViewComponent implements OnInit {
         });
       }
 
-      // Step 4: Save field values in bulk
+      // Step 3: Save all grid data
+      await this.saveAllGridsData().toPromise();
+
+      // Step 4: Save field values in bulk (same as FormSubmissionCreateComponent)
       const saveObservables: Observable<any>[] = [];
+      
+      console.log('[FormView] ===== Preparing to save field values =====');
+      console.log('[FormView] Current submission ID:', currentSubmissionId);
+      console.log('[FormView] Field values count:', fieldValues.length);
+      console.log('[FormView] Field values DTOs:', JSON.stringify(fieldValues, null, 2));
       
       if (fieldValues.length > 0) {
         const bulkDto: BulkFormSubmissionValuesDto = {
           submissionId: currentSubmissionId,
           values: fieldValues
         };
+        
+        console.log('[FormView] Bulk DTO before sending:', JSON.stringify(bulkDto, null, 2));
+        console.log('[FormView] Bulk DTO values count:', bulkDto.values.length);
+        
         saveObservables.push(this.formSubmissionValuesService.createBulk(bulkDto));
+      } else {
+        console.warn('[FormView] ⚠️ No field values to save!');
       }
 
       // Step 5: Wait for all saves to complete
@@ -3110,15 +3380,23 @@ export class FormViewComponent implements OnInit {
         await forkJoin(saveObservables).toPromise();
       }
 
-      // Step 6: Show success message
-      const successMessage = this.translationService.getCurrentLanguage() === 'ar' 
-        ? 'تم إرسال النموذج بنجاح!' 
-        : 'Form submitted successfully!';
+      // Step 6: Redirect to success page
+      const queryParams: any = {
+        submissionId: currentSubmissionId
+      };
       
-      alert(successMessage);
+      // Add formCode if available
+      if (this.form && this.form.formCode) {
+        queryParams.formCode = this.form.formCode;
+      }
       
-      // Optionally, you can redirect or reset the form
-      // window.location.reload();
+      // Add documentTypeId if available
+      if (documentTypeId) {
+        queryParams.documentTypeId = documentTypeId;
+      }
+      
+      // Navigate to success page
+      this.router.navigate(['/forms/submission/success'], { queryParams });
     } catch (error) {
       console.error('[FormView] Error submitting form:', error);
       const errorMessage = this.translationService.getCurrentLanguage() === 'ar'

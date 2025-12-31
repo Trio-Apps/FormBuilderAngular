@@ -24,7 +24,8 @@ import { PaginatorModule } from 'primeng/paginator';
 import { CheckboxModule } from 'primeng/checkbox';
 import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
-import { Subscription, forkJoin } from 'rxjs';
+import { Subscription, forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 
 @Component({
   selector: 'app-form-submissions-list',
@@ -91,6 +92,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   submissionForm!: FormGroup;
   fieldValueForm!: FormGroup;
   editingFieldValue: FormSubmissionValueDto | null = null;
+  editSubmissionValuesForm!: FormGroup; // Form for editing all submission values
+  submissionFields: FormFieldDto[] = []; // Fields for the selected submission
 
   // Search & Filter
   searchTerm = '';
@@ -150,6 +153,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       seriesId: [null, [Validators.required]],
       status: ['Submitted', [Validators.required]] // Default status is Submitted
     });
+
+    // Initialize form for editing submission values
+    this.editSubmissionValuesForm = this.fb.group({});
 
     // Subscribe to tabId changes to update selectedTabId
     this.addSubmissionForm.get('tabId')?.valueChanges.subscribe(tabId => {
@@ -345,17 +351,182 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   }
 
   openEditModal(submission: FormSubmissionDto): void {
+    // Navigate to edit page instead of opening modal
+    this.router.navigate(['/document-types', submission.documentTypeId, 'submissions', submission.id, 'edit']);
+  }
+
+  openEditModalOld(submission: FormSubmissionDto): void {
     this.submissionForm.patchValue({
       documentNumber: submission.documentNumber || '',
       status: submission.status || 'Submitted' // Default status is Submitted
     });
-    this.selectedSubmission = submission as any;
+    
+    // Load field values directly using FormSubmissionValuesService
+    this.loading.fieldValues = true;
+    
+    // Create submission detail object from the submission we have
+    const submissionDetail: FormSubmissionDetailDto = {
+      ...submission,
+      fieldValues: [],
+      attachments: [],
+      gridData: []
+    };
+    this.selectedSubmission = submissionDetail;
+    
+    // Load field values by submission ID
+    this.formSubmissionValuesService.getBySubmissionId(submission.id).subscribe({
+      next: (fieldValues: FormSubmissionValueDto[]) => {
+        console.log('[FormSubmissionsList] Loaded field values:', fieldValues);
+        submissionDetail.fieldValues = fieldValues || [];
+        this.selectedSubmission = submissionDetail;
+        
+        // Load form fields to display field names
+        if (submission.formBuilderId) {
+          this.loadFormFieldsForEdit(submission.formBuilderId, submissionDetail);
+        } else {
+          console.warn('[FormSubmissionsList] No formBuilderId found in submission');
+          this.loading.fieldValues = false;
     this.showSubmissionModal = true;
+        }
+      },
+      error: (error) => {
+        console.error('Error loading field values:', error);
+        // Continue anyway - show modal with empty field values
+        submissionDetail.fieldValues = [];
+        this.selectedSubmission = submissionDetail;
+        
+        if (submission.formBuilderId) {
+          this.loadFormFieldsForEdit(submission.formBuilderId, submissionDetail);
+        } else {
+          this.loading.fieldValues = false;
+          this.showSubmissionModal = true;
+        }
+      }
+    });
+  }
+
+  loadFormFieldsForEdit(formBuilderId: number, submissionDetail: FormSubmissionDetailDto): void {
+    this.formsService.getFormById(formBuilderId).subscribe({
+      next: (form: FormBuilderDto) => {
+        // Load tabs using getTabs method
+        this.tabsService.getTabs(formBuilderId).subscribe({
+          next: (tabs: FormTabDto[]) => {
+            // Load all fields from all tabs
+            const fieldObservables = tabs.map(tab => 
+              this.fieldsService.getFieldsByTabId(tab.id).pipe(
+                catchError(() => of([]))
+              )
+            );
+            
+            if (fieldObservables.length === 0) {
+              this.loading.fieldValues = false;
+              this.showSubmissionModal = true;
+              return;
+            }
+            
+            forkJoin(fieldObservables).subscribe({
+              next: (fieldsArrays: FormFieldDto[][]) => {
+                this.submissionFields = fieldsArrays.flat();
+                
+                // Build dynamic form for field values
+                this.buildEditSubmissionValuesForm(submissionDetail);
+                
+                this.loading.fieldValues = false;
+                this.showSubmissionModal = true;
+                this.cdr.detectChanges();
+              },
+              error: (error: any) => {
+                console.error('Error loading fields:', error);
+                this.loading.fieldValues = false;
+                this.showSubmissionModal = true;
+              }
+            });
+          },
+          error: (error: any) => {
+            console.error('Error loading tabs:', error);
+            this.loading.fieldValues = false;
+            this.showSubmissionModal = true;
+          }
+        });
+      },
+      error: (error: any) => {
+        console.error('Error loading form:', error);
+        this.loading.fieldValues = false;
+        this.showSubmissionModal = true;
+      }
+    });
+  }
+
+  buildEditSubmissionValuesForm(submissionDetail: FormSubmissionDetailDto): void {
+    // Clear existing form controls
+    Object.keys(this.editSubmissionValuesForm.controls).forEach(key => {
+      this.editSubmissionValuesForm.removeControl(key);
+    });
+
+    // Create form controls for each field value
+    if (!submissionDetail.fieldValues || submissionDetail.fieldValues.length === 0) {
+      console.warn('[FormSubmissionsList] No field values found in submission detail');
+      console.log('[FormSubmissionsList] Submission detail:', submissionDetail);
+      return;
+    }
+
+    console.log('[FormSubmissionsList] Building form for', submissionDetail.fieldValues.length, 'field values');
+    console.log('[FormSubmissionsList] Available fields:', this.submissionFields.length);
+    console.log('[FormSubmissionsList] Field values:', submissionDetail.fieldValues);
+    
+    let controlsAdded = 0;
+    submissionDetail.fieldValues.forEach(fieldValue => {
+      // Try to find field, but don't skip if not found - we can still edit the value
+      const field = this.submissionFields.find(f => f.id === fieldValue.fieldId);
+      
+      if (!field) {
+        console.warn(`[FormSubmissionsList] Field ${fieldValue.fieldId} not found in submissionFields, but will still create control`);
+      }
+      
+      let formValue: any = null;
+      
+      // Determine the value based on field type
+      if (fieldValue.valueString !== null && fieldValue.valueString !== undefined && fieldValue.valueString !== '') {
+        formValue = fieldValue.valueString;
+      } else if (fieldValue.valueNumber !== null && fieldValue.valueNumber !== undefined) {
+        formValue = fieldValue.valueNumber;
+      } else if (fieldValue.valueDate) {
+        const dateValue = new Date(fieldValue.valueDate);
+        // Format for datetime-local input (YYYY-MM-DDTHH:mm)
+        const year = dateValue.getFullYear();
+        const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+        const day = String(dateValue.getDate()).padStart(2, '0');
+        const hours = String(dateValue.getHours()).padStart(2, '0');
+        const minutes = String(dateValue.getMinutes()).padStart(2, '0');
+        formValue = `${year}-${month}-${day}T${hours}:${minutes}`;
+      } else if (fieldValue.valueBool !== null && fieldValue.valueBool !== undefined) {
+        formValue = fieldValue.valueBool;
+      } else if (fieldValue.valueJson) {
+        try {
+          const parsed = JSON.parse(fieldValue.valueJson);
+          formValue = typeof parsed === 'string' ? parsed : fieldValue.valueJson;
+        } catch {
+          formValue = fieldValue.valueJson;
+        }
+      }
+
+      // Create form control with field ID as key
+      const controlName = `field_${fieldValue.fieldId}`;
+      this.editSubmissionValuesForm.addControl(controlName, this.fb.control(formValue));
+      controlsAdded++;
+      
+      console.log(`[FormSubmissionsList] Added control for field ${fieldValue.fieldId} (${fieldValue.fieldCode || 'unknown'}) with value:`, formValue);
+    });
+    
+    console.log('[FormSubmissionsList] Form built with', Object.keys(this.editSubmissionValuesForm.controls).length, 'controls');
+    console.log('[FormSubmissionsList] Controls added:', controlsAdded, 'out of', submissionDetail.fieldValues.length, 'field values');
   }
 
   closeSubmissionModal(): void {
     this.showSubmissionModal = false;
     this.selectedSubmission = null;
+    this.submissionFields = [];
+    this.editSubmissionValuesForm = this.fb.group({}); // Reset form
     this.submissionForm.reset({
       documentNumber: '',
       status: 'Submitted' // Default status is Submitted
@@ -374,16 +545,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       status: formData.status
     };
 
+    // Update submission basic info
     this.formSubmissionsService.updateSubmission(this.selectedSubmission.id, updateDto).subscribe({
       next: () => {
-        this.loading.save = false;
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Form submission updated successfully'
-        });
-        this.closeSubmissionModal();
-        this.loadSubmissions();
+        // Now update field values
+        this.updateSubmissionFieldValues();
       },
       error: (error: any) => {
         this.loading.save = false;
@@ -393,6 +559,101 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
           severity: 'error',
           summary: 'Error',
           detail: errorMessage
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  updateSubmissionFieldValues(): void {
+    if (!this.selectedSubmission || !this.selectedSubmission.fieldValues) {
+        this.loading.save = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Form submission updated successfully'
+      });
+      this.closeSubmissionModal();
+      this.loadSubmissions();
+      return;
+    }
+
+    const formValues = this.editSubmissionValuesForm.value;
+    const updateObservables: any[] = [];
+
+    // Update each field value
+    this.selectedSubmission.fieldValues.forEach(fieldValue => {
+      const controlName = `field_${fieldValue.fieldId}`;
+      const newValue = formValues[controlName];
+      
+      if (newValue === undefined || newValue === null) return;
+
+      const field = this.submissionFields.find(f => f.id === fieldValue.fieldId);
+      if (!field) return;
+
+      // Determine value type and create update DTO
+      const updateDto: UpdateFormSubmissionValueDto = {};
+      
+      if (field.fieldTypeId === 1) { // Text/String
+        updateDto.valueString = String(newValue);
+      } else if (field.fieldTypeId === 2) { // Number
+        updateDto.valueNumber = Number(newValue);
+      } else if (field.fieldTypeId === 3) { // Date
+        updateDto.valueDate = newValue instanceof Date ? newValue : new Date(newValue);
+      } else if (field.fieldTypeId === 4) { // Boolean
+        updateDto.valueBool = Boolean(newValue);
+      } else if (field.fieldTypeId === 5) { // JSON/Array
+        updateDto.valueJson = typeof newValue === 'string' ? newValue : JSON.stringify(newValue);
+      } else {
+        // Default to string
+        updateDto.valueString = String(newValue);
+      }
+
+      updateObservables.push(
+        this.formSubmissionValuesService.updateByField(
+          this.selectedSubmission!.id,
+          fieldValue.fieldId,
+          updateDto
+        ).pipe(
+          catchError((error) => {
+            console.error(`Error updating field ${fieldValue.fieldId}:`, error);
+            return of(null); // Continue with other updates
+          })
+        )
+      );
+    });
+
+    if (updateObservables.length === 0) {
+      this.loading.save = false;
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Form submission updated successfully'
+      });
+      this.closeSubmissionModal();
+      this.loadSubmissions();
+      return;
+    }
+
+    // Execute all updates
+    forkJoin(updateObservables).subscribe({
+      next: () => {
+        this.loading.save = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Form submission and values updated successfully'
+        });
+        this.closeSubmissionModal();
+        this.loadSubmissions();
+      },
+      error: (error) => {
+        this.loading.save = false;
+        console.error('Error updating field values:', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Some field values may not have been updated'
         });
         this.cdr.detectChanges();
       }
@@ -723,6 +984,69 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     if (value.valueBool !== null && value.valueBool !== undefined) return value.valueBool ? 'Yes' : 'No';
     if (value.valueJson) return value.valueJson;
     return '-';
+  }
+
+  /**
+   * Get field name by field ID
+   */
+  getFieldName(fieldId: number): string {
+    const field = this.submissionFields.find(f => f.id === fieldId);
+    return field?.fieldName || '';
+  }
+
+  /**
+   * Get field type by field ID (for edit modal)
+   * Returns simple types: text, number, date, boolean, json, textarea
+   */
+  getFieldTypeById(fieldId: number): string {
+    const field = this.submissionFields.find(f => f.id === fieldId);
+    if (!field || !field.fieldTypeId) return 'text';
+    
+    // Map field type IDs to simple input types
+    // Adjust these IDs based on your actual field type IDs
+    const typeMap: { [key: number]: string } = {
+      1: 'text',      // Text/String
+      2: 'number',    // Number
+      3: 'date',      // Date
+      4: 'boolean',   // Boolean
+      5: 'json',      // JSON/Array
+      6: 'textarea'   // Textarea
+    };
+    
+    // Try direct mapping first
+    if (typeMap[field.fieldTypeId]) {
+      return typeMap[field.fieldTypeId];
+    }
+    
+    // Fallback: use field type name to determine input type
+    const fieldTypeName = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
+    
+    if (fieldTypeName.includes('number') || fieldTypeName.includes('numeric')) {
+      return 'number';
+    }
+    if (fieldTypeName.includes('date') || fieldTypeName.includes('time')) {
+      return 'date';
+    }
+    if (fieldTypeName.includes('boolean') || fieldTypeName.includes('checkbox') || fieldTypeName.includes('switch')) {
+      return 'boolean';
+    }
+    if (fieldTypeName.includes('textarea') || fieldTypeName.includes('text area')) {
+      return 'textarea';
+    }
+    if (fieldTypeName.includes('json') || fieldTypeName.includes('array')) {
+      return 'json';
+    }
+    
+    // Default to text
+    return 'text';
+  }
+
+  /**
+   * Check if field is required
+   */
+  isFieldRequired(fieldId: number): boolean {
+    const field = this.submissionFields.find(f => f.id === fieldId);
+    return field?.is_required || false;
   }
 
   // ================================
