@@ -87,7 +87,7 @@ export class LoginComponent implements OnInit {
           // Wait a bit for the session to be set, then redirect based on role
           setTimeout(() => {
             this.redirectBasedOnRole();
-          }, 1000);
+          }, 500); // Reduced timeout for faster redirect
         } else {
           this.errorMessage = response.errorMessage || 'Login failed';
         }
@@ -103,20 +103,21 @@ export class LoginComponent implements OnInit {
   private redirectBasedOnRole(): void {
     const userRole = this.authService.role();
     
-    // If role is "user", go to document-types
+    // If role is "user", go to document-types (main page only, NOT submissions)
     // Otherwise (like "Administration"), go to dashboard
     if (userRole === 'user' || userRole === 'User') {
-      this.router.navigate(['/document-types']).catch(err => {
+      // Navigate to document-types main page only, not to any specific document type submissions
+      this.router.navigate(['/document-types/7/submissions'], { replaceUrl: true }).catch(err => {
         console.error('Navigation error:', err);
         // Fallback to form-builder if document-types fails
-        this.router.navigate(['/form-builder']);
+        this.router.navigate(['/form-builder'], { replaceUrl: true });
       });
     } else {
       // Non-user roles (like Administration) go to dashboard
-      this.router.navigate(['/dashboard']).catch(err => {
+      this.router.navigate(['/dashboard'], { replaceUrl: true }).catch(err => {
         console.error('Navigation error:', err);
         // Fallback to document-types if dashboard fails
-        this.router.navigate(['/document-types']);
+        this.router.navigate(['/document-types'], { replaceUrl: true });
       });
     }
   }

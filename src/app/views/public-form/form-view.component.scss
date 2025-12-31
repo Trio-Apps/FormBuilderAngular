@@ -8,13 +8,15 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
 }
 
 // Main Form Container
 .form-main-container {
-  max-width: 800px;
+  max-width: 500px; // Reduced width, centered
   width: 100%;
-  background: #ffffff;
+  margin: 0 auto; // Center the container
+  background: #cf0707;
   border-radius: 20px;
   padding: 40px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
@@ -677,6 +679,10 @@
   box-shadow: 0 4px 16px rgba(40, 106, 97, 0.2);
   position: relative;
   overflow: hidden;
+  width: 70%; // Match form-content width (same as inputs container)
+  max-width: 70%; // Match form-content width
+  margin-left: auto;
+  margin-right: auto;
 
   &::before {
     content: '';
@@ -721,6 +727,10 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(10px);
+  width: 70%; // Match form-content width (same as inputs container)
+  max-width: 70%; // Match form-content width
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .nav-tabs-list {
@@ -790,7 +800,7 @@
   border-radius: 0;
   padding: 0;
   box-shadow: none;
-  width: 100%;
+  width: 70%;
 }
 
 // Submit Button Section - Enhanced Design
@@ -1043,6 +1053,7 @@
   min-height: 32px;
   display: block;
   width: 100%;
+  max-width: 100%; // Ensure it doesn't exceed container width
 }
 
 // Common Input Styles - Enhanced Design
@@ -1050,6 +1061,7 @@
 .form-textarea,
 .form-select {
   width: 100%;
+  max-width: 100%; // Ensure inputs don't exceed container width
   padding: 14px 16px;
   border: 2px solid #e5e7eb;
   border-radius: 12px;
@@ -1670,6 +1682,7 @@
   .form-header {
     padding: 24px 20px;
     border-radius: 12px;
+    
     
     .form-title {
       font-size: 28px;
