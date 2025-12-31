@@ -815,15 +815,15 @@
       }
     }
 
-    .p-checkbox-label {
-      margin-left: 12px;
-      font-weight: 600;
-      color: #07122b;
-      font-size: 15px;
-      cursor: pointer;
-      letter-spacing: 0.2px;
-    }
+  .p-checkbox-label {
+    margin-left: 12px;
+    font-weight: 600;
+    color: #07122b;
+    font-size: 15px;
+    cursor: pointer;
+    letter-spacing: 0.2px;
   }
+}
 }
 
 // Active Status Group
@@ -923,9 +923,9 @@
       font-size: 14px;
       font-weight: 600;
       color: #6b7280;
-      transition: color 0.3s ease;
-    }
-  }
+        transition: color 0.3s ease;
+      }
+}
 }
 
 .form-actions {

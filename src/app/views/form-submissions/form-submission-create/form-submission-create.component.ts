@@ -595,7 +595,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       const fieldKey = `field_${field.id}`;
       const fieldValue = this.fieldsForm.get(fieldKey)?.value;
 
-      if (fieldValue !== null && fieldValue !== undefined && fieldValue !== '') {
+      // Check if field has a value (including 0, false, empty arrays)
+      const hasValue = fieldValue !== null && 
+                      fieldValue !== undefined && 
+                      fieldValue !== '' &&
+                      !(Array.isArray(fieldValue) && fieldValue.length === 0);
+
+      if (hasValue) {
         const valueDto: CreateFormSubmissionValueDto = {
           submissionId: submissionId,
           fieldId: field.id,
@@ -605,28 +611,56 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         const fieldType = this.getFieldType(field);
         switch (fieldType) {
           case 'number':
-            valueDto.valueNumber = Number(fieldValue);
+            const numValue = Number(fieldValue);
+            valueDto.valueNumber = numValue;
+            valueDto.valueJson = JSON.stringify(numValue);
+            valueDto.valueString = String(numValue);
             break;
           case 'date':
-            valueDto.valueDate = fieldValue instanceof Date ? fieldValue : new Date(fieldValue);
+            const dateValue = fieldValue instanceof Date ? fieldValue : new Date(fieldValue);
+            valueDto.valueDate = dateValue;
+            valueDto.valueJson = JSON.stringify(dateValue.toISOString());
+            valueDto.valueString = dateValue.toISOString();
             break;
           case 'boolean':
-            valueDto.valueBool = Boolean(fieldValue);
+            const boolValue = Boolean(fieldValue);
+            valueDto.valueBool = boolValue;
+            valueDto.valueJson = JSON.stringify(boolValue);
+            valueDto.valueString = String(boolValue);
             break;
           case 'checkbox':
             if (Array.isArray(fieldValue)) {
               valueDto.valueJson = JSON.stringify(fieldValue);
+              valueDto.valueString = fieldValue.join(', ');
             } else {
               valueDto.valueString = String(fieldValue);
+              valueDto.valueJson = JSON.stringify(fieldValue);
             }
             break;
           default:
             if (Array.isArray(fieldValue)) {
               valueDto.valueJson = JSON.stringify(fieldValue);
+              valueDto.valueString = fieldValue.join(', ');
             } else {
-              valueDto.valueString = String(fieldValue);
+              const stringValue = String(fieldValue);
+              valueDto.valueString = stringValue;
+              valueDto.valueJson = JSON.stringify(stringValue);
             }
             break;
+        }
+
+        // Safety check: Ensure valueJson is always set (API requirement)
+        if (!valueDto.valueJson) {
+          valueDto.valueJson = valueDto.valueString ? JSON.stringify(valueDto.valueString) : JSON.stringify(null);
+        }
+        // Ensure valueString is set if valueJson exists but valueString doesn't
+        if (valueDto.valueJson && !valueDto.valueString) {
+          try {
+            const parsed = JSON.parse(valueDto.valueJson);
+            valueDto.valueString = typeof parsed === 'string' ? parsed : String(parsed);
+          } catch {
+            valueDto.valueString = valueDto.valueJson;
+          }
         }
 
         fieldValues.push(valueDto);
