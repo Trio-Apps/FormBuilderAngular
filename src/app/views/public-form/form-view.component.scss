@@ -1,18 +1,44 @@
-// Form Viewer Container - Google Forms Style
+// Form Viewer Container - Enhanced Design
 .form-viewer-container {
-  max-width: 760px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 24px 16px 48px 16px;
-  background: #f0ebf8;
+  padding: 32px 24px;
+  background: #f5f7fa;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-// Language Dropdown Button (Sphere Design)
+// Main Form Container
+.form-main-container {
+  max-width: 800px;
+  width: 100%;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Language Dropdown Button (Enhanced Design)
 .language-dropdown-container {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 12px;
-  padding: 0 4px;
+  margin-bottom: 24px;
+  padding: 0 24px;
   position: relative;
   z-index: 1000;
 }
@@ -26,23 +52,23 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 12px 20px;
   border: none;
   background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
   color: #ffffff;
   border-radius: 50px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-  min-width: 120px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0, 235, 181, 0.3);
+  min-width: 140px;
   justify-content: center;
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
-    background: linear-gradient(135deg, #5568d3 0%, #653a8f 100%);
+    box-shadow: 0 6px 20px rgba(0, 235, 181, 0.4);
+    background: linear-gradient(135deg, #00EBB5 0%, #286A61 100%);
   }
 
   &:active {
@@ -642,39 +668,59 @@
   }
 }
 
-// Form Header - Google Forms Style
+// Form Header - Enhanced Design
 .form-header {
-  margin-bottom: 12px;
-  padding: 24px 24px 16px 24px;
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 1px -1px rgba(0, 0, 0, 0.2), 0 1px 1px 0 rgba(0, 0, 0, 0.14), 0 1px 3px 0 rgba(0, 0, 0, 0.12);
+  background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+  border-radius: 16px;
+  padding: 32px 40px;
+  margin-bottom: 32px;
+  box-shadow: 0 4px 16px rgba(40, 106, 97, 0.2);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+    pointer-events: none;
+  }
+
+  .form-title {
+    font-size: 36px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+    padding-bottom: 16px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+    letter-spacing: -0.8px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    z-index: 1;
+  }
+
+  .form-description {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.95);
+    margin: 16px 0 0 0;
+    line-height: 1.6;
+    position: relative;
+    z-index: 1;
+  }
 }
 
-.form-title {
-  font-size: 32px;
-  font-weight: 400;
-  color: #202124;
-  margin: 0 0 8px 0;
-  line-height: 1.25;
-  letter-spacing: 0;
-}
-
-.form-description {
-  font-size: 14px;
-  color: #5f6368;
-  margin: 0;
-  line-height: 1.5;
-}
-
-// Tabs Navigation - Google Forms Style
+// Tabs Navigation - Enhanced Design
 .tabs-navigation {
-  margin-bottom: 12px;
   background: #ffffff;
-  border-radius: 8px;
-  padding: 8px;
-  box-shadow: 0 2px 1px -1px rgba(0, 0, 0, 0.2), 0 1px 1px 0 rgba(0, 0, 0, 0.14), 0 1px 3px 0 rgba(0, 0, 0, 0.12);
-  border-bottom: none;
+  border-radius: 16px;
+  padding: 12px;
+  margin-bottom: 32px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(10px);
 }
 
 .nav-tabs-list {
@@ -694,53 +740,202 @@
 .nav-tab-button {
   background: transparent;
   border: none;
-  border-radius: 6px;
-  padding: 12px 20px;
-  font-size: 14px;
+  border-radius: 12px;
+  padding: 14px 24px;
+  font-size: 15px;
   font-weight: 500;
-  color: #5f6368;
+  color: #6b7280;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   width: 100%;
   text-align: center;
   
   &:hover {
-    color: #1a73e8;
-    background: rgba(26, 115, 232, 0.08);
+    color: #00EBB5;
+    background: rgba(0, 235, 181, 0.1);
+    transform: translateY(-1px);
   }
   
   &:focus {
     outline: none;
-    background: rgba(26, 115, 232, 0.12);
+    box-shadow: 0 0 0 3px rgba(0, 235, 181, 0.2);
   }
 }
 
 .nav-tab-item.active .nav-tab-button {
-  color: #1a73e8;
-  background: #e8f0fe;
+  color: #ffffff;
+  background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
   font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 235, 181, 0.3);
   
   &::after {
     content: '';
     position: absolute;
-    bottom: 0;
+    bottom: -12px;
     left: 50%;
     transform: translateX(-50%);
-    width: 40px;
-    height: 3px;
-    background: #1a73e8;
+    width: 50px;
+    height: 4px;
+    background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
     border-radius: 2px 2px 0 0;
+    box-shadow: 0 2px 8px rgba(0, 235, 181, 0.4);
   }
 }
 
-// Form Content - Google Forms Style
+// Form Content - Enhanced Design
 .form-content {
-  margin-top: 12px;
-  background: #ffffff;
-  border-radius: 8px;
-  padding: 24px 24px 24px 24px;
-  box-shadow: 0 2px 1px -1px rgba(0, 0, 0, 0.2), 0 1px 1px 0 rgba(0, 0, 0, 0.14), 0 1px 3px 0 rgba(0, 0, 0, 0.12);
+  margin-top: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  width: 100%;
+}
+
+// Submit Button Section - Enhanced Design
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 48px;
+  padding: 32px 36px;
+  border-top: 2px solid rgba(0, 0, 0, 0.06);
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.95), #ffffff);
+  backdrop-filter: blur(10px);
+  border-radius: 0 0 20px 20px;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
+
+  .btn-cancel,
+  .btn-submit {
+    padding: 16px 40px;
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: 0.3px;
+    min-width: 160px;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+
+    i {
+      font-size: 18px;
+      transition: transform 0.3s ease;
+    }
+
+    span {
+      position: relative;
+      z-index: 1;
+    }
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+
+    &:active::before {
+      width: 300px;
+      height: 300px;
+    }
+  }
+
+  .btn-cancel {
+    background: #ffffff;
+    color: #6b7280;
+    border: 2px solid #e5e7eb;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+    &:hover {
+      background: #f9fafb;
+      border-color: #d1d5db;
+      color: #374151;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+
+      i {
+        transform: rotate(90deg);
+      }
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+  }
+
+  .btn-submit {
+    background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+    color: white;
+    box-shadow: 0 4px 20px rgba(0, 235, 181, 0.35);
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      transition: left 0.5s;
+    }
+
+    &:hover:not(:disabled) {
+      background: linear-gradient(135deg, #00EBB5 0%, #286A61 100%);
+      box-shadow: 0 8px 28px rgba(0, 235, 181, 0.45);
+      transform: translateY(-3px);
+
+      &::after {
+        left: 100%;
+      }
+
+      i {
+        transform: scale(1.1);
+      }
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(0, 235, 181, 0.4);
+    }
+
+    &:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+
+      i {
+        animation: spin 1s linear infinite;
+      }
+    }
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .tab-panel {
@@ -759,15 +954,67 @@
   margin-bottom: 0;
 }
 
-// Form Fields - Google Forms Style
+// Form Fields - Enhanced Design
 .form-field {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 36px 40px;
   margin-bottom: 24px;
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
-  border: none;
-  box-shadow: none;
-  transition: none;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 5px;
+    height: 100%;
+    background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+    opacity: 0;
+    transition: opacity 0.4s ease, width 0.3s ease;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(0, 235, 181, 0.3), transparent);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  &:hover {
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+    transform: translateY(-3px);
+    border-color: rgba(0, 235, 181, 0.25);
+    background: linear-gradient(to bottom, #ffffff, #fafbfc);
+
+    &::before {
+      opacity: 1;
+      width: 6px;
+    }
+
+    &::after {
+      opacity: 1;
+    }
+  }
+
+  &:focus-within {
+    box-shadow: 0 8px 24px rgba(0, 235, 181, 0.15);
+    border-color: rgba(0, 235, 181, 0.3);
+
+    &::before {
+      opacity: 1;
+      width: 6px;
+    }
+  }
   
   &:last-child {
     margin-bottom: 0;
@@ -776,12 +1023,13 @@
 
 .field-label {
   display: block;
-  font-size: 16px;
-  font-weight: 400;
-  color: #202124;
-  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 12px;
   line-height: 1.5;
-  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .required-indicator {
@@ -797,37 +1045,40 @@
   width: 100%;
 }
 
-// Common Input Styles - Google Forms Style
+// Common Input Styles - Enhanced Design
 .form-input,
 .form-textarea,
 .form-select {
   width: 100%;
-  padding: 8px 0;
-  font-size: 14px;
-  font-family: 'Roboto', 'Google Sans', Arial, sans-serif;
-  color: #202124;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 0;
+  padding: 14px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 15px;
+  color: #1f2937;
+  background: #f9fafb;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
   box-sizing: border-box;
-  transition: border-bottom 0.2s ease;
   display: block;
-  min-height: 24px;
+  min-height: 48px;
   
   &::placeholder {
-    color: rgba(0, 0, 0, 0.38);
+    color: #9ca3af;
+    font-weight: 400;
     opacity: 1;
   }
   
   &:focus {
     outline: none;
-    border-bottom: 2px solid #673ab7;
-    padding-bottom: 7px;
+    border-color: #00EBB5;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(0, 235, 181, 0.1);
+    transform: translateY(-1px);
   }
   
   &:hover:not(:focus) {
-    border-bottom: 1px solid rgba(0, 0, 0, 0.42);
+    border-color: #d1d5db;
+    background: #ffffff;
   }
 }
 
@@ -839,99 +1090,137 @@
 }
 
 .form-textarea {
-  min-height: 60px;
+  min-height: 140px;
   resize: vertical;
-  padding: 8px 0;
-  line-height: 1.5;
-  font-family: 'Roboto', 'Google Sans', Arial, sans-serif;
+  padding: 16px 18px;
+  line-height: 1.6;
+  font-family: inherit;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:focus {
+    border: 2px solid #00EBB5;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(0, 235, 181, 0.1);
+    transform: translateY(-1px);
+  }
 }
 
 .form-select {
   cursor: pointer;
-  padding: 8px 0;
+  padding: 14px 16px;
+  padding-right: 48px;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%236b7280' d='M8 11L3 6h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right center;
-  padding-right: 24px;
+  background-position: right 16px center;
+  background-color: #f9fafb;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+
+  &:focus {
+    border-color: #00EBB5;
+    background-color: #ffffff;
+    box-shadow: 0 0 0 4px rgba(0, 235, 181, 0.1);
+  }
 }
 
-// Radio Buttons - Google Forms Style
+// Radio Buttons - Enhanced Design
 .radio-group {
+  margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 8px 0;
 }
 
 .radio-option {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-}
-
-input[type="radio"] {
-  width: 20px;
-  height: 20px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #f9fafb;
+  border: 2px solid #e5e7eb;
+  transition: all 0.3s ease;
   cursor: pointer;
-  margin: 0;
-  accent-color: #673ab7;
-  
-  &:focus {
-    outline: 2px solid rgba(103, 58, 183, 0.2);
-    outline-offset: 2px;
-    border-radius: 50%;
+
+  &:hover {
+    background: #f3f4f6;
+    border-color: #00EBB5;
+    transform: translateX(4px);
+  }
+
+  input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    margin-right: 14px;
+    cursor: pointer;
+    accent-color: #00EBB5;
+    
+    &:focus {
+      outline: 2px solid rgba(0, 235, 181, 0.2);
+      outline-offset: 2px;
+      border-radius: 50%;
+    }
+  }
+
+  .radio-label {
+    font-size: 15px;
+    color: #1f2937;
+    cursor: pointer;
+    margin: 0;
+    flex: 1;
+    font-weight: 500;
   }
 }
 
-.radio-label {
-  font-size: 14px;
-  color: #202124;
-  cursor: pointer;
-  margin: 0;
-  padding-left: 0;
-  font-weight: 400;
-  line-height: 1.5;
-}
-
-// Checkboxes - Google Forms Style
+// Checkboxes - Enhanced Design
 .checkbox-group {
+  margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 8px 0;
 }
 
 .checkbox-option {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-}
-
-input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #f9fafb;
+  border: 2px solid #e5e7eb;
+  transition: all 0.3s ease;
   cursor: pointer;
-  margin: 0;
-  accent-color: #673ab7;
-  
-  &:focus {
-    outline: 2px solid rgba(103, 58, 183, 0.2);
-    outline-offset: 2px;
-    border-radius: 4px;
+
+  &:hover {
+    background: #f3f4f6;
+    border-color: #00EBB5;
+    transform: translateX(4px);
   }
-}
 
-.checkbox-label {
-  font-size: 14px;
-  color: #202124;
-  cursor: pointer;
-  margin: 0;
-  padding-left: 0;
-  font-weight: 400;
-  line-height: 1.5;
+  input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    margin-right: 14px;
+    cursor: pointer;
+    accent-color: #00EBB5;
+    
+    &:focus {
+      outline: 2px solid rgba(0, 235, 181, 0.2);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+  }
+
+  .checkbox-label {
+    font-size: 15px;
+    color: #1f2937;
+    cursor: pointer;
+    margin: 0;
+    flex: 1;
+    font-weight: 500;
+  }
 }
 
 // File Upload Display
@@ -1004,13 +1293,10 @@ input[type="checkbox"] {
 
 // Field Hint - Google Forms Style
 .field-hint {
-  margin-top: 4px;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.54);
-  line-height: 1.4;
-  font-style: normal;
-  padding-left: 0;
+  font-size: 14px;
+  color: #5f6368;
+  margin-bottom: 12px;
+  line-height: 1.5;
   font-weight: 400;
 }
 
@@ -1370,40 +1656,61 @@ input[type="checkbox"] {
   }
 }
 
-// Responsive Design - Google Forms Style
+// Responsive Design - Enhanced
 @media (max-width: 768px) {
   .form-viewer-container {
-    padding: 16px 8px 32px 8px;
-    max-width: 100%;
+    padding: 16px 12px;
   }
-  
-  .form-content {
-    padding: 16px;
+
+  .form-main-container {
+    padding: 24px 20px;
+    border-radius: 16px;
   }
   
   .form-header {
-    padding: 16px;
+    padding: 24px 20px;
+    border-radius: 12px;
+    
+    .form-title {
+      font-size: 28px;
+    }
   }
   
-  .form-title {
-    font-size: 24px;
+  .tabs-navigation {
+    padding: 8px;
+    border-radius: 12px;
   }
   
   .nav-tabs-list {
     flex-wrap: wrap;
+    gap: 4px;
   }
   
   .nav-tab-button {
-    padding: 10px 16px;
-    font-size: 13px;
+    padding: 12px 16px;
+    font-size: 14px;
   }
   
   .form-field {
-    margin-bottom: 20px;
+    padding: 24px 20px;
+    margin-bottom: 16px;
+    border-radius: 12px;
   }
   
   .field-label {
-    font-size: 14px;
+    font-size: 12px;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+    gap: 12px;
+    padding-top: 24px;
+
+    .btn-cancel,
+    .btn-submit {
+      width: 100%;
+      padding: 14px 24px;
+    }
   }
 }
 

@@ -44,8 +44,8 @@
   <div class="main-content">
     <div class="form-container">
       <form [formGroup]="submissionForm" (ngSubmit)="saveSubmission()">
-        <!-- Tabs Navigation -->
-        <div class="tabs-navigation" *ngIf="tabs && tabs.length > 0">
+        <!-- Tabs Navigation - Only show if more than one tab -->
+        <div class="tabs-navigation" *ngIf="tabs && tabs.length > 1">
           <ul class="nav-tabs-list">
             <li *ngFor="let tab of tabs; let i = index" class="nav-tab-item" [class.active]="i === activeTabIndex">
               <button type="button" class="nav-tab-button" (click)="setActiveTab(i)">
@@ -131,6 +131,7 @@
                     *ngIf="getFieldType(field) === 'select'"
                     [id]="'field_' + field.id"
                     [formControlName]="'field_' + field.id"
+                    (change)="onSelectChange(field, $event)"
                     class="form-select">
                     <option [value]="''" [disabled]="isRequired(field)">
                       {{ isLoadingFieldOptions(field) ? 'Loading...' : getFieldPlaceholder(field) }}
@@ -151,7 +152,8 @@
                         [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
                         [name]="'field_' + field.id"
                         [value]="opt.optionValue"
-                        [formControlName]="'field_' + field.id">
+                        [formControlName]="'field_' + field.id"
+                        (change)="onRadioChange(field, opt.optionValue, $event)">
                       <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
                         {{ opt.optionText || opt.optionValue }}
                       </label>

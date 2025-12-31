@@ -506,7 +506,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       });
     }
     
-    this.fields = fields.filter(f => f.isActive).sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
+        this.fields = fields.filter(f => f.isActive).sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
     console.log('[FormSubmissionCreate] Active fields after filtering:', this.fields.length);
     
     // Count fields with DataSource
@@ -558,36 +558,36 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         }
       }
     });
-    
-    // Build dynamic form for fields
-    const formControls: { [key: string]: any } = {};
-    this.fields.forEach(field => {
-      if (field.id) {
-        const fieldKey = `field_${field.id}`;
-        if (!this.isFileField(field)) {
-          const validators: any[] = [];
+        
+        // Build dynamic form for fields
+        const formControls: { [key: string]: any } = {};
+        this.fields.forEach(field => {
+          if (field.id) {
+            const fieldKey = `field_${field.id}`;
+            if (!this.isFileField(field)) {
+              const validators: any[] = [];
           const dynamicState = this.dynamicFieldStates[field.fieldCode || ''];
           const isRequired = dynamicState?.isRequired ?? field.isMandatory ?? false;
           
           if (isRequired) {
-            validators.push(Validators.required);
+                validators.push(Validators.required);
+              }
+              
+              const fieldType = this.getFieldType(field);
+              let defaultValue: any = field.defaultValueJson || null;
+              
+              if (fieldType === 'checkbox') {
+                defaultValue = [];
+              } else if (fieldType === 'boolean') {
+                defaultValue = (field.defaultValueJson === 'true' || field.defaultValueJson === 'True') ? true : false;
+              }
+              
+              formControls[fieldKey] = [defaultValue, validators];
+            }
           }
-          
-          const fieldType = this.getFieldType(field);
-          let defaultValue: any = field.defaultValueJson || null;
-          
-          if (fieldType === 'checkbox') {
-            defaultValue = [];
-          } else if (fieldType === 'boolean') {
-            defaultValue = (field.defaultValueJson === 'true' || field.defaultValueJson === 'True') ? true : false;
-          }
-          
-          formControls[fieldKey] = [defaultValue, validators];
-        }
-      }
-    });
-    this.fieldsForm = this.fb.group(formControls);
-    
+        });
+        this.fieldsForm = this.fb.group(formControls);
+        
     try {
       // Unsubscribe from previous subscription if exists
       if (this.fieldsFormValueChangesSubscription) {
@@ -1074,6 +1074,50 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    */
   trackByOptionValue(index: number, option: any): any {
     return option?.optionValue || option?.value || option?.id || index;
+  }
+
+  /**
+   * Handle select dropdown change
+   */
+  onSelectChange(field: FormFieldDto, event: any): void {
+    const fieldKey = `field_${field.id}`;
+    const selectedValue = event.target.value;
+    const control = this.fieldsForm.get(fieldKey);
+    
+    console.log(`[FormSubmissionCreate] Select changed for field ${field.id} (${field.fieldCode || 'no-code'})`, {
+      selectedValue,
+      controlValue: control?.value,
+      controlExists: !!control
+    });
+    
+    if (control) {
+      // Ensure the control value is updated
+      control.setValue(selectedValue, { emitEvent: true });
+      // Update fieldValues for rule evaluation
+      this.updateFieldValues();
+    }
+  }
+
+  /**
+   * Handle radio button change
+   */
+  onRadioChange(field: FormFieldDto, optionValue: string, event: any): void {
+    const fieldKey = `field_${field.id}`;
+    const control = this.fieldsForm.get(fieldKey);
+    
+    console.log(`[FormSubmissionCreate] Radio changed for field ${field.id} (${field.fieldCode || 'no-code'})`, {
+      optionValue,
+      controlValue: control?.value,
+      controlExists: !!control,
+      eventChecked: event.target.checked
+    });
+    
+    if (control && event.target.checked) {
+      // Ensure the control value is updated
+      control.setValue(optionValue, { emitEvent: true });
+      // Update fieldValues for rule evaluation
+      this.updateFieldValues();
+    }
   }
 
   onCheckboxChange(field: FormFieldDto, optionValue: string, event: any): void {
@@ -1641,17 +1685,46 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     const fieldValues: CreateFormSubmissionValueDto[] = [];
     const attachments: CreateFormSubmissionAttachmentDto[] = [];
 
+    console.log('[FormSubmissionCreate] ===== Starting saveSubmissionData =====');
+    console.log('[FormSubmissionCreate] Submission ID:', submissionId);
+    console.log('[FormSubmissionCreate] Fields count:', this.fields.length);
+    console.log('[FormSubmissionCreate] Form values:', this.fieldsForm.getRawValue());
+
     // Process field values
     this.fields.forEach(field => {
       if (!field.id) return;
       const fieldKey = `field_${field.id}`;
-      const fieldValue = this.fieldsForm.get(fieldKey)?.value;
+      const control = this.fieldsForm.get(fieldKey);
+      const fieldValue = control?.value;
+      const fieldType = this.getFieldType(field);
+
+      // Debug logging for all fields
+      console.log(`[FormSubmissionCreate] Processing field ${field.id} (${field.fieldCode || 'no-code'})`, {
+        fieldKey,
+        fieldType,
+        controlValue: fieldValue,
+        controlExists: !!control,
+        controlValid: control?.valid,
+        controlErrors: control?.errors,
+        controlTouched: control?.touched,
+        controlDirty: control?.dirty,
+        optionsCount: ['select', 'radio', 'checkbox'].includes(fieldType) ? this.getFieldOptions(field).length : 0
+      });
 
       // Check if field has a value (including 0, false, empty arrays)
       const hasValue = fieldValue !== null && 
                       fieldValue !== undefined && 
                       fieldValue !== '' &&
                       !(Array.isArray(fieldValue) && fieldValue.length === 0);
+      
+      console.log(`[FormSubmissionCreate] Field ${field.id} hasValue: ${hasValue}`, {
+        fieldValue,
+        isNull: fieldValue === null,
+        isUndefined: fieldValue === undefined,
+        isEmptyString: fieldValue === '',
+        isArray: Array.isArray(fieldValue),
+        arrayLength: Array.isArray(fieldValue) ? fieldValue.length : 'N/A'
+      });
 
       if (hasValue) {
         const valueDto: CreateFormSubmissionValueDto = {
@@ -1661,6 +1734,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         };
 
         const fieldType = this.getFieldType(field);
+        console.log(`[FormSubmissionCreate] Saving field ${field.id} (${field.fieldCode || 'no-code'}), type: ${fieldType}, value:`, fieldValue);
+        
         switch (fieldType) {
           case 'number':
             const numValue = Number(fieldValue);
@@ -1689,6 +1764,29 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               valueDto.valueJson = JSON.stringify(fieldValue);
             }
             break;
+          case 'select':
+          case 'radio':
+            // For select/radio, save the option value
+            // The valueJson should be the raw value (not double-stringified)
+            const optionValue = String(fieldValue);
+            valueDto.valueString = optionValue;
+            // valueJson should be the JSON representation of the value
+            // If it's a number, save as number; otherwise save as string
+            const numOptionValue = Number(optionValue);
+            if (!isNaN(numOptionValue) && isFinite(numOptionValue) && optionValue.trim() !== '') {
+              // It's a valid number - save as number in JSON
+              valueDto.valueNumber = numOptionValue;
+              valueDto.valueJson = JSON.stringify(numOptionValue); // "15" not "\"15\""
+            } else {
+              // It's a string - save as string in JSON
+              valueDto.valueJson = JSON.stringify(optionValue); // "\"Individual\"" is correct for strings
+            }
+            console.log(`[FormSubmissionCreate] Saved select/radio option value: ${optionValue}`, {
+              valueString: valueDto.valueString,
+              valueJson: valueDto.valueJson,
+              valueNumber: valueDto.valueNumber
+            });
+            break;
           default:
             if (Array.isArray(fieldValue)) {
               valueDto.valueJson = JSON.stringify(fieldValue);
@@ -1715,9 +1813,15 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           }
         }
 
+        console.log(`[FormSubmissionCreate] ✅ Added value DTO for field ${field.id}:`, valueDto);
         fieldValues.push(valueDto);
+      } else {
+        console.log(`[FormSubmissionCreate] ⚠️ Skipping field ${field.id} - no value`);
       }
     });
+
+    console.log('[FormSubmissionCreate] Total field values to save:', fieldValues.length);
+    console.log('[FormSubmissionCreate] Field values DTOs:', JSON.stringify(fieldValues, null, 2));
 
     // Process file fields
     Object.keys(this.fieldFiles).forEach(fieldIdStr => {

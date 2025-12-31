@@ -8,6 +8,8 @@ import { FileUploadService, FormSubmissionAttachmentDto } from '../FormBuilder/s
 import { FieldDataSourceService } from '../FormBuilder/services/field-data-source.service';
 import { RuleEvaluationService, FieldState } from '../FormBuilder/services/rule-evaluation.service';
 import { FormRulesService } from '../FormBuilder/services/form-rules.service';
+import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto } from '../form-submissions/services/form-submissions.service';
+import { FormSubmissionValuesService, CreateFormSubmissionValueDto, BulkFormSubmissionValuesDto } from '../form-submissions/services/form-submission-values.service';
 import { buildContext, getContextFieldCodes, requiresContext } from '../FormBuilder/utils/field-data-source-helpers';
 import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse, FormRule, RuleCondition, FieldCondition, RuleAction } from '../FormBuilder/form-builder/models/form-builder-dto.model';
 import { TranslationService } from '../../core/services/translation.service';
@@ -34,6 +36,7 @@ export class FormViewComponent implements OnInit {
   notFoundReason: string = '';
   activeTabIndex = 0;
   showLanguageDropdown = false;
+  isSubmitting = false;
 
   // File upload state
   uploadingFiles: { [fieldId: number]: boolean } = {};
@@ -81,6 +84,8 @@ export class FormViewComponent implements OnInit {
     private formRulesService: FormRulesService,
     public fileUploadService: FileUploadService,
     public translationService: TranslationService,
+    private formSubmissionsService: FormSubmissionsService,
+    private formSubmissionValuesService: FormSubmissionValuesService,
     private cdr: ChangeDetectorRef
   ) { }
 
@@ -2762,6 +2767,218 @@ export class FormViewComponent implements OnInit {
     }
 
     return field.fieldType.typeName || '';
+  }
+
+  /**
+   * Handle form submission
+   */
+  async onSubmit(): Promise<void> {
+    if (this.isSubmitting) {
+      return;
+    }
+
+    if (!this.form || !this.form.id) {
+      const errorMessage = this.translationService.getCurrentLanguage() === 'ar'
+        ? 'النموذج غير موجود'
+        : 'Form not found';
+      alert(errorMessage);
+      return;
+    }
+
+    // Validate form before submission
+    const validation = await this.validateFormBeforeSubmit();
+    
+    if (!validation.valid) {
+      // Show validation errors
+      const errorMessage = validation.errors.join('\n');
+      alert(errorMessage);
+      return;
+    }
+
+    this.isSubmitting = true;
+
+    try {
+      // Get documentTypeId and seriesId from query params or use defaults
+      const queryParams = this.route.snapshot.queryParams;
+      const documentTypeId = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1; // Default to 1 if not provided
+      const seriesId = queryParams['seriesId'] ? +queryParams['seriesId'] : 1; // Default to 1 if not provided
+      const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 1; // Default to 1 if not provided
+      const submittedByUserId = queryParams['userId'] || 'public-user'; // Default user ID
+
+      let currentSubmissionId = this.submissionId;
+
+      // Step 1: Create submission record if not exists
+      if (currentSubmissionId === 0) {
+        const createDto: CreateFormSubmissionDto = {
+          formBuilderId: this.form.id,
+          documentTypeId: documentTypeId,
+          seriesId: seriesId,
+          submittedByUserId: submittedByUserId,
+          status: 'Submitted'
+        };
+
+        const submission = await this.formSubmissionsService.createSubmission(createDto).toPromise();
+        if (submission && submission.id) {
+          currentSubmissionId = submission.id;
+          this.submissionId = submission.id;
+        } else {
+          throw new Error('Failed to create submission');
+        }
+      }
+
+      // Step 2: Save all grid data
+      await this.saveAllGridsData().toPromise();
+
+      // Step 3: Prepare and save field values
+      const fieldValues: CreateFormSubmissionValueDto[] = [];
+      
+      if (this.tabs && this.tabs.length > 0) {
+        this.tabs.forEach(tab => {
+          if (tab.fields && tab.fields.length > 0) {
+            tab.fields.forEach(field => {
+              if (!field.id || !field.fieldCode) return;
+              
+              // Skip hidden fields
+              if (!this.isFieldVisible(field)) return;
+
+              const fieldValue = this.getFieldValue(field);
+              
+              // Check if field has a value
+              const hasValue = fieldValue !== null && 
+                              fieldValue !== undefined && 
+                              fieldValue !== '' &&
+                              !(Array.isArray(fieldValue) && fieldValue.length === 0);
+
+              if (hasValue) {
+                const valueDto: CreateFormSubmissionValueDto = {
+                  submissionId: currentSubmissionId,
+                  fieldId: field.id,
+                  fieldCode: field.fieldCode
+                };
+
+                const fieldType = this.getFieldType(field);
+                
+                switch (fieldType) {
+                  case 'number':
+                    const numValue = Number(fieldValue);
+                    valueDto.valueNumber = numValue;
+                    valueDto.valueJson = JSON.stringify(numValue);
+                    valueDto.valueString = String(numValue);
+                    break;
+                  case 'date':
+                    const dateValue = fieldValue instanceof Date ? fieldValue : new Date(fieldValue);
+                    valueDto.valueDate = dateValue;
+                    valueDto.valueJson = JSON.stringify(dateValue.toISOString());
+                    valueDto.valueString = dateValue.toISOString();
+                    break;
+                  case 'boolean':
+                  case 'switch':
+                    const boolValue = Boolean(fieldValue);
+                    valueDto.valueBool = boolValue;
+                    valueDto.valueJson = JSON.stringify(boolValue);
+                    valueDto.valueString = String(boolValue);
+                    break;
+                  case 'checkbox':
+                    if (Array.isArray(fieldValue)) {
+                      valueDto.valueJson = JSON.stringify(fieldValue);
+                      valueDto.valueString = fieldValue.join(', ');
+                    } else {
+                      valueDto.valueString = String(fieldValue);
+                      valueDto.valueJson = JSON.stringify(fieldValue);
+                    }
+                    break;
+                  case 'select':
+                  case 'radio':
+                    const optionValue = String(fieldValue);
+                    valueDto.valueString = optionValue;
+                    const numOptionValue = Number(optionValue);
+                    if (!isNaN(numOptionValue) && isFinite(numOptionValue) && optionValue.trim() !== '') {
+                      valueDto.valueNumber = numOptionValue;
+                      valueDto.valueJson = JSON.stringify(numOptionValue);
+                    } else {
+                      valueDto.valueJson = JSON.stringify(optionValue);
+                    }
+                    break;
+                  default:
+                    if (Array.isArray(fieldValue)) {
+                      valueDto.valueJson = JSON.stringify(fieldValue);
+                      valueDto.valueString = fieldValue.join(', ');
+                    } else {
+                      const stringValue = String(fieldValue);
+                      valueDto.valueString = stringValue;
+                      valueDto.valueJson = JSON.stringify(stringValue);
+                    }
+                    break;
+                }
+
+                // Ensure valueJson is always set
+                if (!valueDto.valueJson) {
+                  valueDto.valueJson = valueDto.valueString ? JSON.stringify(valueDto.valueString) : JSON.stringify(null);
+                }
+                if (valueDto.valueJson && !valueDto.valueString) {
+                  try {
+                    const parsed = JSON.parse(valueDto.valueJson);
+                    valueDto.valueString = typeof parsed === 'string' ? parsed : String(parsed);
+                  } catch {
+                    valueDto.valueString = valueDto.valueJson;
+                  }
+                }
+
+                fieldValues.push(valueDto);
+              }
+            });
+          }
+        });
+      }
+
+      // Step 4: Save field values in bulk
+      const saveObservables: Observable<any>[] = [];
+      
+      if (fieldValues.length > 0) {
+        const bulkDto: BulkFormSubmissionValuesDto = {
+          submissionId: currentSubmissionId,
+          values: fieldValues
+        };
+        saveObservables.push(this.formSubmissionValuesService.createBulk(bulkDto));
+      }
+
+      // Step 5: Wait for all saves to complete
+      if (saveObservables.length > 0) {
+        await forkJoin(saveObservables).toPromise();
+      }
+
+      // Step 6: Show success message
+      const successMessage = this.translationService.getCurrentLanguage() === 'ar' 
+        ? 'تم إرسال النموذج بنجاح!' 
+        : 'Form submitted successfully!';
+      
+      alert(successMessage);
+      
+      // Optionally, you can redirect or reset the form
+      // window.location.reload();
+    } catch (error) {
+      console.error('[FormView] Error submitting form:', error);
+      const errorMessage = this.translationService.getCurrentLanguage() === 'ar'
+        ? 'حدث خطأ أثناء إرسال النموذج. يرجى المحاولة مرة أخرى.'
+        : 'An error occurred while submitting the form. Please try again.';
+      alert(errorMessage);
+    } finally {
+      this.isSubmitting = false;
+    }
+  }
+
+  /**
+   * Handle cancel action
+   */
+  onCancel(): void {
+    const confirmMessage = this.translationService.getCurrentLanguage() === 'ar'
+      ? 'هل أنت متأكد من إلغاء النموذج؟ سيتم فقدان جميع البيانات المدخلة.'
+      : 'Are you sure you want to cancel? All entered data will be lost.';
+    
+    if (confirm(confirmMessage)) {
+      // Reset form or navigate away
+      window.location.reload();
+    }
   }
 }
 

@@ -307,6 +307,22 @@
     </div>
   </div>
 
+  <!-- Submit Buttons Section -->
+  <div class="form-actions" *ngIf="tabs && tabs.length > 0">
+    <button type="button" class="btn-cancel" (click)="onCancel()">
+      <i class="pi pi-times"></i>
+      <span>{{ translationService.getCurrentLanguage() === 'ar' ? 'إلغاء' : 'Cancel' }}</span>
+    </button>
+    <button type="button" class="btn-submit" (click)="onSubmit()" [disabled]="isSubmitting">
+      <i class="pi pi-check" *ngIf="!isSubmitting"></i>
+      <i class="pi pi-spin pi-spinner" *ngIf="isSubmitting"></i>
+      <span>{{ isSubmitting 
+        ? (translationService.getCurrentLanguage() === 'ar' ? 'جاري الإرسال...' : 'Submitting...')
+        : (translationService.getCurrentLanguage() === 'ar' ? 'إرسال' : 'Submit')
+      }}</span>
+    </button>
+  </div>
+
 </div>
 
 <!-- Loading State -->
