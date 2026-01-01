@@ -14,6 +14,7 @@ import { FieldDataSourceService } from '../../FormBuilder/services/field-data-so
 import { RuleEvaluationService, FieldState } from '../../FormBuilder/services/rule-evaluation.service';
 import { FormRulesService } from '../../FormBuilder/services/form-rules.service';
 import { buildContext, getContextFieldCodes, requiresContext } from '../../FormBuilder/utils/field-data-source-helpers';
+import { CalculationEngineService } from '../../FormBuilder/services/calculation-engine.service';
 import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -120,6 +121,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     private fieldDataSourceService: FieldDataSourceService,
     private ruleEvaluationService: RuleEvaluationService,
     private formRulesService: FormRulesService,
+    private calculationEngine: CalculationEngineService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
@@ -625,6 +627,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         
         try {
           this.updateFieldValues();
+          // Calculate calculated fields (fire and forget - don't await to avoid blocking)
+          this.calculateCalculatedFields().catch(error => {
+            console.error('[FormSubmissionCreate] Error calculating calculated fields:', error);
+          });
           // Use setTimeout to defer rule evaluation and avoid infinite loops
           setTimeout(() => {
             if (!this.isEvaluatingRules) {
@@ -638,9 +644,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       
       // Initial rule evaluation (wrap in try-catch to prevent blocking)
       // Use setTimeout to defer initial evaluation and avoid infinite loops
-      setTimeout(() => {
+      setTimeout(async () => {
         try {
           this.updateFieldValues();
+          // Calculate calculated fields on initial load (OnLoad mode)
+          await this.calculateCalculatedFields('OnLoad');
+          // Also calculate OnFieldChange fields initially
+          await this.calculateCalculatedFields('OnFieldChange');
           if (!this.isEvaluatingRules) {
             this.evaluateFormRules();
           }
@@ -681,7 +691,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     const typeName = (field.fieldTypeName || ft?.typeName || '').toLowerCase().trim();
     const dataType = (ft?.dataType || '').toLowerCase().trim();
 
-    // Check for Grid type first
+    // Check for Calculated type first
+    if (typeName === 'calculated' || this.calculationEngine.isCalculatedField(field)) {
+      return 'calculated';
+    }
+
+    // Check for Grid type
     if (typeName === 'grid') {
       return 'grid';
     }
@@ -1596,6 +1611,68 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Calculate all calculated fields based on current field values
+   * @param recalculateMode - Filter by recalculation mode (null = all modes)
+   */
+  private async calculateCalculatedFields(recalculateMode: 'OnFieldChange' | 'OnLoad' | 'OnSubmitOnly' | null = 'OnFieldChange'): Promise<void> {
+    if (!this.fieldsForm || !this.fields.length) return;
+
+    const calculatedFields = this.fields.filter(f => {
+      if (!this.calculationEngine.isCalculatedField(f)) return false;
+      if (recalculateMode === null) return true;
+      return f.recalculateOn === recalculateMode;
+    });
+
+    if (calculatedFields.length === 0) return;
+
+    try {
+      // Get current field values
+      const currentFieldValues: { [fieldCode: string]: any } = {};
+      this.fields.forEach(field => {
+        if (field.id && field.fieldCode) {
+          const fieldKey = `field_${field.id}`;
+          const control = this.fieldsForm.get(fieldKey);
+          if (control) {
+            currentFieldValues[field.fieldCode] = control.value;
+          }
+        }
+      });
+
+      // Calculate each calculated field
+      for (const field of calculatedFields) {
+        if (!field.id || !field.fieldCode || !field.expressionText) continue;
+
+        try {
+          const fieldValuesMap = this.calculationEngine.buildFieldValuesMap(
+            currentFieldValues,
+            this.fields
+          );
+
+          const result = await this.calculationEngine.calculateExpressionSafe(
+            field.expressionText,
+            fieldValuesMap
+          );
+
+          if (result.success) {
+            const fieldKey = `field_${field.id}`;
+            const control = this.fieldsForm.get(fieldKey);
+            if (control) {
+              // Update form control value without emitting events to prevent loops
+              control.setValue(result.value, { emitEvent: false });
+            }
+            // Update fieldValues for rule evaluation
+            this.fieldValues[field.fieldCode] = result.value;
+          }
+        } catch (error) {
+          console.error(`[FormSubmissionCreate] Error calculating field ${field.fieldCode}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('[FormSubmissionCreate] Error calculating calculated fields:', error);
+    }
+  }
+
   private markFormGroupTouched(formGroup: FormGroup): void {
     Object.keys(formGroup.controls).forEach(key => {
       const control = formGroup.get(key);
@@ -1919,7 +1996,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
   }
 
-  saveSubmission(): void {
+  async saveSubmission(): Promise<void> {
     if (this.submissionForm.invalid) {
       this.markFormGroupTouched(this.submissionForm);
       this.messageService.add({
@@ -1939,6 +2016,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       });
       return;
     }
+
+    // Calculate calculated fields that need to be recalculated on submit
+    await this.calculateCalculatedFields('OnSubmitOnly');
 
     // Check for required image/file fields
     const missingRequiredFiles: string[] = [];
@@ -2172,6 +2252,20 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         } else {
           // Normal save logic for fields with values
           switch (fieldType) {
+          case 'calculated':
+            // Calculated fields are saved like number or text based on resultType
+            if (field.resultType === 'Decimal' || field.resultType === 'Integer') {
+              const calcNumValue = Number(fieldValue);
+              valueDto.valueNumber = calcNumValue;
+              valueDto.valueJson = JSON.stringify(calcNumValue);
+              valueDto.valueString = String(calcNumValue);
+            } else {
+              // Text result type
+              const calcTextValue = String(fieldValue);
+              valueDto.valueString = calcTextValue;
+              valueDto.valueJson = JSON.stringify(calcTextValue);
+            }
+            break;
           case 'number':
             const numValue = Number(fieldValue);
             valueDto.valueNumber = numValue;

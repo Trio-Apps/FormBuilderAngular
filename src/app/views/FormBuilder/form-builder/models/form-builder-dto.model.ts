@@ -109,6 +109,11 @@ export interface FormFieldDto {
   fieldType?: FieldTypeDto;
   fieldOptions: FieldOptionDto[]; // Required in C# (List with default)
   fieldDataSource?: FieldDataSource; // ✅ Data Source configuration for dynamic options
+  // Calculation properties (for Calculated field type)
+  expressionText?: string; // Expression text for calculated fields
+  calculationMode?: 'Expression' | 'Formula'; // Calculation mode
+  recalculateOn?: 'OnFieldChange' | 'OnLoad' | 'OnSubmitOnly'; // When to recalculate
+  resultType?: 'Decimal' | 'Integer' | 'Text'; // Result data type
   // Computed properties from API (for compatibility)
   label_en?: string; // English label (from API)
   label_ar?: string; // Arabic label (from API)
@@ -141,6 +146,11 @@ export interface UpdateFormFieldDto {
   validationMessage?: string;
   foreignValidationMessage?: string; // Arabic validation message
   gridId?: number; // Grid ID for Grid field type
+  // Calculation properties (for Calculated field type)
+  expressionText?: string; // Expression text for calculated fields
+  calculationMode?: 'Expression' | 'Formula'; // Calculation mode
+  recalculateOn?: 'OnFieldChange' | 'OnLoad' | 'OnSubmitOnly'; // When to recalculate
+  resultType?: 'Decimal' | 'Integer' | 'Text'; // Result data type
 }
 
 export interface FieldTypeDto {
@@ -228,6 +238,11 @@ export interface CreateFormFieldDto {
   validationMessage?: string;
   foreignValidationMessage?: string; // Arabic validation message
   gridId?: number; // Grid ID for Grid field type
+  // Calculation properties (for Calculated field type)
+  expressionText?: string; // Expression text for calculated fields
+  calculationMode?: 'Expression' | 'Formula'; // Calculation mode
+  recalculateOn?: 'OnFieldChange' | 'OnLoad' | 'OnSubmitOnly'; // When to recalculate
+  resultType?: 'Decimal' | 'Integer' | 'Text'; // Result data type
   createdByUserId?: string;
 }
 

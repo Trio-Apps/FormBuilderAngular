@@ -61,7 +61,8 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     { label: 'Dropdown', value: 'Dropdown' },
     { label: 'Radio', value: 'Radio' },
     { label: 'Switch', value: 'Switch' },
-    { label: 'Grid', value: 'Grid' }
+    { label: 'Grid', value: 'Grid' },
+    { label: 'Calculated', value: 'Calculated' }
   ];
 
   // Predefined base field type names in Arabic
@@ -76,7 +77,8 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
     { label: 'قائمة منسدلة', value: 'Dropdown' },
     { label: 'زر اختيار', value: 'Radio' },
     { label: 'مفتاح', value: 'Switch' },
-    { label: 'جدول', value: 'Grid' }
+    { label: 'جدول', value: 'Grid' },
+    { label: 'محسوب', value: 'Calculated' }
   ];
 
   // Predefined data types to choose from
@@ -818,6 +820,29 @@ export class FieldTypesListComponent implements OnInit, OnDestroy {
   }
 
   // Handle type name change - reset options if type doesn't support them
+  /**
+   * Get recommended data types for the selected field type
+   */
+  getRecommendedDataTypes(): string[] {
+    const typeName = this.fieldTypeForm.get('typeName')?.value || '';
+    if (!typeName) return [];
+
+    // For Calculated fields, recommend numeric data types
+    if (typeName === 'Calculated') {
+      return ['decimal', 'int', 'string'];
+    }
+
+    return [];
+  }
+
+  /**
+   * Check if a data type is recommended for the current field type
+   */
+  isRecommendedDataType(dataType: string): boolean {
+    const recommended = this.getRecommendedDataTypes();
+    return recommended.length > 0 && recommended.includes(dataType);
+  }
+
   onTypeNameChange(typeName: string | null): void {
     if (!typeName) {
       // Reset options when no type is selected

@@ -290,9 +290,13 @@
                 >
                   <option value="" selected>Select data type</option>
                   <option *ngFor="let dt of dataTypeOptions" [value]="dt.value">
-                    {{ dt.label }}
+                    {{ dt.label }}{{ isRecommendedDataType(dt.value) ? ' (Recommended)' : '' }}
                   </option>
                 </select>
+                <small class="form-text text-muted" *ngIf="fieldTypeForm.get('typeName')?.value === 'Calculated'" style="display: block; margin-top: 6px; color: #667eea;">
+                  <i class="pi pi-info-circle"></i>
+                  For Calculated fields, use <strong>Number (decimal)</strong> or <strong>Number (int)</strong> for numeric results, or <strong>String</strong> for text results.
+                </small>
               </div>
             </div>
 

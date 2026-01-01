@@ -7,6 +7,7 @@ import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FieldOptionsService } from '../../FormBuilder/services/field-options.service';
 import { GridService } from '../../FormBuilder/services/grid.service';
 import { FieldDataSourceService } from '../../FormBuilder/services/field-data-source.service';
+import { FormulasService } from '../../FormBuilder/services/formulas.service';
 import { FormFieldDto, FieldTypeDto, UpdateFormFieldDto, CreateFormFieldDto, FieldOptionDto, CreateFieldOptionDto, FieldDataSource, CreateFieldDataSourceDto, FieldOptionResponse, PreviewDataSourceRequestDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { FormGridDto } from '../../FormBuilder/form-builder/models/grid-dto.model';
 import { MessageService, ConfirmationService } from 'primeng/api';
@@ -158,6 +159,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     private fieldOptionsService: FieldOptionsService,
     private gridService: GridService,
     private fieldDataSourceService: FieldDataSourceService,
+    private formulasService: FormulasService,
     private attachmentTypesService: AttachmentTypesService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
@@ -188,7 +190,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       foreignValidationMessage: ['', Validators.maxLength(500)], // Arabic validation message
       minValue: [null],
       maxValue: [null],
-      fieldOptions: this.fb.array([])
+      fieldOptions: this.fb.array([]),
+      // Calculation properties
+      expressionText: [''],
+      calculationMode: ['Expression'],
+      recalculateOn: ['OnFieldChange'],
+      resultType: ['Decimal']
     });
 
     // Watch fieldTypeId changes to show/hide options section
@@ -199,6 +206,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.loadFileExtensionsFromForm();
       } else {
         this.selectedFileExtensions = [];
+      }
+      // Handle calculated field type - disable editable and mandatory
+      if (this.isCalculatedFieldType(fieldTypeId)) {
+        this.fieldForm.patchValue({
+          isEditable: false,
+          isMandatory: false
+        });
       }
     });
 
@@ -455,7 +469,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       validationMessage: validationMessage,
       foreignValidationMessage: field.foreignValidationMessage || '',
       minValue: field.minValue || null,
-      maxValue: field.maxValue || null
+      maxValue: field.maxValue || null,
+      // Calculation properties
+      expressionText: field.expressionText || '',
+      calculationMode: field.calculationMode || 'Expression',
+      recalculateOn: field.recalculateOn || 'OnFieldChange',
+      resultType: field.resultType || 'Decimal'
     }, { emitEvent: false }); // Prevent triggering change listeners during initialization
 
     // Load grids if grid type
@@ -587,6 +606,19 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       }
     }
 
+    // Validate expression text for Calculated field type
+    if (this.isCalculatedFieldType(this.fieldForm.get('fieldTypeId')?.value)) {
+      const expressionText = this.fieldForm.get('expressionText')?.value;
+      if (!expressionText || !expressionText.trim()) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Expression text is required for Calculated field type'
+        });
+        return;
+      }
+    }
+
     // Save file extensions to form if file type is selected
     if (this.isFileFieldType()) {
       console.log('[saveField] File field type detected, calling saveFileExtensionsToForm()');
@@ -627,7 +659,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           : undefined,
         maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== ''
           ? Number(fieldData.maxValue)
-          : undefined
+          : undefined,
+        // Calculation properties
+        expressionText: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.expressionText || undefined) : undefined,
+        calculationMode: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.calculationMode || 'Expression') : undefined,
+        recalculateOn: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.recalculateOn || 'OnFieldChange') : undefined,
+        resultType: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.resultType || 'Decimal') : undefined
       };
 
       if (!this.editingField) return;
@@ -696,6 +733,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== ''
           ? Number(fieldData.maxValue)
           : undefined,
+        // Calculation properties
+        expressionText: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.expressionText || undefined) : undefined,
+        calculationMode: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.calculationMode || 'Expression') : undefined,
+        recalculateOn: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.recalculateOn || 'OnFieldChange') : undefined,
+        resultType: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.resultType || 'Decimal') : undefined,
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
       };
 
@@ -1073,6 +1115,33 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     if (!selectedType) return false;
     const typeName = (selectedType.typeName || '').toLowerCase().trim();
     return typeName === 'file' || typeName.includes('file');
+  }
+
+  /**
+   * Check if field type is Calculated
+   */
+  isCalculatedFieldType(fieldTypeId: number | string | null | undefined): boolean {
+    if (!fieldTypeId) return false;
+    const normalizedId = Number(fieldTypeId);
+    if (!normalizedId) return false;
+    const type = this.fieldTypes.find(t => t.id === normalizedId);
+    return type?.typeName?.toLowerCase() === 'calculated';
+  }
+
+  /**
+   * Extract dependent field codes from expression text
+   */
+  getDependentFields(): string[] {
+    const expressionText = this.fieldForm.get('expressionText')?.value || '';
+    if (!expressionText) return [];
+    
+    // Match field codes in square brackets: [FIELD_CODE]
+    const fieldCodePattern = /\[([A-Za-z0-9_]+)\]/g;
+    const matches = expressionText.matchAll(fieldCodePattern);
+    const fieldCodes = Array.from(matches, (match: RegExpMatchArray) => match[1]);
+    
+    // Remove duplicates
+    return [...new Set(fieldCodes)];
   }
 
   /**

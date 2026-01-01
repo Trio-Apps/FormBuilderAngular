@@ -500,6 +500,95 @@
           </button>
         </div>
 
+        <!-- Calculation Settings Section (Only for Calculated field type) -->
+        <div class="form-section" *ngIf="isCalculatedFieldType(fieldForm.get('fieldTypeId')?.value)">
+          <h4 class="section-title">
+            <i class="pi pi-calculator"></i>
+            Calculation Settings
+          </h4>
+          <div class="form-grid">
+            <!-- Calculation Mode -->
+            <div class="form-group">
+              <label class="form-label">Calculation Mode <span class="required">*</span></label>
+              <select class="form-control" formControlName="calculationMode">
+                <option value="Expression">Expression</option>
+                <option value="Formula">Formula (Future Use)</option>
+              </select>
+            </div>
+
+            <!-- Result Type -->
+            <div class="form-group">
+              <label class="form-label">Result Type <span class="required">*</span></label>
+              <select class="form-control" formControlName="resultType">
+                <option value="Decimal">Decimal</option>
+                <option value="Integer">Integer</option>
+                <option value="Text">Text</option>
+              </select>
+            </div>
+
+            <!-- Recalculate On -->
+            <div class="form-group">
+              <label class="form-label">Recalculate On <span class="required">*</span></label>
+              <select class="form-control" formControlName="recalculateOn">
+                <option value="OnFieldChange">On Field Change</option>
+                <option value="OnLoad">On Load</option>
+                <option value="OnSubmitOnly">On Submit Only</option>
+              </select>
+            </div>
+
+            <!-- Expression Builder -->
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label class="form-label">
+                Expression Text <span class="required">*</span>
+                <i class="pi pi-info-circle" style="margin-left: 6px; color: #667eea; cursor: help;" 
+                   pTooltip="Use field codes in square brackets, e.g., [RENT] * [MONTHS] - [DISCOUNT]"></i>
+              </label>
+              <textarea class="form-control" formControlName="expressionText" rows="4"
+                [placeholder]="'Example: ([RENT] * [MONTHS]) - [DISCOUNT]'"
+                [class.is-invalid]="isFieldInvalid('expressionText')"></textarea>
+              <small class="form-text text-muted">
+                Enter expression using field codes in square brackets. Supported operations: +, -, *, /, (, )
+              </small>
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('expressionText')">
+                {{ getFieldErrorMessage('expressionText') }}
+              </div>
+            </div>
+
+            <!-- Dependent Fields Display (Auto-extracted) -->
+            <div class="form-group" style="grid-column: 1 / -1;" *ngIf="getDependentFields().length > 0">
+              <label class="form-label">
+                <i class="pi pi-link"></i>
+                Dependent Fields (Auto-detected)
+              </label>
+              <div class="dependent-fields-list">
+                <span *ngFor="let fieldCode of getDependentFields()" class="dependent-field-badge">
+                  [{{ fieldCode }}]
+                </span>
+              </div>
+              <small class="form-text text-muted">
+                These fields will trigger recalculation when their values change
+              </small>
+            </div>
+
+            <!-- Field Behavior Info -->
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <div class="info-box" style="padding: 12px; background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 6px;">
+                <div style="display: flex; align-items: start; gap: 8px;">
+                  <i class="pi pi-info-circle" style="color: #0ea5e9; font-size: 18px; margin-top: 2px;"></i>
+                  <div>
+                    <div style="font-weight: 600; color: #0c4a6e; margin-bottom: 4px;">Calculated Field Behavior</div>
+                    <ul style="margin: 0; padding-left: 20px; color: #075985; font-size: 13px;">
+                      <li>This field is automatically set to <strong>non-editable</strong> and <strong>non-mandatory</strong></li>
+                      <li>Values are calculated automatically based on the expression</li>
+                      <li>Calculated values are stored as snapshots in submissions</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Field DataSource Section -->
         <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions">
           <h4 class="section-title">

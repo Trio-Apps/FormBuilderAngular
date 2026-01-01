@@ -108,6 +108,31 @@
                     styleClass="form-input-number">
                   </p-inputNumber>
 
+                  <!-- Calculated Field Input (Read-only) -->
+                  <div *ngIf="getFieldType(field) === 'calculated'" class="calculated-field-wrapper">
+                    <p-inputNumber
+                      *ngIf="field.resultType === 'Decimal' || field.resultType === 'Integer'"
+                      [id]="'field_' + field.id"
+                      [formControlName]="'field_' + field.id"
+                      [showButtons]="false"
+                      [useGrouping]="false"
+                      [readonly]="true"
+                      styleClass="form-input-number calculated-input">
+                    </p-inputNumber>
+                    <input
+                      *ngIf="field.resultType === 'Text'"
+                      type="text"
+                      [id]="'field_' + field.id"
+                      [formControlName]="'field_' + field.id"
+                      class="form-input calculated-input"
+                      [readonly]="true"
+                      [placeholder]="'Calculated value'">
+                    <div class="calculated-field-indicator">
+                      <i class="pi pi-calculator"></i>
+                      <span>Calculated</span>
+                    </div>
+                  </div>
+
                   <!-- Date Input -->
                   <input
                     *ngIf="getFieldType(field) === 'date'"
