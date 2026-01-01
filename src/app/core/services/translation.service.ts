@@ -11,6 +11,7 @@ export class TranslationService {
   private translations: any = {};
   private translationsCache: { [key: string]: any } = {}; // Cache translations for both languages
   private translationsLoaded = false;
+  private loadingPromises: { [key: string]: Promise<any> } = {}; // Track ongoing load operations
 
   constructor() {
     // Get language from:
@@ -113,19 +114,33 @@ export class TranslationService {
       return this.translationsCache[lang];
     }
 
-    try {
-      const response = await fetch(`/assets/i18n/${lang}.json`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const translations = await response.json();
-      this.translationsCache[lang] = translations; // Cache translations
-      return translations;
-    } catch (error) {
-      console.error(`Failed to load translations for ${lang}:`, error);
-      this.translationsCache[lang] = {}; // Cache empty object
-      return {};
+    // If already loading, return the existing promise to avoid duplicate requests
+    if (this.loadingPromises[lang] !== undefined) {
+      return this.loadingPromises[lang];
     }
+
+    // Create a new loading promise
+    const loadPromise = (async () => {
+      try {
+        const response = await fetch(`/assets/i18n/${lang}.json`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const translations = await response.json();
+        this.translationsCache[lang] = translations; // Cache translations
+        delete this.loadingPromises[lang]; // Remove from loading promises
+        return translations;
+      } catch (error) {
+        console.error(`Failed to load translations for ${lang}:`, error);
+        this.translationsCache[lang] = {}; // Cache empty object to prevent retries
+        delete this.loadingPromises[lang]; // Remove from loading promises
+        return {};
+      }
+    })();
+
+    // Store the promise to prevent duplicate requests
+    this.loadingPromises[lang] = loadPromise;
+    return loadPromise;
   }
 
   /**
@@ -152,10 +167,13 @@ export class TranslationService {
       if (lang === this.currentLanguage$.value && this.translationsLoaded) {
         translations = this.translations;
       } else {
-        // Try to load translations synchronously (will use cache if already loaded)
-        // For now, return key and load asynchronously for future use
-        if (!this.translationsCache[lang]) {
-          this.loadTranslationsForLanguage(lang);
+        // Only try to load if not already loading and not already cached (even if empty)
+        // This prevents infinite loops
+        if (!this.translationsCache[lang] && this.loadingPromises[lang] === undefined) {
+          // Load asynchronously but don't wait - just trigger the load for future use
+          this.loadTranslationsForLanguage(lang).catch(() => {
+            // Silently handle errors - already logged in loadTranslationsForLanguage
+          });
         }
         // Fallback to current translations or return key
         translations = this.translations || {};

@@ -316,11 +316,36 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.fieldsService.getFields(formId, this.tabId).subscribe({
       next: (fields: FormFieldDto[]) => {
         // getFields الآن يرجع FormFieldDto[] مباشرة بعد استخراج data من response
+        console.log('[loadFields] Fields loaded from API:', fields);
+        
+        // Check for calculated fields and their expressionText
+        const calculatedFields = fields.filter(f => 
+          f.expressionText || (f as any).ExpressionText || 
+          f.fieldTypeName?.toLowerCase() === 'calculated' ||
+          f.fieldType?.typeName?.toLowerCase() === 'calculated'
+        );
+        
+        if (calculatedFields.length > 0) {
+          console.log('[loadFields] Calculated fields found:', calculatedFields.map(f => ({
+            id: f.id,
+            fieldCode: f.fieldCode,
+            fieldName: f.fieldName,
+            expressionText: f.expressionText,
+            ExpressionText: (f as any).ExpressionText,
+            calculationMode: f.calculationMode,
+            recalculateOn: f.recalculateOn,
+            resultType: f.resultType
+          })));
+        } else {
+          console.log('[loadFields] No calculated fields found in response');
+        }
+        
         this.fields = this.sortFieldsByOrder(fields || []);
         this.loading.fields = false;
         this.cdr.detectChanges();
       },
       error: (error) => {
+        console.error('[loadFields] Error loading fields:', error);
         this.fields = [];
         this.loading.fields = false;
         this.messageService.add({
@@ -430,6 +455,19 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.showFieldModal = true;
 
+    // Debug: Log field data to check if expressionText is present
+    console.log('[openEditFieldModal] Field data:', {
+      id: field.id,
+      fieldCode: field.fieldCode,
+      fieldTypeId: field.fieldTypeId,
+      fieldTypeName: field.fieldTypeName,
+      expressionText: field.expressionText,
+      calculationMode: field.calculationMode,
+      recalculateOn: field.recalculateOn,
+      resultType: field.resultType,
+      fullField: field
+    });
+
     const regexPattern = field.regexPattern || '';
     let validationMessage = field.validationMessage || '';
 
@@ -447,6 +485,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     } else {
       this.selectedGridId = null;
     }
+
+    // Prepare calculation properties - check both expressionText and alternative property names
+    // Also check for null/undefined explicitly
+    const expressionText = field.expressionText ?? (field as any).ExpressionText ?? '';
+    const calculationMode = field.calculationMode ?? (field as any).CalculationMode ?? 'Expression';
+    const recalculateOn = field.recalculateOn ?? (field as any).RecalculateOn ?? 'OnFieldChange';
+    const resultType = field.resultType ?? (field as any).ResultType ?? 'Decimal';
+
+    console.log('[openEditFieldModal] Calculation properties:', {
+      expressionText,
+      calculationMode,
+      recalculateOn,
+      resultType,
+      isCalculated: this.isCalculatedFieldType(field.fieldTypeId),
+      fieldTypeId: field.fieldTypeId,
+      fieldTypeName: field.fieldTypeName,
+      'field.expressionText': field.expressionText,
+      'field.ExpressionText': (field as any).ExpressionText
+    });
 
     this.fieldForm.patchValue({
       tabId: this.tabId,
@@ -471,11 +528,41 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       minValue: field.minValue || null,
       maxValue: field.maxValue || null,
       // Calculation properties
-      expressionText: field.expressionText || '',
-      calculationMode: field.calculationMode || 'Expression',
-      recalculateOn: field.recalculateOn || 'OnFieldChange',
-      resultType: field.resultType || 'Decimal'
+      expressionText: expressionText,
+      calculationMode: calculationMode,
+      recalculateOn: recalculateOn,
+      resultType: resultType
     }, { emitEvent: false }); // Prevent triggering change listeners during initialization
+
+    // Force change detection after patching values
+    setTimeout(() => {
+      const formExpressionText = this.fieldForm.get('expressionText')?.value;
+      const formFieldTypeId = this.fieldForm.get('fieldTypeId')?.value;
+      const isCalculated = this.isCalculatedFieldType(formFieldTypeId);
+      
+      console.log('[openEditFieldModal] Form values after patch:', {
+        fieldTypeId: formFieldTypeId,
+        expressionText: formExpressionText,
+        calculationMode: this.fieldForm.get('calculationMode')?.value,
+        recalculateOn: this.fieldForm.get('recalculateOn')?.value,
+        resultType: this.fieldForm.get('resultType')?.value,
+        isCalculated: isCalculated,
+        'form.get(expressionText)': this.fieldForm.get('expressionText'),
+        'form.get(expressionText).value': formExpressionText
+      });
+
+      // If expressionText is empty but field is calculated, log warning
+      if (isCalculated && !formExpressionText) {
+        console.warn('[openEditFieldModal] WARNING: Calculated field has empty expressionText!', {
+          fieldId: field.id,
+          fieldCode: field.fieldCode,
+          originalExpressionText: field.expressionText,
+          originalExpressionTextPascal: (field as any).ExpressionText
+        });
+      }
+
+      this.cdr.detectChanges();
+    }, 100);
 
     // Load grids if grid type
     if (this.isGridFieldType(field.fieldTypeId)) {
@@ -823,15 +910,83 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.fieldsService.deleteField(fieldId).subscribe({
           next: () => {
             this.loading.delete = false;
-            this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field deleted successfully' });
+            const currentLang = this.translationService.getCurrentLanguage();
+            const successMessage = currentLang === 'ar' 
+              ? 'تم حذف الحقل بنجاح' 
+              : 'Field deleted successfully';
+            this.messageService.add({ 
+              severity: 'success', 
+              summary: currentLang === 'ar' ? 'نجاح' : 'Success', 
+              detail: successMessage 
+            });
 
             // Remove field from array
             this.fields = this.fields.filter(f => f.id !== fieldId);
             this.cdr.detectChanges();
           },
-          error: () => {
+          error: (error: any) => {
             this.loading.delete = false;
-            this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete field' });
+            console.error('[FieldsList] Error deleting field:', error);
+            
+            const currentLang = this.translationService.getCurrentLanguage();
+            let errorMessage = 'Failed to delete field';
+            let errorSummary = currentLang === 'ar' ? 'خطأ' : 'Error';
+
+            // Extract error message from response
+            if (error?.error?.message) {
+              errorMessage = error.error.message;
+            } else if (error?.error?.errorMessage) {
+              errorMessage = error.error.errorMessage;
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+
+            // Check for specific SQL constraint errors
+            const errorString = JSON.stringify(error).toLowerCase();
+            if (errorString.includes('reference constraint') || 
+                errorString.includes('fk_formulas_form_fields_resultfieldid') ||
+                errorString.includes('resultfieldid')) {
+              errorMessage = currentLang === 'ar'
+                ? 'لا يمكن حذف هذا الحقل لأنه مرتبط بمعادلة (Formula) تستخدمه كحقل نتيجة. يرجى حذف أو تعديل المعادلة أولاً.'
+                : 'Cannot delete this field because it is linked to a Formula that uses it as a result field. Please delete or modify the Formula first.';
+              errorSummary = currentLang === 'ar' ? 'حذف غير ممكن' : 'Cannot Delete';
+            } else if (error?.status === 400) {
+              if (!errorMessage || errorMessage === 'Failed to delete field') {
+                errorMessage = currentLang === 'ar'
+                  ? 'لا يمكن حذف هذا الحقل. قد يكون مرتبطاً ببيانات أخرى.'
+                  : 'Cannot delete this field. It may be linked to other data.';
+              }
+            } else if (error?.status === 404) {
+              errorMessage = currentLang === 'ar'
+                ? 'الحقل غير موجود. قد يكون تم حذفه مسبقاً.'
+                : 'Field not found. It may have already been deleted.';
+            } else if (error?.status === 409) {
+              errorMessage = currentLang === 'ar'
+                ? 'لا يمكن حذف هذا الحقل لأنه قيد الاستخدام.'
+                : 'Cannot delete this field because it is currently in use.';
+            } else if (error?.status === 403) {
+              errorMessage = currentLang === 'ar'
+                ? 'ليس لديك صلاحية لحذف هذا الحقل.'
+                : 'You do not have permission to delete this field.';
+            } else if (error?.status === 500) {
+              if (!errorMessage || errorMessage === 'Failed to delete field') {
+                errorMessage = currentLang === 'ar'
+                  ? 'حدث خطأ في الخادم أثناء حذف الحقل. يرجى المحاولة مرة أخرى لاحقاً.'
+                  : 'Server error occurred while deleting the field. Please try again later.';
+              }
+            } else if (error?.status === 0) {
+              errorMessage = currentLang === 'ar'
+                ? 'خطأ في الشبكة. يرجى التحقق من الاتصال والمحاولة مرة أخرى.'
+                : 'Network error. Please check your connection and try again.';
+            }
+
+            this.messageService.add({ 
+              severity: 'error', 
+              summary: errorSummary, 
+              detail: errorMessage,
+              life: 8000
+            });
+            this.cdr.detectChanges();
           }
         });
       }

@@ -157,9 +157,69 @@ export class FormulasService {
    * POST /api/Formulas/calculate-safe
    */
   calculateSafe(request: CalculateExpressionRequest): Observable<CalculateExpressionResponse> {
-    return this.http.post<CalculateExpressionResponse>(`${this.baseUrl}/calculate-safe`, request).pipe(
+    console.log(`[FormulasService] calculateSafe - Request URL: ${this.baseUrl}/calculate-safe`);
+    console.log(`[FormulasService] calculateSafe - Request body:`, JSON.stringify(request, null, 2));
+    
+    return this.http.post<any>(`${this.baseUrl}/calculate-safe`, request).pipe(
+      map(response => {
+        console.log(`[FormulasService] calculateSafe - Raw response:`, response);
+        console.log(`[FormulasService] calculateSafe - Response type:`, typeof response);
+        
+        // Handle different response formats
+        let result: CalculateExpressionResponse;
+        
+        if (typeof response === 'number' || typeof response === 'string') {
+          // API returns result directly as number or string
+          console.log(`[FormulasService] calculateSafe - Response is direct value:`, response);
+          result = {
+            success: true,
+            data: response,
+            statusCode: 200
+          };
+        } else if (response && typeof response === 'object') {
+          // API returns object with success/data structure
+          if (response.success !== undefined) {
+            result = {
+              success: response.success,
+              data: response.data || response.result || response,
+              statusCode: response.statusCode || 200
+            };
+          } else if (response.data !== undefined) {
+            // Response wrapped in data property
+            result = {
+              success: true,
+              data: response.data,
+              statusCode: response.statusCode || 200
+            };
+          } else {
+            // Response is the result itself
+            result = {
+              success: true,
+              data: response,
+              statusCode: 200
+            };
+          }
+        } else {
+          // Unknown format
+          result = {
+            success: false,
+            data: 0,
+            statusCode: 500
+          };
+        }
+        
+        console.log(`[FormulasService] calculateSafe - Processed response:`, JSON.stringify(result, null, 2));
+        return result;
+      }),
       catchError(error => {
-        console.error('Error calculating expression safely:', error);
+        console.error('[FormulasService] Error calculating expression safely:', error);
+        console.error('[FormulasService] Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          error: error?.error,
+          message: error?.message,
+          url: error?.url
+        });
         return of({
           success: false,
           data: 0,

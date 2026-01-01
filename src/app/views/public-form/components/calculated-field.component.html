@@ -1,0 +1,17 @@
+<div class="calculated-field-wrapper">
+  <div class="calculated-field-display" [class.has-value]="value !== null && value !== undefined && value !== ''">
+    <span class="calculated-value" *ngIf="value !== null && value !== undefined && value !== ''">
+      {{ displayValue }}
+    </span>
+    <span class="calculated-placeholder" *ngIf="value === null || value === undefined || value === ''">
+      {{ getPlaceholder() }}
+    </span>
+    <i class="pi pi-calculator calculated-icon" *ngIf="!isLoading"></i>
+    <i class="pi pi-spin pi-spinner calculated-icon" *ngIf="isLoading"></i>
+  </div>
+  <div class="calculated-hint" *ngIf="getHintText()">
+    <i class="pi pi-info-circle"></i>
+    {{ getHintText() }}
+  </div>
+</div>
+

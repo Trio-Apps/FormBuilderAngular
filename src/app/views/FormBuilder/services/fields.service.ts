@@ -28,12 +28,31 @@ export class FieldsService {
     return this.http.get<any>(`${this.fieldsUrl}/tab/${tabId}`).pipe(
       map((response: any) => {
         // إذا كان response مغلف في object يحتوي على data
+        let fields: any[] = [];
         if (response && typeof response === 'object' && !Array.isArray(response)) {
           const data = response.data || response.items || response.result || [];
-          return Array.isArray(data) ? data : [];
+          fields = Array.isArray(data) ? data : [];
+        } else if (Array.isArray(response)) {
+          fields = response;
         }
-        // إذا كان response مباشرة array
-        return Array.isArray(response) ? response : [];
+
+        // Normalize field properties - handle both camelCase and PascalCase property names
+        return fields.map((field: any) => {
+          // Normalize calculation properties
+          if (!field.expressionText && field.ExpressionText) {
+            field.expressionText = field.ExpressionText;
+          }
+          if (!field.calculationMode && field.CalculationMode) {
+            field.calculationMode = field.CalculationMode;
+          }
+          if (!field.recalculateOn && field.RecalculateOn) {
+            field.recalculateOn = field.RecalculateOn;
+          }
+          if (!field.resultType && field.ResultType) {
+            field.resultType = field.ResultType;
+          }
+          return field as FormFieldDto;
+        });
       }),
       catchError((error) => {
         console.warn(`Failed to get fields for tab ${tabId}:`, error);
@@ -48,12 +67,31 @@ export class FieldsService {
     return this.http.get<any>(`${this.fieldsUrl}/tab/${tabId}`).pipe(
       map((response: any) => {
         // إذا كان response مغلف في object يحتوي على data
+        let fields: any[] = [];
         if (response && typeof response === 'object' && !Array.isArray(response)) {
           const data = response.data || response.items || response.result || [];
-          return Array.isArray(data) ? data : [];
+          fields = Array.isArray(data) ? data : [];
+        } else if (Array.isArray(response)) {
+          fields = response;
         }
-        // إذا كان response مباشرة array
-        return Array.isArray(response) ? response : [];
+
+        // Normalize field properties - handle both camelCase and PascalCase property names
+        return fields.map((field: any) => {
+          // Normalize calculation properties
+          if (!field.expressionText && field.ExpressionText) {
+            field.expressionText = field.ExpressionText;
+          }
+          if (!field.calculationMode && field.CalculationMode) {
+            field.calculationMode = field.CalculationMode;
+          }
+          if (!field.recalculateOn && field.RecalculateOn) {
+            field.recalculateOn = field.RecalculateOn;
+          }
+          if (!field.resultType && field.ResultType) {
+            field.resultType = field.ResultType;
+          }
+          return field as FormFieldDto;
+        });
       }),
       catchError((error) => {
         console.warn(`Failed to get fields for tab ${tabId}:`, error);
@@ -66,11 +104,30 @@ export class FieldsService {
     return this.http.get<any>(`${this.fieldsUrl}/${fieldId}`).pipe(
       map((response: any) => {
         // إذا كان response مغلف في object يحتوي على data
+        let field: any = null;
         if (response && typeof response === 'object' && !response.id) {
-          return response.data || response.result || response;
+          field = response.data || response.result || response;
+        } else {
+          field = response;
         }
-        // إذا كان response مباشرة FormFieldDto
-        return response;
+
+        // Normalize calculation properties - handle both camelCase and PascalCase property names
+        if (field) {
+          if (!field.expressionText && field.ExpressionText) {
+            field.expressionText = field.ExpressionText;
+          }
+          if (!field.calculationMode && field.CalculationMode) {
+            field.calculationMode = field.CalculationMode;
+          }
+          if (!field.recalculateOn && field.RecalculateOn) {
+            field.recalculateOn = field.RecalculateOn;
+          }
+          if (!field.resultType && field.ResultType) {
+            field.resultType = field.ResultType;
+          }
+        }
+
+        return field as FormFieldDto;
       }),
       catchError(() => of(null as any))
     );

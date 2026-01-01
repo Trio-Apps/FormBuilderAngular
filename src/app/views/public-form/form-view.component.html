@@ -84,6 +84,12 @@
                 [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
                 (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
+              <!-- Calculated Field -->
+              <app-calculated-field *ngSwitchCase="'calculated'" 
+                [field]="field" 
+                [value]="getFieldValue(field)">
+              </app-calculated-field>
+
               <!-- Textarea -->
               <textarea *ngSwitchCase="'textarea'" class="form-textarea" rows="4"
                 [placeholder]="getFieldPlaceholder(field)" [disabled]="!isFieldEditable(field)"

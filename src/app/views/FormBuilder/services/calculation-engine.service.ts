@@ -153,31 +153,59 @@ export class CalculationEngineService {
     }
 
     try {
+      const preparedValues = this.prepareFieldValues(fieldValues);
       const request: CalculateExpressionRequest = {
         expressionText: expressionText.trim(),
-        fieldValues: this.prepareFieldValues(fieldValues)
+        fieldValues: preparedValues
       };
+
+      console.log(`[CalculationEngine] calculateExpressionSafe - Expression: "${expressionText.trim()}"`);
+      console.log(`[CalculationEngine] calculateExpressionSafe - Field values:`, JSON.stringify(preparedValues, null, 2));
+      console.log(`[CalculationEngine] calculateExpressionSafe - Request:`, JSON.stringify(request, null, 2));
 
       const response = await this.formulasService.calculateSafe(request).toPromise();
       
+      console.log(`[CalculationEngine] calculateExpressionSafe - Response:`, JSON.stringify(response, null, 2));
+      console.log(`[CalculationEngine] calculateExpressionSafe - Response type:`, typeof response);
+      console.log(`[CalculationEngine] calculateExpressionSafe - Response success:`, response?.success);
+      console.log(`[CalculationEngine] calculateExpressionSafe - Response data:`, response?.data);
+      console.log(`[CalculationEngine] calculateExpressionSafe - Response statusCode:`, response?.statusCode);
+
       if (response && response.success) {
+        console.log(`[CalculationEngine] Calculation successful! Result:`, response.data);
         return {
           success: true,
           value: response.data
         };
       } else {
+        const errorMessage = (response as any)?.error || (response as any)?.message || (response as any)?.data?.error || 'Calculation failed';
+        console.error(`[CalculationEngine] Calculation failed!`, {
+          expressionText: expressionText.trim(),
+          fieldValues: JSON.stringify(preparedValues, null, 2),
+          response: JSON.stringify(response, null, 2),
+          responseObject: response,
+          statusCode: response?.statusCode,
+          errorMessage: errorMessage
+        });
         return {
           success: false,
           value: 0,
-          error: 'Calculation failed'
+          error: errorMessage
         };
       }
     } catch (error: any) {
-      console.error('Error calculating expression safely:', error);
+      console.error('[CalculationEngine] Error calculating expression safely:', error);
+      console.error('[CalculationEngine] Error details:', {
+        expressionText: expressionText.trim(),
+        fieldValues: fieldValues,
+        error: error,
+        status: error?.status,
+        errorMessage: error?.error || error?.message
+      });
       return {
         success: false,
         value: 0,
-        error: error?.message || 'Error calculating expression'
+        error: error?.error?.message || error?.error || error?.message || 'Error calculating expression'
       };
     }
   }
@@ -208,27 +236,52 @@ export class CalculationEngineService {
     fieldValues: { [fieldCode: string]: any }
   ): Promise<{ [fieldCode: string]: number | string }> {
     const results: { [fieldCode: string]: number | string } = {};
+    
+    // Normalize expressionText from PascalCase if needed
+    fields.forEach(field => {
+      if (!field.expressionText && (field as any).ExpressionText) {
+        field.expressionText = (field as any).ExpressionText;
+      }
+    });
+    
     const calculatedFields = fields.filter(f => 
-      f.expressionText && 
-      (f.fieldTypeName?.toLowerCase() === 'calculated' || 
-       f.fieldType?.typeName?.toLowerCase() === 'calculated')
+      this.isCalculatedField(f)
     );
 
+    console.log(`[CalculationEngine] calculateAllFields: Found ${calculatedFields.length} calculated fields`);
+    calculatedFields.forEach(f => {
+      console.log(`[CalculationEngine] Field ${f.fieldCode}: expressionText="${f.expressionText}"`);
+    });
+
+    if (calculatedFields.length === 0) {
+      return results;
+    }
+
     const fieldValuesMap = this.buildFieldValuesMap(fieldValues, fields);
+    console.log(`[CalculationEngine] Field values map:`, fieldValuesMap);
 
     // Calculate each field sequentially to handle dependencies
     for (const field of calculatedFields) {
-      if (!field.fieldCode || !field.expressionText) continue;
+      if (!field.fieldCode) continue;
+      
+      if (!field.expressionText || field.expressionText.trim() === '') {
+        console.warn(`[CalculationEngine] Field ${field.fieldCode} has no expressionText, skipping calculation`);
+        continue;
+      }
 
       try {
+        console.log(`[CalculationEngine] Calculating field ${field.fieldCode} with expression: ${field.expressionText}`);
         const result = await this.calculateExpressionSafe(field.expressionText, fieldValuesMap);
         if (result.success) {
           results[field.fieldCode] = result.value;
           // Update fieldValuesMap with calculated value for dependent calculations
           fieldValuesMap[field.fieldCode] = result.value;
+          console.log(`[CalculationEngine] Field ${field.fieldCode} calculated successfully: ${result.value}`);
+        } else {
+          console.error(`[CalculationEngine] Field ${field.fieldCode} calculation failed: ${result.error}`);
         }
       } catch (error) {
-        console.error(`Error calculating field ${field.fieldCode}:`, error);
+        console.error(`[CalculationEngine] Error calculating field ${field.fieldCode}:`, error);
         results[field.fieldCode] = 0;
       }
     }
@@ -240,9 +293,29 @@ export class CalculationEngineService {
    * Check if a field is a calculated field
    */
   isCalculatedField(field: FormFieldDto): boolean {
-    return !!(field.expressionText && 
-      (field.fieldTypeName?.toLowerCase() === 'calculated' || 
-       field.fieldType?.typeName?.toLowerCase() === 'calculated'));
+    const typeNameMatch = field.fieldTypeName?.toLowerCase() === 'calculated';
+    const typeMatch = field.fieldType?.typeName?.toLowerCase() === 'calculated';
+    const hasExpression = !!(field.expressionText && field.expressionText.trim() !== '');
+    
+    // A field is calculated if:
+    // 1. Type is 'Calculated' (even if expressionText is not loaded yet from API)
+    // 2. OR has expressionText (for backward compatibility)
+    const isCalculated = (typeNameMatch || typeMatch) || hasExpression;
+    
+    // Debug logging
+    if (typeNameMatch || typeMatch || hasExpression) {
+      console.log(`[CalculationEngine] Checking field ${field.fieldCode}:`, {
+        hasExpression,
+        expressionText: field.expressionText,
+        fieldTypeName: field.fieldTypeName,
+        fieldTypeTypeName: field.fieldType?.typeName,
+        typeNameMatch,
+        typeMatch,
+        isCalculated
+      });
+    }
+    
+    return isCalculated;
   }
 
   /**

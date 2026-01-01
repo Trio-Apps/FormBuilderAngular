@@ -1,0 +1,57 @@
+.calculated-field-wrapper {
+  width: 100%;
+}
+
+.calculated-field-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  min-height: 44px;
+  font-size: 14px;
+  color: #666;
+  transition: all 0.2s ease;
+
+  &.has-value {
+    background-color: #fff;
+    border-color: #4caf50;
+    color: #333;
+    font-weight: 500;
+  }
+
+  .calculated-value {
+    flex: 1;
+    font-size: 15px;
+    color: #333;
+  }
+
+  .calculated-placeholder {
+    flex: 1;
+    color: #999;
+    font-style: italic;
+  }
+
+  .calculated-icon {
+    color: #4caf50;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+}
+
+.calculated-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  i {
+    font-size: 14px;
+    color: #2196f3;
+  }
+}
+

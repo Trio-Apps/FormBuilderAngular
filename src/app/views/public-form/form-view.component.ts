@@ -19,13 +19,16 @@ import { TranslationService } from '../../core/services/translation.service';
 import { environment } from '../../environments/environment';
 import { catchError, of, forkJoin, Observable } from 'rxjs';
 import { GridViewComponent } from './components/grid-view.component';
+import { CalculatedFieldComponent } from './components/calculated-field.component';
+import { CalculationEngineService } from '../FormBuilder/services/calculation-engine.service';
 
 @Component({
   selector: 'app-form-view',
   standalone: true,
   imports: [
     CommonModule,
-    GridViewComponent
+    GridViewComponent,
+    CalculatedFieldComponent
   ],
   templateUrl: './form-view.component.html',
   styleUrls: ['./form-view.component.scss']
@@ -93,6 +96,7 @@ export class FormViewComponent implements OnInit {
     private formSubmissionValuesService: FormSubmissionValuesService,
     private documentTypesService: DocumentTypesService,
     private storageService: StorageService,
+    private calculationEngine: CalculationEngineService,
     private cdr: ChangeDetectorRef
   ) { }
 
@@ -244,6 +248,20 @@ export class FormViewComponent implements OnInit {
                 .filter(field => field.isActive)
                 .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0))
                 .map(field => {
+                  // Normalize calculation properties (handle PascalCase from API)
+                  if (!field.expressionText && (field as any).ExpressionText) {
+                    field.expressionText = (field as any).ExpressionText;
+                  }
+                  if (!field.calculationMode && (field as any).CalculationMode) {
+                    field.calculationMode = (field as any).CalculationMode;
+                  }
+                  if (!field.recalculateOn && (field as any).RecalculateOn) {
+                    field.recalculateOn = (field as any).RecalculateOn;
+                  }
+                  if (!field.resultType && (field as any).ResultType) {
+                    field.resultType = (field as any).ResultType;
+                  }
+                  
                   // IMPORTANT: Keep static options even for Api/LookupTable DataSource fields
                   // Static options will be used as fallback if DataSource fails or returns no options
                   const originalOptions = field.fieldOptions || [];
@@ -256,8 +274,12 @@ export class FormViewComponent implements OnInit {
 
                   const sortedOptions = filteredOptions.sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0));
 
-                  // Only warn if no options at all (will be handled later in getFieldOptions)
-                  if (sortedOptions.length === 0) {
+                  // Only warn if no options at all AND field type requires options
+                  // Field types that require options: select, radio, checkbox
+                  const fieldType = this.getFieldType(field);
+                  const requiresOptions = ['select', 'radio', 'checkbox'].includes(fieldType);
+                  
+                  if (sortedOptions.length === 0 && requiresOptions) {
                     const dataSource = field.fieldDataSource;
                     const hasExternalDataSource = dataSource && 
                                                  dataSource.isActive && 
@@ -313,6 +335,15 @@ export class FormViewComponent implements OnInit {
 
           // Initialize form rules after form is loaded
           this.initializeFormRules();
+
+          // Load expressionText for calculated fields if missing
+          // Try to load fields from /api/FormFields/tab/{tabId} if expressionText is missing
+          this.loadFieldsWithExpressionText().then(() => {
+            // Calculate fields on initial load (use setTimeout to ensure all values are initialized)
+            setTimeout(() => {
+              this.calculateFieldsOnLoad();
+            }, 100);
+          });
 
           // Removed verbose logging
         } else if (form.id) {
@@ -899,7 +930,12 @@ export class FormViewComponent implements OnInit {
     const typeName = (field.fieldTypeName || ft?.typeName || '').toLowerCase().trim();
     const dataType = (ft?.dataType || '').toLowerCase().trim();
 
-    // Check for Grid type first
+    // Check for Calculated type first
+    if (typeName === 'calculated' || this.calculationEngine.isCalculatedField(field)) {
+      return 'calculated';
+    }
+
+    // Check for Grid type
     if (typeName === 'grid') {
       return 'grid';
     }
@@ -1444,7 +1480,19 @@ export class FormViewComponent implements OnInit {
     // Re-evaluate rules
     this.evaluateFormRules();
 
-    // Mark for check and detect changes
+    // Recalculate calculated fields if needed (async, don't wait)
+    const changedCode = fieldCode || idKey;
+    console.log(`[FormView] Triggering calculation for changed field: ${changedCode}`);
+    this.calculateFields(changedCode).then(() => {
+      console.log(`[FormView] Calculation completed for field: ${changedCode}`);
+      // Trigger change detection after calculation completes
+      this.cdr.markForCheck();
+      this.cdr.detectChanges();
+    }).catch(error => {
+      console.error(`[FormView] Error in calculation for field ${changedCode}:`, error);
+    });
+
+    // Mark for check and detect changes immediately
     this.cdr.markForCheck();
     this.cdr.detectChanges();
   }
@@ -1552,6 +1600,304 @@ export class FormViewComponent implements OnInit {
   }
 
   /**
+   * Calculate calculated fields based on changed field
+   */
+  private async calculateFields(changedFieldCode: string): Promise<void> {
+    console.log(`[FormView] calculateFields called for: ${changedFieldCode}`);
+    
+    // Get all fields from all tabs
+    const allFields: FormFieldDto[] = [];
+    this.tabs.forEach(tab => {
+      if (tab.fields && tab.fields.length > 0) {
+        allFields.push(...tab.fields);
+      }
+    });
+
+    console.log(`[FormView] Total fields: ${allFields.length}`);
+    
+    // Debug: Log all fields to see their types
+    console.log(`[FormView] All fields details:`, allFields.map(f => ({
+      id: f.id,
+      code: f.fieldCode,
+      name: f.fieldName,
+      typeName: f.fieldTypeName,
+      type: f.fieldType?.typeName,
+      expressionText: f.expressionText,
+      ExpressionText: (f as any).ExpressionText, // Check PascalCase too
+      recalculateOn: f.recalculateOn,
+      isCalculated: this.calculationEngine.isCalculatedField(f)
+    })));
+    
+    // Normalize expressionText from PascalCase if needed
+    allFields.forEach(field => {
+      if (!field.expressionText && (field as any).ExpressionText) {
+        field.expressionText = (field as any).ExpressionText;
+        console.log(`[FormView] Normalized ExpressionText to expressionText for field ${field.fieldCode}: ${field.expressionText}`);
+      }
+    });
+
+    // Find calculated fields that depend on the changed field
+    const calculatedFields = allFields.filter(field => 
+      this.calculationEngine.isCalculatedField(field) &&
+      (field.recalculateOn === 'OnFieldChange' || !field.recalculateOn) // Default to OnFieldChange
+    );
+
+    console.log(`[FormView] Found ${calculatedFields.length} calculated fields with OnFieldChange:`, 
+      calculatedFields.map(f => ({ code: f.fieldCode, recalculateOn: f.recalculateOn })));
+
+    if (calculatedFields.length === 0) {
+      console.log('[FormView] No calculated fields found, returning');
+      return; // No calculated fields to update
+    }
+
+    // Get dependent calculated fields
+    let dependentFields = this.calculationEngine.getDependentCalculatedFields(
+      changedFieldCode,
+      calculatedFields
+    );
+
+    console.log(`[FormView] Found ${dependentFields.length} dependent calculated fields for ${changedFieldCode}:`, 
+      dependentFields.map(f => f.fieldCode));
+
+    // If no dependent fields found but we have calculated fields, 
+    // check if any calculated field has expressionText that might reference the changed field
+    if (dependentFields.length === 0 && calculatedFields.length > 0) {
+      // Fallback: if expressionText is missing, calculate all calculated fields
+      // This handles the case where expressionText wasn't loaded yet
+      const fieldsWithExpression = calculatedFields.filter(f => f.expressionText && f.expressionText.trim() !== '');
+      if (fieldsWithExpression.length === 0) {
+        console.log(`[FormView] No expressionText found for calculated fields, calculating all calculated fields as fallback`);
+        dependentFields = calculatedFields; // Calculate all calculated fields
+      }
+    }
+
+    if (dependentFields.length === 0) {
+      console.log(`[FormView] No fields depend on ${changedFieldCode}, returning`);
+      return; // No fields depend on the changed field
+    }
+
+    // Recalculate dependent fields
+    try {
+      console.log(`[FormView] Current fieldValues before calculation:`, this.fieldValues);
+      
+      const results = await this.calculationEngine.calculateAllFields(
+        allFields,
+        this.fieldValues
+      );
+
+      console.log(`[FormView] Calculation results:`, results);
+
+      // Update field values with calculated results
+      Object.keys(results).forEach(fieldCode => {
+        const result = results[fieldCode];
+        // Find the field to get its ID
+        const field = allFields.find(f => f.fieldCode === fieldCode);
+        if (field && field.id) {
+          const idKey = String(field.id);
+          const oldValue = this.fieldValues[idKey];
+          this.fieldValues[idKey] = result;
+          this.fieldValues[fieldCode] = result;
+          console.log(`[FormView] Updated field ${fieldCode} (ID: ${idKey}): ${oldValue} -> ${result}`);
+        }
+      });
+
+      // Trigger change detection
+      this.cdr.markForCheck();
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('[FormView] Error calculating fields:', error);
+    }
+  }
+
+  /**
+   * Load fields with expressionText from /api/FormFields/tab/{tabId} if missing
+   */
+  private async loadFieldsWithExpressionText(): Promise<void> {
+    // Check if we have calculated fields without expressionText
+    const allFields: FormFieldDto[] = [];
+    this.tabs.forEach(tab => {
+      if (tab.fields && tab.fields.length > 0) {
+        allFields.push(...tab.fields);
+      }
+    });
+
+    const calculatedFieldsWithoutExpression = allFields.filter(field => 
+      this.calculationEngine.isCalculatedField(field) && 
+      (!field.expressionText || field.expressionText.trim() === '')
+    );
+
+    if (calculatedFieldsWithoutExpression.length === 0) {
+      return; // All calculated fields have expressionText
+    }
+
+    console.log(`[FormView] Found ${calculatedFieldsWithoutExpression.length} calculated fields without expressionText. Loading from /api/FormFields/tab/{tabId}...`);
+
+    // Load fields from /api/FormFields/tab/{tabId} for each tab
+    const loadPromises = this.tabs.map(async (tab) => {
+      if (!tab.id || !tab.fields || tab.fields.length === 0) return;
+      
+      try {
+        const fields = await this.fieldsService.getFieldsByTabId(tab.id).toPromise();
+        if (fields && fields.length > 0) {
+          // Update fields in tabs with expressionText
+          fields.forEach(loadedField => {
+            const tabField = tab.fields?.find(f => f.id === loadedField.id);
+            if (tabField && loadedField.expressionText) {
+              tabField.expressionText = loadedField.expressionText;
+              tabField.calculationMode = loadedField.calculationMode || tabField.calculationMode;
+              tabField.recalculateOn = loadedField.recalculateOn || tabField.recalculateOn;
+              tabField.resultType = loadedField.resultType || tabField.resultType;
+              console.log(`[FormView] Loaded expressionText for field ${loadedField.fieldCode}: ${loadedField.expressionText}`);
+            }
+          });
+        }
+      } catch (error: any) {
+        // Handle errors gracefully
+        if (error?.status === 401) {
+          console.log(`[FormView] Cannot load fields for tab ${tab.id}: API requires authentication (401). Calculated fields will not work without expressionText.`);
+        } else {
+          console.warn(`[FormView] Failed to load fields for tab ${tab.id}:`, error);
+        }
+      }
+    });
+
+    await Promise.all(loadPromises);
+  }
+
+  /**
+   * Load expressionText for calculated fields if missing (DEPRECATED - use loadFieldsWithExpressionText instead)
+   */
+  private async loadCalculatedFieldsExpressionText(): Promise<void> {
+    const allFields: FormFieldDto[] = [];
+    this.tabs.forEach(tab => {
+      if (tab.fields && tab.fields.length > 0) {
+        allFields.push(...tab.fields);
+      }
+    });
+
+    // Find calculated fields without expressionText
+    const calculatedFieldsWithoutExpression = allFields.filter(field => 
+      this.calculationEngine.isCalculatedField(field) && 
+      (!field.expressionText || field.expressionText.trim() === '')
+    );
+
+    if (calculatedFieldsWithoutExpression.length === 0) {
+      return; // All calculated fields have expressionText
+    }
+
+    console.log(`[FormView] Loading expressionText for ${calculatedFieldsWithoutExpression.length} calculated fields`);
+
+    // Check if user is authenticated (has token)
+    const token = this.storageService.getToken();
+    if (!token) {
+      console.log(`[FormView] No authentication token found. Skipping expressionText load (API requires auth). Will use fallback calculation.`);
+      return; // Skip loading if not authenticated - API requires auth
+    }
+
+    // Load expressionText for each calculated field
+    const loadPromises = calculatedFieldsWithoutExpression.map(async (field) => {
+      if (!field.id) return;
+      
+      try {
+        const loadedField = await this.fieldsService.getFieldById(field.id).toPromise();
+        if (loadedField && loadedField.expressionText) {
+          // Update the field in tabs
+          this.tabs.forEach(tab => {
+            const tabField = tab.fields?.find(f => f.id === field.id);
+            if (tabField) {
+              tabField.expressionText = loadedField.expressionText;
+              tabField.calculationMode = loadedField.calculationMode || tabField.calculationMode;
+              tabField.recalculateOn = loadedField.recalculateOn || tabField.recalculateOn;
+              tabField.resultType = loadedField.resultType || tabField.resultType;
+              console.log(`[FormView] Loaded expressionText for field ${field.fieldCode}: ${loadedField.expressionText}`);
+            }
+          });
+        }
+      } catch (error: any) {
+        // Handle 401 (Unauthorized) gracefully - API requires authentication
+        if (error?.status === 401) {
+          console.log(`[FormView] Cannot load expressionText for field ${field.fieldCode}: API requires authentication (401). Will use fallback calculation.`);
+        } else {
+          console.warn(`[FormView] Failed to load expressionText for field ${field.fieldCode}:`, error);
+        }
+      }
+    });
+
+    await Promise.all(loadPromises);
+  }
+
+  /**
+   * Calculate calculated fields on form load
+   */
+  private async calculateFieldsOnLoad(): Promise<void> {
+    // Get all fields from all tabs
+    const allFields: FormFieldDto[] = [];
+    this.tabs.forEach(tab => {
+      if (tab.fields && tab.fields.length > 0) {
+        allFields.push(...tab.fields);
+      }
+    });
+
+    // Find all calculated fields
+    const calculatedFields = allFields.filter(field => 
+      this.calculationEngine.isCalculatedField(field)
+    );
+
+    if (calculatedFields.length === 0) {
+      return; // No calculated fields to update
+    }
+
+    // Check if there are any values to calculate with
+    const hasValues = Object.keys(this.fieldValues).some(key => {
+      const value = this.fieldValues[key];
+      return value !== null && value !== undefined && value !== '';
+    });
+    
+    // Calculate all calculated fields on load if:
+    // 1. recalculateOn is 'OnLoad' or not specified (default)
+    // 2. OR there are values in the form (user may have entered data or default values exist)
+    const fieldsToCalculate = calculatedFields.filter(field => {
+      const recalculateOn = field.recalculateOn || 'OnLoad'; // Default to OnLoad
+      return recalculateOn === 'OnLoad' || hasValues;
+    });
+
+    if (fieldsToCalculate.length === 0) {
+      return; // No fields to calculate
+    }
+
+    // Recalculate all calculated fields that should be calculated on load
+    try {
+      console.log('[FormView] Calculating fields on load. Fields:', fieldsToCalculate.map(f => f.fieldCode), 'Values:', this.fieldValues);
+      
+      const results = await this.calculationEngine.calculateAllFields(
+        allFields,
+        this.fieldValues
+      );
+
+      console.log('[FormView] Calculation results:', results);
+
+      // Update field values with calculated results
+      Object.keys(results).forEach(fieldCode => {
+        const result = results[fieldCode];
+        // Find the field to get its ID
+        const field = allFields.find(f => f.fieldCode === fieldCode);
+        if (field && field.id) {
+          const idKey = String(field.id);
+          this.fieldValues[idKey] = result;
+          this.fieldValues[fieldCode] = result;
+          console.log(`[FormView] Updated field ${fieldCode} (ID: ${idKey}) with calculated value:`, result);
+        }
+      });
+
+      // Trigger change detection
+      this.cdr.markForCheck();
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('[FormView] Error calculating fields on load:', error);
+    }
+  }
+
+  /**
    * Check if field is required (base + dynamic rules)
    */
   isRequired(field: FormFieldDto): boolean {
@@ -1585,6 +1931,11 @@ export class FormViewComponent implements OnInit {
    * Check if field is editable (base + dynamic rules)
    */
   isFieldEditable(field: FormFieldDto): boolean {
+    // Calculated fields are always read-only
+    if (this.calculationEngine.isCalculatedField(field)) {
+      return false;
+    }
+
     const dynamicState = this.dynamicFieldStates[field.fieldCode];
     if (dynamicState && dynamicState.isReadOnly !== undefined) {
       return !dynamicState.isReadOnly;
@@ -3003,7 +3354,20 @@ export class FormViewComponent implements OnInit {
       
       // Final fallback: use default 1 (but this may fail if document type doesn't exist)
       if (!documentTypeId || documentTypeId <= 0) {
-        documentTypeId = routeQueryParams['documentTypeId'] ? +routeQueryParams['documentTypeId'] : 1;
+        const fallbackId = routeQueryParams['documentTypeId'] ? +routeQueryParams['documentTypeId'] : null;
+        if (fallbackId && fallbackId > 0) {
+          documentTypeId = fallbackId;
+        } else {
+          // Don't use default 1 if it's not explicitly provided - it may not exist
+          console.warn('[FormView] No valid documentTypeId found. Cannot proceed without document type.');
+          const currentLang = this.translationService.getCurrentLanguage();
+          const errorMsg = currentLang === 'ar'
+            ? 'خطأ: لا يمكن إرسال النموذج بدون تحديد نوع المستند (documentTypeId). يرجى التأكد من أن النموذج مرتبط بنوع مستند صحيح.'
+            : 'Error: Cannot submit form without document type (documentTypeId). Please ensure the form is linked to a valid document type.';
+          alert(errorMsg);
+          this.isSubmitting = false;
+          return;
+        }
         console.warn('[FormView] Using fallback documentTypeId:', documentTypeId);
       }
       
@@ -3076,6 +3440,23 @@ export class FormViewComponent implements OnInit {
               }
               } catch (createSeriesError: any) {
                 console.warn('[FormView] Failed to create document series automatically:', createSeriesError);
+                
+                // Check if error is due to invalid document type ID
+                const errorMessage = createSeriesError?.error?.message || createSeriesError?.message || '';
+                const isInvalidDocType = errorMessage.toLowerCase().includes('invalid document type') || 
+                                        createSeriesError?.status === 400;
+                
+                if (isInvalidDocType) {
+                  // Don't use fallback if document type is invalid - show error instead
+                  const currentLang = this.translationService.getCurrentLanguage();
+                  const errorMsg = currentLang === 'ar'
+                    ? `خطأ: نوع المستند غير صالح (documentTypeId: ${documentTypeId}). يرجى التأكد من أن نوع المستند موجود في النظام.`
+                    : `Error: Invalid document type (documentTypeId: ${documentTypeId}). Please ensure the document type exists in the system.`;
+                  alert(errorMsg);
+                  this.isSubmitting = false;
+                  return;
+                }
+                
                 // Fallback: use seriesId from query params or default
                 actualSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
                 console.warn('[FormView] Using fallback seriesId:', actualSeriesId);
@@ -3089,15 +3470,20 @@ export class FormViewComponent implements OnInit {
                   console.warn('[FormView]', errorMsg);
                 } else {
                   const errorMsg = currentLang === 'ar'
-                    ? `تحذير: فشل إنشاء Document Series تلقائياً: ${createSeriesError?.error?.message || createSeriesError?.message || 'Unknown error'}. سيتم استخدام القيمة الافتراضية.`
-                    : `Warning: Failed to create Document Series automatically: ${createSeriesError?.error?.message || createSeriesError?.message || 'Unknown error'}. Using default value.`;
+                    ? `تحذير: فشل إنشاء Document Series تلقائياً: ${errorMessage}. سيتم استخدام القيمة الافتراضية.`
+                    : `Warning: Failed to create Document Series automatically: ${errorMessage}. Using default value.`;
                   console.warn('[FormView]', errorMsg);
                 }
               }
             } else {
-              // documentTypeId is invalid, use fallback
-              actualSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
-              console.warn('[FormView] Invalid documentTypeId, cannot create series. Using fallback seriesId:', actualSeriesId);
+              // documentTypeId is invalid, cannot proceed
+              const currentLang = this.translationService.getCurrentLanguage();
+              const errorMsg = currentLang === 'ar'
+                ? 'خطأ: لا يمكن المتابعة بدون نوع مستند صالح. يرجى التأكد من أن النموذج مرتبط بنوع مستند.'
+                : 'Error: Cannot proceed without a valid document type. Please ensure the form is linked to a document type.';
+              alert(errorMsg);
+              this.isSubmitting = false;
+              return;
             }
           }
         } catch (seriesError: any) {
@@ -3134,13 +3520,35 @@ export class FormViewComponent implements OnInit {
               }
             } catch (createSeriesError: any) {
               console.warn('[FormView] Failed to create document series, using fallback:', createSeriesError);
+              
+              // Check if error is due to invalid document type ID
+              const errorMessage = createSeriesError?.error?.message || createSeriesError?.message || '';
+              const isInvalidDocType = errorMessage.toLowerCase().includes('invalid document type') || 
+                                      createSeriesError?.status === 400;
+              
+              if (isInvalidDocType) {
+                // Don't use fallback if document type is invalid - show error instead
+                const currentLang = this.translationService.getCurrentLanguage();
+                const errorMsg = currentLang === 'ar'
+                  ? `خطأ: نوع المستند غير صالح (documentTypeId: ${documentTypeId}). يرجى التأكد من أن نوع المستند موجود في النظام.`
+                  : `Error: Invalid document type (documentTypeId: ${documentTypeId}). Please ensure the document type exists in the system.`;
+                alert(errorMsg);
+                this.isSubmitting = false;
+                return;
+              }
+              
               // Use seriesId from query params or default to 1
               actualSeriesId = (seriesId && seriesId > 0) ? seriesId : 1;
             }
           } else {
-            // documentTypeId is invalid, use fallback
-            actualSeriesId = (seriesId && seriesId > 0) ? seriesId : 1;
-            console.warn('[FormView] Invalid documentTypeId, cannot create series. Using fallback:', actualSeriesId);
+            // documentTypeId is invalid, cannot proceed
+            const currentLang = this.translationService.getCurrentLanguage();
+            const errorMsg = currentLang === 'ar'
+              ? 'خطأ: لا يمكن المتابعة بدون نوع مستند صالح. يرجى التأكد من أن النموذج مرتبط بنوع مستند.'
+              : 'Error: Cannot proceed without a valid document type. Please ensure the form is linked to a document type.';
+            alert(errorMsg);
+            this.isSubmitting = false;
+            return;
           }
         }
       } else {
@@ -3206,19 +3614,25 @@ export class FormViewComponent implements OnInit {
           
           if (createError?.status === 404) {
             const errorMsg = currentLang === 'ar'
-              ? `خدمة حفظ النماذج غير متاحة (404).\n\nAPI URL: ${apiUrl}\nEndpoint المطلوب: POST /FormSubmissions\n\nملاحظة: ${token ? 'يوجد token لكن الـ endpoint غير موجود' : 'لا يوجد token - قد يتطلب الـ endpoint authentication'}`
-              : `Form submission service is not available (404).\n\nAPI URL: ${apiUrl}\nRequired endpoint: POST /FormSubmissions\n\nNote: ${token ? 'Token exists but endpoint not found' : 'No token - endpoint may require authentication'}`;
+              ? `خدمة حفظ النماذج غير متاحة (404).\n\nAPI URL: ${apiUrl}\nEndpoint المطلوب: POST /FormSubmissions\n\nملاحظة: ${token ? 'يوجد token لكن الـ endpoint غير موجود. قد يكون الـ endpoint غير متوفر في الـ backend أو يحتاج إلى تكوين.' : 'لا يوجد token - قد يتطلب الـ endpoint authentication. يرجى تسجيل الدخول أولاً.'}\n\nالحل: تأكد من أن الـ endpoint متوفر في الـ backend أو استخدم طريقة أخرى لحفظ البيانات.`
+              : `Form submission service is not available (404).\n\nAPI URL: ${apiUrl}\nRequired endpoint: POST /FormSubmissions\n\nNote: ${token ? 'Token exists but endpoint not found. The endpoint may not be available in the backend or needs configuration.' : 'No token - endpoint may require authentication. Please login first.'}\n\nSolution: Ensure the endpoint is available in the backend or use an alternative method to save data.`;
             alert(errorMsg);
           } else if (createError?.status === 401) {
             const errorMsg = currentLang === 'ar'
-              ? `غير مصرح لك بإنشاء submission. يرجى تسجيل الدخول أولاً.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`
-              : `You are not authorized to create submission. Please login first.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`;
+              ? `غير مصرح لك بإنشاء submission. يرجى تسجيل الدخول أولاً.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}\n\nالحل: قم بتسجيل الدخول ثم حاول مرة أخرى.`
+              : `You are not authorized to create submission. Please login first.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}\n\nSolution: Please login and try again.`;
+            alert(errorMsg);
+          } else if (createError?.status === 400) {
+            const errorDetails = createError?.error?.message || createError?.error?.detail || createError?.message || 'Bad Request';
+            const errorMsg = currentLang === 'ar'
+              ? `خطأ في البيانات المرسلة (400).\n\nالتفاصيل: ${errorDetails}\n\nالحل: تأكد من أن جميع البيانات المطلوبة صحيحة ومكتملة.`
+              : `Bad Request (400).\n\nDetails: ${errorDetails}\n\nSolution: Ensure all required data is correct and complete.`;
             alert(errorMsg);
           } else {
             const errorMsg = createError?.error?.message || createError?.errorMessage || createError?.message || 'Failed to create submission';
             alert(currentLang === 'ar' 
-              ? `فشل إنشاء submission: ${errorMsg}`
-              : `Failed to create submission: ${errorMsg}`);
+              ? `فشل إنشاء submission: ${errorMsg}\n\nالحل: تحقق من اتصال الإنترنت أو اتصل بالدعم الفني.`
+              : `Failed to create submission: ${errorMsg}\n\nSolution: Check your internet connection or contact technical support.`);
           }
           
           this.isSubmitting = false;
