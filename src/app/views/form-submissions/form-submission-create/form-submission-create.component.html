@@ -230,6 +230,7 @@
                              [src]="getAttachmentImageUrl(attachment)" 
                              [alt]="attachment.fileName"
                              class="attachment-thumbnail"
+                             style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #e0e0e0; flex-shrink: 0; display: block;"
                              (error)="$event.target.style.display='none'">
                         <i *ngIf="!isImageAttachment(attachment)" class="pi pi-file"></i>
                         <div class="file-info">

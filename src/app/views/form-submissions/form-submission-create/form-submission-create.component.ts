@@ -23,9 +23,10 @@ import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
 import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
-import { Subscription, forkJoin } from 'rxjs';
-import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { Subscription, forkJoin, of } from 'rxjs';
+import { debounceTime, distinctUntilChanged, catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
+import { FileUploadService } from '../../FormBuilder/services/file-upload.service';
 
 @Component({
   selector: 'app-form-submission-create',
@@ -65,6 +66,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   fieldsForm!: FormGroup;
   fieldFiles: { [fieldId: number]: File[] } = {};
   existingAttachments: { [fieldId: number]: FormSubmissionAttachmentDto[] } = {}; // Store existing attachments for edit mode
+  deletedAttachments: number[] = []; // Track deleted attachment IDs to delete from server
 
   // Field DataSource state
   fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
@@ -122,7 +124,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
     public translationService: TranslationService,
-    private authService: AuthService
+    private authService: AuthService,
+    public fileUploadService: FileUploadService
   ) {
     // Submission form
     this.submissionForm = this.fb.group({
@@ -1613,20 +1616,92 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   loadSubmissionForEdit(): void {
     if (!this.submissionId) return;
     
-    // Load field values
-    this.formSubmissionValuesService.getBySubmissionId(this.submissionId).subscribe({
-      next: (fieldValues) => {
-        console.log('[FormSubmissionCreate] Loaded field values for edit:', fieldValues);
-        // Store field values to populate form after fields are loaded
-        (this as any)._pendingFieldValues = fieldValues;
+    const submissionId = this.submissionId; // Store in local variable to avoid null check issues
+    
+    // Load submission to get current status
+    this.formSubmissionsService.getSubmissionById(submissionId).subscribe({
+      next: (submission) => {
+        console.log('[FormSubmissionCreate] Loaded submission for edit:', submission);
+        // Store current status
+        (this as any)._currentSubmissionStatus = submission.status;
+        // Update form with current status
+        this.submissionForm.patchValue({ status: submission.status });
         
-        // If fields are already loaded, populate form
-        if (this.fields.length > 0) {
-          this.populateFormWithFieldValues(fieldValues);
-        }
+        // Load field values
+        this.formSubmissionValuesService.getBySubmissionId(submissionId).subscribe({
+          next: (fieldValues) => {
+            console.log('[FormSubmissionCreate] Loaded field values for edit:', fieldValues);
+            // Store field values to populate form after fields are loaded
+            (this as any)._pendingFieldValues = fieldValues;
+            
+            // If fields are already loaded, populate form
+            if (this.fields.length > 0) {
+              this.populateFormWithFieldValues(fieldValues);
+            }
+          },
+          error: (error) => {
+            console.error('[FormSubmissionCreate] Error loading field values:', error);
+            const currentLang = this.translationService.getCurrentLanguage();
+            this.messageService.add({
+              severity: 'warn',
+              summary: currentLang === 'ar' ? 'تحذير' : 'Warning',
+              detail: currentLang === 'ar' 
+                ? 'فشل تحميل قيم الحقول. قد تكون بعض البيانات غير متاحة.' 
+                : 'Failed to load field values. Some data may not be available.'
+            });
+          }
+        });
       },
       error: (error) => {
-        console.error('[FormSubmissionCreate] Error loading field values:', error);
+        console.error('[FormSubmissionCreate] Error loading submission:', error);
+        const currentLang = this.translationService.getCurrentLanguage();
+        
+        // Check if it's a 404 error (submission not found)
+        if (error?.status === 404) {
+          this.messageService.add({
+            severity: 'error',
+            summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+            detail: currentLang === 'ar' 
+              ? 'لم يتم العثور على الـ submission. قد يكون تم حذفه.' 
+              : 'Submission not found. It may have been deleted.'
+          });
+          // Redirect back after showing error
+          setTimeout(() => this.goBack(), 2000);
+          return;
+        }
+        
+        // For other errors, try to continue with field values
+        this.messageService.add({
+          severity: 'warn',
+          summary: currentLang === 'ar' ? 'تحذير' : 'Warning',
+          detail: currentLang === 'ar' 
+            ? 'فشل تحميل بيانات الـ submission. سيتم المحاولة بدون معلومات الـ status.' 
+            : 'Failed to load submission data. Will continue without status information.'
+        });
+        
+        // Default to Draft if we can't load the status
+        (this as any)._currentSubmissionStatus = 'Draft';
+        
+        // Continue loading field values even if submission load fails
+        this.formSubmissionValuesService.getBySubmissionId(submissionId).subscribe({
+          next: (fieldValues) => {
+            console.log('[FormSubmissionCreate] Loaded field values for edit:', fieldValues);
+            (this as any)._pendingFieldValues = fieldValues;
+            if (this.fields.length > 0) {
+              this.populateFormWithFieldValues(fieldValues);
+            }
+          },
+          error: (error) => {
+            console.error('[FormSubmissionCreate] Error loading field values:', error);
+            this.messageService.add({
+              severity: 'error',
+              summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+              detail: currentLang === 'ar' 
+                ? 'فشل تحميل بيانات الـ submission. يرجى المحاولة مرة أخرى.' 
+                : 'Failed to load submission data. Please try again.'
+            });
+          }
+        });
       }
     });
 
@@ -1636,6 +1711,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   loadAttachmentsForEdit(): void {
     if (!this.submissionId) return;
+    
+    // Reset deleted attachments when loading new submission
+    this.deletedAttachments = [];
 
     // Wait for fields to be loaded
     if (this.fields.length === 0) {
@@ -1673,11 +1751,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   getAttachmentImageUrl(attachment: FormSubmissionAttachmentDto): string {
     if (!attachment.id) return '';
-    return `${environment.apiUrl}/FileUpload/${attachment.id}/preview`;
+    // Use FileUploadService to get download URL (same as form-submissions-list)
+    return this.fileUploadService.getDownloadUrl(attachment.id);
   }
 
   getAttachmentDownloadUrl(attachmentId: number): string {
-    return `${environment.apiUrl}/FileUpload/${attachmentId}/download`;
+    // Use FileUploadService to get download URL (same as form-submissions-list)
+    return this.fileUploadService.getDownloadUrl(attachmentId);
   }
 
   isImageAttachment(attachment: FormSubmissionAttachmentDto): boolean {
@@ -1687,6 +1767,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   removeExistingAttachment(fieldId: number, attachmentId: number): void {
     if (!this.existingAttachments[fieldId]) return;
+    
+    // Track deleted attachment for server deletion
+    if (attachmentId && !this.deletedAttachments.includes(attachmentId)) {
+      this.deletedAttachments.push(attachmentId);
+      console.log(`[FormSubmissionCreate] Marked attachment ${attachmentId} for deletion`);
+    }
+    
+    // Remove from local display
     this.existingAttachments[fieldId] = this.existingAttachments[fieldId].filter(att => att.id !== attachmentId);
     this.cdr.detectChanges();
   }
@@ -1856,8 +1944,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     const missingRequiredFiles: string[] = [];
     this.fields.forEach(field => {
       if (this.isFileField(field) && this.isRequired(field)) {
-        const files = this.fieldFiles[field.id!] || [];
-        if (files.length === 0) {
+        const newFiles = this.fieldFiles[field.id!] || [];
+        const existingFiles = this.getExistingAttachments(field.id!) || [];
+        const totalFiles = newFiles.length + existingFiles.length;
+        
+        console.log(`[FormSubmissionCreate] Checking required file field ${field.id} (${field.fieldName || field.fieldCode}):`, {
+          newFiles: newFiles.length,
+          existingFiles: existingFiles.length,
+          totalFiles: totalFiles,
+          isEditMode: this.isEditMode
+        });
+        
+        if (totalFiles === 0) {
           missingRequiredFiles.push(field.fieldName || field.fieldCode || `Field ${field.id}`);
         }
       }
@@ -1925,9 +2023,37 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     
     // If edit mode, update existing submission
     if (this.isEditMode && this.submissionId) {
-      // Skip status update - just save the data
-      // Status can be updated separately if needed
-      this.saveSubmissionData(this.submissionId);
+      const submissionId = this.submissionId; // Store in local variable to avoid null check issues
+      // Get current status from loaded submission or form data
+      const currentStatus = (this as any)._currentSubmissionStatus || formData.status || 'Draft';
+      console.log('[FormSubmissionCreate] Current submission status:', currentStatus);
+      
+      // Update status to Submitted if it was Draft
+      if (currentStatus === 'Draft') {
+        // Update status to Submitted
+        const updateDto = { status: 'Submitted' };
+        this.formSubmissionsService.updateSubmission(submissionId, updateDto).subscribe({
+          next: () => {
+            console.log('[FormSubmissionCreate] Status updated from Draft to Submitted');
+            this.saveSubmissionData(submissionId, 'Submitted');
+          },
+          error: (error) => {
+            console.error('[FormSubmissionCreate] Error updating status:', error);
+            const currentLang = this.translationService.getCurrentLanguage();
+            this.messageService.add({
+              severity: 'warn',
+              summary: currentLang === 'ar' ? 'تحذير' : 'Warning',
+              detail: currentLang === 'ar' 
+                ? 'فشل تحديث الـ status. سيتم المتابعة مع حفظ البيانات.' 
+                : 'Failed to update status. Will continue with saving data.'
+            });
+            // Continue with save even if status update fails
+            this.saveSubmissionData(submissionId, 'Submitted');
+          }
+        });
+      } else {
+        this.saveSubmissionData(submissionId, currentStatus);
+      }
       return;
     }
     
@@ -2207,6 +2333,21 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       saveObservables.push(this.formSubmissionValuesService.createBulk(bulkDto));
     }
 
+    // Delete removed attachments from server
+    this.deletedAttachments.forEach(attachmentId => {
+      console.log(`[FormSubmissionCreate] Deleting attachment ${attachmentId} from server`);
+      saveObservables.push(
+        this.formSubmissionAttachmentsService.delete(attachmentId).pipe(
+          catchError(error => {
+            console.error(`[FormSubmissionCreate] Error deleting attachment ${attachmentId}:`, error);
+            // Continue even if deletion fails
+            return of(null);
+          })
+        )
+      );
+    });
+
+    // Upload new files
     Object.keys(this.fieldFiles).forEach(fieldIdStr => {
       const fieldId = Number(fieldIdStr);
       const files = this.fieldFiles[fieldId];

@@ -79,6 +79,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     save: false,
     delete: false,
     fieldValues: false,
+    attachments: false,
     saveFieldValue: false,
     deleteFieldValue: false,
     create: false,
@@ -94,6 +95,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   showFieldValueModal = false;
   showPreviewModal = false;
   previewFile: FormSubmissionAttachmentDto | null = null;
+  previewImageError: boolean = false;
   isViewMode = false; // true for view-only, false for edit mode
   submissionForm!: FormGroup;
   fieldValueForm!: FormGroup;
@@ -380,7 +382,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   viewSubmissionDetails(submission: FormSubmissionDto): void {
     // Load submission details
     this.loading.fieldValues = true;
+    this.loading.attachments = false; // Reset attachments loading state
     this.isViewMode = true; // Set to view mode to show submission information
+    
+    // Clear previous attachments to avoid showing wrong attachments
+    this.fieldAttachments = {};
     
     // Initialize submission form with basic info
     this.submissionForm.patchValue({
@@ -669,6 +675,38 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     console.log('[FormSubmissionsList] Available fields:', this.submissionFields.length);
     console.log('[FormSubmissionsList] Field values:', submissionDetail.fieldValues);
     
+    // Add file/image fields that have attachments but no fieldValue
+    const fileFieldsWithoutValues: FormSubmissionValueDto[] = [];
+    this.submissionFields.forEach(field => {
+      if (this.isFileField(field.id!)) {
+        // Check if this field has attachments
+        const attachments = this.fieldAttachments[field.id!] || [];
+        if (attachments.length > 0) {
+          // Check if fieldValue already exists
+          const existingValue = submissionDetail.fieldValues.find(fv => fv.fieldId === field.id);
+          if (!existingValue) {
+            // Create a placeholder fieldValue for display purposes
+            fileFieldsWithoutValues.push({
+              id: 0,
+              submissionId: submissionDetail.id!,
+              fieldId: field.id!,
+              fieldCode: field.fieldCode || '',
+              valueString: '',
+              valueJson: '',
+              valueNumber: undefined,
+              valueDate: undefined,
+              valueBool: undefined
+            } as FormSubmissionValueDto);
+            console.log(`[FormSubmissionsList] Added file field ${field.id} (${field.fieldCode || 'unknown'}) without fieldValue but with ${attachments.length} attachment(s)`);
+          }
+        }
+      }
+    });
+    
+    // Combine fieldValues with file fields that have attachments
+    const allFieldValues = [...submissionDetail.fieldValues, ...fileFieldsWithoutValues];
+    submissionDetail.fieldValues = allFieldValues;
+    
     let controlsAdded = 0;
     submissionDetail.fieldValues.forEach(fieldValue => {
       // Skip file/image fields - they don't need form controls, only attachments
@@ -752,6 +790,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    */
   loadAttachmentsForFields(submissionId: number, fields: FormFieldDto[]): void {
     console.log('[FormSubmissionsList] loadAttachmentsForFields called with submissionId:', submissionId, 'selectedSubmission.id:', this.selectedSubmission?.id);
+    this.loading.attachments = true;
     // First, check fieldValues for fields with valueJson containing allowedExtensions
     // This works even if fields array is empty
     const fileFieldIds: number[] = [];
@@ -803,6 +842,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     
     if (fileFieldIds.length === 0) {
       console.log('[FormSubmissionsList] No file/image fields found');
+      this.loading.attachments = false;
       return;
     }
     
@@ -812,16 +852,36 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     console.log(`[FormSubmissionsList] Attempting to load all attachments for submissionId=${submissionId}`);
     this.formSubmissionAttachmentsService.getBySubmissionId(submissionId).subscribe({
       next: (allAttachments) => {
-        const allAttachmentsArray = Array.isArray(allAttachments) ? allAttachments : (allAttachments ? [allAttachments] : []);
+        // Handle different response formats
+        let allAttachmentsArray: FormSubmissionAttachmentDto[] = [];
+        
+        if (Array.isArray(allAttachments)) {
+          allAttachmentsArray = allAttachments;
+        } else if (allAttachments && typeof allAttachments === 'object') {
+          // Check if response has a data property
+          if ((allAttachments as any).data && Array.isArray((allAttachments as any).data)) {
+            allAttachmentsArray = (allAttachments as any).data;
+          } else if ((allAttachments as any).attachments && Array.isArray((allAttachments as any).attachments)) {
+            allAttachmentsArray = (allAttachments as any).attachments;
+          } else {
+            // Try to convert object to array
+            allAttachmentsArray = [allAttachments as any];
+          }
+        }
+        
         console.log(`[FormSubmissionsList] ✅ Loaded ${allAttachmentsArray.length} total attachment(s) for submissionId=${submissionId}`);
+        console.log(`[FormSubmissionsList] Raw response:`, allAttachments);
+        console.log(`[FormSubmissionsList] Processed attachments array:`, allAttachmentsArray);
         
         // Group attachments by fieldId
         const attachmentsByField: { [fieldId: number]: FormSubmissionAttachmentDto[] } = {};
         allAttachmentsArray.forEach(att => {
-          if (!attachmentsByField[att.fieldId]) {
-            attachmentsByField[att.fieldId] = [];
+          if (att && att.fieldId) {
+            if (!attachmentsByField[att.fieldId]) {
+              attachmentsByField[att.fieldId] = [];
+            }
+            attachmentsByField[att.fieldId].push(att);
           }
-          attachmentsByField[att.fieldId].push(att);
         });
         
         console.log(`[FormSubmissionsList] Attachments grouped by fieldId:`, Object.keys(attachmentsByField).map(fid => `${fid}: ${attachmentsByField[+fid].length}`).join(', '));
@@ -853,6 +913,19 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
           console.log(`[FormSubmissionsList] Updated fieldAttachments[${fieldId}] with ${fieldAttachments.length} attachment(s) from bulk load`);
         });
         
+        // Also check for attachments that might not be in fileFieldIds but exist in the response
+        Object.keys(attachmentsByField).forEach(fieldIdStr => {
+          const fieldId = +fieldIdStr;
+          if (!fileFieldIds.includes(fieldId) && attachmentsByField[fieldId].length > 0) {
+            console.log(`[FormSubmissionsList] ⚠️ Found attachments for field ${fieldId} that wasn't in fileFieldIds list`);
+            this.fieldAttachments[fieldId] = attachmentsByField[fieldId];
+          }
+        });
+        
+        // Add file/image fields that have attachments but no fieldValue
+        this.addFileFieldsWithAttachments();
+        
+        this.loading.attachments = false;
         this.cdr.detectChanges();
       },
       error: (error) => {
@@ -864,10 +937,24 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
           console.log(`[FormSubmissionsList] About to call API: getBySubmissionAndField(${submissionId}, ${fieldId})`);
           this.formSubmissionAttachmentsService.getBySubmissionAndField(submissionId, fieldId).subscribe({
             next: (attachments) => {
-              const attachmentsArray = attachments || [];
+              // Handle different response formats
+              let attachmentsArray: FormSubmissionAttachmentDto[] = [];
+              
+              if (Array.isArray(attachments)) {
+                attachmentsArray = attachments;
+              } else if (attachments && typeof attachments === 'object') {
+                if ((attachments as any).data && Array.isArray((attachments as any).data)) {
+                  attachmentsArray = (attachments as any).data;
+                } else if ((attachments as any).attachments && Array.isArray((attachments as any).attachments)) {
+                  attachmentsArray = (attachments as any).attachments;
+                } else {
+                  attachmentsArray = [attachments as any];
+                }
+              }
+              
               console.log(`[FormSubmissionsList] ✅ Loaded ${attachmentsArray.length} attachment(s) for field ${fieldId}, submissionId=${submissionId}`);
-              console.log(`[FormSubmissionsList] Attachments array:`, attachmentsArray);
-              console.log(`[FormSubmissionsList] Attachments response type:`, typeof attachments, Array.isArray(attachments));
+              console.log(`[FormSubmissionsList] Raw response:`, attachments);
+              console.log(`[FormSubmissionsList] Processed attachments array:`, attachmentsArray);
               
               if (attachmentsArray.length > 0) {
                 attachmentsArray.forEach((att, index) => {
@@ -895,6 +982,13 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
               
               this.fieldAttachments[fieldId] = attachmentsArray;
               console.log(`[FormSubmissionsList] Updated fieldAttachments[${fieldId}] with ${attachmentsArray.length} attachment(s)`);
+              
+              // Check if all requests are done
+              const allRequestsDone = fileFieldIds.every(fid => this.fieldAttachments.hasOwnProperty(fid));
+              if (allRequestsDone) {
+                this.loading.attachments = false;
+              }
+              
               this.cdr.detectChanges();
             },
             error: (error) => {
@@ -912,6 +1006,13 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
                 });
               }
               this.fieldAttachments[fieldId] = [];
+              
+              // Check if all requests are done
+              const allRequestsDone = fileFieldIds.every(fid => this.fieldAttachments.hasOwnProperty(fid));
+              if (allRequestsDone) {
+                this.loading.attachments = false;
+              }
+              
               this.cdr.detectChanges();
             }
           });
@@ -1043,46 +1144,50 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    * Get image URL from filePath stored in database
    */
   getImageUrl(attachment: FormSubmissionAttachmentDto): string {
-    console.log(`[FormSubmissionsList] getImageUrl for attachment:`, {
-      id: attachment.id,
-      fileName: attachment.fileName,
-      filePath: attachment.filePath,
-      downloadUrl: attachment.downloadUrl
-    });
+    // Use FileUploadService to get download URL (same as FormViewComponent)
+    if (attachment.id) {
+      const downloadUrl = this.fileUploadService.getDownloadUrl(attachment.id);
+      console.log(`[FormSubmissionsList] getImageUrl for attachment ${attachment.id}:`, {
+        fileName: attachment.fileName,
+        downloadUrl: downloadUrl,
+        filePath: attachment.filePath,
+        attachmentDownloadUrl: attachment.downloadUrl
+      });
+      return downloadUrl;
+    }
     
-    // If downloadUrl is provided, use it
+    // Fallback: If downloadUrl is provided, use it
     if (attachment.downloadUrl) {
+      console.log(`[FormSubmissionsList] getImageUrl: Using attachment.downloadUrl:`, attachment.downloadUrl);
       return attachment.downloadUrl;
     }
     
-    // If filePath is a full URL, use it directly
+    // Fallback: If filePath is a full URL, use it directly
     if (attachment.filePath && (attachment.filePath.startsWith('http://') || attachment.filePath.startsWith('https://'))) {
+      console.log(`[FormSubmissionsList] getImageUrl: Using full URL filePath:`, attachment.filePath);
       return attachment.filePath;
     }
     
-    // If filePath is relative (from database), construct full URL
+    // Fallback: Construct URL from filePath
     if (attachment.filePath) {
-      // Remove leading slash if present
       let cleanPath = attachment.filePath.startsWith('/') ? attachment.filePath.substring(1) : attachment.filePath;
-      
-      // If path doesn't start with 'uploads' or 'wwwroot', prepend common upload directory
-      // Common patterns: submissions/25/image.png or uploads/submissions/25/image.png
       if (!cleanPath.startsWith('uploads/') && !cleanPath.startsWith('wwwroot/') && !cleanPath.startsWith('www/')) {
-        // Try common upload paths
         if (cleanPath.startsWith('submissions/')) {
-          // Path is already correct: submissions/25/image.png
-          return `${environment.apiUrl}/${cleanPath}`;
+          const url = `${environment.apiUrl}/${cleanPath}`;
+          console.log(`[FormSubmissionsList] getImageUrl: Constructed URL from submissions path:`, url);
+          return url;
         } else {
-          // Assume it's in uploads directory
           cleanPath = `uploads/${cleanPath}`;
         }
       }
-      
-      return `${environment.apiUrl}/${cleanPath}`;
+      const url = `${environment.apiUrl}/${cleanPath}`;
+      console.log(`[FormSubmissionsList] getImageUrl: Constructed URL from filePath:`, url);
+      return url;
     }
     
-    // Fallback to download endpoint using attachment ID
-    return `${environment.apiUrl}/FormSubmissionAttachments/${attachment.id}/download`;
+    // Final fallback - return empty string to avoid 404
+    console.warn(`[FormSubmissionsList] getImageUrl: No valid URL found for attachment:`, attachment);
+    return '';
   }
 
   /**
@@ -1099,6 +1204,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   openPreview(attachment: FormSubmissionAttachmentDto): void {
     if (this.canPreviewFile(attachment)) {
       this.previewFile = attachment;
+      this.previewImageError = false; // Reset error state
       this.showPreviewModal = true;
     }
   }
@@ -1109,6 +1215,24 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   closePreview(): void {
     this.showPreviewModal = false;
     this.previewFile = null;
+    this.previewImageError = false;
+  }
+
+  /**
+   * Handle image error in preview modal
+   */
+  handlePreviewImageError(event: any, attachment: FormSubmissionAttachmentDto): void {
+    console.error(`[FormSubmissionsList] Error loading preview image for attachment ${attachment.id}:`, {
+      fileName: attachment.fileName,
+      downloadUrl: this.fileUploadService.getDownloadUrl(attachment.id!),
+      imageUrl: this.getImageUrl(attachment)
+    });
+    this.previewImageError = true;
+    // Try fallback URL once
+    if (event.target.src !== attachment.downloadUrl && attachment.downloadUrl) {
+      event.target.src = attachment.downloadUrl;
+      this.previewImageError = false;
+    }
   }
 
   /**
@@ -1135,9 +1259,17 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       downloadUrl: attachment.downloadUrl,
       imageUrl: this.getImageUrl(attachment)
     });
-    // Try fallback to download URL
+    // Hide the image and show icon instead
+    const thumbnail = event.target.closest('.file-preview-thumbnail');
+    if (thumbnail) {
+      thumbnail.style.display = 'none';
+    }
+    // Try fallback to download URL once
     if (event.target.src !== this.getAttachmentDownloadUrl(attachment.id)) {
       event.target.src = this.getAttachmentDownloadUrl(attachment.id);
+    } else {
+      // If fallback also failed, hide the image element
+      event.target.style.display = 'none';
     }
   }
 
@@ -1173,16 +1305,33 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Validate required file fields
+    const missingFiles = this.validateRequiredFileFields();
+    if (missingFiles.length > 0) {
+      const fieldNames = missingFiles.map(f => this.getFieldDisplayName(f)).join(', ');
+      const errorMessage = this.translationService.getCurrentLanguage() === 'ar' 
+        ? `يرجى رفع الملفات للحقول المطلوبة: ${fieldNames}`
+        : `Please upload files for required fields: ${fieldNames}`;
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Validation Error',
+        detail: errorMessage
+      });
+      return;
+    }
+
     this.loading.save = true;
     const formData = this.submissionForm.value;
     const updateDto: UpdateFormSubmissionDto = {
       documentNumber: formData.documentNumber || undefined,
-      status: formData.status
+      status: 'Submitted' // Always set status to Submitted after edit and save
     };
 
     // Update submission basic info
     this.formSubmissionsService.updateSubmission(this.selectedSubmission.id, updateDto).subscribe({
       next: () => {
+        // Update the form status to Submitted
+        this.submissionForm.patchValue({ status: 'Submitted' });
         // Now update field values
         this.updateSubmissionFieldValues();
       },
@@ -1198,6 +1347,44 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  /**
+   * Validate required file fields have attachments
+   */
+  validateRequiredFileFields(): FormFieldDto[] {
+    const missingFields: FormFieldDto[] = [];
+    
+    if (!this.selectedSubmission || !this.submissionFields.length) {
+      console.log('[FormSubmissionsList] validateRequiredFileFields: No submission or fields');
+      return missingFields;
+    }
+
+    console.log('[FormSubmissionsList] validateRequiredFileFields: Checking', this.submissionFields.length, 'fields');
+    console.log('[FormSubmissionsList] validateRequiredFileFields: fieldAttachments keys:', Object.keys(this.fieldAttachments));
+
+    // Check all fields in submissionFields
+    this.submissionFields.forEach(field => {
+      // Check if field is required and is a file/image field
+      if (this.isRequired(field) && this.isFileFieldByObject(field)) {
+        const attachments = this.getFieldAttachments(field.id!);
+        console.log(`[FormSubmissionsList] validateRequiredFileFields: Field ${field.id} (${field.fieldName || field.fieldCode}) - Required: ${this.isRequired(field)}, IsFile: ${this.isFileFieldByObject(field)}, Attachments: ${attachments.length}`);
+        
+        // Check if there are no attachments for this field
+        // Also check if attachments exist but have no valid IDs (might be loading)
+        const hasValidAttachments = attachments && attachments.length > 0 && attachments.some(att => att.id);
+        
+        if (!hasValidAttachments) {
+          console.log(`[FormSubmissionsList] validateRequiredFileFields: ❌ Missing attachments for required field ${field.id} (${field.fieldName || field.fieldCode})`);
+          missingFields.push(field);
+        } else {
+          console.log(`[FormSubmissionsList] validateRequiredFileFields: ✅ Field ${field.id} has ${attachments.length} valid attachment(s)`);
+        }
+      }
+    });
+
+    console.log('[FormSubmissionsList] validateRequiredFileFields: Missing fields:', missingFields.length);
+    return missingFields;
   }
 
   saveSubmissionAsDraft(): void {
@@ -1668,6 +1855,47 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     if (value.valueBool !== null && value.valueBool !== undefined) return value.valueBool ? 'Yes' : 'No';
     if (value.valueJson) return value.valueJson;
     return '-';
+  }
+
+  /**
+   * Add file/image fields that have attachments but no fieldValue
+   */
+  addFileFieldsWithAttachments(): void {
+    if (!this.selectedSubmission) return;
+    
+    const fileFieldsWithoutValues: FormSubmissionValueDto[] = [];
+    this.submissionFields.forEach(field => {
+      if (this.isFileField(field.id!)) {
+        // Check if this field has attachments
+        const attachments = this.fieldAttachments[field.id!] || [];
+        if (attachments.length > 0) {
+          // Check if fieldValue already exists
+          const existingValue = this.selectedSubmission!.fieldValues.find(fv => fv.fieldId === field.id);
+          if (!existingValue) {
+            // Create a placeholder fieldValue for display purposes
+            fileFieldsWithoutValues.push({
+              id: 0,
+              submissionId: this.selectedSubmission!.id!,
+              fieldId: field.id!,
+              fieldCode: field.fieldCode || '',
+              valueString: '',
+              valueJson: '',
+              valueNumber: undefined,
+              valueDate: undefined,
+              valueBool: undefined
+            } as FormSubmissionValueDto);
+            console.log(`[FormSubmissionsList] Added file field ${field.id} (${field.fieldCode || 'unknown'}) without fieldValue but with ${attachments.length} attachment(s)`);
+          }
+        }
+      }
+    });
+    
+    // Combine fieldValues with file fields that have attachments
+    if (fileFieldsWithoutValues.length > 0) {
+      this.selectedSubmission.fieldValues = [...this.selectedSubmission.fieldValues, ...fileFieldsWithoutValues];
+      console.log(`[FormSubmissionsList] Added ${fileFieldsWithoutValues.length} file field(s) with attachments to fieldValues`);
+      this.cdr.detectChanges();
+    }
   }
 
   /**

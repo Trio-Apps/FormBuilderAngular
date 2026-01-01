@@ -236,7 +236,11 @@
               
               <!-- File/Image Field - Show attachments ONLY (hide all text inputs) -->
               <div *ngIf="isFileField(fieldValue.fieldId)" class="file-attachments-display">
-                <div *ngIf="getFieldAttachments(fieldValue.fieldId).length === 0" class="no-attachments">
+                <div *ngIf="loading.attachments" class="loading-attachments">
+                  <i class="pi pi-spin pi-spinner"></i>
+                  <span>{{ translationService.getCurrentLanguage() === 'ar' ? 'جاري تحميل الملفات...' : 'Loading attachments...' }}</span>
+                </div>
+                <div *ngIf="!loading.attachments && getFieldAttachments(fieldValue.fieldId).length === 0" class="no-attachments">
                   <i class="pi pi-image"></i>
                   <span>
                     {{ getFileNameFromValue(fieldValue) || (translationService.getCurrentLanguage() === 'ar' ? 'لا توجد ملفات مرفقة' : 'No attachments') }}
@@ -244,17 +248,20 @@
                 </div>
                 
                 <!-- Uploaded Files List (same style as FormViewComponent) -->
-                <div class="uploaded-files-list" *ngIf="getFieldAttachments(fieldValue.fieldId).length > 0">
+                <div class="uploaded-files-list" *ngIf="!loading.attachments && getFieldAttachments(fieldValue.fieldId).length > 0">
                   <div class="uploaded-file-item" *ngFor="let attachment of getFieldAttachments(fieldValue.fieldId)">
-                    <!-- File Preview Thumbnail (for images) -->
-                    <div class="file-preview-thumbnail" *ngIf="isImageAttachment(attachment) && getPreviewUrl(attachment)">
-                      <img [src]="getPreviewUrl(attachment)" 
+                    <!-- File Preview Thumbnail (for images) - Show thumbnail OR icon, not both -->
+                    <div class="file-preview-thumbnail" *ngIf="isImageAttachment(attachment) && getPreviewUrl(attachment) && attachment.id">
+                      <img [src]="getPreviewUrl(attachment)!" 
                            [alt]="attachment.fileName"
-                           (click)="openPreview(attachment)" />
+                           (error)="handleImageError($event, attachment)"
+                           (click)="openPreview(attachment)"
+                           style="display: block;" />
                     </div>
 
-                    <!-- File Icon -->
+                    <!-- File Icon (only show if not an image or if image failed to load) -->
                     <div class="file-icon" 
+                         *ngIf="!isImageAttachment(attachment) || !getPreviewUrl(attachment)"
                          [class.has-preview]="canPreviewFile(attachment)"
                          (click)="canPreviewFile(attachment) && openPreview(attachment)">
                       <i [class]="getFileIcon(attachment)"></i>
@@ -292,10 +299,22 @@
                       <i class="pi pi-times"></i>
                     </button>
                     <div class="preview-container">
-                      <img *ngIf="isImageFile(previewFile)" [src]="getPreviewUrl(previewFile!)"
-                        [alt]="previewFile!.fileName" />
-                      <iframe *ngIf="isPdfFile(previewFile)" [src]="getPreviewUrl(previewFile!)"
-                        frameborder="0"></iframe>
+                      <img *ngIf="isImageFile(previewFile) && getPreviewUrl(previewFile!) && previewFile!.id" 
+                           [src]="getPreviewUrl(previewFile!)!"
+                           [alt]="previewFile!.fileName"
+                           (error)="handlePreviewImageError($event, previewFile!)"
+                           style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+                      <iframe *ngIf="isPdfFile(previewFile) && getPreviewUrl(previewFile!) && previewFile!.id" 
+                              [src]="getPreviewUrl(previewFile!)!"
+                              frameborder="0"
+                              style="width: 100%; height: 100%; min-height: 600px;"></iframe>
+                      <div *ngIf="previewImageError || (previewFile && !previewFile.id)" class="preview-error">
+                        <i class="pi pi-image" style="font-size: 48px; color: #ccc;"></i>
+                        <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'فشل تحميل الصورة' : 'Failed to load image' }}</p>
+                        <p *ngIf="previewFile && !previewFile.id" style="font-size: 12px; color: #999;">
+                          {{ translationService.getCurrentLanguage() === 'ar' ? 'معرف الملف غير موجود' : 'File ID is missing' }}
+                        </p>
+                      </div>
                     </div>
                     <div class="preview-footer">
                       <span class="preview-file-name">{{ previewFile!.fileName }}</span>
@@ -373,21 +392,6 @@
 
     <div class="dialog-footer">
       <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeSubmissionModal()" [disabled]="loading.save"></button>
-      <button type="button" pButton 
-        *ngIf="isViewMode"
-        label="Edit" 
-        icon="pi pi-pencil"
-        class="p-button-primary"
-        (click)="enableEditMode()"
-        [disabled]="loading.save"></button>
-      <button type="button" pButton 
-        *ngIf="!isViewMode"
-        label="Save as Draft" 
-        icon="pi pi-file"
-        class="p-button-info"
-        (click)="saveSubmissionAsDraft()"
-        [disabled]="submissionForm.invalid || loading.save"
-        [loading]="loading.save"></button>
       <button type="submit" pButton 
         *ngIf="!isViewMode"
         label="Update Submission" 
