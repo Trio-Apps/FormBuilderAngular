@@ -84,8 +84,49 @@ export class FormSubmissionAttachmentsService {
   }
 
   getBySubmissionId(submissionId: number): Observable<FormSubmissionAttachmentDto[]> {
-    return this.http.get<any>(`${this.baseUrl}/submission/${submissionId}`).pipe(
-      map(response => response.data || response),
+    const url = `${this.baseUrl}/submission/${submissionId}`;
+    console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Calling API: ${url}`);
+    return this.http.get<any>(url).pipe(
+      map(response => {
+        console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Response for submissionId=${submissionId}:`, response);
+        console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Response type:`, typeof response);
+        console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Response is array:`, Array.isArray(response));
+        console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Response keys:`, response ? Object.keys(response) : 'null/undefined');
+        console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Response.data:`, response?.data);
+        console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Response.data is array:`, Array.isArray(response?.data));
+        console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Response.data length:`, Array.isArray(response?.data) ? response.data.length : 'N/A');
+        
+        // Try multiple possible response structures
+        let attachments: any = null;
+        
+        if (Array.isArray(response)) {
+          attachments = response;
+          console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Response is direct array with ${attachments.length} items`);
+        } else if (response?.data) {
+          attachments = response.data;
+          console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Using response.data, type:`, Array.isArray(attachments) ? 'Array' : typeof attachments);
+        } else if (response?.items) {
+          attachments = response.items;
+          console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Using response.items`);
+        } else if (response?.attachments) {
+          attachments = response.attachments;
+          console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Using response.attachments`);
+        } else if (response && typeof response === 'object') {
+          attachments = response;
+          console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Response is single object`);
+        } else {
+          attachments = [];
+          console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - No attachments found in response`);
+        }
+        
+        // Ensure we return an array
+        const result = Array.isArray(attachments) ? attachments : (attachments ? [attachments] : []);
+        console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - Final result:`, result.length, 'attachment(s)');
+        if (result.length > 0) {
+          console.log(`[FormSubmissionAttachmentsService] getBySubmissionId - First attachment:`, result[0]);
+        }
+        return result;
+      }),
       catchError(this.handleError)
     );
   }
@@ -98,8 +139,54 @@ export class FormSubmissionAttachmentsService {
   }
 
   getBySubmissionAndField(submissionId: number, fieldId: number): Observable<FormSubmissionAttachmentDto[]> {
-    return this.http.get<any>(`${this.baseUrl}/submission/${submissionId}/field/${fieldId}`).pipe(
-      map(response => response.data || response),
+    const url = `${this.baseUrl}/submission/${submissionId}/field/${fieldId}`;
+    console.log(`[FormSubmissionAttachmentsService] getBySubmissionAndField - Calling API: ${url}`);
+    return this.http.get<any>(url).pipe(
+      map(response => {
+        console.log(`[FormSubmissionAttachmentsService] getBySubmissionAndField - Response for submissionId=${submissionId}, fieldId=${fieldId}:`, response);
+        console.log(`[FormSubmissionAttachmentsService] Response type:`, typeof response);
+        console.log(`[FormSubmissionAttachmentsService] Response is array:`, Array.isArray(response));
+        console.log(`[FormSubmissionAttachmentsService] Response keys:`, response ? Object.keys(response) : 'null/undefined');
+        console.log(`[FormSubmissionAttachmentsService] Response.data:`, response?.data);
+        console.log(`[FormSubmissionAttachmentsService] Response.data is array:`, Array.isArray(response?.data));
+        console.log(`[FormSubmissionAttachmentsService] Response.data length:`, Array.isArray(response?.data) ? response.data.length : 'N/A');
+        
+        // Try multiple possible response structures
+        let attachments: any = null;
+        
+        if (Array.isArray(response)) {
+          // Response is directly an array
+          attachments = response;
+          console.log(`[FormSubmissionAttachmentsService] Response is direct array with ${attachments.length} items`);
+        } else if (response?.data) {
+          // Response has data property
+          attachments = response.data;
+          console.log(`[FormSubmissionAttachmentsService] Using response.data, type:`, Array.isArray(attachments) ? 'Array' : typeof attachments);
+        } else if (response?.items) {
+          // Response has items property
+          attachments = response.items;
+          console.log(`[FormSubmissionAttachmentsService] Using response.items`);
+        } else if (response?.attachments) {
+          // Response has attachments property
+          attachments = response.attachments;
+          console.log(`[FormSubmissionAttachmentsService] Using response.attachments`);
+        } else if (response && typeof response === 'object') {
+          // Response is a single object
+          attachments = response;
+          console.log(`[FormSubmissionAttachmentsService] Response is single object`);
+        } else {
+          attachments = [];
+          console.log(`[FormSubmissionAttachmentsService] No attachments found in response`);
+        }
+        
+        // Ensure we return an array
+        const result = Array.isArray(attachments) ? attachments : (attachments ? [attachments] : []);
+        console.log(`[FormSubmissionAttachmentsService] Final result:`, result.length, 'attachment(s)');
+        if (result.length > 0) {
+          console.log(`[FormSubmissionAttachmentsService] First attachment:`, result[0]);
+        }
+        return result;
+      }),
       catchError(this.handleError)
     );
   }

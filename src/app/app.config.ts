@@ -4,8 +4,7 @@ import {
   provideRouter,
   withEnabledBlockingInitialNavigation,
   withInMemoryScrolling,
-  withRouterConfig,
-  withViewTransitions
+  withRouterConfig
 } from '@angular/router';
 import { provideHttpClient, withInterceptors, withFetch } from '@angular/common/http';
 
@@ -26,8 +25,8 @@ export const appConfig: ApplicationConfig = {
         scrollPositionRestoration: 'top',
         anchorScrolling: 'enabled'
       }),
-      withEnabledBlockingInitialNavigation(),
-      withViewTransitions()
+      withEnabledBlockingInitialNavigation()
+      // Removed withViewTransitions() to fix InvalidStateError with lazy loading
     ),
     provideHttpClient(
       withFetch(),

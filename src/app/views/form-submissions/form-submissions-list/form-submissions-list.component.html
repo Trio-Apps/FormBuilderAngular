@@ -66,6 +66,7 @@
             <option [ngValue]="'Rejected'">Rejected</option>
             <option [ngValue]="'Pending Approval'">Pending Approval</option>
           </select>
+          
         </div>
       </div>
 
@@ -127,6 +128,12 @@
             <td>
               <div class="action-buttons">
                 <button pButton 
+                  icon="pi pi-eye" 
+                  class="p-button-text p-button-sm action-btn" 
+                  (click)="viewSubmissionDetails(submission)"
+                  pTooltip="View Details"
+                  tooltipPosition="top"></button>
+                <button pButton 
                   icon="pi pi-pencil" 
                   class="p-button-text p-button-sm action-btn" 
                   (click)="openEditModal(submission)"
@@ -160,7 +167,7 @@
 <!-- Edit Submission Modal -->
 <p-dialog
   [(visible)]="showSubmissionModal"
-  [header]="'Edit Form Submission'"
+  [header]="isViewMode ? 'View Submission Details' : 'Edit Form Submission'"
   [modal]="true"
   [style]="{ width: '90%', maxWidth: '1000px' }"
   [draggable]="false"
@@ -173,101 +180,191 @@
     <p>Loading submission details...</p>
   </div>
   
-  <form [formGroup]="submissionForm" (ngSubmit)="saveSubmission()" *ngIf="!loading.fieldValues">
-    <!-- Basic Submission Info -->
-    <div class="form-section">
-      <h4>Submission Information</h4>
-    <div class="form-group">
-      <label for="documentNumber">
-        Document Number
-      </label>
-      <input type="text" id="documentNumber" pInputText formControlName="documentNumber" placeholder="Enter document number" />
-    </div>
+  <form [formGroup]="submissionForm" (ngSubmit)="saveSubmission()" *ngIf="!loading.fieldValues" [class.read-only-form]="isViewMode">
+    <!-- Submission Information - Google Forms Style -->
+    <div class="form-display-section">
+      <div class="form-field-wrapper">
+        <label class="field-label" for="documentNumber">
+          Document Number
+        </label>
+        <div class="field-input-wrapper">
+          <input 
+            type="text" 
+            id="documentNumber" 
+            class="form-input"
+            formControlName="documentNumber" 
+            placeholder="Enter document number" 
+            [readonly]="isViewMode" />
+        </div>
+      </div>
 
-    <div class="form-group">
-      <label for="status">
-        Status <span class="text-danger">*</span>
-      </label>
-      <select
-        id="status"
-        formControlName="status"
-        class="p-inputtext w-full">
-        <option value="Draft">Draft</option>
-        <option value="Submitted">Submitted</option>
-        <option value="Approved">Approved</option>
-        <option value="Rejected">Rejected</option>
-        <option value="Pending Approval">Pending Approval</option>
-      </select>
+      <div class="form-field-wrapper">
+        <label class="field-label" for="status">
+          Status <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <select
+            id="status"
+            formControlName="status"
+            class="form-select">
+            <option value="Draft">Draft</option>
+            <option value="Submitted">Submitted</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Pending Approval">Pending Approval</option>
+          </select>
+        </div>
       </div>
     </div>
 
-    <!-- Field Values -->
-    <div class="form-section" *ngIf="selectedSubmission && !loading.fieldValues">
-      <h4>Field Values</h4>
-      <div *ngIf="!selectedSubmission.fieldValues || selectedSubmission.fieldValues.length === 0" class="text-muted">
-        <p>No field values found for this submission.</p>
-        <p class="text-small">Field values count: {{ selectedSubmission?.fieldValues?.length || 0 }}</p>
+    <!-- Field Values - Google Forms Style -->
+    <div class="form-display-section" *ngIf="selectedSubmission && !loading.fieldValues">
+      <div *ngIf="!selectedSubmission.fieldValues || selectedSubmission.fieldValues.length === 0" class="form-field-wrapper">
+        <div class="text-muted" style="text-align: center; padding: 20px; color: #5f6368;">
+          <p>No field values found for this submission.</p>
+        </div>
       </div>
-      <form [formGroup]="editSubmissionValuesForm" *ngIf="selectedSubmission.fieldValues && selectedSubmission.fieldValues.length > 0">
-        <div class="field-values-container">
-          <div *ngFor="let fieldValue of selectedSubmission.fieldValues" class="field-value-item">
-            <div class="form-group">
-              <label>
-                {{ getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || ('Field #' + fieldValue.fieldId) }}
-                <span *ngIf="isFieldRequired(fieldValue.fieldId)" class="text-danger">*</span>
-              </label>
+      <form [formGroup]="editSubmissionValuesForm" *ngIf="selectedSubmission.fieldValues && selectedSubmission.fieldValues.length > 0" [class.read-only]="isViewMode">
+        <div class="google-form-fields">
+          <div *ngFor="let fieldValue of selectedSubmission.fieldValues" class="form-field-wrapper">
+            <label class="field-label">
+              {{ getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || ('Field #' + fieldValue.fieldId) }}
+              <span *ngIf="isFieldRequired(fieldValue.fieldId)" class="required-indicator">*</span>
+            </label>
+            
+            <div class="field-input-wrapper">
               
-              <!-- Text/String Input -->
+              <!-- File/Image Field - Show attachments ONLY (hide all text inputs) -->
+              <div *ngIf="isFileField(fieldValue.fieldId)" class="file-attachments-display">
+                <div *ngIf="getFieldAttachments(fieldValue.fieldId).length === 0" class="no-attachments">
+                  <i class="pi pi-image"></i>
+                  <span>
+                    {{ getFileNameFromValue(fieldValue) || (translationService.getCurrentLanguage() === 'ar' ? 'لا توجد ملفات مرفقة' : 'No attachments') }}
+                  </span>
+                </div>
+                
+                <!-- Uploaded Files List (same style as FormViewComponent) -->
+                <div class="uploaded-files-list" *ngIf="getFieldAttachments(fieldValue.fieldId).length > 0">
+                  <div class="uploaded-file-item" *ngFor="let attachment of getFieldAttachments(fieldValue.fieldId)">
+                    <!-- File Preview Thumbnail (for images) -->
+                    <div class="file-preview-thumbnail" *ngIf="isImageAttachment(attachment) && getPreviewUrl(attachment)">
+                      <img [src]="getPreviewUrl(attachment)" 
+                           [alt]="attachment.fileName"
+                           (click)="openPreview(attachment)" />
+                    </div>
+
+                    <!-- File Icon -->
+                    <div class="file-icon" 
+                         [class.has-preview]="canPreviewFile(attachment)"
+                         (click)="canPreviewFile(attachment) && openPreview(attachment)">
+                      <i [class]="getFileIcon(attachment)"></i>
+                    </div>
+
+                    <!-- File Info -->
+                    <div class="file-info">
+                      <span class="file-name" [title]="attachment.fileName">{{ attachment.fileName }}</span>
+                      <span class="file-size">{{ formatFileSize(attachment.fileSize) }}</span>
+                    </div>
+
+                    <!-- File Actions -->
+                    <div class="file-actions">
+                      <button type="button" 
+                              class="preview-btn" 
+                              *ngIf="canPreviewFile(attachment)"
+                              (click)="openPreview(attachment)"
+                              [title]="translationService.getCurrentLanguage() === 'ar' ? 'معاينة' : 'Preview'">
+                        <i class="pi pi-eye"></i>
+                      </button>
+                      <a [href]="fileUploadService.getDownloadUrl(attachment.id!)" 
+                         target="_blank" 
+                         class="download-link"
+                         [title]="translationService.getCurrentLanguage() === 'ar' ? 'تحميل' : 'Download'">
+                        <i class="pi pi-download"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- File Preview Modal -->
+                <div class="preview-modal-overlay" *ngIf="showPreviewModal && previewFile" (click)="closePreview()">
+                  <div class="preview-modal-content" (click)="$event.stopPropagation()">
+                    <button type="button" class="close-preview-btn" (click)="closePreview()">
+                      <i class="pi pi-times"></i>
+                    </button>
+                    <div class="preview-container">
+                      <img *ngIf="isImageFile(previewFile)" [src]="getPreviewUrl(previewFile!)"
+                        [alt]="previewFile!.fileName" />
+                      <iframe *ngIf="isPdfFile(previewFile)" [src]="getPreviewUrl(previewFile!)"
+                        frameborder="0"></iframe>
+                    </div>
+                    <div class="preview-footer">
+                      <span class="preview-file-name">{{ previewFile!.fileName }}</span>
+                      <a [href]="fileUploadService.getDownloadUrl(previewFile!.id!)" target="_blank"
+                        class="download-link">
+                        <i class="pi pi-download"></i>
+                        {{ translationService.getCurrentLanguage() === 'ar' ? 'تحميل' : 'Download' }}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Text/String Input (hide for file fields) -->
               <input 
-                *ngIf="getFieldTypeById(fieldValue.fieldId) === 'text' || getFieldTypeById(fieldValue.fieldId) === 'string'"
+                *ngIf="(getFieldTypeById(fieldValue.fieldId, fieldValue) === 'text' || getFieldTypeById(fieldValue.fieldId, fieldValue) === 'string') && !isFileField(fieldValue.fieldId)"
                 type="text" 
-                pInputText 
+                class="form-input"
                 [formControlName]="'field_' + fieldValue.fieldId"
-                [placeholder]="'Enter ' + (getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'value')" />
+                [placeholder]="getFieldPlaceholder(getSubmissionField(fieldValue.fieldId))"
+                [readonly]="isViewMode" />
               
               <!-- Number Input -->
-              <p-inputNumber 
-                *ngIf="getFieldTypeById(fieldValue.fieldId) === 'number'"
+              <input
+                *ngIf="getFieldTypeById(fieldValue.fieldId, fieldValue) === 'number' && !isFileField(fieldValue.fieldId)"
+                type="number"
+                class="form-input"
                 [formControlName]="'field_' + fieldValue.fieldId"
-                [placeholder]="'Enter ' + (getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'value')"
-                [showButtons]="false"
-                [useGrouping]="false">
-              </p-inputNumber>
+                [placeholder]="getFieldPlaceholder(getSubmissionField(fieldValue.fieldId))"
+                [readonly]="isViewMode" />
               
               <!-- Date Input -->
               <input 
-                *ngIf="getFieldTypeById(fieldValue.fieldId) === 'date'"
+                *ngIf="getFieldTypeById(fieldValue.fieldId, fieldValue) === 'date' && !isFileField(fieldValue.fieldId)"
                 type="datetime-local" 
-                pInputText 
+                class="form-input"
                 [formControlName]="'field_' + fieldValue.fieldId"
-                [placeholder]="'Select date'" />
+                placeholder="Select date"
+                [readonly]="isViewMode" />
               
               <!-- Boolean Checkbox -->
-              <div *ngIf="getFieldTypeById(fieldValue.fieldId) === 'boolean'" class="checkbox-wrapper">
-                <p-checkbox 
-                  [formControlName]="'field_' + fieldValue.fieldId"
-                  [binary]="true">
-                </p-checkbox>
-                <label class="checkbox-label">{{ getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'Value' }}</label>
+              <div *ngIf="getFieldTypeById(fieldValue.fieldId, fieldValue) === 'boolean' && !isFileField(fieldValue.fieldId)" class="checkbox-group">
+                <div class="checkbox-option">
+                  <p-checkbox 
+                    [formControlName]="'field_' + fieldValue.fieldId"
+                    [binary]="true">
+                  </p-checkbox>
+                  <label class="checkbox-label">{{ getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'Value' }}</label>
+                </div>
               </div>
               
-              <!-- Textarea for JSON/Long Text -->
+              <!-- Textarea for JSON/Long Text (hide for file fields) -->
               <textarea 
-                *ngIf="getFieldTypeById(fieldValue.fieldId) === 'json' || getFieldTypeById(fieldValue.fieldId) === 'textarea'"
-                pInputText 
+                *ngIf="(getFieldTypeById(fieldValue.fieldId, fieldValue) === 'json' || getFieldTypeById(fieldValue.fieldId, fieldValue) === 'textarea') && !isFileField(fieldValue.fieldId)"
+                class="form-textarea"
                 [formControlName]="'field_' + fieldValue.fieldId"
-                [placeholder]="'Enter ' + (getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'value')"
-                rows="3"
-                class="w-full">
+                [placeholder]="getFieldPlaceholder(getSubmissionField(fieldValue.fieldId))"
+                rows="4"
+                [readonly]="isViewMode">
               </textarea>
               
-              <!-- Default: Text Input -->
+              <!-- Default: Text Input (hide for file fields) -->
               <input 
-                *ngIf="!getFieldTypeById(fieldValue.fieldId)"
+                *ngIf="!getFieldTypeById(fieldValue.fieldId, fieldValue) && !isFileField(fieldValue.fieldId)"
                 type="text" 
-                pInputText 
+                class="form-input"
                 [formControlName]="'field_' + fieldValue.fieldId"
-                [placeholder]="'Enter ' + (getFieldName(fieldValue.fieldId) || fieldValue.fieldCode || 'value')" />
+                [placeholder]="getFieldPlaceholder(getSubmissionField(fieldValue.fieldId))"
+                [readonly]="isViewMode" />
             </div>
           </div>
         </div>
@@ -276,7 +373,23 @@
 
     <div class="dialog-footer">
       <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeSubmissionModal()" [disabled]="loading.save"></button>
+      <button type="button" pButton 
+        *ngIf="isViewMode"
+        label="Edit" 
+        icon="pi pi-pencil"
+        class="p-button-primary"
+        (click)="enableEditMode()"
+        [disabled]="loading.save"></button>
+      <button type="button" pButton 
+        *ngIf="!isViewMode"
+        label="Save as Draft" 
+        icon="pi pi-file"
+        class="p-button-info"
+        (click)="saveSubmissionAsDraft()"
+        [disabled]="submissionForm.invalid || loading.save"
+        [loading]="loading.save"></button>
       <button type="submit" pButton 
+        *ngIf="!isViewMode"
         label="Update Submission" 
         icon="pi pi-save"
         [disabled]="submissionForm.invalid || loading.save"
@@ -481,7 +594,7 @@
       <form [formGroup]="fieldsForm">
           <div *ngFor="let field of fields" class="form-field-wrapper">
             <!-- Field Label -->
-            <label class="field-label" [for]="isFileField(field) ? 'file-' + field.id : 'field_' + field.id">
+            <label class="field-label" [for]="isFileFieldByObject(field) ? 'file-' + field.id : 'field_' + field.id">
             {{ getFieldDisplayName(field) }}
               <span *ngIf="isRequired(field)" class="required-indicator">*</span>
           </label>
@@ -500,7 +613,7 @@
 
               <!-- Text Input -->
           <input
-                *ngIf="getFieldType(field) === 'string' && !isFileField(field)"
+                *ngIf="getFieldType(field) === 'string' && !isFileFieldByObject(field)"
             type="text"
             [id]="'field_' + field.id"
             [formControlName]="'field_' + field.id"
@@ -592,7 +705,7 @@
           </div>
 
               <!-- File Upload Field -->
-              <div *ngIf="isFileField(field)" class="file-upload-wrapper">
+              <div *ngIf="isFileFieldByObject(field)" class="file-upload-wrapper">
                 <!-- Allowed Extensions Info -->
                 <div class="allowed-extensions-info" *ngIf="getAllowedExtensions(field).length > 0">
                   <i class="pi pi-info-circle"></i>

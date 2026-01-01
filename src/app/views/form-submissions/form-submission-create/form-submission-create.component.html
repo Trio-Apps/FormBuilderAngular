@@ -223,7 +223,36 @@
                       </div>
                     </div>
 
-                    <!-- Uploaded Files List -->
+                    <!-- Existing Attachments (Edit Mode) -->
+                    <div class="uploaded-files-list" *ngIf="isEditMode && getExistingAttachments(field.id!).length > 0">
+                      <div class="uploaded-file-item" *ngFor="let attachment of getExistingAttachments(field.id!)">
+                        <img *ngIf="isImageAttachment(attachment)" 
+                             [src]="getAttachmentImageUrl(attachment)" 
+                             [alt]="attachment.fileName"
+                             class="attachment-thumbnail"
+                             (error)="$event.target.style.display='none'">
+                        <i *ngIf="!isImageAttachment(attachment)" class="pi pi-file"></i>
+                        <div class="file-info">
+                          <div class="file-name">{{ attachment.fileName }}</div>
+                          <div class="file-size">{{ formatFileSize(attachment.fileSize) }}</div>
+                        </div>
+                        <a [href]="getAttachmentDownloadUrl(attachment.id!)" 
+                           target="_blank"
+                           class="download-link"
+                           title="Download">
+                          <i class="pi pi-download"></i>
+                        </a>
+                        <button
+                          type="button"
+                          class="remove-file-btn"
+                          (click)="removeExistingAttachment(field.id!, attachment.id!)"
+                          title="Remove file">
+                          <i class="pi pi-times"></i>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- New Uploaded Files List -->
                     <div class="uploaded-files-list" *ngIf="getFieldFiles(field.id!).length > 0">
                       <div class="uploaded-file-item" *ngFor="let file of getFieldFiles(field.id!); let i = index">
                         <i class="pi pi-file"></i>
@@ -263,6 +292,14 @@
         <div class="form-actions">
           <button type="button" class="btn-cancel" (click)="goBack()">
             Cancel
+          </button>
+          <button type="button" class="btn-draft" (click)="saveSubmissionAsDraft()" [disabled]="loading.create">
+            <span *ngIf="!loading.create">
+              <i class="pi pi-file"></i> Save as Draft
+            </span>
+            <span *ngIf="loading.create">
+              <i class="pi pi-spin pi-spinner"></i> Saving...
+            </span>
           </button>
           <button type="submit" class="btn-submit" [disabled]="submissionForm.invalid || fieldsForm.invalid || loading.create">
             <span *ngIf="!loading.create">Save</span>

@@ -4,7 +4,7 @@ import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto } from '../services/form-submissions.service';
 import { FormSubmissionValuesService, BulkFormSubmissionValuesDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto } from '../services/form-submission-values.service';
-import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
+import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { DocumentType, DocumentSeries } from '../../FormBuilder/form-builder/models/document-types.model';
 import { FormsService } from '../../FormBuilder/services/forms.service';
@@ -25,6 +25,7 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
 import { Subscription, forkJoin } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-form-submission-create',
@@ -63,6 +64,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   submissionForm!: FormGroup;
   fieldsForm!: FormGroup;
   fieldFiles: { [fieldId: number]: File[] } = {};
+  existingAttachments: { [fieldId: number]: FormSubmissionAttachmentDto[] } = {}; // Store existing attachments for edit mode
 
   // Field DataSource state
   fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
@@ -1627,6 +1629,66 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         console.error('[FormSubmissionCreate] Error loading field values:', error);
       }
     });
+
+    // Load attachments for all file fields
+    this.loadAttachmentsForEdit();
+  }
+
+  loadAttachmentsForEdit(): void {
+    if (!this.submissionId) return;
+
+    // Wait for fields to be loaded
+    if (this.fields.length === 0) {
+      setTimeout(() => this.loadAttachmentsForEdit(), 200);
+      return;
+    }
+
+    // Find all file/image fields
+    const fileFields = this.fields.filter(field => this.isFileField(field));
+    
+    if (fileFields.length === 0) return;
+
+    // Load attachments for each file field
+    fileFields.forEach(field => {
+      if (!field.id) return;
+      
+      this.formSubmissionAttachmentsService.getBySubmissionAndField(this.submissionId!, field.id).subscribe({
+        next: (attachments) => {
+          const attachmentsArray = Array.isArray(attachments) ? attachments : (attachments ? [attachments] : []);
+          console.log(`[FormSubmissionCreate] Loaded ${attachmentsArray.length} attachment(s) for field ${field.id}`);
+          this.existingAttachments[field.id] = attachmentsArray;
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error(`[FormSubmissionCreate] Error loading attachments for field ${field.id}:`, error);
+          this.existingAttachments[field.id] = [];
+        }
+      });
+    });
+  }
+
+  getExistingAttachments(fieldId: number): FormSubmissionAttachmentDto[] {
+    return this.existingAttachments[fieldId] || [];
+  }
+
+  getAttachmentImageUrl(attachment: FormSubmissionAttachmentDto): string {
+    if (!attachment.id) return '';
+    return `${environment.apiUrl}/FileUpload/${attachment.id}/preview`;
+  }
+
+  getAttachmentDownloadUrl(attachmentId: number): string {
+    return `${environment.apiUrl}/FileUpload/${attachmentId}/download`;
+  }
+
+  isImageAttachment(attachment: FormSubmissionAttachmentDto): boolean {
+    const contentType = (attachment.contentType || '').toLowerCase();
+    return contentType.startsWith('image/');
+  }
+
+  removeExistingAttachment(fieldId: number, attachmentId: number): void {
+    if (!this.existingAttachments[fieldId]) return;
+    this.existingAttachments[fieldId] = this.existingAttachments[fieldId].filter(att => att.id !== attachmentId);
+    this.cdr.detectChanges();
   }
 
   /**
@@ -1679,6 +1741,96 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  saveSubmissionAsDraft(): void {
+    // For draft, we only check essential fields (formBuilderId, documentTypeId)
+    // Field values can be empty/incomplete for drafts
+    if (!this.submissionForm.get('formBuilderId')?.value) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation Error',
+        detail: 'Please select a form'
+      });
+      return;
+    }
+
+    // Get formBuilderId from documentType (fixed value)
+    if (!this.documentType?.formBuilderId) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Document type does not have a form associated with it'
+      });
+      return;
+    }
+
+    // Get default series (fixed value)
+    if (this.documentSeries.length === 0) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No document series available. Please create a series first.'
+      });
+      return;
+    }
+
+    const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
+    if (!defaultSeries || !defaultSeries.id) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No document series available'
+      });
+      return;
+    }
+
+    const userId = this.authService.userName();
+    if (!userId) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'User not found. Please login again.'
+      });
+      return;
+    }
+
+    const formData = this.submissionForm.getRawValue();
+    const createDto: CreateFormSubmissionDto = {
+      formBuilderId: this.documentType.formBuilderId, // Fixed value - from documentType
+      documentTypeId: this.documentTypeId,
+      seriesId: defaultSeries.id, // Fixed value - use default series
+      submittedByUserId: userId,
+      status: 'Draft' // Set status to Draft
+    };
+
+    this.loading.create = true;
+    
+    // If edit mode, update existing submission status to Draft
+    if (this.isEditMode && this.submissionId) {
+      // Update status to Draft
+      this.submissionForm.patchValue({ status: 'Draft' });
+      this.saveSubmissionData(this.submissionId, 'Draft');
+      return;
+    }
+    
+    // Create new submission with Draft status
+    this.formSubmissionsService.createSubmission(createDto).subscribe({
+      next: (submission: FormSubmissionDto) => {
+        this.saveSubmissionData(submission.id, 'Draft');
+      },
+      error: (error: any) => {
+        this.loading.create = false;
+        console.error('Error creating draft submission:', error);
+        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to save submission as draft';
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: errorMessage
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   saveSubmission(): void {
     if (this.submissionForm.invalid) {
       this.markFormGroupTouched(this.submissionForm);
@@ -1696,6 +1848,26 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         severity: 'warn',
         summary: 'Validation Error',
         detail: 'Please fill in all required fields'
+      });
+      return;
+    }
+
+    // Check for required image/file fields
+    const missingRequiredFiles: string[] = [];
+    this.fields.forEach(field => {
+      if (this.isFileField(field) && this.isRequired(field)) {
+        const files = this.fieldFiles[field.id!] || [];
+        if (files.length === 0) {
+          missingRequiredFiles.push(field.fieldName || field.fieldCode || `Field ${field.id}`);
+        }
+      }
+    });
+
+    if (missingRequiredFiles.length > 0) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation Error',
+        detail: `Please upload files for required fields: ${missingRequiredFiles.join(', ')}`
       });
       return;
     }
@@ -1778,7 +1950,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
   }
 
-  saveSubmissionData(submissionId: number): void {
+  saveSubmissionData(submissionId: number, status?: string): void {
     const fieldValues: CreateFormSubmissionValueDto[] = [];
     const attachments: CreateFormSubmissionAttachmentDto[] = [];
 
@@ -1793,22 +1965,23 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       this.formSubmissionValuesService.getBySubmissionId(submissionId).subscribe({
         next: (existingValues) => {
           console.log('[FormSubmissionCreate] Existing field values:', existingValues);
-          this.saveSubmissionDataWithExisting(submissionId, existingValues);
+          this.saveSubmissionDataWithExisting(submissionId, existingValues, status);
         },
         error: (error) => {
           console.error('[FormSubmissionCreate] Error loading existing values:', error);
           // Continue with create mode if loading fails
-          this.saveSubmissionDataWithExisting(submissionId, []);
+          this.saveSubmissionDataWithExisting(submissionId, [], status);
         }
       });
       return;
     }
 
     // Create mode - proceed normally
-    this.saveSubmissionDataWithExisting(submissionId, []);
+    this.saveSubmissionDataWithExisting(submissionId, [], status);
   }
 
-  saveSubmissionDataWithExisting(submissionId: number, existingValues: any[]): void {
+  saveSubmissionDataWithExisting(submissionId: number, existingValues: any[], status?: string): void {
+    const isDraft = status === 'Draft';
     const fieldValues: CreateFormSubmissionValueDto[] = [];
     const attachments: CreateFormSubmissionAttachmentDto[] = [];
     const updateObservablesList: any[] = [];
@@ -1838,12 +2011,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       });
 
       // Check if field has a value (including 0, false, empty arrays)
+      // For drafts, we save all fields even if empty (to preserve form structure)
       const hasValue = fieldValue !== null && 
                       fieldValue !== undefined && 
                       fieldValue !== '' &&
                       !(Array.isArray(fieldValue) && fieldValue.length === 0);
       
-      console.log(`[FormSubmissionCreate] Field ${field.id} hasValue: ${hasValue}`, {
+      console.log(`[FormSubmissionCreate] Field ${field.id} hasValue: ${hasValue}, isDraft: ${isDraft}`, {
         fieldValue,
         isNull: fieldValue === null,
         isUndefined: fieldValue === undefined,
@@ -1852,7 +2026,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         arrayLength: Array.isArray(fieldValue) ? fieldValue.length : 'N/A'
       });
 
-      if (hasValue) {
+      // For drafts, save all fields (even empty ones) to preserve form structure
+      // For regular submissions, only save fields with values
+      if (hasValue || isDraft) {
         const valueDto: CreateFormSubmissionValueDto = {
           submissionId: submissionId,
           fieldId: field.id,
@@ -1860,9 +2036,16 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         };
 
         const fieldType = this.getFieldType(field);
-        console.log(`[FormSubmissionCreate] Saving field ${field.id} (${field.fieldCode || 'no-code'}), type: ${fieldType}, value:`, fieldValue);
+        console.log(`[FormSubmissionCreate] Saving field ${field.id} (${field.fieldCode || 'no-code'}), type: ${fieldType}, value:`, fieldValue, 'isDraft:', isDraft, 'hasValue:', hasValue);
         
-        switch (fieldType) {
+        // If draft and no value, save empty values
+        if (isDraft && !hasValue) {
+          valueDto.valueString = '';
+          valueDto.valueJson = JSON.stringify('');
+          console.log(`[FormSubmissionCreate] Saving empty field ${field.id} for draft`);
+        } else {
+          // Normal save logic for fields with values
+          switch (fieldType) {
           case 'number':
             const numValue = Number(fieldValue);
             valueDto.valueNumber = numValue;
@@ -1923,6 +2106,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               valueDto.valueJson = JSON.stringify(stringValue);
             }
             break;
+          }
         }
 
         // Safety check: Ensure valueJson is always set (API requirement)

@@ -1926,9 +1926,9 @@ export class FormViewComponent implements OnInit {
     // Check if submission exists - if yes, upload immediately; if no, save files for later
     if (this.submissionId > 0) {
       // Submission exists - upload files immediately
-      if (allowMultiple && filesToUpload.length > 1) {
+    if (allowMultiple && filesToUpload.length > 1) {
         await this.uploadMultipleFiles(filesToUpload, field);
-      } else {
+    } else {
         await this.uploadFile(filesToUpload[0], field);
       }
     } else {

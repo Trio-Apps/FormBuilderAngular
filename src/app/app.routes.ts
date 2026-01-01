@@ -68,6 +68,10 @@ export const routes: Routes = [
         path: 'document-types/:documentTypeId/submissions',
         loadComponent: () => import('./views/form-submissions/form-submissions-list/form-submissions-list.component')
           .then(m => m.FormSubmissionsListComponent)
+          .catch(err => {
+            console.error('Error loading FormSubmissionsListComponent:', err);
+            throw err;
+          })
       },
 
       // ===== Create New Form Submission =====

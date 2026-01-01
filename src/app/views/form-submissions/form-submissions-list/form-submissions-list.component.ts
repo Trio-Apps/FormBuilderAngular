@@ -4,7 +4,8 @@ import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { FormSubmissionsService, FormSubmissionDto, FormSubmissionDetailDto, CreateFormSubmissionDto, UpdateFormSubmissionDto } from '../services/form-submissions.service';
 import { FormSubmissionValuesService, FormSubmissionValueDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto, BulkFormSubmissionValuesDto } from '../services/form-submission-values.service';
-import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
+import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
+import { FileUploadService } from '../../FormBuilder/services/file-upload.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { DocumentType, DocumentSeries } from '../../FormBuilder/form-builder/models/document-types.model';
 import { FormsService } from '../../FormBuilder/services/forms.service';
@@ -26,6 +27,7 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-form-submissions-list',
@@ -56,6 +58,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   submissions: FormSubmissionDto[] = [];
   filteredSubmissions: FormSubmissionDto[] = [];
   selectedSubmission: FormSubmissionDetailDto | null = null;
+  fieldAttachments: { [fieldId: number]: FormSubmissionAttachmentDto[] } = {}; // Store attachments for each field
 
   // For creating new submission
   forms: FormBuilderDto[] = [];
@@ -89,6 +92,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   // Modals
   showSubmissionModal = false;
   showFieldValueModal = false;
+  showPreviewModal = false;
+  previewFile: FormSubmissionAttachmentDto | null = null;
+  isViewMode = false; // true for view-only, false for edit mode
   submissionForm!: FormGroup;
   fieldValueForm!: FormGroup;
   editingFieldValue: FormSubmissionValueDto | null = null;
@@ -98,6 +104,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   // Search & Filter
   searchTerm = '';
   statusFilter: string | null = null;
+  showOnlyMySubmissions: boolean = true; // Filter to show only current user's submissions (enabled by default)
   statusOptions = [
     { label: 'All Statuses', value: null },
     { label: 'Draft', value: 'Draft' },
@@ -129,7 +136,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public translationService: TranslationService,
-    private authService: AuthService
+    private authService: AuthService,
+    public fileUploadService: FileUploadService
   ) {
     // Initialize forms
     this.submissionForm = this.fb.group({
@@ -310,6 +318,17 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   filterSubmissions(): void {
     let filtered = [...this.submissions];
 
+    // Filter by current user if "Show Only My Submissions" is enabled
+    if (this.showOnlyMySubmissions) {
+      const currentUserId = this.authService.userName();
+      if (currentUserId) {
+        filtered = filtered.filter(sub => 
+          sub.submittedByUserId === currentUserId || 
+          sub.submittedByUserName === currentUserId
+        );
+      }
+    }
+
     // Filter by search term
     if (this.searchTerm.trim()) {
       const term = this.searchTerm.toLowerCase();
@@ -331,6 +350,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     this.totalRecords = filtered.length;
   }
 
+  onMySubmissionsFilterChange(): void {
+    this.first = 0; // Reset to first page
+    this.filterSubmissions();
+  }
+
   onSearchChange(): void {
     this.first = 0; // Reset to first page
     this.filterSubmissions();
@@ -348,6 +372,177 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
   getPaginatedSubmissions(): FormSubmissionDto[] {
     return this.filteredSubmissions.slice(this.first, this.first + this.rows);
+  }
+
+  /**
+   * View submission details (read-only)
+   */
+  viewSubmissionDetails(submission: FormSubmissionDto): void {
+    // Load submission details
+    this.loading.fieldValues = true;
+    this.isViewMode = true; // Set to view mode to show submission information
+    
+    // Initialize submission form with basic info
+    this.submissionForm.patchValue({
+      documentNumber: submission.documentNumber || '',
+      status: submission.status || 'Submitted'
+    });
+    
+    // Store original submission ID before creating detail object
+    const originalSubmissionId = submission.id;
+    console.log('[FormSubmissionsList] Viewing submission:', {
+      id: originalSubmissionId,
+      documentNumber: submission.documentNumber,
+      formBuilderId: submission.formBuilderId,
+      submissionObject: submission
+    });
+    
+    // Create submission detail object from the submission we have
+    const submissionDetail: FormSubmissionDetailDto = {
+      ...submission,
+      id: originalSubmissionId, // Ensure ID is preserved
+      fieldValues: [],
+      attachments: [],
+      gridData: []
+    };
+    this.selectedSubmission = submissionDetail;
+    
+    // Load field values by submission ID
+    this.formSubmissionValuesService.getBySubmissionId(originalSubmissionId).subscribe({
+      next: (fieldValues: FormSubmissionValueDto[]) => {
+        console.log('[FormSubmissionsList] Loaded field values for view:', fieldValues);
+        submissionDetail.fieldValues = fieldValues || [];
+        submissionDetail.id = originalSubmissionId; // Ensure ID is preserved
+        this.selectedSubmission = submissionDetail;
+        
+        // Load form fields to display field names
+        if (submission.formBuilderId) {
+          this.loadFormFieldsForView(submission.formBuilderId, submissionDetail, originalSubmissionId);
+        } else {
+          console.warn('[FormSubmissionsList] No formBuilderId found in submission');
+          // Build form even without fields (will show field codes)
+          this.buildEditSubmissionValuesForm(submissionDetail);
+          this.loadAttachmentsForFields(originalSubmissionId, []);
+          this.loading.fieldValues = false;
+          this.showSubmissionModal = true;
+        }
+      },
+      error: (error) => {
+        console.error('Error loading field values:', error);
+        // Continue anyway - show modal with empty field values
+        submissionDetail.fieldValues = [];
+        submissionDetail.id = originalSubmissionId; // Ensure ID is preserved
+        this.selectedSubmission = submissionDetail;
+        
+        if (submission.formBuilderId) {
+          this.loadFormFieldsForView(submission.formBuilderId, submissionDetail, originalSubmissionId);
+        } else {
+          // Build form even without fields
+          this.buildEditSubmissionValuesForm(submissionDetail);
+          this.loadAttachmentsForFields(originalSubmissionId, []);
+          this.loading.fieldValues = false;
+          this.showSubmissionModal = true;
+        }
+      }
+    });
+  }
+
+  /**
+   * Load form fields for viewing (read-only)
+   */
+  loadFormFieldsForView(formBuilderId: number, submissionDetail: FormSubmissionDetailDto, submissionId?: number): void {
+    // Use provided submissionId or fallback to submissionDetail.id
+    const actualSubmissionId = submissionId || submissionDetail.id;
+    console.log('[FormSubmissionsList] loadFormFieldsForView - submissionId:', actualSubmissionId, 'submissionDetail.id:', submissionDetail.id);
+    this.formsService.getFormById(formBuilderId).subscribe({
+      next: (form: FormBuilderDto) => {
+        if (form && form.id) {
+          // Load tabs using getTabs method
+          this.tabsService.getTabs(formBuilderId).subscribe({
+            next: (tabs: FormTabDto[]) => {
+              // Load all fields from all tabs explicitly (same as loadFormFieldsForEdit)
+              const fieldObservables = tabs.map(tab => 
+                this.fieldsService.getFieldsByTabId(tab.id).pipe(
+                  catchError(() => of([]))
+                )
+              );
+              
+              if (fieldObservables.length === 0) {
+                this.submissionFields = [];
+                this.selectedSubmission = submissionDetail;
+                this.buildEditSubmissionValuesForm(submissionDetail);
+                this.loadAttachmentsForFields(actualSubmissionId, []);
+                this.loading.fieldValues = false;
+                this.showSubmissionModal = true;
+                this.cdr.detectChanges();
+                return;
+              }
+              
+              forkJoin(fieldObservables).subscribe({
+                next: (fieldsArrays: FormFieldDto[][]) => {
+                  const allFields = fieldsArrays.flat();
+                  this.submissionFields = allFields;
+                  this.selectedSubmission = submissionDetail;
+                  
+                  console.log('[FormSubmissionsList] Loaded fields:', allFields.length, 'fields');
+                  console.log('[FormSubmissionsList] Submission detail:', submissionDetail);
+                  console.log('[FormSubmissionsList] Field values:', submissionDetail.fieldValues);
+                  console.log('[FormSubmissionsList] Using submissionId for attachments:', actualSubmissionId);
+                  
+                  // Build form with field values for display
+                  this.buildEditSubmissionValuesForm(submissionDetail);
+                  
+                  // Load attachments for file fields using actual submission ID
+                  this.loadAttachmentsForFields(actualSubmissionId, allFields);
+                  
+                  this.loading.fieldValues = false;
+                  this.showSubmissionModal = true;
+                  this.cdr.detectChanges();
+                },
+                error: (error: any) => {
+                  console.error('Error loading fields:', error);
+                  this.submissionFields = [];
+                  this.selectedSubmission = submissionDetail;
+                  this.buildEditSubmissionValuesForm(submissionDetail);
+                  this.loadAttachmentsForFields(actualSubmissionId, []);
+                  this.loading.fieldValues = false;
+                  this.showSubmissionModal = true;
+                  this.cdr.detectChanges();
+                }
+              });
+            },
+            error: (error: any) => {
+              console.error('Error loading tabs:', error);
+              this.submissionFields = [];
+              this.selectedSubmission = submissionDetail;
+              this.buildEditSubmissionValuesForm(submissionDetail);
+              this.loadAttachmentsForFields(actualSubmissionId, []);
+              this.loading.fieldValues = false;
+              this.showSubmissionModal = true;
+              this.cdr.detectChanges();
+            }
+          });
+        } else {
+          this.submissionFields = [];
+          this.selectedSubmission = submissionDetail;
+          this.buildEditSubmissionValuesForm(submissionDetail);
+          this.loadAttachmentsForFields(actualSubmissionId, []);
+          this.loading.fieldValues = false;
+          this.showSubmissionModal = true;
+          this.cdr.detectChanges();
+        }
+      },
+      error: (error: any) => {
+        console.error('Error loading form:', error);
+        this.submissionFields = [];
+        this.selectedSubmission = submissionDetail;
+        this.buildEditSubmissionValuesForm(submissionDetail);
+        this.loadAttachmentsForFields(actualSubmissionId, []);
+        this.loading.fieldValues = false;
+        this.showSubmissionModal = true;
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   openEditModal(submission: FormSubmissionDto): void {
@@ -476,6 +671,12 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     
     let controlsAdded = 0;
     submissionDetail.fieldValues.forEach(fieldValue => {
+      // Skip file/image fields - they don't need form controls, only attachments
+      if (this.isFileField(fieldValue.fieldId)) {
+        console.log(`[FormSubmissionsList] Skipping form control for file/image field ${fieldValue.fieldId} (${fieldValue.fieldCode || 'unknown'})`);
+        return;
+      }
+      
       // Try to find field, but don't skip if not found - we can still edit the value
       const field = this.submissionFields.find(f => f.id === fieldValue.fieldId);
       
@@ -485,12 +686,13 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       
       let formValue: any = null;
       
-      // Determine the value based on field type
-      if (fieldValue.valueString !== null && fieldValue.valueString !== undefined && fieldValue.valueString !== '') {
-        formValue = fieldValue.valueString;
-      } else if (fieldValue.valueNumber !== null && fieldValue.valueNumber !== undefined) {
+      // Determine value based on actual data present (prioritize by data type, not field type)
+      // This ensures correct display even if fieldTypeId is incorrect
+      if (fieldValue.valueNumber !== null && fieldValue.valueNumber !== undefined) {
+        // If valueNumber exists, treat as number field
         formValue = fieldValue.valueNumber;
       } else if (fieldValue.valueDate) {
+        // If valueDate exists, treat as date field
         const dateValue = new Date(fieldValue.valueDate);
         // Format for datetime-local input (YYYY-MM-DDTHH:mm)
         const year = dateValue.getFullYear();
@@ -500,32 +702,459 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         const minutes = String(dateValue.getMinutes()).padStart(2, '0');
         formValue = `${year}-${month}-${day}T${hours}:${minutes}`;
       } else if (fieldValue.valueBool !== null && fieldValue.valueBool !== undefined) {
+        // If valueBool exists, treat as boolean field
         formValue = fieldValue.valueBool;
       } else if (fieldValue.valueJson) {
+        // If valueJson exists, try to parse it
         try {
           const parsed = JSON.parse(fieldValue.valueJson);
-          formValue = typeof parsed === 'string' ? parsed : fieldValue.valueJson;
+          // If parsed value is a string, use it directly; otherwise stringify
+          formValue = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
         } catch {
           formValue = fieldValue.valueJson;
         }
+      } else if (fieldValue.valueString !== null && fieldValue.valueString !== undefined && fieldValue.valueString !== '') {
+        // If valueString exists, use it
+        formValue = fieldValue.valueString;
       }
 
       // Create form control with field ID as key
       const controlName = `field_${fieldValue.fieldId}`;
-      this.editSubmissionValuesForm.addControl(controlName, this.fb.control(formValue));
+      // In view mode, disable the control; in edit mode, enable it
+      // Important: Use {value, disabled} syntax to ensure value is set correctly
+      const control = this.fb.control({ value: formValue, disabled: this.isViewMode });
+      this.editSubmissionValuesForm.addControl(controlName, control);
       controlsAdded++;
       
-      console.log(`[FormSubmissionsList] Added control for field ${fieldValue.fieldId} (${fieldValue.fieldCode || 'unknown'}) with value:`, formValue);
+      console.log(`[FormSubmissionsList] Added control for field ${fieldValue.fieldId} (${fieldValue.fieldCode || 'unknown'}) with value:`, formValue, 'type:', typeof formValue, 'disabled:', this.isViewMode);
+      console.log(`[FormSubmissionsList] Control value after creation:`, control.value);
     });
     
     console.log('[FormSubmissionsList] Form built with', Object.keys(this.editSubmissionValuesForm.controls).length, 'controls');
     console.log('[FormSubmissionsList] Controls added:', controlsAdded, 'out of', submissionDetail.fieldValues.length, 'field values');
+    
+    // Log all control values for debugging
+    Object.keys(this.editSubmissionValuesForm.controls).forEach(key => {
+      const control = this.editSubmissionValuesForm.get(key);
+      console.log(`[FormSubmissionsList] Control ${key}: value=`, control?.value, 'disabled=', control?.disabled, 'rawValue=', control?.getRawValue?.());
+    });
+    
+    // Ensure forms are disabled in view mode
+    if (this.isViewMode) {
+      // Don't disable the entire form - controls are already disabled individually
+      // this.editSubmissionValuesForm.disable();
+      this.submissionForm.disable();
+    }
+  }
+
+  /**
+   * Load attachments for file/image fields
+   */
+  loadAttachmentsForFields(submissionId: number, fields: FormFieldDto[]): void {
+    console.log('[FormSubmissionsList] loadAttachmentsForFields called with submissionId:', submissionId, 'selectedSubmission.id:', this.selectedSubmission?.id);
+    // First, check fieldValues for fields with valueJson containing allowedExtensions
+    // This works even if fields array is empty
+    const fileFieldIds: number[] = [];
+    
+    if (this.selectedSubmission?.fieldValues) {
+      console.log('[FormSubmissionsList] Checking fieldValues for file fields:', this.selectedSubmission.fieldValues.length, 'values');
+      this.selectedSubmission.fieldValues.forEach(fieldValue => {
+        console.log(`[FormSubmissionsList] Checking fieldValue: fieldId=${fieldValue.fieldId}, fieldCode=${fieldValue.fieldCode}, valueJson=${fieldValue.valueJson}`);
+        if (fieldValue.valueJson && fieldValue.valueJson.includes('allowedExtensions')) {
+          // This is a file field based on valueJson
+          console.log(`[FormSubmissionsList] ✅ Found file field: ${fieldValue.fieldId} (${fieldValue.fieldCode})`);
+          if (!fileFieldIds.includes(fieldValue.fieldId)) {
+            fileFieldIds.push(fieldValue.fieldId);
+          }
+        }
+      });
+    }
+    
+    // Find all file/image fields from fields array
+    const fileFields = fields.filter(field => {
+      const fieldType = this.getFieldType(field);
+      const fieldCode = (field.fieldCode || '').toLowerCase();
+      const fieldName = (field.fieldName || '').toLowerCase();
+      
+      // Check by field type
+      if (fieldType === 'file' || fieldType === 'image') {
+        if (!fileFieldIds.includes(field.id!)) {
+          fileFieldIds.push(field.id!);
+        }
+        return true;
+      }
+      
+      // Check by field code/name
+      if (fieldCode.includes('image') || fieldCode.includes('file') || fieldCode.includes('attachment')) {
+        if (!fileFieldIds.includes(field.id!)) {
+          fileFieldIds.push(field.id!);
+        }
+        return true;
+      }
+      if (fieldName.includes('image') || fieldName.includes('file') || fieldName.includes('attachment')) {
+        if (!fileFieldIds.includes(field.id!)) {
+          fileFieldIds.push(field.id!);
+        }
+        return true;
+      }
+      
+      return false;
+    });
+    
+    if (fileFieldIds.length === 0) {
+      console.log('[FormSubmissionsList] No file/image fields found');
+      return;
+    }
+    
+    console.log('[FormSubmissionsList] Loading attachments for file fields:', fileFieldIds);
+    
+    // First, try to load all attachments for the submission at once (more efficient)
+    console.log(`[FormSubmissionsList] Attempting to load all attachments for submissionId=${submissionId}`);
+    this.formSubmissionAttachmentsService.getBySubmissionId(submissionId).subscribe({
+      next: (allAttachments) => {
+        const allAttachmentsArray = Array.isArray(allAttachments) ? allAttachments : (allAttachments ? [allAttachments] : []);
+        console.log(`[FormSubmissionsList] ✅ Loaded ${allAttachmentsArray.length} total attachment(s) for submissionId=${submissionId}`);
+        
+        // Group attachments by fieldId
+        const attachmentsByField: { [fieldId: number]: FormSubmissionAttachmentDto[] } = {};
+        allAttachmentsArray.forEach(att => {
+          if (!attachmentsByField[att.fieldId]) {
+            attachmentsByField[att.fieldId] = [];
+          }
+          attachmentsByField[att.fieldId].push(att);
+        });
+        
+        console.log(`[FormSubmissionsList] Attachments grouped by fieldId:`, Object.keys(attachmentsByField).map(fid => `${fid}: ${attachmentsByField[+fid].length}`).join(', '));
+        
+        // Update fieldAttachments for each file field
+        fileFieldIds.forEach(fieldId => {
+          const fieldAttachments = attachmentsByField[fieldId] || [];
+          console.log(`[FormSubmissionsList] Field ${fieldId} has ${fieldAttachments.length} attachment(s) from bulk load`);
+          
+          if (fieldAttachments.length > 0) {
+            fieldAttachments.forEach((att, index) => {
+              const imageUrl = this.getImageUrl(att);
+              console.log(`[FormSubmissionsList] 📎 Attachment ${index + 1} for field ${fieldId}:`, {
+                id: att.id,
+                submissionId: att.submissionId,
+                fieldId: att.fieldId,
+                fileName: att.fileName,
+                filePath: att.filePath,
+                fileSize: att.fileSize,
+                contentType: att.contentType,
+                downloadUrl: att.downloadUrl,
+                imageUrl: imageUrl,
+                isImage: this.isImageAttachment(att)
+              });
+            });
+          }
+          
+          this.fieldAttachments[fieldId] = fieldAttachments;
+          console.log(`[FormSubmissionsList] Updated fieldAttachments[${fieldId}] with ${fieldAttachments.length} attachment(s) from bulk load`);
+        });
+        
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.log(`[FormSubmissionsList] Bulk load failed, falling back to individual field requests. Error:`, error);
+        
+        // Fallback: Load attachments for each file field ID individually
+        fileFieldIds.forEach(fieldId => {
+          console.log(`[FormSubmissionsList] Requesting attachments for submissionId=${submissionId}, fieldId=${fieldId}`);
+          console.log(`[FormSubmissionsList] About to call API: getBySubmissionAndField(${submissionId}, ${fieldId})`);
+          this.formSubmissionAttachmentsService.getBySubmissionAndField(submissionId, fieldId).subscribe({
+            next: (attachments) => {
+              const attachmentsArray = attachments || [];
+              console.log(`[FormSubmissionsList] ✅ Loaded ${attachmentsArray.length} attachment(s) for field ${fieldId}, submissionId=${submissionId}`);
+              console.log(`[FormSubmissionsList] Attachments array:`, attachmentsArray);
+              console.log(`[FormSubmissionsList] Attachments response type:`, typeof attachments, Array.isArray(attachments));
+              
+              if (attachmentsArray.length > 0) {
+                attachmentsArray.forEach((att, index) => {
+                  const imageUrl = this.getImageUrl(att);
+                  console.log(`[FormSubmissionsList] 📎 Attachment ${index + 1} details:`, {
+                    id: att.id,
+                    submissionId: att.submissionId,
+                    fieldId: att.fieldId,
+                    fileName: att.fileName,
+                    filePath: att.filePath,
+                    fileSize: att.fileSize,
+                    contentType: att.contentType,
+                    downloadUrl: att.downloadUrl,
+                    imageUrl: imageUrl,
+                    isImage: this.isImageAttachment(att)
+                  });
+                });
+                // Log first file name for easy reference
+                console.log(`[FormSubmissionsList] First file name: ${attachmentsArray[0].fileName}`);
+              } else {
+                // This is normal - field exists but no files uploaded yet
+                console.log(`[FormSubmissionsList] No attachments found for field ${fieldId}, submissionId=${submissionId} (this is normal if no files were uploaded)`);
+                console.log(`[FormSubmissionsList] Check if submission ${submissionId} has attachments in database for field ${fieldId}`);
+              }
+              
+              this.fieldAttachments[fieldId] = attachmentsArray;
+              console.log(`[FormSubmissionsList] Updated fieldAttachments[${fieldId}] with ${attachmentsArray.length} attachment(s)`);
+              this.cdr.detectChanges();
+            },
+            error: (error) => {
+              // Only log as error if it's not a 404 (not found is normal)
+              if (error?.status === 404) {
+                console.log(`[FormSubmissionsList] No attachments found for field ${fieldId}, submissionId=${submissionId} (404 - this is normal)`);
+                console.log(`[FormSubmissionsList] API URL called: /FormSubmissionAttachments/submission/${submissionId}/field/${fieldId}`);
+              } else {
+                console.error(`[FormSubmissionsList] ❌ Error loading attachments for field ${fieldId}, submissionId=${submissionId}:`, error);
+                console.error(`[FormSubmissionsList] Error details:`, {
+                  status: error?.status,
+                  statusText: error?.statusText,
+                  message: error?.message,
+                  url: error?.url
+                });
+              }
+              this.fieldAttachments[fieldId] = [];
+              this.cdr.detectChanges();
+            }
+          });
+        });
+      }
+    });
+  }
+
+  /**
+   * Get attachments for a specific field
+   */
+  getFieldAttachments(fieldId: number): FormSubmissionAttachmentDto[] {
+    const attachments = this.fieldAttachments[fieldId] || [];
+    if (attachments.length > 0) {
+      console.log(`[FormSubmissionsList] getFieldAttachments(${fieldId}):`, attachments.length, 'attachments found');
+      attachments.forEach(att => {
+        console.log(`[FormSubmissionsList] Attachment in getFieldAttachments:`, {
+          id: att.id,
+          fieldId: att.fieldId,
+          fileName: att.fileName,
+          filePath: att.filePath,
+          imageUrl: this.getImageUrl(att)
+        });
+      });
+    } else {
+      console.log(`[FormSubmissionsList] getFieldAttachments(${fieldId}): No attachments found`);
+      console.log(`[FormSubmissionsList] fieldAttachments object:`, this.fieldAttachments);
+    }
+    return attachments;
+  }
+
+  /**
+   * Check if field is a file/image field (by fieldId)
+   */
+  isFileField(fieldId: number): boolean {
+    const field = this.submissionFields.find(f => f.id === fieldId);
+    if (!field) {
+      // If field not found in submissionFields, check by fieldCode from fieldValue
+      const fieldValue = this.selectedSubmission?.fieldValues?.find(fv => fv.fieldId === fieldId);
+      if (fieldValue) {
+        const fieldCode = (fieldValue.fieldCode || '').toLowerCase();
+        // Check if fieldCode contains image/file keywords
+        if (fieldCode.includes('image') || fieldCode.includes('file') || fieldCode.includes('attachment')) {
+          return true;
+        }
+        // Check if valueJson contains allowedExtensions (indicates file field config)
+        if (fieldValue.valueJson && fieldValue.valueJson.includes('allowedExtensions')) {
+          return true;
+        }
+      }
+      return false;
+    }
+    const fieldType = this.getFieldType(field);
+    const fieldCode = (field.fieldCode || '').toLowerCase();
+    const fieldName = (field.fieldName || '').toLowerCase();
+    
+    // Check by field type
+    if (fieldType === 'file' || fieldType === 'image') {
+      return true;
+    }
+    
+    // Check by field code/name
+    if (fieldCode.includes('image') || fieldCode.includes('file') || fieldCode.includes('attachment')) {
+      return true;
+    }
+    if (fieldName.includes('image') || fieldName.includes('file') || fieldName.includes('attachment')) {
+      return true;
+    }
+    
+    // Check if field has valueJson with allowedExtensions (file field configuration)
+    const fieldValue = this.selectedSubmission?.fieldValues?.find(fv => fv.fieldId === fieldId);
+    if (fieldValue?.valueJson && fieldValue.valueJson.includes('allowedExtensions')) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check if attachment is an image
+   */
+  isImageAttachment(attachment: FormSubmissionAttachmentDto): boolean {
+    if (!attachment.contentType) return false;
+    return attachment.contentType.startsWith('image/') || 
+           /\.(jpg|jpeg|png|gif|webp)$/i.test(attachment.fileName);
+  }
+
+  /**
+   * Check if file is a PDF
+   */
+  isPdfFile(attachment: FormSubmissionAttachmentDto): boolean {
+    const contentType = attachment.contentType?.toLowerCase() || '';
+    const fileName = attachment.fileName?.toLowerCase() || '';
+    return contentType === 'application/pdf' || fileName.endsWith('.pdf');
+  }
+
+  /**
+   * Check if file can be previewed
+   */
+  canPreviewFile(attachment: FormSubmissionAttachmentDto): boolean {
+    return this.isImageAttachment(attachment) || this.isPdfFile(attachment);
+  }
+
+  /**
+   * Get file type icon class (same as FormViewComponent)
+   */
+  getFileIcon(attachment: FormSubmissionAttachmentDto): string {
+    if (this.isImageAttachment(attachment)) {
+      return 'pi pi-image';
+    } else if (this.isPdfFile(attachment)) {
+      return 'pi pi-file-pdf';
+    } else if (attachment.contentType?.includes('word') || /\.(doc|docx)$/i.test(attachment.fileName || '')) {
+      return 'pi pi-file-word';
+    } else if (attachment.contentType?.includes('excel') || attachment.contentType?.includes('spreadsheet') || /\.(xls|xlsx)$/i.test(attachment.fileName || '')) {
+      return 'pi pi-file-excel';
+    } else {
+      return 'pi pi-file';
+    }
+  }
+
+  /**
+   * Get download URL for attachment
+   */
+  getAttachmentDownloadUrl(attachmentId: number): string {
+    return `${environment.apiUrl}/FormSubmissionAttachments/${attachmentId}/download`;
+  }
+
+  /**
+   * Get image URL from filePath stored in database
+   */
+  getImageUrl(attachment: FormSubmissionAttachmentDto): string {
+    console.log(`[FormSubmissionsList] getImageUrl for attachment:`, {
+      id: attachment.id,
+      fileName: attachment.fileName,
+      filePath: attachment.filePath,
+      downloadUrl: attachment.downloadUrl
+    });
+    
+    // If downloadUrl is provided, use it
+    if (attachment.downloadUrl) {
+      return attachment.downloadUrl;
+    }
+    
+    // If filePath is a full URL, use it directly
+    if (attachment.filePath && (attachment.filePath.startsWith('http://') || attachment.filePath.startsWith('https://'))) {
+      return attachment.filePath;
+    }
+    
+    // If filePath is relative (from database), construct full URL
+    if (attachment.filePath) {
+      // Remove leading slash if present
+      let cleanPath = attachment.filePath.startsWith('/') ? attachment.filePath.substring(1) : attachment.filePath;
+      
+      // If path doesn't start with 'uploads' or 'wwwroot', prepend common upload directory
+      // Common patterns: submissions/25/image.png or uploads/submissions/25/image.png
+      if (!cleanPath.startsWith('uploads/') && !cleanPath.startsWith('wwwroot/') && !cleanPath.startsWith('www/')) {
+        // Try common upload paths
+        if (cleanPath.startsWith('submissions/')) {
+          // Path is already correct: submissions/25/image.png
+          return `${environment.apiUrl}/${cleanPath}`;
+        } else {
+          // Assume it's in uploads directory
+          cleanPath = `uploads/${cleanPath}`;
+        }
+      }
+      
+      return `${environment.apiUrl}/${cleanPath}`;
+    }
+    
+    // Fallback to download endpoint using attachment ID
+    return `${environment.apiUrl}/FormSubmissionAttachments/${attachment.id}/download`;
+  }
+
+  /**
+   * Get preview URL for attachment (alias for getImageUrl)
+   */
+  getPreviewUrl(attachment: FormSubmissionAttachmentDto): string | null {
+    if (!attachment.id) return null;
+    return this.getImageUrl(attachment);
+  }
+
+  /**
+   * Open preview for attachment (opens modal like FormViewComponent)
+   */
+  openPreview(attachment: FormSubmissionAttachmentDto): void {
+    if (this.canPreviewFile(attachment)) {
+      this.previewFile = attachment;
+      this.showPreviewModal = true;
+    }
+  }
+
+  /**
+   * Close preview modal
+   */
+  closePreview(): void {
+    this.showPreviewModal = false;
+    this.previewFile = null;
+  }
+
+  /**
+   * Check if attachment is an image (alias for isImageAttachment to match FormViewComponent)
+   */
+  isImageFile(attachment: FormSubmissionAttachmentDto): boolean {
+    return this.isImageAttachment(attachment);
+  }
+
+  /**
+   * Open image preview in new window
+   */
+  openImagePreview(url: string): void {
+    window.open(url, '_blank');
+  }
+
+  /**
+   * Handle image loading error
+   */
+  handleImageError(event: any, attachment: FormSubmissionAttachmentDto): void {
+    console.error(`[FormSubmissionsList] Error loading image for attachment ${attachment.id}:`, {
+      fileName: attachment.fileName,
+      filePath: attachment.filePath,
+      downloadUrl: attachment.downloadUrl,
+      imageUrl: this.getImageUrl(attachment)
+    });
+    // Try fallback to download URL
+    if (event.target.src !== this.getAttachmentDownloadUrl(attachment.id)) {
+      event.target.src = this.getAttachmentDownloadUrl(attachment.id);
+    }
+  }
+
+  enableEditMode(): void {
+    this.isViewMode = false;
+    // Enable the form controls
+    this.submissionForm.enable();
+    this.editSubmissionValuesForm.enable();
+    this.cdr.detectChanges();
   }
 
   closeSubmissionModal(): void {
     this.showSubmissionModal = false;
+    this.isViewMode = false; // Reset view mode
     this.selectedSubmission = null;
     this.submissionFields = [];
+    this.fieldAttachments = {}; // Clear attachments
     this.editSubmissionValuesForm = this.fb.group({}); // Reset form
     this.submissionForm.reset({
       documentNumber: '',
@@ -534,6 +1163,12 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   }
 
   saveSubmission(): void {
+    // Prevent saving in view mode
+    if (this.isViewMode) {
+      console.warn('[FormSubmissionsList] Cannot save in view mode');
+      return;
+    }
+    
     if (this.submissionForm.invalid || !this.selectedSubmission) {
       return;
     }
@@ -565,13 +1200,56 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     });
   }
 
-  updateSubmissionFieldValues(): void {
+  saveSubmissionAsDraft(): void {
+    // Prevent saving in view mode
+    if (this.isViewMode) {
+      console.warn('[FormSubmissionsList] Cannot save in view mode');
+      return;
+    }
+    
+    if (!this.selectedSubmission) {
+      return;
+    }
+
+    this.loading.save = true;
+    const formData = this.submissionForm.value;
+    const updateDto: UpdateFormSubmissionDto = {
+      documentNumber: formData.documentNumber || undefined,
+      status: 'Draft' // Set status to Draft
+    };
+
+    // Update submission basic info with Draft status
+    this.formSubmissionsService.updateSubmission(this.selectedSubmission.id, updateDto).subscribe({
+      next: () => {
+        // Update the form status to Draft
+        this.submissionForm.patchValue({ status: 'Draft' });
+        // Now update field values
+        this.updateSubmissionFieldValues('Draft');
+      },
+      error: (error: any) => {
+        this.loading.save = false;
+        console.error('Error saving submission as draft:', error);
+        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to save submission as draft';
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: errorMessage
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  updateSubmissionFieldValues(status?: string): void {
     if (!this.selectedSubmission || !this.selectedSubmission.fieldValues) {
         this.loading.save = false;
+        const successMessage = status === 'Draft' 
+          ? 'Form submission saved as draft successfully'
+          : 'Form submission updated successfully';
         this.messageService.add({
           severity: 'success',
           summary: 'Success',
-          detail: 'Form submission updated successfully'
+          detail: successMessage
       });
       this.closeSubmissionModal();
       this.loadSubmissions();
@@ -625,10 +1303,13 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
     if (updateObservables.length === 0) {
       this.loading.save = false;
+      const successMessage = status === 'Draft' 
+        ? 'Form submission saved as draft successfully'
+        : 'Form submission updated successfully';
       this.messageService.add({
         severity: 'success',
         summary: 'Success',
-        detail: 'Form submission updated successfully'
+        detail: successMessage
       });
       this.closeSubmissionModal();
       this.loadSubmissions();
@@ -639,10 +1320,13 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     forkJoin(updateObservables).subscribe({
       next: () => {
         this.loading.save = false;
+        const successMessage = status === 'Draft' 
+          ? 'Form submission saved as draft successfully'
+          : 'Form submission and values updated successfully';
         this.messageService.add({
           severity: 'success',
           summary: 'Success',
-          detail: 'Form submission and values updated successfully'
+          detail: successMessage
         });
         this.closeSubmissionModal();
         this.loadSubmissions();
@@ -997,8 +1681,26 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   /**
    * Get field type by field ID (for edit modal)
    * Returns simple types: text, number, date, boolean, json, textarea
+   * Also checks actual data in fieldValue to determine correct type
    */
-  getFieldTypeById(fieldId: number): string {
+  getFieldTypeById(fieldId: number, fieldValue?: FormSubmissionValueDto): string {
+    // First, check actual data in fieldValue to determine type (most reliable)
+    if (fieldValue) {
+      if (fieldValue.valueNumber !== null && fieldValue.valueNumber !== undefined) {
+        return 'number';
+      }
+      if (fieldValue.valueDate) {
+        return 'date';
+      }
+      if (fieldValue.valueBool !== null && fieldValue.valueBool !== undefined) {
+        return 'boolean';
+      }
+      if (fieldValue.valueJson) {
+        return 'json';
+      }
+    }
+    
+    // Fallback to field definition
     const field = this.submissionFields.find(f => f.id === fieldId);
     if (!field || !field.fieldTypeId) return 'text';
     
@@ -1288,7 +1990,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         this.fields.forEach(field => {
           if (field.id) {
             const fieldKey = `field_${field.id}`;
-            if (this.isFileField(field)) {
+            if (this.isFileFieldByObject(field)) {
               // File fields don't need form control, handled separately
               formControls[fieldKey] = [null];
             } else {
@@ -1334,7 +2036,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     });
   }
 
-  isFileField(field: FormFieldDto): boolean {
+  isFileFieldByObject(field: FormFieldDto): boolean {
     // Check both fieldTypeName (from field) and fieldType.typeName (from navigation property)
     const typeName = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
     return typeName.includes('file') || typeName.includes('attachment') || typeName.includes('image');
@@ -1537,7 +2239,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
     // Process regular fields
     this.fields.forEach(field => {
-      if (!field.id || this.isFileField(field)) return;
+      if (!field.id || this.isFileFieldByObject(field)) return;
 
       const fieldKey = `field_${field.id}`;
       const fieldValue = this.fieldsForm.get(fieldKey)?.value;
@@ -1870,8 +2572,15 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     return field.fieldOptions.filter(opt => opt.isActive !== false);
   }
 
-  getFieldPlaceholder(field: FormFieldDto): string {
-    return field.placeholder || 'Your answer';
+  /**
+   * Get field object from submissionFields by fieldId
+   */
+  getSubmissionField(fieldId: number): FormFieldDto | undefined {
+    return this.submissionFields.find(f => f.id === fieldId);
+  }
+
+  getFieldPlaceholder(field: FormFieldDto | undefined): string {
+    return field?.placeholder || 'Your answer';
   }
 
   getFieldHintText(field: FormFieldDto): string {
@@ -1890,8 +2599,19 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     return 10;
   }
 
-  formatFileSize(sizeInMB: number): string {
-    return `${sizeInMB} MB`;
+  formatFileSize(sizeInBytes: number | null | undefined): string {
+    if (!sizeInBytes || sizeInBytes === 0) return '0 B';
+    
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = sizeInBytes;
+    let unitIndex = 0;
+    
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    
+    return `${size.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
   }
 
   formatAllowedExtensions(extensions: string[]): string {
@@ -1934,6 +2654,129 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
   isRequired(field: FormFieldDto): boolean {
     return field.isMandatory === true;
+  }
+
+  /**
+   * Check if a form control is disabled
+   */
+  isControlDisabled(controlName: string): boolean {
+    const control = this.editSubmissionValuesForm.get(controlName);
+    return control ? control.disabled : false;
+  }
+
+  /**
+   * Get file name from field value or attachments
+   */
+  getFileNameFromValue(fieldValue: FormSubmissionValueDto): string | null {
+    console.log(`[FormSubmissionsList] getFileNameFromValue for field ${fieldValue.fieldId}:`, {
+      fieldId: fieldValue.fieldId,
+      fieldCode: fieldValue.fieldCode,
+      valueString: fieldValue.valueString,
+      valueJson: fieldValue.valueJson,
+      valueNumber: fieldValue.valueNumber,
+      valueDate: fieldValue.valueDate,
+      valueBool: fieldValue.valueBool
+    });
+    
+    // First, check if attachments are loaded in fieldAttachments - use first attachment's file name
+    const attachments = this.getFieldAttachments(fieldValue.fieldId);
+    console.log(`[FormSubmissionsList] getFileNameFromValue - attachments for field ${fieldValue.fieldId}:`, {
+      attachmentsCount: attachments.length,
+      firstFileName: attachments.length > 0 ? attachments[0]?.fileName : null,
+      fieldAttachments: this.fieldAttachments[fieldValue.fieldId]
+    });
+    
+    if (attachments.length > 0 && attachments[0].fileName) {
+      console.log(`[FormSubmissionsList] getFileNameFromValue - ✅ Returning file name from attachments: ${attachments[0].fileName}`);
+      return attachments[0].fileName;
+    }
+    
+    // Also check selectedSubmission.attachments if available
+    if (this.selectedSubmission?.attachments && this.selectedSubmission.attachments.length > 0) {
+      const fieldAttachment = this.selectedSubmission.attachments.find(att => att.fieldId === fieldValue.fieldId);
+      if (fieldAttachment && fieldAttachment.fileName) {
+        console.log(`[FormSubmissionsList] getFileNameFromValue - ✅ Returning file name from selectedSubmission.attachments: ${fieldAttachment.fileName}`);
+        return fieldAttachment.fileName;
+      }
+    }
+    
+    // Try to extract file name from valueString
+    if (fieldValue.valueString && fieldValue.valueString.trim() !== '') {
+      console.log(`[FormSubmissionsList] getFileNameFromValue - Checking valueString: "${fieldValue.valueString}"`);
+      // Skip if it's JSON configuration (like allowedExtensions)
+      if (fieldValue.valueString.includes('allowedExtensions') || fieldValue.valueString.includes('customExtensions')) {
+        console.log(`[FormSubmissionsList] getFileNameFromValue - valueString is JSON configuration, skipping`);
+      } else {
+        // Check if valueString contains file path or name
+        const fileName = fieldValue.valueString.split('/').pop() || fieldValue.valueString.split('\\').pop();
+        if (fileName && fileName !== fieldValue.valueString) {
+          console.log(`[FormSubmissionsList] getFileNameFromValue - ✅ Extracted file name from valueString path: ${fileName}`);
+          return fileName;
+        }
+        // If valueString looks like a file name (has extension), return it
+        if (/\.(jpg|jpeg|png|gif|webp|pdf|doc|docx|xls|xlsx|txt|csv)$/i.test(fieldValue.valueString)) {
+          console.log(`[FormSubmissionsList] getFileNameFromValue - ✅ valueString looks like file name: ${fieldValue.valueString}`);
+          return fieldValue.valueString;
+        }
+        // If valueString doesn't look like JSON config, it might be a file name
+        if (!fieldValue.valueString.startsWith('{') && !fieldValue.valueString.startsWith('[')) {
+          console.log(`[FormSubmissionsList] getFileNameFromValue - ✅ valueString is not JSON, using as file name: ${fieldValue.valueString}`);
+          return fieldValue.valueString;
+        }
+      }
+    }
+    
+    // Try to extract from valueJson
+    if (fieldValue.valueJson) {
+      console.log(`[FormSubmissionsList] getFileNameFromValue - Checking valueJson: "${fieldValue.valueJson}"`);
+      try {
+        let parsed = JSON.parse(fieldValue.valueJson);
+        console.log(`[FormSubmissionsList] getFileNameFromValue - Parsed valueJson:`, parsed);
+        
+        // Handle double-encoded JSON strings
+        if (typeof parsed === 'string') {
+          try {
+            parsed = JSON.parse(parsed);
+            console.log(`[FormSubmissionsList] getFileNameFromValue - Double-parsed valueJson:`, parsed);
+          } catch {
+            // Not nested JSON
+            console.log(`[FormSubmissionsList] getFileNameFromValue - valueJson is string, not nested JSON`);
+          }
+        }
+        
+        if (typeof parsed === 'object' && parsed !== null) {
+          // Check for fileName property first
+          if (parsed.fileName && typeof parsed.fileName === 'string') {
+            console.log(`[FormSubmissionsList] getFileNameFromValue - ✅ Found fileName in parsed JSON: ${parsed.fileName}`);
+            return parsed.fileName;
+          }
+          // Check for filePath property
+          if (parsed.filePath && typeof parsed.filePath === 'string') {
+            const fileName = parsed.filePath.split('/').pop() || parsed.filePath.split('\\').pop();
+            console.log(`[FormSubmissionsList] getFileNameFromValue - ✅ Extracted file name from filePath: ${fileName}`);
+            return fileName || parsed.filePath;
+          }
+          // Check for name property
+          if (parsed.name && typeof parsed.name === 'string') {
+            console.log(`[FormSubmissionsList] getFileNameFromValue - ✅ Found name in parsed JSON: ${parsed.name}`);
+            return parsed.name;
+          }
+          // Check all keys in the parsed object
+          console.log(`[FormSubmissionsList] getFileNameFromValue - Parsed object keys:`, Object.keys(parsed));
+          console.log(`[FormSubmissionsList] getFileNameFromValue - Parsed object values:`, Object.values(parsed));
+        }
+      } catch (error) {
+        console.log(`[FormSubmissionsList] getFileNameFromValue - Error parsing valueJson:`, error);
+        // Not valid JSON, might be a file name string
+        if (fieldValue.valueJson && /\.(jpg|jpeg|png|gif|webp|pdf|doc|docx|xls|xlsx|txt|csv)$/i.test(fieldValue.valueJson)) {
+          console.log(`[FormSubmissionsList] getFileNameFromValue - ✅ valueJson looks like file name: ${fieldValue.valueJson}`);
+          return fieldValue.valueJson;
+        }
+      }
+    }
+    
+    console.log(`[FormSubmissionsList] getFileNameFromValue - ❌ No file name found for field ${fieldValue.fieldId}`);
+    return null;
   }
 }
 
