@@ -293,27 +293,31 @@ export class CalculationEngineService {
    * Check if a field is a calculated field
    */
   isCalculatedField(field: FormFieldDto): boolean {
+    // Check fieldTypeId first (should be 14 for Calculated based on static array)
+    const isCalculatedById = field.fieldTypeId === 14;
+    
     const typeNameMatch = field.fieldTypeName?.toLowerCase() === 'calculated';
     const typeMatch = field.fieldType?.typeName?.toLowerCase() === 'calculated';
     const hasExpression = !!(field.expressionText && field.expressionText.trim() !== '');
     
     // A field is calculated if:
-    // 1. Type is 'Calculated' (even if expressionText is not loaded yet from API)
-    // 2. OR has expressionText (for backward compatibility)
-    const isCalculated = (typeNameMatch || typeMatch) || hasExpression;
+    // 1. fieldTypeId is 14 (Calculated type from static array)
+    // 2. Type name is 'Calculated' (even if expressionText is not loaded yet from API)
+    // 3. OR has expressionText (for backward compatibility)
+    const isCalculated = isCalculatedById || (typeNameMatch || typeMatch) || hasExpression;
     
-    // Debug logging
-    if (typeNameMatch || typeMatch || hasExpression) {
-      console.log(`[CalculationEngine] Checking field ${field.fieldCode}:`, {
-        hasExpression,
-        expressionText: field.expressionText,
-        fieldTypeName: field.fieldTypeName,
-        fieldTypeTypeName: field.fieldType?.typeName,
-        typeNameMatch,
-        typeMatch,
-        isCalculated
-      });
-    }
+    // Debug logging for all fields to help diagnose
+    console.log(`[CalculationEngine] Checking field ${field.fieldCode}:`, {
+      fieldTypeId: field.fieldTypeId,
+      isCalculatedById,
+      hasExpression,
+      expressionText: field.expressionText,
+      fieldTypeName: field.fieldTypeName,
+      fieldTypeTypeName: field.fieldType?.typeName,
+      typeNameMatch,
+      typeMatch,
+      isCalculated
+    });
     
     return isCalculated;
   }

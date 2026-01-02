@@ -1,60 +1,195 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
 import {
   FieldTypeDto,
   CreateFieldTypeDto,
   UpdateFieldTypeDto
 } from '../form-builder/models/form-builder-dto.model';
-import { environment } from '../../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class FieldTypesService {
 
-  private fieldTypesUrl = `${environment.apiUrl}/FieldTypes`;
+  // Static Field Types Array
+  private staticFieldTypes: FieldTypeDto[] = [
+    {
+      id: 1,
+      typeName: 'Text',
+      foreignTypeName: 'نص',
+      description: 'Text input field',
+      dataType: 'string',
+      maxLength: 255,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 2,
+      typeName: 'Number',
+      foreignTypeName: 'رقم',
+      description: 'Numeric input field',
+      dataType: 'number',
+      maxLength: undefined,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 3,
+      typeName: 'Date',
+      foreignTypeName: 'تاريخ',
+      description: 'Date picker field',
+      dataType: 'date',
+      maxLength: undefined,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 4,
+      typeName: 'Email',
+      foreignTypeName: 'بريد إلكتروني',
+      description: 'Email input field',
+      dataType: 'string',
+      maxLength: 255,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 5,
+      typeName: 'Text Area',
+      foreignTypeName: 'نص طويل',
+      description: 'Multi-line text input',
+      dataType: 'string',
+      maxLength: 4000,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 6,
+      typeName: 'Select',
+      foreignTypeName: 'قائمة منسدلة',
+      description: 'Dropdown select field',
+      dataType: 'string',
+      maxLength: undefined,
+      hasOptions: true,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 7,
+      typeName: 'Radio',
+      foreignTypeName: 'خيارات راديو',
+      description: 'Radio button group',
+      dataType: 'string',
+      maxLength: undefined,
+      hasOptions: true,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 8,
+      typeName: 'Checkbox',
+      foreignTypeName: 'مربع اختيار',
+      description: 'Checkbox field',
+      dataType: 'boolean',
+      maxLength: undefined,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 9,
+      typeName: 'Multiple Select',
+      foreignTypeName: 'اختيار متعدد',
+      description: 'Multi-select dropdown',
+      dataType: 'array',
+      maxLength: undefined,
+      hasOptions: true,
+      allowMultiple: true,
+      isActive: true
+    },
+    {
+      id: 10,
+      typeName: 'File',
+      foreignTypeName: 'ملف',
+      description: 'File upload field',
+      dataType: 'file',
+      maxLength: undefined,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 11,
+      typeName: 'Multiple Files',
+      foreignTypeName: 'ملفات متعددة',
+      description: 'Multiple file upload field',
+      dataType: 'file',
+      maxLength: undefined,
+      hasOptions: false,
+      allowMultiple: true,
+      isActive: true
+    },
+    {
+      id: 12,
+      typeName: 'Grid',
+      foreignTypeName: 'جدول',
+      description: 'Line items grid/table',
+      dataType: 'json',
+      maxLength: undefined,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 13,
+      typeName: 'Boolean',
+      foreignTypeName: 'نعم/لا',
+      description: 'Boolean/switch field',
+      dataType: 'boolean',
+      maxLength: undefined,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    },
+    {
+      id: 14,
+      typeName: 'Calculated',
+      foreignTypeName: 'محسوب',
+      description: 'Calculated field with formula',
+      dataType: 'number',
+      maxLength: undefined,
+      hasOptions: false,
+      allowMultiple: false,
+      isActive: true
+    }
+  ];
 
-  constructor(private http: HttpClient) {}
+  constructor() {}
 
   // ================= FIELD TYPES CRUD ================
   
-  // Get all field types
+  // Get all field types (from static array)
   getAllFieldTypes(): Observable<FieldTypeDto[]> {
-    return this.http.get<any>(this.fieldTypesUrl).pipe(
-      map((response: any) => {
-        if (response && typeof response === 'object' && !Array.isArray(response)) {
-          const data = response.data || response.items || response.result || [];
-          return Array.isArray(data) ? data : [];
-        }
-        return Array.isArray(response) ? response : [];
-      }),
-      catchError(() => of([]))
-    );
+    return of([...this.staticFieldTypes]);
   }
 
-  // Get active field types only
+  // Get active field types only (from static array)
   getActiveFieldTypes(): Observable<FieldTypeDto[]> {
-    return this.getAllFieldTypes().pipe(
-      map(types => types.filter(type => type.isActive))
-    );
+    return of(this.staticFieldTypes.filter(type => type.isActive));
   }
 
-  // Get field type by ID
-  getFieldTypeById(id: number): Observable<FieldTypeDto> {
-    return this.http.get<any>(`${this.fieldTypesUrl}/${id}`).pipe(
-      map((response: any) => {
-        if (response && typeof response === 'object' && !response.id) {
-          return response.data || response.result || response;
-        }
-        return response;
-      }),
-      catchError(() => of(null as any))
-    );
+  // Get field type by ID (from static array)
+  getFieldTypeById(id: number): Observable<FieldTypeDto | null> {
+    const fieldType = this.staticFieldTypes.find(type => type.id === id);
+    return of(fieldType || null);
   }
 
-  // Create field type
+  // Create field type (add to static array)
   createFieldType(dto: CreateFieldTypeDto): Observable<FieldTypeDto> {
     // Validate required fields
     if (!dto.typeName || dto.typeName.trim() === '') {
@@ -63,41 +198,26 @@ export class FieldTypesService {
       });
     }
 
-    console.log('[createFieldType] Creating field type with DTO:', dto);
-    console.log('[createFieldType] Request URL:', this.fieldTypesUrl);
-    console.log('[createFieldType] Request body:', JSON.stringify(dto));
+    // Generate new ID (get max ID + 1)
+    const maxId = Math.max(...this.staticFieldTypes.map(t => t.id), 0);
+    const newFieldType: FieldTypeDto = {
+      id: maxId + 1,
+      typeName: dto.typeName,
+      foreignTypeName: dto.foreignTypeName,
+      description: dto.description,
+      dataType: dto.dataType,
+      maxLength: dto.maxLength,
+      hasOptions: dto.hasOptions,
+      allowMultiple: dto.allowMultiple,
+      isActive: dto.isActive
+    };
 
-    return this.http.post<any>(this.fieldTypesUrl, dto).pipe(
-      map((response: any) => {
-        console.log('[createFieldType] Raw response:', response);
-        // Handle wrapped response
-        if (response && typeof response === 'object' && !response.id) {
-          const unwrapped = response.data || response.result || response;
-          console.log('[createFieldType] Unwrapped response:', unwrapped);
-          return unwrapped;
-        }
-        console.log('[createFieldType] Direct response:', response);
-        return response;
-      }),
-      catchError((error) => {
-        console.error('[createFieldType] Error creating field type:', error);
-        console.error('[createFieldType] Error details:', {
-          status: error.status,
-          statusText: error.statusText,
-          error: error.error,
-          message: error.message,
-          url: error.url,
-          dto: dto,
-          requestBody: JSON.stringify(dto)
-        });
-        throw error;
-      })
-    );
+    this.staticFieldTypes.push(newFieldType);
+    return of({ ...newFieldType });
   }
 
-  // Update field type
+  // Update field type (update in static array)
   updateFieldType(id: number, dto: UpdateFieldTypeDto): Observable<FieldTypeDto> {
-    // Ensure ID is a valid number
     const fieldTypeId = Number(id);
     if (isNaN(fieldTypeId) || fieldTypeId <= 0) {
       return new Observable(observer => {
@@ -105,37 +225,36 @@ export class FieldTypesService {
       });
     }
 
-    return this.http.put<any>(`${this.fieldTypesUrl}/${fieldTypeId}`, dto).pipe(
-      map((response: any) => {
-        if (response && typeof response === 'object' && !response.id) {
-          return response.data || response.result || response;
-        }
-        return response;
-      }),
-      catchError((error) => {
-        console.error('Error updating field type:', error);
-        console.error('Error details:', {
-          status: error.status,
-          statusText: error.statusText,
-          error: error.error,
-          message: error.message,
-          url: error.url,
-          fieldTypeId: fieldTypeId,
-          dto: dto
-        });
-        throw error;
-      })
-    );
+    const index = this.staticFieldTypes.findIndex(t => t.id === fieldTypeId);
+    if (index === -1) {
+      return new Observable(observer => {
+        observer.error(new Error('Field type not found'));
+      });
+    }
+
+    // Update the field type
+    this.staticFieldTypes[index] = {
+      ...this.staticFieldTypes[index],
+      ...dto,
+      id: fieldTypeId // Ensure ID doesn't change
+    };
+
+    return of({ ...this.staticFieldTypes[index] });
   }
 
-  // Delete field type (hard delete)
+  // Delete field type (remove from static array)
   deleteFieldType(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.fieldTypesUrl}/${id}`).pipe(
-      catchError((error) => {
-        console.error('Error deleting field type:', error);
-        throw error;
-      })
-    );
+    const fieldTypeId = Number(id);
+    const index = this.staticFieldTypes.findIndex(t => t.id === fieldTypeId);
+    
+    if (index === -1) {
+      return new Observable(observer => {
+        observer.error(new Error('Field type not found'));
+      });
+    }
+
+    this.staticFieldTypes.splice(index, 1);
+    return of(void 0);
   }
 
   // Soft delete field type (update isActive to false)
@@ -143,9 +262,8 @@ export class FieldTypesService {
     return this.updateFieldType(id, { isActive: false });
   }
 
-  // Toggle field type status - Try dedicated status endpoint first, fallback to full update
+  // Toggle field type status (update in static array)
   toggleFieldTypeStatus(id: number, isActive: boolean): Observable<FieldTypeDto> {
-    // Ensure ID is a valid number
     const fieldTypeId = Number(id);
     if (isNaN(fieldTypeId) || fieldTypeId <= 0) {
       return new Observable(observer => {
@@ -153,58 +271,6 @@ export class FieldTypesService {
       });
     }
 
-    console.log('[toggleFieldTypeStatus] Toggling field type status:', { fieldTypeId, isActive });
-
-    // Try dedicated status endpoint first (PATCH /api/FieldTypes/{id}/status)
-    return this.http.patch<any>(`${this.fieldTypesUrl}/${fieldTypeId}/status`, { isActive }).pipe(
-      map((response: any) => {
-        console.log('[toggleFieldTypeStatus] Status updated successfully via status endpoint:', response);
-        // Handle wrapped response
-        if (response && typeof response === 'object' && !response.id) {
-          return response.data || response.result || response;
-        }
-        return response;
-      }),
-      catchError((error) => {
-        console.error('[toggleFieldTypeStatus] Error using status endpoint, trying full update:', error);
-        
-        // Fallback: use full update with isActive
-        // Get the current field type first to include all required fields
-        return this.getFieldTypeById(fieldTypeId).pipe(
-          switchMap((currentFieldType) => {
-            if (!currentFieldType) {
-              throw new Error('Field type not found');
-            }
-            
-            // Create update DTO with all current values plus new isActive
-            const updateDto: UpdateFieldTypeDto = {
-              typeName: currentFieldType.typeName,
-              description: currentFieldType.description,
-              dataType: currentFieldType.dataType,
-              maxLength: currentFieldType.maxLength,
-              hasOptions: currentFieldType.hasOptions,
-              allowMultiple: currentFieldType.allowMultiple,
-              isActive: isActive
-            };
-            
-            console.log('[toggleFieldTypeStatus] Using full update fallback with DTO:', updateDto);
-            return this.updateFieldType(fieldTypeId, updateDto);
-          }),
-          catchError((finalError) => {
-            console.error('[toggleFieldTypeStatus] Final error toggling field type status:', finalError);
-            console.error('[toggleFieldTypeStatus] Error details:', {
-              status: finalError.status,
-              statusText: finalError.statusText,
-              error: finalError.error,
-              message: finalError.message,
-              url: finalError.url,
-              fieldTypeId: fieldTypeId,
-              isActive: isActive
-            });
-            throw finalError;
-          })
-        );
-      })
-    );
+    return this.updateFieldType(fieldTypeId, { isActive });
   }
 }

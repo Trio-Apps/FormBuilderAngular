@@ -1616,17 +1616,28 @@ export class FormViewComponent implements OnInit {
     console.log(`[FormView] Total fields: ${allFields.length}`);
     
     // Debug: Log all fields to see their types
-    console.log(`[FormView] All fields details:`, allFields.map(f => ({
-      id: f.id,
-      code: f.fieldCode,
-      name: f.fieldName,
-      typeName: f.fieldTypeName,
-      type: f.fieldType?.typeName,
-      expressionText: f.expressionText,
-      ExpressionText: (f as any).ExpressionText, // Check PascalCase too
-      recalculateOn: f.recalculateOn,
-      isCalculated: this.calculationEngine.isCalculatedField(f)
-    })));
+    console.log(`[FormView] All fields details:`, allFields.map(f => {
+      const isCalculated = this.calculationEngine.isCalculatedField(f);
+      return {
+        id: f.id,
+        code: f.fieldCode,
+        name: f.fieldName,
+        fieldTypeId: f.fieldTypeId,
+        typeName: f.fieldTypeName,
+        type: f.fieldType?.typeName,
+        fieldTypeObject: f.fieldType, // Full object
+        expressionText: f.expressionText,
+        ExpressionText: (f as any).ExpressionText, // Check PascalCase too
+        recalculateOn: f.recalculateOn,
+        isCalculated: isCalculated,
+        // Detailed calculated check
+        calculatedCheck: {
+          typeNameMatch: f.fieldTypeName?.toLowerCase() === 'calculated',
+          typeMatch: f.fieldType?.typeName?.toLowerCase() === 'calculated',
+          hasExpression: !!(f.expressionText && f.expressionText.trim() !== '')
+        }
+      };
+    }));
     
     // Normalize expressionText from PascalCase if needed
     allFields.forEach(field => {

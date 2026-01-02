@@ -16,7 +16,8 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { DialogModule } from 'primeng/dialog';
 import { ButtonModule } from 'primeng/button';
-import { Subscription } from 'rxjs';
+import { Subscription, forkJoin, of } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 import { TranslationService } from '../../../core/services/translation.service';
 import { environment } from '../../../environments/environment';
 import { AttachmentTypesService } from '../../FormBuilder/services/attachment-types.service';
@@ -48,6 +49,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   // Data Arrays
   fields: FormFieldDto[] = [];
+  allFormFields: FormFieldDto[] = []; // All fields from all tabs for expression builder
   fieldTypes: FieldTypeDto[] = [];
   filteredFieldTypes: FieldTypeDto[] = [];
   regexOptions = [
@@ -213,6 +215,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           isEditable: false,
           isMandatory: false
         });
+        // Load all form fields for expression builder if not loaded
+        if (this.allFormFields.length === 0) {
+          this.loadAllFormFields();
+        }
       }
     });
 
@@ -247,6 +253,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           this.tabName = tab.tabName || '';
           // Load fields with correct formBuilderId
           this.loadFields();
+          // Load all form fields for expression builder
+          this.loadAllFormFields();
         } else {
           // Fallback: try parent route
           this.getFormIdFromParentRoute();
@@ -454,6 +462,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.editingField = field;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.showFieldModal = true;
+
+    // Load all form fields for expression builder if editing calculated field
+    if (this.isCalculatedFieldType(field.fieldTypeId) && this.allFormFields.length === 0) {
+      this.loadAllFormFields();
+    }
 
     // Debug: Log field data to check if expressionText is present
     console.log('[openEditFieldModal] Field data:', {
@@ -1298,6 +1311,92 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Remove duplicates
     return [...new Set(fieldCodes)];
   }
+
+  /**
+   * Load all fields from all tabs for expression builder
+   */
+  loadAllFormFields(): void {
+    if (!this.formBuilderId) return;
+
+    // Load all tabs for this form
+    this.tabsService.getTabs(this.formBuilderId).subscribe({
+      next: (tabs) => {
+        if (!tabs || tabs.length === 0) {
+          this.allFormFields = [];
+          return;
+        }
+
+        // Load fields for each tab
+        const fieldObservables = tabs.map(tab =>
+          this.fieldsService.getFields(this.formBuilderId, tab.id).pipe(
+            catchError(() => of([]))
+          )
+        );
+
+        // Wait for all fields to load
+        forkJoin(fieldObservables).subscribe({
+          next: (results) => {
+            this.allFormFields = [];
+            results.forEach(fields => {
+              if (fields && fields.length > 0) {
+                // Exclude calculated fields and the current field being edited
+                const editableFields = fields.filter(f => {
+                  const isCalculated = this.isCalculatedFieldType(f.fieldTypeId);
+                  const isCurrentField = this.editingField && f.id === this.editingField.id;
+                  return !isCalculated && !isCurrentField;
+                });
+                this.allFormFields.push(...editableFields);
+              }
+            });
+            console.log('[FieldsList] Loaded all form fields for expression builder:', this.allFormFields.length);
+          },
+          error: (error) => {
+            console.error('[FieldsList] Error loading all form fields:', error);
+            this.allFormFields = [];
+          }
+        });
+      },
+      error: (error) => {
+        console.error('[FieldsList] Error loading tabs for expression builder:', error);
+        this.allFormFields = [];
+      }
+    });
+  }
+
+  /**
+   * Add selected field to expression text
+   */
+  addFieldToExpression(fieldCode: string): void {
+    if (!fieldCode) return;
+
+    const currentExpression = this.fieldForm.get('expressionText')?.value || '';
+    const fieldReference = `[${fieldCode}]`;
+    
+    // Add space before if expression is not empty and doesn't end with space
+    const separator = currentExpression.trim() && !currentExpression.trim().endsWith(' ') ? ' ' : '';
+    const newExpression = currentExpression + separator + fieldReference;
+    
+    this.fieldForm.patchValue({
+      expressionText: newExpression
+    });
+  }
+
+  /**
+   * Get available fields for expression builder (excluding calculated and current field)
+   */
+  getAvailableFieldsForExpression(): FormFieldDto[] {
+    const currentFieldCode = this.fieldForm.get('fieldCode')?.value;
+    return this.allFormFields.filter(f => {
+      // Exclude calculated fields
+      const isCalculated = this.isCalculatedFieldType(f.fieldTypeId);
+      // Exclude current field being edited
+      const isCurrentField = this.editingField && f.id === this.editingField.id;
+      // Exclude if same field code (for new fields)
+      const isSameCode = f.fieldCode === currentFieldCode;
+      return !isCalculated && !isCurrentField && !isSameCode;
+    });
+  }
+
 
   /**
    * Toggle file extension selection

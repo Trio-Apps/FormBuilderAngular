@@ -9,6 +9,7 @@ import {
   FieldTypeDto
 } from '../form-builder/models/form-builder-dto.model';
 import { environment } from '../../../environments/environment';
+import { FieldTypesService } from './field-types.service';
 
 @Injectable({
   providedIn: 'root'
@@ -16,9 +17,11 @@ import { environment } from '../../../environments/environment';
 export class FieldsService {
 
   private fieldsUrl = `${environment.apiUrl}/FormFields`;
-  private fieldTypesUrl = `${environment.apiUrl}/FieldTypes`;
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private fieldTypesService: FieldTypesService
+  ) {}
 
   // ================= FIELDS CRUD ================
   
@@ -212,50 +215,13 @@ export class FieldsService {
   // ================= FIELD TYPES ================
   
   getFieldTypes(): Observable<FieldTypeDto[]> {
-    return this.http.get<any>(this.fieldTypesUrl).pipe(
-      map((response: any) => {
-        // Handle wrapped response
-        let types: any[] = [];
-        
-        if (Array.isArray(response)) {
-          types = response;
-        } else if (response && typeof response === 'object') {
-          const data = response.data || response.items || response.result || [];
-          types = Array.isArray(data) ? data : [];
-        }
-        
-        // Map and normalize field types to ensure typeName is set correctly
-        return types.map((type: any) => {
-          // Ensure typeName is set from type_name_en if typeName is missing
-          if (!type.typeName && type.type_name_en) {
-            type.typeName = type.type_name_en;
-          }
-          // Ensure foreignTypeName is set from type_name_ar if foreignTypeName is missing
-          if (!type.foreignTypeName && type.type_name_ar) {
-            type.foreignTypeName = type.type_name_ar;
-          }
-          // Ensure boolean fields have default values
-          if (type.hasOptions === undefined) {
-            type.hasOptions = false;
-          }
-          if (type.allowMultiple === undefined) {
-            type.allowMultiple = false;
-          }
-          if (type.isActive === undefined) {
-            type.isActive = true;
-          }
-          return type as FieldTypeDto;
-        });
-      }),
-      catchError((error) => {
-        console.error('Error loading field types:', error);
-        return of([]);
-      })
-    );
+    // Use FieldTypesService to get static field types
+    return this.fieldTypesService.getAllFieldTypes();
   }
 
-  getFieldTypeById(id: number): Observable<FieldTypeDto> {
-    return this.http.get<FieldTypeDto>(`${this.fieldTypesUrl}/${id}`);
+  getFieldTypeById(id: number): Observable<FieldTypeDto | null> {
+    // Use FieldTypesService to get static field type by ID
+    return this.fieldTypesService.getFieldTypeById(id);
   }
 
   // ================= HELPER METHODS ================

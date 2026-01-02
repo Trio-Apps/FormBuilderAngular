@@ -19,10 +19,6 @@
           <i class="pi pi-shield"></i>
           <span>Manage Rules</span>
         </button>
-        <button class="btn-secondary" routerLink="/form-builder/field-types" title="Manage Field Types">
-          <i class="pi pi-tags"></i>
-          <span>Field Types</span>
-        </button>
         <button class="btn-primary" (click)="openAddFieldModal()" [disabled]="loading.fields || loading.fieldTypes">
           <i class="pi pi-plus"></i>
           <span>New Field</span>
@@ -507,15 +503,6 @@
             Calculation Settings
           </h4>
           <div class="form-grid">
-            <!-- Calculation Mode -->
-            <div class="form-group">
-              <label class="form-label">Calculation Mode <span class="required">*</span></label>
-              <select class="form-control" formControlName="calculationMode">
-                <option value="Expression">Expression</option>
-                <option value="Formula">Formula (Future Use)</option>
-              </select>
-            </div>
-
             <!-- Result Type -->
             <div class="form-group">
               <label class="form-label">Result Type <span class="required">*</span></label>
@@ -536,7 +523,48 @@
               </select>
             </div>
 
-            <!-- Expression Builder -->
+            <!-- Available Fields for Expression Builder -->
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label class="form-label">
+                Available Fields:
+                <i class="pi pi-info-circle" style="margin-left: 6px; color: #667eea; cursor: help;" 
+                   pTooltip="Click on a field to add it to the expression"></i>
+              </label>
+              <div style="padding: 12px; background: #dcfce7; border: 1px solid #86efac; border-radius: 6px;">
+                <div *ngIf="getAvailableFieldsForExpression().length > 0" 
+                     style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 12px;">
+                  <button 
+                    type="button"
+                    *ngFor="let field of getAvailableFieldsForExpression()"
+                    (click)="addFieldToExpression(field.fieldCode)"
+                    style="
+                      padding: 8px 12px;
+                      background: white;
+                      border: 1px solid #86efac;
+                      border-radius: 6px;
+                      cursor: pointer;
+                      font-size: 13px;
+                      color: #166534;
+                      transition: all 0.2s ease;
+                      text-align: left;
+                      white-space: nowrap;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                    "
+                    [title]="field.fieldName"
+                    onmouseover="this.style.background='#f0fdf4'; this.style.borderColor='#4ade80'"
+                    onmouseout="this.style.background='white'; this.style.borderColor='#86efac'">
+                    {{ field.fieldCode }}
+                  </button>
+                </div>
+                <div *ngIf="getAvailableFieldsForExpression().length === 0" 
+                     style="padding: 12px; text-align: center; color: #166534; font-size: 13px;">
+                  No fields available. Add fields to other tabs first.
+                </div>
+              </div>
+             
+            </div>
+
             <div class="form-group" style="grid-column: 1 / -1;">
               <label class="form-label">
                 Expression Text <span class="required">*</span>
@@ -546,46 +574,13 @@
               <textarea class="form-control" formControlName="expressionText" rows="4"
                 [placeholder]="'Example: ([RENT] * [MONTHS]) - [DISCOUNT]'"
                 [class.is-invalid]="isFieldInvalid('expressionText')"></textarea>
-              <small class="form-text text-muted">
-                Enter expression using field codes in square brackets. Supported operations: +, -, *, /, (, )
-              </small>
-              <div class="invalid-feedback" *ngIf="isFieldInvalid('expressionText')">
-                {{ getFieldErrorMessage('expressionText') }}
-              </div>
+              
             </div>
 
-            <!-- Dependent Fields Display (Auto-extracted) -->
-            <div class="form-group" style="grid-column: 1 / -1;" *ngIf="getDependentFields().length > 0">
-              <label class="form-label">
-                <i class="pi pi-link"></i>
-                Dependent Fields (Auto-detected)
-              </label>
-              <div class="dependent-fields-list">
-                <span *ngFor="let fieldCode of getDependentFields()" class="dependent-field-badge">
-                  [{{ fieldCode }}]
-                </span>
-              </div>
-              <small class="form-text text-muted">
-                These fields will trigger recalculation when their values change
-              </small>
-            </div>
+         
 
             <!-- Field Behavior Info -->
-            <div class="form-group" style="grid-column: 1 / -1;">
-              <div class="info-box" style="padding: 12px; background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 6px;">
-                <div style="display: flex; align-items: start; gap: 8px;">
-                  <i class="pi pi-info-circle" style="color: #0ea5e9; font-size: 18px; margin-top: 2px;"></i>
-                  <div>
-                    <div style="font-weight: 600; color: #0c4a6e; margin-bottom: 4px;">Calculated Field Behavior</div>
-                    <ul style="margin: 0; padding-left: 20px; color: #075985; font-size: 13px;">
-                      <li>This field is automatically set to <strong>non-editable</strong> and <strong>non-mandatory</strong></li>
-                      <li>Values are calculated automatically based on the expression</li>
-                      <li>Calculated values are stored as snapshots in submissions</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
+          
           </div>
         </div>
 

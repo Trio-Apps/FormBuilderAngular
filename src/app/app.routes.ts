@@ -151,13 +151,6 @@ export const routes: Routes = [
               .then(m => m.GridRowsListComponent) 
           },
           
-          // إدارة أنواع الحقول (Field Types)
-          { 
-            path: 'field-types', 
-            loadComponent: () => import('./views/field-types/field-types-list/field-types-list.component')
-              .then(m => m.FieldTypesListComponent) 
-          },
-          
           // إدارة أنواع المستندات (Document Types) - مرتبطة بفورم معين
           { 
             path: 'document-types/:formId', 
