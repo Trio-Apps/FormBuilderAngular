@@ -165,6 +165,16 @@ export class FormsService {
         
         if (foundForm) {
           console.log('[FormsService] Form found in list:', foundForm.formCode);
+          
+          // Check if form is published and active
+          if (foundForm.isPublished !== true || foundForm.isActive !== true) {
+            console.warn('[FormsService] Form found but not published or active:', {
+              formCode: foundForm.formCode,
+              isPublished: foundForm.isPublished,
+              isActive: foundForm.isActive
+            });
+            // Still return the form, but the caller should check isPublished/isActive
+          }
         } else {
           console.warn('[FormsService] Form not found in list. Available codes:', 
             result.items.map(f => f.formCode).join(', '));
@@ -174,6 +184,12 @@ export class FormsService {
       }),
       catchError((error) => {
         console.error('[FormsService] Forms list search failed:', error);
+        
+        // If search fails due to 401 (unauthorized), log a helpful message
+        if (error?.status === 401) {
+          console.warn('[FormsService] Unauthorized access to forms list. Form may exist but requires authentication.');
+        }
+        
         // If search fails, return null
         return of(null);
       })

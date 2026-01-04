@@ -104,7 +104,23 @@ export class FormViewComponent implements OnInit {
     this.route.paramMap.subscribe(params => {
       const code = params.get('formCode');
       if (code) {
-        this.formCode = code;
+        // Decode and normalize the formCode to handle URL-encoded characters
+        // Angular's paramMap.get() should decode automatically, but we'll decode explicitly to be safe
+        try {
+          // Decode URL-encoded characters
+          const decoded = decodeURIComponent(code);
+          // Trim whitespace and normalize
+          this.formCode = decoded.trim();
+        } catch (e) {
+          // If decoding fails, use the original code trimmed
+          this.formCode = code.trim();
+        }
+        
+        if (!this.formCode) {
+          this.notFound = true;
+          return;
+        }
+        
         this.loadForm();
       } else {
         this.notFound = true;
@@ -168,8 +184,11 @@ export class FormViewComponent implements OnInit {
     this.loading = true;
     this.notFound = false;
 
-    // Removed verbose logging
-    // console.log('[FormView] Loading form with code:', this.formCode);
+    console.log('[FormView] Loading form with code:', {
+      formCode: this.formCode,
+      length: this.formCode?.length,
+      encoded: encodeURIComponent(this.formCode)
+    });
 
     // Fetch form data from API by formCode
     this.formsService.getFormByCode(this.formCode).subscribe({
@@ -178,7 +197,12 @@ export class FormViewComponent implements OnInit {
 
         if (!form) {
           console.warn('[FormView] Form is null or undefined');
-          this.handleNotFound('Form not found in API response');
+          // Check if formCode contains COPY (indicating it's a duplicated form)
+          if (this.formCode && this.formCode.toUpperCase().includes('COPY')) {
+            this.handleNotFound(`Form "${this.formCode}" not found. The duplicated form may not be published or active. Please check the form settings in the admin panel and ensure it is published and active.`);
+          } else {
+            this.handleNotFound(`Form "${this.formCode}" not found. Please check if the form code is correct.`);
+          }
           return;
         }
 
@@ -189,9 +213,15 @@ export class FormViewComponent implements OnInit {
             isActive: form.isActive,
             formCode: form.formCode
           });
-          let reason = 'Form is ';
-          if (!form.isPublished) reason += 'not published';
-          if (!form.isActive) reason += (reason.includes('not') ? ' and ' : '') + 'not active';
+          let reason = `Form "${form.formCode || this.formCode}" is `;
+          if (!form.isPublished && !form.isActive) {
+            reason += 'not published and not active';
+          } else if (!form.isPublished) {
+            reason += 'not published';
+          } else if (!form.isActive) {
+            reason += 'not active';
+          }
+          reason += '. Please publish and activate the form in the admin panel to make it accessible.';
           this.handleNotFound(reason);
           return;
         }
@@ -367,13 +397,22 @@ export class FormViewComponent implements OnInit {
 
         let reason = 'Unable to load form';
         if (error?.status === 404) {
-          reason = 'Form not found (404)';
+          // Check if formCode contains COPY (indicating it's a duplicated form)
+          if (this.formCode && this.formCode.toUpperCase().includes('COPY')) {
+            reason = `Form "${this.formCode}" not found. The duplicated form may not be published or active. Please check the form settings in the admin panel.`;
+          } else {
+            reason = `Form "${this.formCode}" not found (404). Please check if the form code is correct and the form is published.`;
+          }
         } else if (error?.status === 403) {
-          reason = 'Access denied (403)';
+          reason = 'Access denied (403). You may not have permission to view this form.';
+        } else if (error?.status === 401) {
+          reason = 'Unauthorized (401). Please ensure the form is published and accessible.';
         } else if (error?.status === 500) {
-          reason = 'Server error (500)';
+          reason = 'Server error (500). Please try again later.';
         } else if (error?.status) {
           reason = `Error ${error.status}: ${error.statusText || error.message || 'Unknown error'}`;
+        } else {
+          reason = `Unable to load form "${this.formCode}". Please check if the form exists and is published.`;
         }
 
         this.handleNotFound(reason);
@@ -489,8 +528,16 @@ export class FormViewComponent implements OnInit {
     this.tabs = [];
     this.loading = false;
     this.notFound = true;
-    this.notFoundReason = reason;
-    console.log('[FormView] Form not found. Reason:', reason);
+    
+    // Enhance reason message for duplicated forms
+    if (reason && this.formCode && this.formCode.toUpperCase().includes('COPY')) {
+      this.notFoundReason = reason + ' This usually means the form duplication failed or the duplicated form was not created properly. Please try duplicating the form again from the admin panel.';
+    } else {
+      this.notFoundReason = reason;
+    }
+    
+    console.log('[FormView] Form not found. Reason:', this.notFoundReason);
+    console.log('[FormView] Form code:', this.formCode);
   }
 
   // ===== Field DataSource Helpers =====

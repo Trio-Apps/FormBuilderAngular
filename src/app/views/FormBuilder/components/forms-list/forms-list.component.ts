@@ -888,24 +888,81 @@ export class FormsListComponent implements OnInit, OnDestroy {
       icon: 'pi pi-copy',
       accept: () => {
         this.loading = true;
+        console.log('[FormsList] Duplicating form:', {
+          formId: form.id,
+          formName: form.formName,
+          formCode: form.formCode
+        });
+        
         this.formsService.duplicateForm(form.id).subscribe({
           next: (duplicatedForm) => {
+            console.log('[FormsList] Form duplicated successfully:', {
+              id: duplicatedForm.id,
+              formName: duplicatedForm.formName,
+              formCode: duplicatedForm.formCode,
+              isPublished: duplicatedForm.isPublished,
+              isActive: duplicatedForm.isActive
+            });
+            
             this.loading = false;
             this.loadForms(this.currentPage);
-            this.messageService.add({
-              severity: 'success',
-              summary: 'Success',
-              detail: `Form "${duplicatedForm.formName}" duplicated successfully`
-            });
+            
+            // Check if duplicated form is published and active
+            const isPublished = duplicatedForm.isPublished === true;
+            const isActive = duplicatedForm.isActive === true;
+            
+            if (isPublished && isActive) {
+              this.messageService.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: `Form "${duplicatedForm.formName}" duplicated successfully. Form code: ${duplicatedForm.formCode}. You can now copy the public link.`
+              });
+            } else {
+              // Show warning if form is not published or not active
+              let warningMessage = `Form "${duplicatedForm.formName}" duplicated successfully, but `;
+              if (!isPublished && !isActive) {
+                warningMessage += 'it is not published and not active.';
+              } else if (!isPublished) {
+                warningMessage += 'it is not published.';
+              } else if (!isActive) {
+                warningMessage += 'it is not active.';
+              }
+              warningMessage += ` Please publish and activate the form in the admin panel to make it accessible via the public link. Form code: ${duplicatedForm.formCode}`;
+              
+              this.messageService.add({
+                severity: 'warn',
+                summary: 'Form Duplicated',
+                detail: warningMessage,
+                life: 10000
+              });
+            }
           },
           error: (error) => {
             this.loading = false;
-            const errorMessage = error?.error?.message || error?.message || 'Failed to duplicate form';
+            console.error('[FormsList] Error duplicating form:', {
+              formId: form.id,
+              error: error,
+              status: error?.status,
+              message: error?.message,
+              errorBody: error?.error
+            });
+            
+            let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to duplicate form';
+            
+            // Provide more specific error messages
+            if (error?.status === 404) {
+              errorMessage = 'Original form not found. Please refresh the page and try again.';
+            } else if (error?.status === 500) {
+              errorMessage = 'Server error occurred while duplicating the form. Please try again later.';
+            } else if (error?.status === 400) {
+              errorMessage = errorMessage || 'Invalid request. Please check the form data and try again.';
+            }
+            
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
               detail: errorMessage,
-              life: 7000
+              life: 10000
             });
           }
         });
