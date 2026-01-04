@@ -1,0 +1,341 @@
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/approval-workflows" title="Back to Approval Workflows">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Approval Stages</h1>
+          <p class="page-subtitle" *ngIf="workflow">
+            Manage approval stages for: <strong>{{ workflow.name }}</strong>
+          </p>
+          <p class="page-subtitle" *ngIf="!workflow && !loading.workflow">
+            Manage approval stages
+          </p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadApprovalStages()" [disabled]="loading.stages" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.stages || !workflowId">
+          <i class="pi pi-plus"></i>
+          <span>New Approval Stage</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a routerLink="/approval-workflows" class="breadcrumb-link">
+        <i class="pi pi-sitemap"></i>
+        <span>Approval Workflows</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-list"></i>
+        <span>Approval Stages</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Workflow Info Section -->
+    <div *ngIf="workflow" class="workflow-info-section" style="margin-bottom: 24px; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <i class="pi pi-info-circle" style="color: #667eea; font-size: 20px;"></i>
+        <div>
+          <strong>Workflow Name:</strong> {{ workflow.name }}<br>
+          <strong>Document Type:</strong> {{ getDocumentTypeName() }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Approval Stages Section -->
+    <div class="document-types-section">
+      <div class="section-header">
+        <h3>Approval Stages List</h3>
+        <div class="header-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              placeholder="Search stages..."
+              class="search-input"
+              [(ngModel)]="searchTerm"
+              (input)="onSearchChange()"
+            />
+          </div>
+          <button pButton 
+            icon="pi pi-filter" 
+            class="p-button-text p-button-sm header-icon-btn" 
+            pTooltip="Filter"
+            tooltipPosition="top"></button>
+          <button pButton 
+            icon="pi pi-download" 
+            class="p-button-text p-button-sm header-icon-btn" 
+            pTooltip="Download"
+            tooltipPosition="top"></button>
+        </div>
+      </div>
+
+      <div *ngIf="loading.stages" class="loading-container">
+        <i class="pi pi-spin pi-spinner"></i>
+        <p>Loading approval stages...</p>
+      </div>
+
+      <div *ngIf="!loading.stages && approvalStages.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-list"></i>
+        </div>
+        <h4>No Approval Stages Configured</h4>
+        <p>There are no approval stages for this workflow yet. Click "New Approval Stage" to create one.</p>
+        <button pButton label="New Approval Stage" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
+      </div>
+
+      <p-table *ngIf="!loading.stages && approvalStages.length > 0" 
+        [value]="getPaginatedStages()" 
+        [paginator]="false"
+        styleClass="p-datatable-sm document-types-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>#</th>
+            <th>Order</th>
+            <th>Stage Name</th>
+            <th>Amount Range</th>
+            <th>Final Stage</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-stage let-rowIndex="rowIndex">
+          <tr>
+            <td>{{ first + rowIndex + 1 }}</td>
+            <td>
+              <span class="badge badge-info">{{ stage.stageOrder }}</span>
+            </td>
+            <td>
+              <div class="document-name-cell">
+                <i class="pi pi-list"></i>
+                <span>{{ stage.stageName }}</span>
+              </div>
+            </td>
+            <td>
+              <span *ngIf="(stage.minAmount !== null && stage.minAmount !== undefined) || (stage.maxAmount !== null && stage.maxAmount !== undefined)">
+                {{ formatAmount(stage.minAmount) }} - {{ formatAmount(stage.maxAmount) }}
+              </span>
+              <span *ngIf="(stage.minAmount === null || stage.minAmount === undefined) && (stage.maxAmount === null || stage.maxAmount === undefined)" class="text-muted">-</span>
+            </td>
+            <td>
+              <span *ngIf="stage.isFinalStage" class="badge badge-success">
+                <i class="pi pi-check"></i>
+                Yes
+              </span>
+              <span *ngIf="!stage.isFinalStage" class="badge badge-secondary">No</span>
+            </td>
+            <td>
+              <span *ngIf="stage.isActive" class="badge badge-success">
+                <i class="pi pi-check"></i>
+                Active
+              </span>
+              <span *ngIf="!stage.isActive" class="badge badge-danger">
+                <i class="pi pi-times"></i>
+                Inactive
+              </span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button pButton 
+                  [icon]="stage.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'" 
+                  class="p-button-text p-button-sm action-btn" 
+                  (click)="toggleStageStatus(stage)"
+                  [disabled]="loading.toggle"
+                  [pTooltip]="stage.isActive ? 'Deactivate' : 'Activate'"
+                  tooltipPosition="top"></button>
+                <button pButton 
+                  icon="pi pi-pencil" 
+                  class="p-button-text p-button-sm action-btn" 
+                  (click)="openEditModal(stage)"
+                  pTooltip="Edit"
+                  tooltipPosition="top"></button>
+                <button pButton 
+                  icon="pi pi-trash" 
+                  class="p-button-text p-button-sm action-btn action-btn-danger" 
+                  (click)="deleteStage(stage)"
+                  [disabled]="loading.delete"
+                  pTooltip="Delete"
+                  tooltipPosition="top"></button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+
+      <p-paginator 
+        *ngIf="!loading.stages && approvalStages.length > 0"
+        [first]="first"
+        [rows]="rows"
+        [totalRecords]="totalRecords"
+        [rowsPerPageOptions]="[10, 20, 50]"
+        (onPageChange)="onPageChange($event)"
+        styleClass="document-types-paginator">
+      </p-paginator>
+    </div>
+  </div>
+</div>
+
+<!-- Approval Stage Modal -->
+<p-dialog
+  [(visible)]="showModal"
+  [header]="(editingStage ? 'Edit' : 'New') + ' Approval Stage'"
+  [modal]="true"
+  [style]="{ width: '600px' }"
+  [closable]="true"
+  [autoZIndex]="true"
+  [baseZIndex]="10001"
+  (onHide)="closeModal()"
+>
+  <form [formGroup]="stageForm" (ngSubmit)="saveStage()">
+    <div class="form-display-section">
+      <!-- Stage Name -->
+      <div class="form-field-wrapper">
+        <label class="field-label" for="stageName">
+          Stage Name <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <input 
+            type="text" 
+            id="stageName" 
+            class="form-input"
+            formControlName="stageName" 
+            placeholder="Enter stage name"
+            [class.input-error]="stageForm.get('stageName')?.invalid && stageForm.get('stageName')?.touched" />
+        </div>
+        <div *ngIf="stageForm.get('stageName')?.invalid && stageForm.get('stageName')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>Stage name is required (2-200 characters)</span>
+        </div>
+      </div>
+
+      <!-- Stage Order -->
+      <div class="form-field-wrapper">
+        <label class="field-label" for="stageOrder">
+          Stage Order <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <p-inputNumber
+            id="stageOrder"
+            formControlName="stageOrder"
+            [min]="1"
+            [max]="999"
+            [showButtons]="true"
+            [class.ng-invalid]="stageForm.get('stageOrder')?.invalid && stageForm.get('stageOrder')?.touched"
+            styleClass="w-full">
+          </p-inputNumber>
+        </div>
+        <div *ngIf="stageForm.get('stageOrder')?.invalid && stageForm.get('stageOrder')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>Stage order is required (minimum 1)</span>
+        </div>
+      </div>
+
+      <!-- Amount Range -->
+      <div class="form-field-wrapper">
+        <label class="field-label">Amount Range (Optional)</label>
+        <div class="amount-range-grid">
+          <div class="amount-field">
+            <label class="field-label-small" for="minAmount">Min Amount</label>
+            <p-inputNumber
+              id="minAmount"
+              formControlName="minAmount"
+              [min]="0"
+              [maxFractionDigits]="2"
+              [showButtons]="true"
+              placeholder="0.00"
+              styleClass="w-full">
+            </p-inputNumber>
+          </div>
+          <div class="amount-field">
+            <label class="field-label-small" for="maxAmount">Max Amount</label>
+            <p-inputNumber
+              id="maxAmount"
+              formControlName="maxAmount"
+              [min]="0"
+              [maxFractionDigits]="2"
+              [showButtons]="true"
+              placeholder="0.00"
+              styleClass="w-full">
+            </p-inputNumber>
+          </div>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          Leave empty for no amount restriction. Min must be less than Max.
+        </div>
+      </div>
+
+      <!-- Final Stage -->
+      <div class="form-field-wrapper">
+        <div class="checkbox-group">
+          <div class="checkbox-option">
+            <p-checkbox 
+              formControlName="isFinalStage"
+              [binary]="true"
+              inputId="isFinalStage">
+            </p-checkbox>
+            <label class="checkbox-label" for="isFinalStage">Final Stage</label>
+          </div>
+        </div>
+        <div class="field-hint" *ngIf="hasFinalStage() && (!editingStage || editingStage?.isFinalStage !== true)">
+          <i class="pi pi-exclamation-triangle" style="color: #f59e0b;"></i>
+          Another stage is already marked as final stage. Only one stage can be final.
+        </div>
+        <div class="field-hint" *ngIf="!hasFinalStage() || (editingStage && editingStage?.isFinalStage === true)">
+          <i class="pi pi-info-circle"></i>
+          Mark this stage as the final approval stage. Only one stage can be final.
+        </div>
+      </div>
+
+      <!-- Active Status -->
+      <div class="form-field-wrapper">
+        <div class="checkbox-group">
+          <div class="checkbox-option">
+            <p-checkbox 
+              formControlName="isActive"
+              [binary]="true"
+              inputId="stageIsActive">
+            </p-checkbox>
+            <label class="checkbox-label" for="stageIsActive">Active</label>
+          </div>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          Inactive stages will not be used in the approval process
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeModal()" [disabled]="loading.save"></button>
+      <button type="submit" pButton 
+        [label]="(editingStage ? 'Update' : 'Create') + ' Stage'" 
+        [icon]="editingStage ? 'pi pi-save' : 'pi pi-plus'"
+        [disabled]="stageForm.invalid || loading.save"
+        [loading]="loading.save"></button>
+    </div>
+  </form>
+</p-dialog>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

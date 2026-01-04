@@ -71,6 +71,14 @@ export const routes: Routes = [
         canActivate: [authGuard] // All authenticated users can access
       },
 
+      // ===== Approval Stages ===== (Available for all authenticated users)
+      {
+        path: 'approval-workflows/:workflowId/stages',
+        loadComponent: () => import('./views/approval-workflows/approval-stages-list/approval-stages-list.component')
+          .then(m => m.ApprovalStagesListComponent),
+        canActivate: [authGuard] // All authenticated users can access
+      },
+
       // ===== Form Submissions by Document Type =====
       {
         path: 'document-types/:documentTypeId/submissions',

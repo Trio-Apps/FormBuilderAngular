@@ -120,6 +120,12 @@
             <td>
               <div class="action-buttons">
                 <button pButton 
+                  icon="pi pi-list" 
+                  class="p-button-text p-button-sm action-btn" 
+                  [routerLink]="['/approval-workflows', workflow.id, 'stages']"
+                  pTooltip="Manage Stages"
+                  tooltipPosition="top"></button>
+                <button pButton 
                   [icon]="workflow.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'" 
                   class="p-button-text p-button-sm action-btn" 
                   (click)="toggleWorkflowStatus(workflow)"

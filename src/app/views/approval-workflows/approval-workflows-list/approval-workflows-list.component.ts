@@ -11,6 +11,7 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { CheckboxModule } from 'primeng/checkbox';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
@@ -30,6 +31,7 @@ import { TranslationService } from '../../../core/services/translation.service';
     TooltipModule,
     DialogModule,
     InputTextModule,
+    InputNumberModule,
     CheckboxModule,
     ButtonModule,
     TableModule,
@@ -76,7 +78,7 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
     private confirmationService: ConfirmationService,
     public translationService: TranslationService
   ) {
-    // Initialize the form
+    // Initialize the workflow form
     this.workflowForm = this.fb.group({
       name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(200)]],
       documentTypeId: [null, [Validators.required]],
@@ -392,5 +394,6 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
     // Ensure documentTypeId is enabled when closing modal
     this.workflowForm.get('documentTypeId')?.enable();
   }
+
 }
 
