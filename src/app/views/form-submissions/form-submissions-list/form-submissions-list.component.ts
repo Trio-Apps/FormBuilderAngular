@@ -23,6 +23,7 @@ import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { CheckboxModule } from 'primeng/checkbox';
+import { CalculatedFieldComponent } from '../../public-form/components/calculated-field.component';
 import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
 import { Subscription, forkJoin, of } from 'rxjs';
@@ -46,7 +47,8 @@ import { environment } from '../../../environments/environment';
     ButtonModule,
     TableModule,
     PaginatorModule,
-    CheckboxModule
+    CheckboxModule,
+    CalculatedFieldComponent
   ],
   templateUrl: './form-submissions-list.component.html',
   styleUrls: ['./form-submissions-list.component.scss'],
@@ -1912,6 +1914,16 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    * Also checks actual data in fieldValue to determine correct type
    */
   getFieldTypeById(fieldId: number, fieldValue?: FormSubmissionValueDto): string {
+    // Fallback to field definition first to check for calculated type
+    const field = this.submissionFields.find(f => f.id === fieldId);
+    if (field) {
+      const fieldTypeName = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase().trim();
+      // Check for Calculated type
+      if (fieldTypeName === 'calculated' || fieldTypeName.includes('calculated') || fieldTypeName.includes('formula')) {
+        return 'calculated';
+      }
+    }
+    
     // First, check actual data in fieldValue to determine type (most reliable)
     if (fieldValue) {
       if (fieldValue.valueNumber !== null && fieldValue.valueNumber !== undefined) {
@@ -1929,7 +1941,6 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     }
     
     // Fallback to field definition
-    const field = this.submissionFields.find(f => f.id === fieldId);
     if (!field || !field.fieldTypeId) return 'text';
     
     // Map field type IDs to simple input types
@@ -2721,6 +2732,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     const allowMultiple = ft?.allowMultiple ?? false;
     const dataType = (ft?.dataType || '').toLowerCase().trim();
 
+    // Check for Calculated type first
+    if (fieldTypeName === 'calculated' || fieldTypeName.includes('calculated') || fieldTypeName.includes('formula')) {
+      return 'calculated';
+    }
+
     // Check for Grid type first
     if (fieldTypeName === 'grid') {
       return 'grid';
@@ -2805,6 +2821,28 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    */
   getSubmissionField(fieldId: number): FormFieldDto | undefined {
     return this.submissionFields.find(f => f.id === fieldId);
+  }
+
+  /**
+   * Get field value for calculated field display
+   */
+  getFieldValue(fieldValue: FormSubmissionValueDto): any {
+    if (fieldValue.valueNumber !== null && fieldValue.valueNumber !== undefined) {
+      return fieldValue.valueNumber;
+    }
+    if (fieldValue.valueString !== null && fieldValue.valueString !== undefined && fieldValue.valueString !== '') {
+      return fieldValue.valueString;
+    }
+    if (fieldValue.valueDate) {
+      return fieldValue.valueDate;
+    }
+    if (fieldValue.valueBool !== null && fieldValue.valueBool !== undefined) {
+      return fieldValue.valueBool;
+    }
+    if (fieldValue.valueJson) {
+      return fieldValue.valueJson;
+    }
+    return null;
   }
 
   getFieldPlaceholder(field: FormFieldDto | undefined): string {

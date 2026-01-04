@@ -6,7 +6,8 @@ import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto } fr
 import { FormSubmissionValuesService, BulkFormSubmissionValuesDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto } from '../services/form-submission-values.service';
 import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
-import { DocumentType, DocumentSeries } from '../../FormBuilder/form-builder/models/document-types.model';
+import { DocumentType, DocumentSeries, CreateDocumentSeriesDto } from '../../FormBuilder/form-builder/models/document-types.model';
+import { DocumentSettingsService } from '../../FormBuilder/services/document-settings.service';
 import { FormsService } from '../../FormBuilder/services/forms.service';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FieldsService } from '../../FormBuilder/services/fields.service';
@@ -28,6 +29,7 @@ import { Subscription, forkJoin, of } from 'rxjs';
 import { debounceTime, distinctUntilChanged, catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { FileUploadService } from '../../FormBuilder/services/file-upload.service';
+import { CalculatedFieldComponent } from '../../public-form/components/calculated-field.component';
 
 @Component({
   selector: 'app-form-submission-create',
@@ -41,7 +43,8 @@ import { FileUploadService } from '../../FormBuilder/services/file-upload.servic
     InputTextModule,
     InputNumberModule,
     ButtonModule,
-    CheckboxModule
+    CheckboxModule,
+    CalculatedFieldComponent
   ],
   templateUrl: './form-submission-create.component.html',
   styleUrls: ['./form-submission-create.component.scss'],
@@ -86,6 +89,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
   } = {};
   fieldValues: { [fieldCode: string]: any } = {}; // Track field values for rule evaluation
+  
+  // Track calculation errors for each field
+  calculationErrors: { [fieldId: number]: string } = {};
 
   // Track which fields depend on context for reloading options
   private contextDependencies: { [fieldId: number]: string[] } = {}; // fieldId -> array of context field codes
@@ -115,6 +121,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     private formSubmissionValuesService: FormSubmissionValuesService,
     private formSubmissionAttachmentsService: FormSubmissionAttachmentsService,
     private documentTypesService: DocumentTypesService,
+    private documentSettingsService: DocumentSettingsService,
     private formsService: FormsService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
@@ -182,6 +189,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.documentTypesService.getAllDocumentTypes().subscribe({
       next: (types: DocumentType[]) => {
         this.documentType = types.find(t => t.id === this.documentTypeId) || null;
+        
+        // Log approval workflow configuration (Task 2)
+        if (this.documentType) {
+          console.log(`[FormSubmissionCreate] Document Type loaded:`, {
+            id: this.documentType.id,
+            name: this.documentType.name,
+            approvalWorkflowId: this.documentType.approvalWorkflowId,
+            approvalWorkflowName: this.documentType.approvalWorkflowName,
+            hasWorkflow: !!this.documentType.approvalWorkflowId
+          });
+        }
+        
         this.loadDocumentSeries();
         // Set formBuilderId from documentType
         if (this.documentType?.formBuilderId) {
@@ -213,7 +232,24 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.loading.series = true;
     this.documentTypesService.getDocumentSeriesByDocumentTypeId(this.documentTypeId).subscribe({
       next: (series: DocumentSeries[]) => {
-        this.documentSeries = series.filter(s => s.isActive);
+        // First priority: Use active series
+        const activeSeries = series.filter(s => s.isActive);
+        if (activeSeries.length > 0) {
+          this.documentSeries = activeSeries;
+        } else {
+          // Second priority: Use any series (even if inactive) - better than no series
+          if (series.length > 0) {
+            this.documentSeries = series;
+            console.warn('[FormSubmissionCreate] No active series found, using first available series (may be inactive)');
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'Warning',
+              detail: 'No active document series found. Using inactive series if available.'
+            });
+          } else {
+            this.documentSeries = [];
+          }
+        }
         this.loading.series = false;
         this.cdr.detectChanges();
       },
@@ -224,6 +260,63 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  /**
+   * Create a default document series automatically
+   * Uses default projectId = 1 if no projects available
+   */
+  private async createDefaultSeries(): Promise<DocumentSeries | null> {
+    if (!this.documentTypeId) {
+      return null;
+    }
+
+    try {
+      // Try to get first available project, or use default projectId = 1
+      let projectId = 1; // Default project ID
+      
+      try {
+        const projects = await this.documentSettingsService.getActiveProjects().toPromise();
+        if (projects && projects.length > 0) {
+          projectId = projects[0].id || 1;
+        }
+      } catch (error) {
+        console.warn('[FormSubmissionCreate] Could not load projects, using default projectId = 1');
+      }
+
+      // Generate a series code based on document type
+      const seriesCode = `SERIES-${this.documentTypeId}-${Date.now().toString().slice(-6)}`;
+      
+      const createSeriesDto: CreateDocumentSeriesDto = {
+        documentTypeId: this.documentTypeId,
+        projectId: projectId,
+        seriesCode: seriesCode,
+        nextNumber: 1,
+        isDefault: true,
+        isActive: true
+      };
+      
+      console.log('[FormSubmissionCreate] Creating default document series:', createSeriesDto);
+      
+      const newSeries = await new Promise<DocumentSeries>((resolve, reject) => {
+        this.documentTypesService.createDocumentSeries(createSeriesDto).subscribe({
+          next: (result) => resolve(result),
+          error: (err) => reject(err)
+        });
+      });
+      
+      if (newSeries && newSeries.id) {
+        console.log('[FormSubmissionCreate] ✅ Default document series created successfully:', newSeries.id);
+        // Add to documentSeries array
+        this.documentSeries = [newSeries];
+        return newSeries;
+      } else {
+        throw new Error('Failed to create document series - no ID returned');
+      }
+    } catch (error: any) {
+      console.error('[FormSubmissionCreate] Failed to create default document series:', error);
+      return null;
+    }
   }
 
   loadForms(): void {
@@ -423,7 +516,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             });
           });
           
-          this.processFields(fields);
+          this.processFields(fields).catch(error => {
+            console.error('[FormSubmissionCreate] Error processing fields:', error);
+            this.loading.fields = false;
+          });
         },
         error: (error) => {
           console.error('[FormSubmissionCreate] Error loading form by code:', error);
@@ -459,7 +555,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Try to enrich fields with fieldDataSource from form
         // First, try to load form by ID to get fieldDataSource
         if (!formId) {
-          this.processFields(fieldsFromService);
+          this.processFields(fieldsFromService).catch(error => {
+            console.error('[FormSubmissionCreate] Error processing fields:', error);
+            this.loading.fields = false;
+          });
           return;
         }
         this.formsService.getFormById(formId).subscribe({
@@ -479,12 +578,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               });
             }
             
-            this.processFields(fieldsFromService);
+            this.processFields(fieldsFromService).catch(error => {
+              console.error('[FormSubmissionCreate] Error processing fields:', error);
+              this.loading.fields = false;
+            });
           },
           error: (error) => {
             console.warn('[FormSubmissionCreate] Could not load form to enrich fields with DataSource:', error);
             // Continue without fieldDataSource enrichment
-            this.processFields(fieldsFromService);
+            this.processFields(fieldsFromService).catch(error => {
+              console.error('[FormSubmissionCreate] Error processing fields:', error);
+              this.loading.fields = false;
+            });
           }
         });
       },
@@ -495,7 +600,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
   }
 
-  private processFields(fields: FormFieldDto[]): void {
+  private async processFields(fields: FormFieldDto[]): Promise<void> {
     console.log('[FormSubmissionCreate] Processing fields:', fields?.length || 0);
     
     // Log detailed info about ALL fields with DataSource
@@ -510,7 +615,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         dataSourceActive: f.fieldDataSource?.isActive,
         dataSourceApiUrl: f.fieldDataSource?.apiUrl,
         hasOptions: !!(f.fieldOptions && f.fieldOptions.length > 0),
-        optionsCount: f.fieldOptions?.length || 0
+        optionsCount: f.fieldOptions?.length || 0,
+        isCalculated: this.calculationEngine.isCalculatedField(f),
+        hasExpressionText: !!f.expressionText
       })));
       
       // Log fields with DataSource separately
@@ -526,8 +633,34 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       });
     }
     
-        this.fields = fields.filter(f => f.isActive).sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
+    this.fields = fields.filter(f => f.isActive).sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
     console.log('[FormSubmissionCreate] Active fields after filtering:', this.fields.length);
+    
+    // Load expressionText for calculated fields that don't have it
+    const calculatedFieldsWithoutExpression = this.fields.filter(f => 
+      this.calculationEngine.isCalculatedField(f) && !f.expressionText
+    );
+    
+    if (calculatedFieldsWithoutExpression.length > 0) {
+      console.log(`[FormSubmissionCreate] Found ${calculatedFieldsWithoutExpression.length} calculated fields without expressionText. Loading...`);
+      
+      // Load expressionText for each calculated field
+      for (const field of calculatedFieldsWithoutExpression) {
+        if (!field.id) continue;
+        
+        try {
+          const fieldDetails = await this.fieldsService.getFieldById(field.id).toPromise();
+          if (fieldDetails && fieldDetails.expressionText) {
+            field.expressionText = fieldDetails.expressionText;
+            console.log(`[FormSubmissionCreate] ✅ Loaded expressionText for field ${field.fieldCode} (ID: ${field.id}): ${field.expressionText}`);
+          } else {
+            console.warn(`[FormSubmissionCreate] ⚠️ Field ${field.fieldCode} (ID: ${field.id}) has no expressionText in API response`);
+          }
+        } catch (error) {
+          console.error(`[FormSubmissionCreate] ❌ Error loading expressionText for field ${field.fieldCode} (ID: ${field.id}):`, error);
+        }
+      }
+    }
     
     // Count fields with DataSource
     const fieldsWithDataSource = this.fields.filter(f => f.fieldDataSource && f.fieldDataSource.isActive);
@@ -579,7 +712,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       }
     });
         
-        // Build dynamic form for fields
+        // Mark fields loading as complete
+    this.loading.fields = false;
+    
+    // Build dynamic form for fields
         const formControls: { [key: string]: any } = {};
         this.fields.forEach(field => {
           if (field.id) {
@@ -619,18 +755,27 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       this.fieldsFormValueChangesSubscription = this.fieldsForm.valueChanges.pipe(
         debounceTime(300), // Wait 300ms after user stops typing
         distinctUntilChanged() // Only emit if value actually changed
-      ).subscribe(() => {
+      ).subscribe((formValues) => {
         // Prevent infinite loops
         if (this.isEvaluatingRules) {
           return;
         }
         
         try {
+          // Update field values first
           this.updateFieldValues();
-          // Calculate calculated fields (fire and forget - don't await to avoid blocking)
-          this.calculateCalculatedFields().catch(error => {
-            console.error('[FormSubmissionCreate] Error calculating calculated fields:', error);
-          });
+          
+          // Find which field changed by comparing old and new values
+          const changedFieldCode = this.findChangedFieldCode(formValues);
+          
+          if (changedFieldCode) {
+            console.log(`[FormSubmissionCreate] Field value changed: ${changedFieldCode}`);
+            // Calculate dependent calculated fields (like FormViewComponent)
+            this.calculateFields(changedFieldCode).catch(error => {
+              console.error('[FormSubmissionCreate] Error calculating fields:', error);
+            });
+          }
+          
           // Use setTimeout to defer rule evaluation and avoid infinite loops
           setTimeout(() => {
             if (!this.isEvaluatingRules) {
@@ -647,10 +792,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       setTimeout(async () => {
         try {
           this.updateFieldValues();
-          // Calculate calculated fields on initial load (OnLoad mode)
-          await this.calculateCalculatedFields('OnLoad');
-          // Also calculate OnFieldChange fields initially
-          await this.calculateCalculatedFields('OnFieldChange');
+          // Calculate calculated fields on initial load (like FormViewComponent)
+          await this.calculateFieldsOnLoad();
           if (!this.isEvaluatingRules) {
             this.evaluateFormRules();
           }
@@ -1063,6 +1206,124 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     return field.fieldName || '';
   }
 
+  /**
+   * Get the 'for' attribute value for the label element
+   * Returns null if the field doesn't need a 'for' attribute (radio, checkbox, boolean)
+   * or if field.id is not available, or if no input will be rendered
+   * Uses the same ID format as getFieldId/getFileFieldId to ensure matching
+   */
+  getFieldLabelFor(field: FormFieldDto): string | null {
+    // Return null if field.id is not available
+    if (!field.id || field.id === null || field.id === undefined) {
+      return null;
+    }
+    
+    // Don't set 'for' for radio, checkbox, or boolean fields (they have separate labels)
+    const fieldType = this.getFieldType(field);
+    if (fieldType === 'radio' || fieldType === 'checkbox' || fieldType === 'boolean') {
+      return null;
+    }
+    
+    // Check if an input will actually be rendered for this field
+    // This ensures the label's 'for' attribute matches an actual input element
+    const willRenderInput = this.willRenderInputForField(field);
+    if (!willRenderInput) {
+      return null;
+    }
+    
+    // Use the same helper functions to ensure ID consistency
+    if (this.isFileField(field)) {
+      const fileId = this.getFileFieldId(field);
+      return fileId || null;
+    }
+    
+    const fieldId = this.getFieldId(field);
+    return fieldId || null;
+  }
+
+  /**
+   * Check if an input element will be rendered for this field
+   * This helps ensure label 'for' attributes only reference existing inputs
+   * Matches the exact conditions from the HTML template
+   */
+  private willRenderInputForField(field: FormFieldDto): boolean {
+    if (!field.id) {
+      return false;
+    }
+    
+    const fieldType = this.getFieldType(field);
+    const isFile = this.isFileField(field);
+    
+    // Match exact conditions from HTML template
+    // Text Input: getFieldType(field) === 'text' && !isFileField(field)
+    if (fieldType === 'text' && !isFile) {
+      return true;
+    }
+    
+    // Number Input: getFieldType(field) === 'number'
+    if (fieldType === 'number') {
+      return true;
+    }
+    
+    // Calculated Field: getFieldType(field) === 'calculated'
+    // Will render either p-inputNumber (if Decimal/Integer) or input (if Text)
+    // Must check resultType to ensure an input will actually be rendered
+    if (fieldType === 'calculated') {
+      const resultType = field.resultType;
+      // Only return true if resultType matches one of the conditions in the template
+      return resultType === 'Decimal' || resultType === 'Integer' || resultType === 'Text';
+    }
+    
+    // Date Input: getFieldType(field) === 'date'
+    if (fieldType === 'date') {
+      return true;
+    }
+    
+    // Textarea: getFieldType(field) === 'textarea'
+    if (fieldType === 'textarea') {
+      return true;
+    }
+    
+    // Select: getFieldType(field) === 'select'
+    if (fieldType === 'select') {
+      return true;
+    }
+    
+    // File Upload: isFileField(field)
+    if (isFile) {
+      return true;
+    }
+    
+    // Email, switch, and other text-like types
+    if (fieldType === 'email' || fieldType === 'switch') {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Get the field ID for form controls
+   * Returns a safe ID string or undefined if field.id is not available
+   */
+  getFieldId(field: FormFieldDto): string | undefined {
+    if (!field.id || field.id === null || field.id === undefined) {
+      return undefined;
+    }
+    return `field_${field.id}`;
+  }
+
+  /**
+   * Get the file field ID
+   * Returns a safe ID string or undefined if field.id is not available
+   */
+  getFileFieldId(field: FormFieldDto): string | undefined {
+    if (!field.id || field.id === null || field.id === undefined) {
+      return undefined;
+    }
+    return `file-${field.id}`;
+  }
+
   isRequired(field: FormFieldDto): boolean {
     const dynamicState = this.dynamicFieldStates[field.fieldCode || ''];
     if (dynamicState?.isRequired !== undefined) {
@@ -1128,6 +1389,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       control.setValue(selectedValue, { emitEvent: true });
       // Update fieldValues for rule evaluation
       this.updateFieldValues();
+      // Calculate dependent calculated fields (like FormViewComponent)
+      if (field.fieldCode) {
+        this.calculateFields(field.fieldCode).catch(error => {
+          console.error('[FormSubmissionCreate] Error calculating fields:', error);
+        });
+      }
     }
   }
 
@@ -1150,6 +1417,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       control.setValue(optionValue, { emitEvent: true });
       // Update fieldValues for rule evaluation
       this.updateFieldValues();
+      // Calculate dependent calculated fields (like FormViewComponent)
+      if (field.fieldCode) {
+        this.calculateFields(field.fieldCode).catch(error => {
+          console.error('[FormSubmissionCreate] Error calculating fields:', error);
+        });
+      }
     }
   }
 
@@ -1178,6 +1451,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     
     // Update field values and evaluate rules
     this.updateFieldValues();
+    // Calculate dependent calculated fields (like FormViewComponent)
+    if (field.fieldCode) {
+      this.calculateFields(field.fieldCode).catch(error => {
+        console.error('[FormSubmissionCreate] Error calculating fields:', error);
+      });
+    }
     // Use setTimeout to defer rule evaluation and avoid infinite loops
     setTimeout(() => {
       if (!this.isEvaluatingRules) {
@@ -1428,6 +1707,111 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Get field value (like FormViewComponent)
+   */
+  getFieldValue(field: FormFieldDto): any {
+    if (!field) return '';
+    
+    // Priority 1: Field ID (unique, normalized to string)
+    const idKey = field.id !== undefined && field.id !== null ? String(field.id) : null;
+    if (idKey && this.fieldValues[idKey] !== undefined) {
+      return this.fieldValues[idKey];
+    }
+    
+    // Priority 2: Field Code
+    if (field.fieldCode && this.fieldValues[field.fieldCode] !== undefined) {
+      return this.fieldValues[field.fieldCode];
+    }
+    
+    // Priority 3: Form control value
+    if (field.id && this.fieldsForm) {
+      const fieldKey = `field_${field.id}`;
+      const control = this.fieldsForm.get(fieldKey);
+      if (control && control.value !== null && control.value !== undefined && control.value !== '') {
+        return control.value;
+      }
+    }
+    
+    // Fallback: Default value
+    return this.getDefaultValue(field);
+  }
+
+  /**
+   * Get default value for field
+   */
+  getDefaultValue(field: FormFieldDto): any {
+    // Check if defaultValueJson exists and is not empty
+    if (!field.defaultValueJson || field.defaultValueJson.trim() === '') {
+      return '';
+    }
+    
+    try {
+      // Try to parse JSON if it's a JSON string
+      const parsed = JSON.parse(field.defaultValueJson);
+      
+      // Handle different types
+      if (parsed === null || parsed === undefined) {
+        return '';
+      }
+      
+      // If it's an array, join it or return first element
+      if (Array.isArray(parsed)) {
+        return parsed.length > 0 ? parsed.map(String).join(', ') : '';
+      }
+      
+      // If it's an object (but not null), stringify it
+      if (typeof parsed === 'object') {
+        return JSON.stringify(parsed);
+      }
+      
+      // Otherwise, return as string
+      return String(parsed).trim();
+    } catch {
+      // If not valid JSON, return as is (but trim it)
+      return field.defaultValueJson.trim();
+    }
+  }
+
+  /**
+   * Find which field code changed by comparing form values
+   */
+  private findChangedFieldCode(newFormValues: any): string | null {
+    // Store previous values if not exists
+    if (!(this as any)._previousFormValues) {
+      (this as any)._previousFormValues = {};
+    }
+    
+    const previousValues = (this as any)._previousFormValues;
+    let changedFieldCode: string | null = null;
+    
+    // Compare values to find what changed
+    Object.keys(newFormValues).forEach(key => {
+      if (key.startsWith('field_')) {
+        const fieldId = key.replace('field_', '');
+        const field = this.fields.find(f => String(f.id) === fieldId);
+        
+        if (field && field.fieldCode) {
+          const newValue = newFormValues[key];
+          const oldValue = previousValues[key];
+          
+          // Check if value actually changed
+          if (newValue !== oldValue) {
+            // Skip calculated fields (they shouldn't trigger recalculation)
+            if (!this.calculationEngine.isCalculatedField(field)) {
+              changedFieldCode = field.fieldCode;
+            }
+          }
+        }
+      }
+    });
+    
+    // Update previous values
+    (this as any)._previousFormValues = { ...newFormValues };
+    
+    return changedFieldCode;
+  }
+
+  /**
    * Evaluate all form rules and apply actions
    */
   evaluateFormRules(): void {
@@ -1612,8 +1996,313 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Calculate calculated fields based on changed field (like FormViewComponent)
+   */
+  private async calculateFields(changedFieldCode: string): Promise<void> {
+    console.log(`[FormSubmissionCreate] calculateFields called for: ${changedFieldCode}`);
+    
+    // Get all fields
+    const allFields = this.fields;
+
+    console.log(`[FormSubmissionCreate] Total fields: ${allFields.length}`);
+    
+    // Normalize expressionText from PascalCase if needed
+    allFields.forEach(field => {
+      if (!field.expressionText && (field as any).ExpressionText) {
+        field.expressionText = (field as any).ExpressionText;
+        console.log(`[FormSubmissionCreate] Normalized ExpressionText to expressionText for field ${field.fieldCode}: ${field.expressionText}`);
+      }
+    });
+
+    // Find calculated fields that depend on the changed field
+    const calculatedFields = allFields.filter(field => 
+      this.calculationEngine.isCalculatedField(field) &&
+      (field.recalculateOn === 'OnFieldChange' || !field.recalculateOn || field.recalculateOn === null) // Default to OnFieldChange
+    );
+
+    console.log(`[FormSubmissionCreate] Found ${calculatedFields.length} calculated fields with OnFieldChange:`, 
+      calculatedFields.map(f => ({ code: f.fieldCode, recalculateOn: f.recalculateOn })));
+
+    if (calculatedFields.length === 0) {
+      console.log('[FormSubmissionCreate] No calculated fields found, returning');
+      return; // No calculated fields to update
+    }
+
+    // Get dependent calculated fields
+    let dependentFields = this.calculationEngine.getDependentCalculatedFields(
+      changedFieldCode,
+      calculatedFields
+    );
+
+    console.log(`[FormSubmissionCreate] Found ${dependentFields.length} dependent calculated fields for ${changedFieldCode}:`, 
+      dependentFields.map(f => f.fieldCode));
+
+    // If no dependent fields found but we have calculated fields, 
+    // check if any calculated field has expressionText that might reference the changed field
+    if (dependentFields.length === 0 && calculatedFields.length > 0) {
+      // Fallback: if expressionText is missing, calculate all calculated fields
+      // This handles the case where expressionText wasn't loaded yet
+      const fieldsWithExpression = calculatedFields.filter(f => f.expressionText && f.expressionText.trim() !== '');
+      if (fieldsWithExpression.length === 0) {
+        console.log(`[FormSubmissionCreate] No expressionText found for calculated fields, calculating all calculated fields as fallback`);
+        dependentFields = calculatedFields; // Calculate all calculated fields
+      }
+    }
+
+    if (dependentFields.length === 0) {
+      console.log(`[FormSubmissionCreate] No fields depend on ${changedFieldCode}, returning`);
+      return; // No fields depend on the changed field
+    }
+
+    // Recalculate dependent fields (like FormViewComponent - use calculateAllFields but filter results)
+    try {
+      console.log(`[FormSubmissionCreate] Current fieldValues before calculation:`, this.fieldValues);
+      
+      // Use calculateAllFields like FormViewComponent - it handles all calculated fields and dependencies
+      // But we'll filter results to only update dependent fields
+      const results = await this.calculationEngine.calculateAllFields(
+        allFields,
+        this.fieldValues
+      );
+      
+      // Filter results to only include dependent fields (and fields that depend on them)
+      const dependentFieldCodes = new Set(dependentFields.map(f => f.fieldCode).filter(code => !!code));
+      
+      // Also include fields that depend on calculated fields (cascade)
+      const fieldsToUpdate = new Set<string>(dependentFieldCodes);
+      let hasNewDependencies = true;
+      while (hasNewDependencies) {
+        hasNewDependencies = false;
+        calculatedFields.forEach(field => {
+          if (!field.fieldCode || fieldsToUpdate.has(field.fieldCode)) return;
+          if (field.expressionText) {
+            const dependentCodes = this.calculationEngine.extractFieldCodes(field.expressionText);
+            const dependsOnCalculatedField = dependentCodes.some(code => fieldsToUpdate.has(code));
+            if (dependsOnCalculatedField) {
+              fieldsToUpdate.add(field.fieldCode);
+              hasNewDependencies = true;
+            }
+          }
+        });
+      }
+      
+      // Filter results to only include fields we need to update
+      const filteredResults: { [fieldCode: string]: number | string } = {};
+      Object.keys(results).forEach(fieldCode => {
+        if (fieldsToUpdate.has(fieldCode)) {
+          filteredResults[fieldCode] = results[fieldCode];
+        }
+      });
+
+      console.log(`[FormSubmissionCreate] Calculation results (filtered):`, filteredResults);
+
+      // Update field values with calculated results (like FormViewComponent)
+      Object.keys(filteredResults).forEach(fieldCode => {
+        const calculatedValue = filteredResults[fieldCode];
+        // Find the field to get its ID
+        const field = allFields.find(f => f.fieldCode === fieldCode);
+        if (field && field.id) {
+          const idKey = String(field.id);
+          const fieldKey = `field_${field.id}`;
+          const control = this.fieldsForm.get(fieldKey);
+          
+          if (control) {
+            const oldValue = this.fieldValues[idKey];
+            // Update form control value without emitting events to prevent loops
+            // Use patchValue instead of setValue for p-inputNumber compatibility
+            control.patchValue(calculatedValue, { emitEvent: false });
+            // Also update valueAndValidity to ensure UI updates
+            control.updateValueAndValidity({ emitEvent: false });
+            this.fieldValues[idKey] = calculatedValue;
+            this.fieldValues[fieldCode] = calculatedValue;
+            
+            // Clear any previous error for this field
+            if (field.id) {
+              delete this.calculationErrors[field.id];
+            }
+            
+            console.log(`[FormSubmissionCreate] Updated field ${fieldCode} (ID: ${idKey}): ${oldValue} -> ${calculatedValue}`);
+          } else {
+            console.warn(`[FormSubmissionCreate] ⚠️ Form control not found for field ${fieldCode} (key: ${fieldKey})`);
+          }
+        }
+      });
+      
+      // Handle calculation errors - check if any calculated fields failed
+      // calculateAllFields only returns successful results, so check which fields didn't get results
+      const calculatedFieldCodes = calculatedFields.map(f => f.fieldCode).filter(code => !!code);
+      calculatedFieldCodes.forEach(fieldCode => {
+        if (!results[fieldCode] && fieldCode) {
+          const field = allFields.find(f => f.fieldCode === fieldCode);
+          if (field && field.id && field.expressionText) {
+            // Field calculation failed - try to calculate individually to get error message
+            const fieldValuesMap = this.calculationEngine.buildFieldValuesMap(this.fieldValues, allFields);
+            this.calculationEngine.calculateExpressionSafe(field.expressionText, fieldValuesMap).then(result => {
+              if (!result.success && field.id) {
+                this.calculationErrors[field.id] = result.error || 'Unknown calculation error';
+                
+                // Show user-friendly error message for syntax errors
+                const currentLang = this.translationService.getCurrentLanguage();
+                const errorMessage = result.error || 'Unknown calculation error';
+                
+                if (errorMessage.includes('Incomplete expression') || 
+                    errorMessage.includes('Invalid expression') || 
+                    errorMessage.includes('Syntax error') ||
+                    errorMessage.includes('mismatched')) {
+                  this.messageService.add({
+                    severity: 'error',
+                    summary: currentLang === 'ar' ? 'خطأ في التعبير' : 'Expression Error',
+                    detail: currentLang === 'ar' 
+                      ? `حقل "${field.fieldName || field.fieldCode}": ${errorMessage}. يرجى تصحيح التعبير في إعدادات الحقل.`
+                      : `Field "${field.fieldName || field.fieldCode}": ${errorMessage}. Please fix the expression in field settings.`,
+                    life: 10000
+                  });
+                }
+              }
+            }).catch(error => {
+              console.error(`[FormSubmissionCreate] Error calculating field ${fieldCode}:`, error);
+            });
+          }
+        }
+      });
+
+      // Trigger change detection
+      this.cdr.markForCheck();
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('[FormSubmissionCreate] Error calculating fields:', error);
+    }
+  }
+
+  /**
+   * Calculate calculated fields on form load (like FormViewComponent)
+   */
+  private async calculateFieldsOnLoad(): Promise<void> {
+    // Get all fields
+    const allFields = this.fields;
+
+    // Find all calculated fields
+    const calculatedFields = allFields.filter(field => 
+      this.calculationEngine.isCalculatedField(field)
+    );
+
+    if (calculatedFields.length === 0) {
+      return; // No calculated fields to update
+    }
+
+    // Check if there are any values to calculate with
+    const hasValues = Object.keys(this.fieldValues).some(key => {
+      const value = this.fieldValues[key];
+      return value !== null && value !== undefined && value !== '';
+    });
+    
+    // Calculate all calculated fields on load if:
+    // 1. recalculateOn is 'OnLoad' or not specified (default)
+    // 2. OR there are values in the form (user may have entered data or default values exist)
+    const fieldsToCalculate = calculatedFields.filter(field => {
+      const recalculateOn = field.recalculateOn || 'OnLoad'; // Default to OnLoad
+      return recalculateOn === 'OnLoad' || hasValues;
+    });
+
+    if (fieldsToCalculate.length === 0) {
+      return; // No fields to calculate
+    }
+
+    // Recalculate all calculated fields that should be calculated on load
+    try {
+      console.log('[FormSubmissionCreate] Calculating fields on load. Fields:', fieldsToCalculate.map(f => f.fieldCode), 'Values:', this.fieldValues);
+      
+      const results = await this.calculationEngine.calculateAllFields(
+        allFields,
+        this.fieldValues
+      );
+
+      console.log('[FormSubmissionCreate] Calculation results:', results);
+
+      // Update field values with calculated results
+      Object.keys(results).forEach(fieldCode => {
+        const result = results[fieldCode];
+        // Find the field to get its ID
+        const field = allFields.find(f => f.fieldCode === fieldCode);
+        if (field && field.id) {
+          const idKey = String(field.id);
+          const fieldKey = `field_${field.id}`;
+          const control = this.fieldsForm.get(fieldKey);
+          
+          if (control) {
+            // Update form control value without emitting events to prevent loops
+            // Use patchValue instead of setValue for p-inputNumber compatibility
+            control.patchValue(result, { emitEvent: false });
+            // Also update valueAndValidity to ensure UI updates
+            control.updateValueAndValidity({ emitEvent: false });
+            this.fieldValues[idKey] = result;
+            this.fieldValues[fieldCode] = result;
+            
+            // Clear any previous error for this field
+            if (field.id) {
+              delete this.calculationErrors[field.id];
+            }
+            
+            console.log(`[FormSubmissionCreate] Updated field ${fieldCode} (ID: ${idKey}) with calculated value:`, result);
+          } else {
+            console.warn(`[FormSubmissionCreate] ⚠️ Form control not found for field ${fieldCode} (key: ${fieldKey})`);
+          }
+        }
+      });
+      
+      // Note: calculateAllFields handles errors internally and only returns successful results
+      // Failed calculations are logged but don't appear in results
+      // To show errors for failed fields, we need to check which fields didn't get results
+      const calculatedFieldCodes = fieldsToCalculate.map(f => f.fieldCode).filter(code => !!code);
+      calculatedFieldCodes.forEach(fieldCode => {
+        if (!results[fieldCode] && fieldCode) {
+          const field = allFields.find(f => f.fieldCode === fieldCode);
+          if (field && field.id && field.expressionText) {
+            // Field calculation failed - try to calculate individually to get error message
+            const fieldValuesMap = this.calculationEngine.buildFieldValuesMap(this.fieldValues, allFields);
+            this.calculationEngine.calculateExpressionSafe(field.expressionText, fieldValuesMap).then(result => {
+              if (!result.success && field.id) {
+                this.calculationErrors[field.id] = result.error || 'Unknown calculation error';
+                
+                // Show user-friendly error message for syntax errors
+                const currentLang = this.translationService.getCurrentLanguage();
+                const errorMessage = result.error || 'Unknown calculation error';
+                
+                if (errorMessage.includes('Incomplete expression') || 
+                    errorMessage.includes('Invalid expression') || 
+                    errorMessage.includes('Syntax error') ||
+                    errorMessage.includes('mismatched')) {
+                  this.messageService.add({
+                    severity: 'error',
+                    summary: currentLang === 'ar' ? 'خطأ في التعبير' : 'Expression Error',
+                    detail: currentLang === 'ar' 
+                      ? `حقل "${field.fieldName || field.fieldCode}": ${errorMessage}. يرجى تصحيح التعبير في إعدادات الحقل.`
+                      : `Field "${field.fieldName || field.fieldCode}": ${errorMessage}. Please fix the expression in field settings.`,
+                    life: 10000
+                  });
+                }
+              }
+            }).catch(error => {
+              console.error(`[FormSubmissionCreate] Error calculating field ${fieldCode}:`, error);
+            });
+          }
+        }
+      });
+      
+      // Force change detection to update UI (especially for p-inputNumber)
+      setTimeout(() => {
+        this.cdr.markForCheck();
+        this.cdr.detectChanges();
+      }, 0);
+    } catch (error) {
+      console.error('[FormSubmissionCreate] Error calculating fields on load:', error);
+    }
+  }
+
+  /**
    * Calculate all calculated fields based on current field values
    * @param recalculateMode - Filter by recalculation mode (null = all modes)
+   * @deprecated Use calculateFields() or calculateFieldsOnLoad() instead (like FormViewComponent)
    */
   private async calculateCalculatedFields(recalculateMode: 'OnFieldChange' | 'OnLoad' | 'OnSubmitOnly' | null = 'OnFieldChange'): Promise<void> {
     if (!this.fieldsForm || !this.fields.length) return;
@@ -1621,7 +2310,17 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     const calculatedFields = this.fields.filter(f => {
       if (!this.calculationEngine.isCalculatedField(f)) return false;
       if (recalculateMode === null) return true;
+      // If recalculateMode is 'OnFieldChange', include fields with OnFieldChange or no recalculateOn (default to OnFieldChange)
+      if (recalculateMode === 'OnFieldChange') {
+        return f.recalculateOn === 'OnFieldChange' || !f.recalculateOn || f.recalculateOn === null;
+      }
+      // For other modes, match exactly
       return f.recalculateOn === recalculateMode;
+    });
+
+    console.log(`[FormSubmissionCreate] Found ${calculatedFields.length} calculated fields for mode: ${recalculateMode}`);
+    calculatedFields.forEach(f => {
+      console.log(`[FormSubmissionCreate] - Calculated field: ${f.fieldCode} (ID: ${f.id}), expressionText: ${f.expressionText ? 'EXISTS' : 'MISSING'}, recalculateOn: ${f.recalculateOn}`);
     });
 
     if (calculatedFields.length === 0) return;
@@ -1639,9 +2338,32 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         }
       });
 
+      console.log(`[FormSubmissionCreate] Current field values for calculation:`, currentFieldValues);
+
       // Calculate each calculated field
       for (const field of calculatedFields) {
-        if (!field.id || !field.fieldCode || !field.expressionText) continue;
+        if (!field.id || !field.fieldCode) {
+          console.warn(`[FormSubmissionCreate] Skipping calculated field - missing id or fieldCode:`, field);
+          continue;
+        }
+
+        if (!field.expressionText) {
+          console.warn(`[FormSubmissionCreate] Calculated field ${field.fieldCode} (ID: ${field.id}) has no expressionText. Attempting to load...`);
+          // Try to load the field details to get expressionText
+          try {
+            const fieldDetails = await this.fieldsService.getFieldById(field.id).toPromise();
+            if (fieldDetails && fieldDetails.expressionText) {
+              field.expressionText = fieldDetails.expressionText;
+              console.log(`[FormSubmissionCreate] ✅ Loaded expressionText for field ${field.fieldCode}: ${field.expressionText}`);
+            } else {
+              console.error(`[FormSubmissionCreate] ❌ Could not load expressionText for field ${field.fieldCode} (ID: ${field.id})`);
+              continue;
+            }
+          } catch (loadError) {
+            console.error(`[FormSubmissionCreate] ❌ Error loading field details for ${field.fieldCode}:`, loadError);
+            continue;
+          }
+        }
 
         try {
           const fieldValuesMap = this.calculationEngine.buildFieldValuesMap(
@@ -1649,25 +2371,79 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             this.fields
           );
 
+          console.log(`[FormSubmissionCreate] Calculating field ${field.fieldCode} with expression: ${field.expressionText}`);
+          console.log(`[FormSubmissionCreate] Field values map:`, fieldValuesMap);
+
           const result = await this.calculationEngine.calculateExpressionSafe(
             field.expressionText,
             fieldValuesMap
           );
 
+          console.log(`[FormSubmissionCreate] Calculation result for ${field.fieldCode}:`, result);
+
           if (result.success) {
+            // Clear any previous error for this field
+            if (field.id) {
+              delete this.calculationErrors[field.id];
+            }
+            
             const fieldKey = `field_${field.id}`;
             const control = this.fieldsForm.get(fieldKey);
             if (control) {
               // Update form control value without emitting events to prevent loops
               control.setValue(result.value, { emitEvent: false });
+              console.log(`[FormSubmissionCreate] ✅ Updated calculated field ${field.fieldCode} (ID: ${field.id}) with value:`, result.value);
+            } else {
+              console.warn(`[FormSubmissionCreate] ⚠️ Form control not found for field ${field.fieldCode} (key: ${fieldKey})`);
             }
             // Update fieldValues for rule evaluation
             this.fieldValues[field.fieldCode] = result.value;
+            this.fieldValues[String(field.id)] = result.value;
+          } else {
+            console.error(`[FormSubmissionCreate] ❌ Calculation failed for ${field.fieldCode}:`, result.error);
+            
+            // Store error for visual display
+            if (field.id) {
+              this.calculationErrors[field.id] = result.error || 'Unknown calculation error';
+            }
+            
+            // Show user-friendly error message for calculation failures
+            const currentLang = this.translationService.getCurrentLanguage();
+            const errorMessage = result.error || 'Unknown calculation error';
+            
+            // Only show toast for syntax errors or critical errors (not for missing field values)
+            if (errorMessage.includes('Incomplete expression') || 
+                errorMessage.includes('Invalid expression') || 
+                errorMessage.includes('Syntax error') ||
+                errorMessage.includes('mismatched')) {
+              this.messageService.add({
+                severity: 'error',
+                summary: currentLang === 'ar' ? 'خطأ في التعبير' : 'Expression Error',
+                detail: currentLang === 'ar' 
+                  ? `حقل "${field.fieldName || field.fieldCode}": ${errorMessage}. يرجى تصحيح التعبير في إعدادات الحقل.`
+                  : `Field "${field.fieldName || field.fieldCode}": ${errorMessage}. Please fix the expression in field settings.`,
+                life: 10000 // Show for 10 seconds
+              });
+            }
+            
+            // Don't update field value if calculation failed - keep previous value or empty
+            // This prevents clearing the field when API returns error
           }
-        } catch (error) {
-          console.error(`[FormSubmissionCreate] Error calculating field ${field.fieldCode}:`, error);
+        } catch (error: any) {
+          console.error(`[FormSubmissionCreate] ❌ Error calculating field ${field.fieldCode}:`, error);
+          // Log detailed error information
+          if (error?.status === 500) {
+            console.error(`[FormSubmissionCreate] Server error (500) for field ${field.fieldCode}. This may indicate an issue with the expression or field values.`);
+            console.error(`[FormSubmissionCreate] Expression: ${field.expressionText}`);
+            console.error(`[FormSubmissionCreate] Current field values:`, currentFieldValues);
+          }
+          // Don't throw - continue with other fields
         }
       }
+      
+      // Trigger change detection after all calculations are done
+      this.cdr.markForCheck();
+      this.cdr.detectChanges();
     } catch (error) {
       console.error('[FormSubmissionCreate] Error calculating calculated fields:', error);
     }
@@ -1906,7 +2682,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  saveSubmissionAsDraft(): void {
+  async saveSubmissionAsDraft(): Promise<void> {
     // For draft, we only check essential fields (formBuilderId, documentTypeId)
     // Field values can be empty/incomplete for drafts
     if (!this.submissionForm.get('formBuilderId')?.value) {
@@ -1928,22 +2704,37 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Get default series (fixed value)
+    // Get default series (fixed value) - create one automatically if not available
     if (this.documentSeries.length === 0) {
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'No document series available. Please create a series first.'
-      });
-      return;
+      console.log('[FormSubmissionCreate] No document series available, attempting to create default series...');
+      const defaultSeries = await this.createDefaultSeries();
+      
+      if (!defaultSeries || !defaultSeries.id) {
+        const currentLang = this.translationService.getCurrentLanguage();
+        const errorMessage = currentLang === 'ar' 
+          ? 'لا يوجد سلسلة وثائق متاحة. يرجى إنشاء سلسلة وثائق أولاً من إعدادات أنواع الوثائق.'
+          : 'No document series available. Please create a document series first from Document Types settings.';
+        
+        this.messageService.add({
+          severity: 'error',
+          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+          detail: errorMessage
+        });
+        return;
+      }
     }
 
     const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
     if (!defaultSeries || !defaultSeries.id) {
+      const currentLang = this.translationService.getCurrentLanguage();
+      const errorMessage = currentLang === 'ar' 
+        ? 'لا يوجد سلسلة وثائق صالحة متاحة.'
+        : 'No valid document series available.';
+      
       this.messageService.add({
         severity: 'error',
-        summary: 'Error',
-        detail: 'No document series available'
+        summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+        detail: errorMessage
       });
       return;
     }
@@ -1994,6 +2785,34 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  /**
+   * Determine submission status based on approval workflow configuration
+   * According to Task 2: Workflow & Approval Configuration
+   * - If DocumentType has no ApprovalWorkflow → Auto-approve (status = "Approved")
+   * - If DocumentType has Active ApprovalWorkflow → Submit (status = "Submitted")
+   * - If DocumentType has Inactive ApprovalWorkflow → Auto-approve (status = "Approved")
+   */
+  private determineSubmissionStatus(): 'Submitted' | 'Approved' {
+    // Check if documentType has approvalWorkflowId
+    if (!this.documentType) {
+      console.warn('[FormSubmissionCreate] No documentType loaded, defaulting to Submitted');
+      return 'Submitted';
+    }
+
+    const approvalWorkflowId = this.documentType.approvalWorkflowId;
+    
+    // If no workflow assigned → Auto-approve
+    if (!approvalWorkflowId || approvalWorkflowId === null) {
+      console.log('[FormSubmissionCreate] No approval workflow assigned to document type. Status: Approved (auto-approved)');
+      return 'Approved';
+    }
+
+    // If workflow assigned → Submitted (workflow will be triggered by backend)
+    // Note: Backend should check if workflow is active, but for now we assume if workflowId exists, it's active
+    console.log(`[FormSubmissionCreate] Approval workflow assigned (ID: ${approvalWorkflowId}). Status: Submitted`);
+    return 'Submitted';
   }
 
   async saveSubmission(): Promise<void> {
@@ -2060,22 +2879,37 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Get default series (fixed value)
+    // Get default series (fixed value) - create one automatically if not available
     if (this.documentSeries.length === 0) {
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'No document series available. Please create a series first.'
-      });
-      return;
+      console.log('[FormSubmissionCreate] No document series available, attempting to create default series...');
+      const defaultSeries = await this.createDefaultSeries();
+      
+      if (!defaultSeries || !defaultSeries.id) {
+        const currentLang = this.translationService.getCurrentLanguage();
+        const errorMessage = currentLang === 'ar' 
+          ? 'لا يوجد سلسلة وثائق متاحة. يرجى إنشاء سلسلة وثائق أولاً من إعدادات أنواع الوثائق.'
+          : 'No document series available. Please create a document series first from Document Types settings.';
+        
+        this.messageService.add({
+          severity: 'error',
+          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+          detail: errorMessage
+        });
+        return;
+      }
     }
 
     const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
     if (!defaultSeries || !defaultSeries.id) {
+      const currentLang = this.translationService.getCurrentLanguage();
+      const errorMessage = currentLang === 'ar' 
+        ? 'لا يوجد سلسلة وثائق صالحة متاحة.'
+        : 'No valid document series available.';
+      
       this.messageService.add({
         severity: 'error',
-        summary: 'Error',
-        detail: 'No document series available'
+        summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+        detail: errorMessage
       });
       return;
     }
@@ -2090,13 +2924,16 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Determine status based on approval workflow configuration (Task 2)
+    const submissionStatus = this.determineSubmissionStatus();
+
     const formData = this.submissionForm.getRawValue();
     const createDto: CreateFormSubmissionDto = {
       formBuilderId: this.documentType.formBuilderId, // Fixed value - from documentType
       documentTypeId: this.documentTypeId,
       seriesId: defaultSeries.id, // Fixed value - use default series
       submittedByUserId: userId,
-      status: formData.status || 'Submitted' // Default status is Submitted
+      status: submissionStatus // Determined by approval workflow configuration
     };
 
     this.loading.create = true;
@@ -2108,14 +2945,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       const currentStatus = (this as any)._currentSubmissionStatus || formData.status || 'Draft';
       console.log('[FormSubmissionCreate] Current submission status:', currentStatus);
       
-      // Update status to Submitted if it was Draft
+      // Update status based on approval workflow configuration if it was Draft
       if (currentStatus === 'Draft') {
-        // Update status to Submitted
-        const updateDto = { status: 'Submitted' };
+        // Determine status based on approval workflow (Task 2)
+        const newStatus = this.determineSubmissionStatus();
+        console.log(`[FormSubmissionCreate] Updating status from Draft to ${newStatus} based on approval workflow configuration`);
+        
+        // Update status
+        const updateDto = { status: newStatus };
         this.formSubmissionsService.updateSubmission(submissionId, updateDto).subscribe({
           next: () => {
-            console.log('[FormSubmissionCreate] Status updated from Draft to Submitted');
-            this.saveSubmissionData(submissionId, 'Submitted');
+            console.log(`[FormSubmissionCreate] Status updated from Draft to ${newStatus}`);
+            this.saveSubmissionData(submissionId, newStatus);
           },
           error: (error) => {
             console.error('[FormSubmissionCreate] Error updating status:', error);
@@ -2128,10 +2969,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
                 : 'Failed to update status. Will continue with saving data.'
             });
             // Continue with save even if status update fails
-            this.saveSubmissionData(submissionId, 'Submitted');
+            this.saveSubmissionData(submissionId, newStatus);
           }
         });
       } else {
+        // Keep existing status if not Draft
         this.saveSubmissionData(submissionId, currentStatus);
       }
       return;

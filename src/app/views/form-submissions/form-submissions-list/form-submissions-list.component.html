@@ -98,6 +98,7 @@
           <tr>
             <th>#</th>
             <th>Document Number</th>
+            <th>Document Type</th>
             <th>Form Name</th>
             <th>Series Code</th>
             <th>Submitted By</th>
@@ -113,6 +114,16 @@
               <div class="document-name-cell">
                 <i class="pi pi-file"></i>
                 <span>{{ submission.documentNumber || '-' }}</span>
+              </div>
+            </td>
+            <td>
+              <div class="document-type-cell">
+                <i class="pi pi-folder"></i>
+                <span>{{ submission.documentTypeName || documentType?.name || '-' }}</span>
+                <span *ngIf="documentType?.approvalWorkflowName" class="workflow-badge" [title]="'Approval Workflow: ' + (documentType?.approvalWorkflowName || '')">
+                  <i class="pi pi-check-circle"></i>
+                  {{ documentType?.approvalWorkflowName }}
+                </span>
               </div>
             </td>
             <td>{{ submission.formName || '-' }}</td>
@@ -328,9 +339,16 @@
                 </div>
               </div>
               
-              <!-- Text/String Input (hide for file fields) -->
+              <!-- Calculated Field (like FormViewComponent) -->
+              <app-calculated-field 
+                *ngIf="getFieldTypeById(fieldValue.fieldId, fieldValue) === 'calculated'"
+                [field]="getSubmissionField(fieldValue.fieldId)!"
+                [value]="getFieldValue(fieldValue)">
+              </app-calculated-field>
+              
+              <!-- Text/String Input (hide for file fields and calculated fields) -->
               <input 
-                *ngIf="(getFieldTypeById(fieldValue.fieldId, fieldValue) === 'text' || getFieldTypeById(fieldValue.fieldId, fieldValue) === 'string') && !isFileField(fieldValue.fieldId)"
+                *ngIf="(getFieldTypeById(fieldValue.fieldId, fieldValue) === 'text' || getFieldTypeById(fieldValue.fieldId, fieldValue) === 'string') && !isFileField(fieldValue.fieldId) && getFieldTypeById(fieldValue.fieldId, fieldValue) !== 'calculated'"
                 type="text" 
                 class="form-input"
                 [formControlName]="'field_' + fieldValue.fieldId"

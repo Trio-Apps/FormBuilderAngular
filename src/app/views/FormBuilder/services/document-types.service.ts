@@ -44,8 +44,8 @@ export class DocumentTypesService {
       }),
       catchError((error) => {
         console.error('Error fetching document types:', error);
-        // Re-throw the error so the component can handle it
-        throw error;
+        // Return empty array instead of throwing to prevent breaking the app
+        return of([]);
       })
     );
   }
@@ -235,9 +235,20 @@ export class DocumentTypesService {
       delete cleanDto.parentMenuId;
     }
 
+    // Explicitly handle approvalWorkflowId - ensure it's sent correctly
+    if (dto.approvalWorkflowId === null) {
+      cleanDto.approvalWorkflowId = null; // Explicitly set to null to remove workflow
+    } else if (dto.approvalWorkflowId === 0) {
+      cleanDto.approvalWorkflowId = null; // Treat 0 as null (no workflow)
+    } else if (dto.approvalWorkflowId === undefined) {
+      // Don't include undefined fields
+      delete cleanDto.approvalWorkflowId;
+    }
+
     console.log('[DocumentTypesService] Updating document type:', { id: documentTypeId, dto: cleanDto });
     console.log('[DocumentTypesService] DTO JSON:', JSON.stringify(cleanDto, null, 2));
     console.log('[DocumentTypesService] parentMenuId value:', cleanDto.parentMenuId, 'type:', typeof cleanDto.parentMenuId);
+    console.log('[DocumentTypesService] approvalWorkflowId value:', cleanDto.approvalWorkflowId, 'type:', typeof cleanDto.approvalWorkflowId);
 
     return this.http.put<any>(`${this.baseUrl}/${documentTypeId}`, cleanDto, {
       headers: { 'Content-Type': 'application/json' }

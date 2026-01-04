@@ -9,6 +9,8 @@ export interface DocumentType {
   isActive: boolean;
   formBuilderName?: string;
   parentMenuName?: string;
+  approvalWorkflowId?: number | null;
+  approvalWorkflowName?: string;
 }
 
 export interface CreateDocumentTypeDto {
@@ -19,6 +21,7 @@ export interface CreateDocumentTypeDto {
   menuOrder?: number;
   parentMenuId?: number;
   isActive?: boolean;
+  approvalWorkflowId?: number | null; // Optional - null means no workflow (auto-approve)
 }
 
 export interface UpdateDocumentTypeDto {
@@ -29,6 +32,7 @@ export interface UpdateDocumentTypeDto {
   menuOrder?: number;
   parentMenuId?: number | null; // Allow null to explicitly remove parent relationship
   isActive?: boolean;
+  approvalWorkflowId?: number | null; // Optional - null means no workflow (auto-approve)
 }
 
 // ==================== DOCUMENT SERIES ====================

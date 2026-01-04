@@ -226,6 +226,19 @@ export class FormsService {
     return this.http.delete<void>(`${this.baseUrl}/${id}`);
   }
 
+  /**
+   * Duplicate form - creates a copy of the form with all tabs and fields
+   * POST /api/FormBuilder/{id}/duplicate
+   */
+  duplicateForm(id: number): Observable<FormBuilderDto> {
+    return this.http.post<FormBuilderDto>(`${this.baseUrl}/${id}/duplicate`, {}).pipe(
+      catchError((error) => {
+        console.error(`[FormsService] Error duplicating form ${id}:`, error);
+        throw error;
+      })
+    );
+  }
+
   // ==================== Form Rules API Methods ====================
 
   /**

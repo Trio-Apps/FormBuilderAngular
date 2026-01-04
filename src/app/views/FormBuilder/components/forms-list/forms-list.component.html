@@ -191,6 +191,13 @@
                     <i class="pi pi-pencil"></i>
                   </button>
                   <button
+                    class="action-btn action-copy"
+                    [title]="'forms.duplicateForm' | translate"
+                    (click)="duplicateForm(form)"
+                  >
+                    <i class="pi pi-clone"></i>
+                  </button>
+                  <button
                     class="action-btn action-duplicate"
                     [title]="'forms.manageTabs' | translate"
                     [routerLink]="['../tabs', form.id]"

@@ -736,6 +736,36 @@
           }
         }
 
+        .document-type-cell {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+
+          i {
+            color: #10b981;
+            font-size: 16px;
+          }
+
+          .workflow-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            background: #dbeafe;
+            color: #1e40af;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-left: 8px;
+
+            i {
+              font-size: 10px;
+              color: #1e40af;
+            }
+          }
+        }
+
         code {
           background: #f3f4f6;
           padding: 4px 10px;

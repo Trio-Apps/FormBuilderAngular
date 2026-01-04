@@ -375,18 +375,64 @@ export class FormSubmissionsService {
 
   /**
    * Submit form submission
+   * POST /api/FormSubmissions/submit
+   * 
+   * Workflow Logic:
+   * - If DocumentType has no ApprovalWorkflow → Auto-approve (status = "Approved")
+   * - If DocumentType has Active ApprovalWorkflow → Submit (status = "Submitted")
+   * - If DocumentType has Inactive ApprovalWorkflow → Auto-approve (status = "Approved")
    */
-  submitSubmission(submissionId: number, submittedByUserId: string): Observable<void> {
+  submitSubmission(submissionId: number, submittedByUserId: string): Observable<FormSubmissionDto> {
     return this.http.post<any>(`${this.baseUrl}/submit`, {
       submissionId,
       submittedByUserId
     }).pipe(
-      map(() => {
-        return;
+      map((response: any) => {
+        // Handle ServiceResult<T> or direct object response
+        if (response && typeof response === 'object') {
+          if (response.success !== undefined) {
+            return response.data || response;
+          }
+          if (!response.id) {
+            return response.data || response.result || response;
+          }
+        }
+        return response;
       }),
       catchError((error) => {
-        console.error(`Error submitting form submission ${submissionId}:`, error);
-        throw error;
+        console.error(`[FormSubmissionsService] Error submitting form submission ${submissionId}:`, error);
+        
+        // Extract error message
+        const errorResponse = error?.error;
+        let errorMessage = 'Failed to submit form submission';
+        
+        if (errorResponse) {
+          if (typeof errorResponse === 'string') {
+            errorMessage = errorResponse;
+          } else if (errorResponse.message) {
+            errorMessage = errorResponse.message;
+          } else if (errorResponse.errorMessage) {
+            errorMessage = errorResponse.errorMessage;
+          } else if (errorResponse.title) {
+            errorMessage = errorResponse.title;
+          } else if (errorResponse.detail) {
+            errorMessage = errorResponse.detail;
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+
+        // Check for specific error scenarios
+        const errorText = errorMessage.toLowerCase();
+        if (errorText.includes('already submitted') || errorText.includes('already approved')) {
+          errorMessage = 'This form submission has already been submitted or approved.';
+        } else if (errorText.includes('draft') && errorText.includes('required')) {
+          errorMessage = 'Form submission must be in Draft status before submitting.';
+        } else if (errorText.includes('not found')) {
+          errorMessage = 'Form submission not found.';
+        }
+
+        throw new Error(errorMessage);
       })
     );
   }

@@ -79,17 +79,26 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   }
 
   loadDocumentTypes(): void {
-    this.documentTypesService.getAllDocumentTypes().subscribe({
-      next: (types: DocumentType[]) => {
-        this.documentTypes = types || [];
-        this.filterNavItemsByRole();
-      },
-      error: (error) => {
-        console.error('Error loading document types for navigation:', error);
-        this.documentTypes = [];
-        this.filterNavItemsByRole();
-      }
-    });
+    // Use setTimeout to ensure this runs after component initialization
+    setTimeout(() => {
+      this.documentTypesService.getAllDocumentTypes().subscribe({
+        next: (types: DocumentType[]) => {
+          try {
+            this.documentTypes = Array.isArray(types) ? types : [];
+            this.filterNavItemsByRole();
+          } catch (error) {
+            console.error('Error processing document types:', error);
+            this.documentTypes = [];
+            this.filterNavItemsByRole();
+          }
+        },
+        error: (error) => {
+          console.error('Error loading document types for navigation:', error);
+          this.documentTypes = [];
+          this.filterNavItemsByRole();
+        }
+      });
+    }, 0);
   }
 
   ngOnDestroy(): void {

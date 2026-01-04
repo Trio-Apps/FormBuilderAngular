@@ -39,6 +39,11 @@ export const navItems: INavData[] = [
     ]
   },
   {
+    name: 'Approval Workflows',
+    url: '/approval-workflows',
+    iconComponent: { name: 'cil-sitemap' }
+  },
+  {
     title: true,
     name: 'Projects'
   },

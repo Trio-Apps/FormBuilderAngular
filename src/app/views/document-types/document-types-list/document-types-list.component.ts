@@ -5,6 +5,7 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { FormsService } from '../../FormBuilder/services/forms.service';
 import { ProjectsService } from '../../projects/services/projects.service';
+import { ApprovalWorkflowService, ApprovalWorkflowDto } from '../../FormBuilder/services/approval-workflow.service';
 import { DocumentType, CreateDocumentTypeDto, UpdateDocumentTypeDto, DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../FormBuilder/form-builder/models/document-types.model';
 import { ProjectDto } from '../../projects/models/project-dto.model';
 import { FormBuilderDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
@@ -62,6 +63,12 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   editingSeries: DocumentSeries | null = null;
   currentDocumentTypeForSeries: DocumentType | null = null;
 
+  // Approval Workflow Management
+  approvalWorkflows: ApprovalWorkflowDto[] = [];
+  showApprovalWorkflowModal = false;
+  currentDocumentTypeForWorkflow: DocumentType | null = null;
+  selectedWorkflowId: number | null = null;
+
   // Loading States
   loading = {
     documentTypes: false,
@@ -69,7 +76,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     delete: false,
     forms: false,
     series: false,
-    projects: false
+    projects: false,
+    workflows: false,
+    updateWorkflow: false
   };
 
   // Document Type Modal
@@ -94,6 +103,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     private documentTypesService: DocumentTypesService,
     private formsService: FormsService,
     private projectsService: ProjectsService,
+    private approvalWorkflowService: ApprovalWorkflowService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
@@ -960,6 +970,185 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.seriesForm.reset();
     // Ensure projectId control is enabled when closing
     this.seriesForm.get('projectId')?.enable();
+  }
+
+  // ==================== APPROVAL WORKFLOW MANAGEMENT ====================
+
+  openManageApprovalWorkflowModal(documentType: DocumentType): void {
+    if (!documentType || !documentType.id) {
+      this.messageService.add({ 
+        severity: 'warn', 
+        summary: 'Warning', 
+        detail: 'Please save the document type first before managing approval workflow' 
+      });
+      return;
+    }
+    
+    console.log('[DocumentTypesList] Opening Approval Workflow Modal for:', documentType.name);
+    this.currentDocumentTypeForWorkflow = documentType;
+    this.selectedWorkflowId = documentType.approvalWorkflowId || null;
+    this.loadApprovalWorkflows();
+    this.showApprovalWorkflowModal = true;
+    this.cdr.detectChanges();
+    console.log('[DocumentTypesList] Modal should be visible:', this.showApprovalWorkflowModal);
+  }
+
+  loadApprovalWorkflows(): void {
+    if (!this.currentDocumentTypeForWorkflow || !this.currentDocumentTypeForWorkflow.id) {
+      return;
+    }
+
+    this.loading.workflows = true;
+    const currentDocTypeId = this.currentDocumentTypeForWorkflow.id;
+    
+    // Load only workflows that are associated with this document type
+    this.approvalWorkflowService.getActiveApprovalWorkflowsByDocumentTypeId(currentDocTypeId).subscribe({
+      next: (workflows: ApprovalWorkflowDto[]) => {
+        this.approvalWorkflows = workflows || [];
+        this.loading.workflows = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Error loading approval workflows:', error);
+        // Fallback: load all active workflows and filter manually
+        this.approvalWorkflowService.getActiveApprovalWorkflows().subscribe({
+          next: (allWorkflows: ApprovalWorkflowDto[]) => {
+            // Filter to show only workflows for this document type
+            this.approvalWorkflows = (allWorkflows || []).filter(w => 
+              w.documentTypeId === currentDocTypeId
+            );
+            this.loading.workflows = false;
+            this.cdr.detectChanges();
+          },
+          error: (fallbackError) => {
+            console.error('Error loading approval workflows (fallback):', fallbackError);
+            this.approvalWorkflows = [];
+            this.loading.workflows = false;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Failed to load approval workflows'
+            });
+            this.cdr.detectChanges();
+          }
+        });
+      }
+    });
+  }
+
+  assignWorkflowToDocumentType(): void {
+    if (!this.currentDocumentTypeForWorkflow || !this.currentDocumentTypeForWorkflow.id) {
+      return;
+    }
+
+    // Validate that if a workflow is selected, it exists and is associated with the correct document type
+    if (this.selectedWorkflowId !== null && this.selectedWorkflowId !== undefined) {
+      const selectedWorkflow = this.approvalWorkflows.find(w => w.id === this.selectedWorkflowId);
+      if (!selectedWorkflow) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Selected approval workflow not found. Please refresh and try again.'
+        });
+        return;
+      }
+
+      // Check if the workflow is associated with a different document type
+      if (selectedWorkflow.documentTypeId && selectedWorkflow.documentTypeId !== this.currentDocumentTypeForWorkflow.id) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: `This approval workflow is already associated with another document type. Please select a different workflow or create a new one for this document type.`
+        });
+        return;
+      }
+    }
+
+    // Prepare the update DTO
+    // If selectedWorkflowId is null or undefined, explicitly set it to null to remove the workflow
+    const updateDto: UpdateDocumentTypeDto = {
+      approvalWorkflowId: this.selectedWorkflowId === null || this.selectedWorkflowId === undefined ? null : this.selectedWorkflowId
+    };
+
+    console.log('[DocumentTypesList] Assigning workflow to document type:', {
+      documentTypeId: this.currentDocumentTypeForWorkflow.id,
+      documentTypeName: this.currentDocumentTypeForWorkflow.name,
+      selectedWorkflowId: this.selectedWorkflowId,
+      updateDto: updateDto
+    });
+
+    this.loading.updateWorkflow = true;
+    this.documentTypesService.updateDocumentType(this.currentDocumentTypeForWorkflow.id, updateDto).subscribe({
+      next: () => {
+        this.loading.updateWorkflow = false;
+        const workflowName = this.selectedWorkflowId 
+          ? this.approvalWorkflows.find(w => w.id === this.selectedWorkflowId)?.name || 'Unknown'
+          : 'None (Auto-approve)';
+        
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: `Approval workflow updated successfully: ${workflowName}`
+        });
+        
+        // Refresh document types list
+        this.loadDocumentTypes();
+        this.closeApprovalWorkflowModal();
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        this.loading.updateWorkflow = false;
+        console.error('Error updating approval workflow:', error);
+        console.error('Error details:', {
+          status: error?.status,
+          error: error?.error,
+          message: error?.message
+        });
+        
+        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to update approval workflow';
+        
+        // Check for specific error scenarios
+        const errorText = errorMessage.toLowerCase();
+        if (errorText.includes('foreign key') || errorText.includes('constraint') || errorText.includes('fk_approval_workflows')) {
+          if (errorText.includes('documenttypeid') || errorText.includes('document_type')) {
+            errorMessage = 'The selected approval workflow is not valid for this document type. Please ensure the workflow exists and is not associated with another document type.';
+          } else {
+            errorMessage = 'Cannot update approval workflow. The selected workflow may not exist or may be associated with another document type.';
+          }
+        }
+        
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: errorMessage,
+          life: 8000
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  removeWorkflowFromDocumentType(): void {
+    if (!this.currentDocumentTypeForWorkflow || !this.currentDocumentTypeForWorkflow.id) {
+      return;
+    }
+
+    this.confirmationService.confirm({
+      message: `Are you sure you want to remove the approval workflow from "${this.currentDocumentTypeForWorkflow.name}"? Submissions will be auto-approved.`,
+      header: 'Confirm Removal',
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        this.selectedWorkflowId = null;
+        this.assignWorkflowToDocumentType();
+      }
+    });
+  }
+
+  closeApprovalWorkflowModal(): void {
+    this.showApprovalWorkflowModal = false;
+    this.currentDocumentTypeForWorkflow = null;
+    this.selectedWorkflowId = null;
+    this.approvalWorkflows = [];
   }
 }
 

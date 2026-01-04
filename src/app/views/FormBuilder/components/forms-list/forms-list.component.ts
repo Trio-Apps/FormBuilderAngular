@@ -871,5 +871,46 @@ export class FormsListComponent implements OnInit, OnDestroy {
       }
     );
   }
+
+  duplicateForm(form: FormBuilderDto): void {
+    if (!form?.id) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Error',
+        detail: 'Form ID is missing.'
+      });
+      return;
+    }
+
+    this.confirmationService.confirm({
+      message: `Duplicate "${form.formName}"? This will create a copy with all tabs and fields.`,
+      header: 'Confirm Duplicate',
+      icon: 'pi pi-copy',
+      accept: () => {
+        this.loading = true;
+        this.formsService.duplicateForm(form.id).subscribe({
+          next: (duplicatedForm) => {
+            this.loading = false;
+            this.loadForms(this.currentPage);
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: `Form "${duplicatedForm.formName}" duplicated successfully`
+            });
+          },
+          error: (error) => {
+            this.loading = false;
+            const errorMessage = error?.error?.message || error?.message || 'Failed to duplicate form';
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: errorMessage,
+              life: 7000
+            });
+          }
+        });
+      }
+    });
+  }
 }
 

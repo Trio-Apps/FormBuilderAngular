@@ -122,6 +122,13 @@
                   pTooltip="Manage Series"
                   tooltipPosition="top"></button>
                 <button pButton 
+                  icon="pi pi-sitemap" 
+                  class="p-button-text p-button-sm action-btn" 
+                  [routerLink]="['/approval-workflows']"
+                  [queryParams]="{ documentTypeId: documentType.id }"
+                  pTooltip="Manage Approval Workflow"
+                  tooltipPosition="top"></button>
+                <button pButton 
                   icon="pi pi-pencil" 
                   class="p-button-text p-button-sm action-btn" 
                   (click)="openEditModal(documentType)"
@@ -493,6 +500,108 @@
             [loading]="loading.series"></button>
         </div>
       </form>
+</p-dialog>
+
+<!-- Approval Workflow Management Modal -->
+<p-dialog
+  [(visible)]="showApprovalWorkflowModal"
+  [header]="'Manage Approval Workflow - ' + (currentDocumentTypeForWorkflow?.name || '')"
+  [modal]="true"
+  [style]="{ width: '700px' }"
+  [closable]="true"
+  [autoZIndex]="true"
+  [baseZIndex]="10001"
+  (onHide)="closeApprovalWorkflowModal()"
+>
+  <div *ngIf="currentDocumentTypeForWorkflow">
+    <!-- Current Workflow Status -->
+    <div class="workflow-status-section" style="margin-bottom: 24px; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+      <h4 style="margin-top: 0; margin-bottom: 12px;">Current Configuration</h4>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <i class="pi pi-info-circle" style="color: #667eea; font-size: 20px;"></i>
+        <div>
+          <strong>Document Type:</strong> {{ currentDocumentTypeForWorkflow.name }}<br>
+          <strong>Current Workflow:</strong> 
+          <span *ngIf="currentDocumentTypeForWorkflow.approvalWorkflowName" class="badge badge-info">
+            {{ currentDocumentTypeForWorkflow.approvalWorkflowName }}
+          </span>
+          <span *ngIf="!currentDocumentTypeForWorkflow.approvalWorkflowName" class="badge badge-secondary">
+            None (Auto-approve)
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Workflow Selection -->
+    <div class="workflow-selection-section">
+      <div class="form-field-wrapper" style="margin-bottom: 20px;">
+        <label class="field-label" for="workflowSelect">
+          Select Approval Workflow
+        </label>
+        <div class="field-input-wrapper">
+          <select
+            id="workflowSelect"
+            class="form-select"
+            [(ngModel)]="selectedWorkflowId">
+            <option [ngValue]="null">None (Auto-approve submissions)</option>
+            <option 
+              *ngFor="let workflow of approvalWorkflows" 
+              [ngValue]="workflow.id">
+              {{ workflow.name }} {{ workflow.isActive ? '' : '(Inactive)' }}
+            </option>
+          </select>
+        </div>
+        <div class="field-hint" style="margin-top: 8px; font-size: 12px; color: #6b7280;">
+          <i class="pi pi-info-circle"></i>
+          If no workflow is selected, all submissions will be automatically approved.
+        </div>
+      </div>
+
+      <div *ngIf="loading.workflows" class="loading-container">
+        <i class="pi pi-spin pi-spinner"></i>
+        <p>Loading approval workflows...</p>
+      </div>
+
+      <div *ngIf="!loading.workflows && approvalWorkflows.length === 0" class="empty-state" style="margin-top: 20px;">
+        <div class="empty-icon">
+          <i class="pi pi-sitemap"></i>
+        </div>
+        <h4>No Approval Workflows Available</h4>
+        <p>There are no active approval workflows configured in the system.</p>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="dialog-footer" style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+      <button 
+        type="button" 
+        pButton 
+        label="Cancel" 
+        icon="pi pi-times" 
+        class="p-button-secondary" 
+        (click)="closeApprovalWorkflowModal()" 
+        [disabled]="loading.updateWorkflow"></button>
+      <button 
+        *ngIf="currentDocumentTypeForWorkflow.approvalWorkflowId"
+        type="button" 
+        pButton 
+        label="Remove Workflow" 
+        icon="pi pi-times-circle" 
+        class="p-button-danger" 
+        (click)="removeWorkflowFromDocumentType()" 
+        [disabled]="loading.updateWorkflow"
+        [loading]="loading.updateWorkflow"></button>
+      <button 
+        type="button" 
+        pButton 
+        label="Save Changes" 
+        icon="pi pi-check" 
+        class="p-button-primary" 
+        (click)="assignWorkflowToDocumentType()" 
+        [disabled]="loading.updateWorkflow || loading.workflows"
+        [loading]="loading.updateWorkflow"></button>
+    </div>
+  </div>
 </p-dialog>
 
 <p-toast></p-toast>

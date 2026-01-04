@@ -36,6 +36,52 @@ export class CalculationEngineService {
   }
 
   /**
+   * Validate expression syntax for common errors
+   * Returns null if valid, or an error message if invalid
+   */
+  validateExpressionSyntax(expressionText: string): string | null {
+    if (!expressionText || !expressionText.trim()) {
+      return 'Expression is empty';
+    }
+
+    const trimmed = expressionText.trim();
+
+    // Check for incomplete operators at the end
+    const incompleteOperators = /[+\-*/^%]$/;
+    if (incompleteOperators.test(trimmed)) {
+      return `Incomplete expression: operator '${trimmed.slice(-1)}' requires a second operand. Example: Use '[FIELD1] ^ [FIELD2]' or 'POW([FIELD1], [FIELD2])' instead of '[FIELD1]^'`;
+    }
+
+    // Check for incomplete operators at the beginning (except for unary minus)
+    const invalidStartOperators = /^[+*/^%]/;
+    if (invalidStartOperators.test(trimmed)) {
+      return `Invalid expression: cannot start with operator '${trimmed[0]}'`;
+    }
+
+    // Check for consecutive operators (except for valid cases like -- or **)
+    const consecutiveOperators = /[+\-*/^%]\s*[+*/^%]/;
+    if (consecutiveOperators.test(trimmed)) {
+      return 'Invalid expression: consecutive operators detected';
+    }
+
+    // Check for incomplete function calls (opening parenthesis without closing)
+    const openParens = (trimmed.match(/\(/g) || []).length;
+    const closeParens = (trimmed.match(/\)/g) || []).length;
+    if (openParens !== closeParens) {
+      return 'Invalid expression: mismatched parentheses';
+    }
+
+    // Check for incomplete field references (opening bracket without closing)
+    const openBrackets = (trimmed.match(/\[/g) || []).length;
+    const closeBrackets = (trimmed.match(/\]/g) || []).length;
+    if (openBrackets !== closeBrackets) {
+      return 'Invalid expression: mismatched square brackets in field references';
+    }
+
+    return null; // Expression is valid
+  }
+
+  /**
    * Build field values map from form values and field definitions
    */
   buildFieldValuesMap(
@@ -47,14 +93,23 @@ export class CalculationEngineService {
     // Add values from fieldValues (form control values)
     Object.keys(fieldValues).forEach(key => {
       const value = fieldValues[key];
-      if (value !== null && value !== undefined && value !== '') {
-        // Try to find field by code or ID
-        const field = fields.find(f => f.fieldCode === key || String(f.id) === key);
-        if (field) {
-          result[field.fieldCode] = this.convertValue(value, field);
+      
+      // Skip null, undefined, or empty string values
+      if (value === null || value === undefined || value === '') {
+        return;
+      }
+      
+      // Try to find field by code or ID
+      const field = fields.find(f => f.fieldCode === key || String(f.id) === key);
+      const convertedValue = field ? this.convertValue(value, field) : this.convertValue(value);
+      
+      // Only add non-null, non-undefined values
+      if (convertedValue !== null && convertedValue !== undefined) {
+        if (field && field.fieldCode) {
+          result[field.fieldCode] = convertedValue;
         } else {
           // Use key as field code if field not found
-          result[key] = this.convertValue(value);
+          result[key] = convertedValue;
         }
       }
     });
@@ -65,9 +120,9 @@ export class CalculationEngineService {
   /**
    * Convert form value to number or string based on field type
    */
-  private convertValue(value: any, field?: FormFieldDto): number | string {
+  private convertValue(value: any, field?: FormFieldDto): number | string | null {
     if (value === null || value === undefined || value === '') {
-      return 0; // Default to 0 for calculations
+      return null; // Return null instead of 0 to allow filtering
     }
     
     // If field is provided, check its type
@@ -79,7 +134,7 @@ export class CalculationEngineService {
       if (fieldType.includes('number') || fieldType.includes('numeric') || 
           dataType === 'int' || dataType === 'decimal' || dataType === 'number') {
         const numValue = Number(value);
-        return isNaN(numValue) ? 0 : numValue;
+        return isNaN(numValue) || !isFinite(numValue) ? null : numValue;
       }
     }
     
@@ -89,8 +144,9 @@ export class CalculationEngineService {
       return numValue;
     }
     
-    // Return as string
-    return String(value);
+    // Return as string (trim whitespace)
+    const stringValue = String(value).trim();
+    return stringValue === '' ? null : stringValue;
   }
 
   /**
@@ -240,8 +296,46 @@ export class CalculationEngineService {
       };
     }
 
+    // Validate expression syntax before sending to API
+    const syntaxError = this.validateExpressionSyntax(expressionText);
+    if (syntaxError) {
+      console.error(`[CalculationEngine] Expression syntax validation failed: ${syntaxError}`);
+      return {
+        success: false,
+        value: 0,
+        error: syntaxError
+      };
+    }
+
     try {
       const preparedValues = this.prepareFieldValues(fieldValues);
+      
+      // Extract field codes from expression
+      const requiredFieldCodes = this.extractFieldCodes(expressionText);
+      console.log(`[CalculationEngine] Required field codes in expression:`, requiredFieldCodes);
+      console.log(`[CalculationEngine] Available field values:`, Object.keys(preparedValues));
+      
+      // Check if all required field codes are available
+      const missingFieldCodes = requiredFieldCodes.filter(code => !(code in preparedValues));
+      if (missingFieldCodes.length > 0) {
+        console.warn(`[CalculationEngine] Missing field codes in fieldValues:`, missingFieldCodes);
+        // Set missing fields to 0 for calculation
+        missingFieldCodes.forEach(code => {
+          preparedValues[code] = 0;
+          console.log(`[CalculationEngine] Setting missing field ${code} to 0`);
+        });
+      }
+      
+      // Validate that we have at least some field values
+      if (Object.keys(preparedValues).length === 0) {
+        console.warn(`[CalculationEngine] No field values available for calculation`);
+        return {
+          success: false,
+          value: 0,
+          error: 'No field values available for calculation'
+        };
+      }
+      
       // Clean expression: remove extra spaces around commas
       const cleanedExpression = this.cleanExpression(expressionText.trim());
       const request: CalculateExpressionRequest = {
@@ -320,16 +414,49 @@ export class CalculationEngineService {
 
   /**
    * Prepare field values for API request (convert null/undefined to 0)
+   * For calculated fields, only numeric values are allowed - non-numeric values are converted to 0
    */
   private prepareFieldValues(fieldValues: FieldValueMap): { [fieldCode: string]: number | string } {
     const result: { [fieldCode: string]: number | string } = {};
     
     Object.keys(fieldValues).forEach(fieldCode => {
       const value = fieldValues[fieldCode];
+      
+      // Skip null, undefined, or empty string
       if (value === null || value === undefined || value === '') {
-        result[fieldCode] = 0;
+        // Don't include empty values - API might not handle them well
+        return;
+      }
+      
+      // Convert to number if possible
+      if (typeof value === 'number') {
+        result[fieldCode] = isNaN(value) || !isFinite(value) ? 0 : value;
+      } else if (typeof value === 'string') {
+        // Try to convert string to number if it's a valid number
+        const trimmedValue = value.trim();
+        const numValue = Number(trimmedValue);
+        
+        if (!isNaN(numValue) && isFinite(numValue) && trimmedValue !== '') {
+          // Valid number string
+          result[fieldCode] = numValue;
+        } else {
+          // Non-numeric string - for calculated fields, convert to 0
+          // This prevents API errors like "Cannot find column [a].."
+          console.warn(`[CalculationEngine] Non-numeric value "${trimmedValue}" for field ${fieldCode} - converting to 0 for calculation`);
+          result[fieldCode] = 0;
+        }
+      } else if (typeof value === 'boolean') {
+        // Convert boolean to number (true = 1, false = 0)
+        result[fieldCode] = value ? 1 : 0;
       } else {
-        result[fieldCode] = value;
+        // For other types, try to convert to number, otherwise use 0
+        const numValue = Number(value);
+        if (!isNaN(numValue) && isFinite(numValue)) {
+          result[fieldCode] = numValue;
+        } else {
+          console.warn(`[CalculationEngine] Cannot convert value "${value}" for field ${fieldCode} to number - using 0`);
+          result[fieldCode] = 0;
+        }
       }
     });
     
@@ -418,18 +545,10 @@ export class CalculationEngineService {
     // 3. OR has expressionText (for backward compatibility)
     const isCalculated = isCalculatedById || (typeNameMatch || typeMatch) || hasExpression;
     
-    // Debug logging for all fields to help diagnose
-    console.log(`[CalculationEngine] Checking field ${field.fieldCode}:`, {
-      fieldTypeId: field.fieldTypeId,
-      isCalculatedById,
-      hasExpression,
-      expressionText: field.expressionText,
-      fieldTypeName: field.fieldTypeName,
-      fieldTypeTypeName: field.fieldType?.typeName,
-      typeNameMatch,
-      typeMatch,
-      isCalculated
-    });
+    // Only log if it's a calculated field and expressionText is missing (for debugging)
+    if (isCalculated && !hasExpression) {
+      console.warn(`[CalculationEngine] Calculated field ${field.fieldCode} (ID: ${field.id}) has no expressionText`);
+    }
     
     return isCalculated;
   }

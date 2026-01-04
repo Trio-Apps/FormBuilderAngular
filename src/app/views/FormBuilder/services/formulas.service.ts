@@ -217,13 +217,33 @@ export class FormulasService {
           status: error?.status,
           statusText: error?.statusText,
           error: error?.error,
+          errorString: typeof error?.error === 'string' ? error.error : JSON.stringify(error?.error),
           message: error?.message,
-          url: error?.url
+          url: error?.url,
+          requestBody: error?.config?.data ? JSON.parse(error.config.data) : null
         });
+        
+        // Extract error message from different possible locations
+        let errorMessage = 'Calculation failed';
+        if (error?.error) {
+          if (typeof error.error === 'string') {
+            errorMessage = error.error;
+          } else if (error.error?.message) {
+            errorMessage = error.error.message;
+          } else if (error.error?.error) {
+            errorMessage = error.error.error;
+          } else {
+            errorMessage = JSON.stringify(error.error);
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+        
         return of({
           success: false,
           data: 0,
-          statusCode: error?.status || 500
+          statusCode: error?.status || 500,
+          error: errorMessage
         } as CalculateExpressionResponse);
       })
     );

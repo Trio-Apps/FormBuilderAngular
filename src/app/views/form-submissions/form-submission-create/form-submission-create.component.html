@@ -76,7 +76,7 @@
                 <!-- Field Label -->
                 <label 
                   class="field-label" 
-                  [attr.for]="(getFieldType(field) === 'radio' || getFieldType(field) === 'checkbox' || getFieldType(field) === 'boolean') ? null : (isFileField(field) ? 'file-' + field.id : 'field_' + field.id)">
+                  [attr.for]="getFieldLabelFor(field)">
                   {{ getFieldDisplayName(field) }}
                   <span *ngIf="isRequired(field)" class="required-indicator">*</span>
                 </label>
@@ -90,62 +90,44 @@
                 <div class="field-input-wrapper">
                   <!-- Text Input -->
                   <input
-                    *ngIf="getFieldType(field) === 'string' && !isFileField(field)"
+                    *ngIf="getFieldType(field) === 'text' && !isFileField(field) && getFieldId(field)"
                     type="text"
-                    [id]="'field_' + field.id"
-                    [formControlName]="'field_' + field.id"
+                    [id]="getFieldId(field)!"
+                    [formControlName]="getFieldId(field)!"
                     class="form-input"
                     [placeholder]="getFieldPlaceholder(field)">
 
                   <!-- Number Input -->
                   <p-inputNumber
-                    *ngIf="getFieldType(field) === 'number'"
-                    [id]="'field_' + field.id"
-                    [formControlName]="'field_' + field.id"
+                    *ngIf="getFieldType(field) === 'number' && getFieldId(field)"
+                    [inputId]="getFieldId(field)!"
+                    [formControlName]="getFieldId(field)!"
                     [showButtons]="false"
                     [useGrouping]="false"
                     [placeholder]="getFieldPlaceholder(field)"
                     styleClass="form-input-number">
                   </p-inputNumber>
 
-                  <!-- Calculated Field Input (Read-only) -->
-                  <div *ngIf="getFieldType(field) === 'calculated'" class="calculated-field-wrapper">
-                    <p-inputNumber
-                      *ngIf="field.resultType === 'Decimal' || field.resultType === 'Integer'"
-                      [id]="'field_' + field.id"
-                      [formControlName]="'field_' + field.id"
-                      [showButtons]="false"
-                      [useGrouping]="false"
-                      [readonly]="true"
-                      styleClass="form-input-number calculated-input">
-                    </p-inputNumber>
-                    <input
-                      *ngIf="field.resultType === 'Text'"
-                      type="text"
-                      [id]="'field_' + field.id"
-                      [formControlName]="'field_' + field.id"
-                      class="form-input calculated-input"
-                      [readonly]="true"
-                      [placeholder]="'Calculated value'">
-                    <div class="calculated-field-indicator">
-                      <i class="pi pi-calculator"></i>
-                      <span>Calculated</span>
-                    </div>
-                  </div>
+                  <!-- Calculated Field (like FormViewComponent) -->
+                  <app-calculated-field 
+                    *ngIf="getFieldType(field) === 'calculated'" 
+                    [field]="field" 
+                    [value]="getFieldValue(field)">
+                  </app-calculated-field>
 
                   <!-- Date Input -->
                   <input
-                    *ngIf="getFieldType(field) === 'date'"
+                    *ngIf="getFieldType(field) === 'date' && getFieldId(field)"
                     type="date"
-                    [id]="'field_' + field.id"
-                    [formControlName]="'field_' + field.id"
+                    [id]="getFieldId(field)!"
+                    [formControlName]="getFieldId(field)!"
                     class="form-input">
 
                   <!-- Textarea -->
                   <textarea
-                    *ngIf="getFieldType(field) === 'textarea'"
-                    [id]="'field_' + field.id"
-                    [formControlName]="'field_' + field.id"
+                    *ngIf="getFieldType(field) === 'textarea' && getFieldId(field)"
+                    [id]="getFieldId(field)!"
+                    [formControlName]="getFieldId(field)!"
                     class="form-textarea"
                     [rows]="4"
                     [placeholder]="getFieldPlaceholder(field)">
@@ -153,9 +135,9 @@
 
                   <!-- Select / Dropdown -->
                   <select
-                    *ngIf="getFieldType(field) === 'select'"
-                    [id]="'field_' + field.id"
-                    [formControlName]="'field_' + field.id"
+                    *ngIf="getFieldType(field) === 'select' && getFieldId(field)"
+                    [id]="getFieldId(field)!"
+                    [formControlName]="getFieldId(field)!"
                     (change)="onSelectChange(field, $event)"
                     class="form-select">
                     <option [value]="''" [disabled]="isRequired(field)">
@@ -167,7 +149,7 @@
                   </select>
 
                   <!-- Radio Buttons -->
-                  <div *ngIf="getFieldType(field) === 'radio'" class="radio-group">
+                  <div *ngIf="getFieldType(field) === 'radio' && getFieldId(field)" class="radio-group">
                     <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                       Loading options...
                     </div>
@@ -175,9 +157,9 @@
                       <input
                         type="radio"
                         [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
-                        [name]="'field_' + field.id"
+                        [name]="getFieldId(field)!"
                         [value]="opt.optionValue"
-                        [formControlName]="'field_' + field.id"
+                        [formControlName]="getFieldId(field)!"
                         (change)="onRadioChange(field, opt.optionValue, $event)">
                       <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
                         {{ opt.optionText || opt.optionValue }}
@@ -189,7 +171,7 @@
                   </div>
 
                   <!-- Checkbox (Multiple Selection) -->
-                  <div *ngIf="getFieldType(field) === 'checkbox'" class="checkbox-group">
+                  <div *ngIf="getFieldType(field) === 'checkbox' && getFieldId(field)" class="checkbox-group">
                     <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                       Loading options...
                     </div>
@@ -209,19 +191,19 @@
                   </div>
 
                   <!-- Boolean/Switch Field -->
-                  <div *ngIf="getFieldType(field) === 'boolean'" class="checkbox-wrapper">
+                  <div *ngIf="getFieldType(field) === 'boolean' && getFieldId(field)" class="checkbox-wrapper">
                     <p-checkbox
-                      [inputId]="'field_' + field.id"
-                      [formControlName]="'field_' + field.id"
+                      [inputId]="getFieldId(field)!"
+                      [formControlName]="getFieldId(field)!"
                       [binary]="true">
                     </p-checkbox>
-                    <label [for]="'field_' + field.id" class="checkbox-label">
+                    <label [for]="getFieldId(field)!" class="checkbox-label">
                       {{ getFieldDisplayName(field) }}
                     </label>
                   </div>
 
                   <!-- File Upload Field -->
-                  <div *ngIf="isFileField(field)" class="file-upload-wrapper">
+                  <div *ngIf="isFileField(field) && getFileFieldId(field)" class="file-upload-wrapper">
                     <!-- Allowed Extensions Info -->
                     <div class="allowed-extensions-info" *ngIf="getAllowedExtensions(field).length > 0">
                       <i class="pi pi-info-circle"></i>
@@ -233,12 +215,12 @@
                     <div class="file-upload-area">
                       <input
                         type="file"
-                        [id]="'file-' + field.id"
+                        [id]="getFileFieldId(field)!"
                         class="file-input-hidden"
                         (change)="onFileSelected($event, field)"
                         [multiple]="field.fieldType?.allowMultiple || false"
                         [accept]="getAcceptedFileTypes(field)">
-                      <label [for]="'file-' + field.id" class="file-upload-label">
+                      <label [for]="getFileFieldId(field)!" class="file-upload-label">
                         <i class="pi pi-cloud-upload"></i>
                         <span>Choose file{{ field.fieldType?.allowMultiple ? 's' : '' }} to upload</span>
                       </label>
@@ -299,7 +281,7 @@
                 </div>
 
                 <!-- Validation Messages -->
-                <div *ngIf="fieldsForm.get('field_' + field.id)?.invalid && fieldsForm.get('field_' + field.id)?.touched" class="field-error">
+                <div *ngIf="getFieldId(field) && fieldsForm.get(getFieldId(field)!)?.invalid && fieldsForm.get(getFieldId(field)!)?.touched" class="field-error">
                   This field is required
                 </div>
                 </div>
