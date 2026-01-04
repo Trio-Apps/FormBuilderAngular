@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { FormulasService, CalculateExpressionRequest } from './formulas.service';
 import { FormFieldDto } from '../form-builder/models/form-builder-dto.model';
+import { getCalculationOperationById, getRecommendedCalculationOperation } from '../constants/calculation-operations';
 
 export interface FieldValueMap {
   [fieldCode: string]: number | string | null | undefined;
@@ -108,8 +109,10 @@ export class CalculationEngineService {
     }
 
     try {
+      // Clean expression: remove extra spaces around commas
+      const cleanedExpression = this.cleanExpression(expressionText.trim());
       const request: CalculateExpressionRequest = {
-        expressionText: expressionText.trim(),
+        expressionText: cleanedExpression,
         fieldValues: this.prepareFieldValues(fieldValues)
       };
 
@@ -138,6 +141,91 @@ export class CalculationEngineService {
   }
 
   /**
+   * Calculate expression using specified operation
+   */
+  async calculateExpressionWithOperation(
+    expressionText: string,
+    fieldValues: FieldValueMap,
+    operationId?: string
+  ): Promise<CalculationResult> {
+    if (!expressionText || !expressionText.trim()) {
+      return {
+        success: false,
+        value: 0,
+        error: 'Expression text is required'
+      };
+    }
+
+    // Get operation or use default
+    const operation = operationId 
+      ? getCalculationOperationById(operationId) 
+      : getRecommendedCalculationOperation();
+
+    if (!operation) {
+      return {
+        success: false,
+        value: 0,
+        error: `Invalid calculation operation: ${operationId}`
+      };
+    }
+
+    try {
+      const preparedValues = this.prepareFieldValues(fieldValues);
+      // Clean expression: remove extra spaces around commas
+      const cleanedExpression = this.cleanExpression(expressionText.trim());
+      const request: CalculateExpressionRequest = {
+        expressionText: cleanedExpression,
+        fieldValues: preparedValues
+      };
+
+      console.log(`[CalculationEngine] calculateExpressionWithOperation - Operation: ${operation.id}`);
+      console.log(`[CalculationEngine] calculateExpressionWithOperation - Expression: "${cleanedExpression}"`);
+
+      let response: any;
+
+      // Call appropriate method based on operation
+      switch (operation.method) {
+        case 'calculateExpression':
+          response = await this.formulasService.calculateExpression(request).toPromise();
+          break;
+        case 'calculateSafe':
+          response = await this.formulasService.calculateSafe(request).toPromise();
+          break;
+        case 'calculateAdvanced':
+          response = await this.formulasService.calculateAdvanced(request).toPromise();
+          break;
+        case 'previewCalculation':
+          // For preview, we need formBuilderId, but we'll use calculateSafe as fallback
+          response = await this.formulasService.calculateSafe(request).toPromise();
+          break;
+        default:
+          response = await this.formulasService.calculateSafe(request).toPromise();
+      }
+
+      if (response && response.success) {
+        return {
+          success: true,
+          value: response.data
+        };
+      } else {
+        const errorMessage = (response as any)?.error || (response as any)?.message || (response as any)?.data?.error || 'Calculation failed';
+        return {
+          success: false,
+          value: 0,
+          error: errorMessage
+        };
+      }
+    } catch (error: any) {
+      console.error(`[CalculationEngine] Error calculating expression with operation ${operation.id}:`, error);
+      return {
+        success: false,
+        value: 0,
+        error: error?.error?.message || error?.error || error?.message || 'Error calculating expression'
+      };
+    }
+  }
+
+  /**
    * Calculate expression safely (with error handling)
    */
   async calculateExpressionSafe(
@@ -154,12 +242,14 @@ export class CalculationEngineService {
 
     try {
       const preparedValues = this.prepareFieldValues(fieldValues);
+      // Clean expression: remove extra spaces around commas
+      const cleanedExpression = this.cleanExpression(expressionText.trim());
       const request: CalculateExpressionRequest = {
-        expressionText: expressionText.trim(),
+        expressionText: cleanedExpression,
         fieldValues: preparedValues
       };
 
-      console.log(`[CalculationEngine] calculateExpressionSafe - Expression: "${expressionText.trim()}"`);
+      console.log(`[CalculationEngine] calculateExpressionSafe - Expression: "${cleanedExpression}"`);
       console.log(`[CalculationEngine] calculateExpressionSafe - Field values:`, JSON.stringify(preparedValues, null, 2));
       console.log(`[CalculationEngine] calculateExpressionSafe - Request:`, JSON.stringify(request, null, 2));
 
@@ -208,6 +298,24 @@ export class CalculationEngineService {
         error: error?.error?.message || error?.error || error?.message || 'Error calculating expression'
       };
     }
+  }
+
+  /**
+   * Clean expression text: remove extra spaces around commas and operators
+   */
+  private cleanExpression(expression: string): string {
+    if (!expression) return expression;
+    
+    // Remove spaces after commas: ", " -> ","
+    let cleaned = expression.replace(/,\s+/g, ',');
+    
+    // Remove spaces before commas: " ," -> ","
+    cleaned = cleaned.replace(/\s+,/g, ',');
+    
+    // Remove spaces around operators but keep spaces around field codes
+    // This is more complex, so we'll be conservative and only clean commas
+    
+    return cleaned;
   }
 
   /**
@@ -271,7 +379,11 @@ export class CalculationEngineService {
 
       try {
         console.log(`[CalculationEngine] Calculating field ${field.fieldCode} with expression: ${field.expressionText}`);
-        const result = await this.calculateExpressionSafe(field.expressionText, fieldValuesMap);
+        // Use calculationOperation if available, otherwise use default
+        const operationId = field.calculationOperation;
+        const result = operationId 
+          ? await this.calculateExpressionWithOperation(field.expressionText, fieldValuesMap, operationId)
+          : await this.calculateExpressionSafe(field.expressionText, fieldValuesMap);
         if (result.success) {
           results[field.fieldCode] = result.value;
           // Update fieldValuesMap with calculated value for dependent calculations

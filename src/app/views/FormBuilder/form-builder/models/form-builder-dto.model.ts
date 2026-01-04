@@ -112,6 +112,7 @@ export interface FormFieldDto {
   // Calculation properties (for Calculated field type)
   expressionText?: string; // Expression text for calculated fields
   calculationMode?: 'Expression' | 'Formula'; // Calculation mode
+  calculationOperation?: string; // Calculation operation ID (e.g., 'calculate-safe', 'calculate-expression')
   recalculateOn?: 'OnFieldChange' | 'OnLoad' | 'OnSubmitOnly'; // When to recalculate
   resultType?: 'Decimal' | 'Integer' | 'Text'; // Result data type
   // Computed properties from API (for compatibility)
@@ -149,6 +150,7 @@ export interface UpdateFormFieldDto {
   // Calculation properties (for Calculated field type)
   expressionText?: string; // Expression text for calculated fields
   calculationMode?: 'Expression' | 'Formula'; // Calculation mode
+  calculationOperation?: string; // Calculation operation ID (e.g., 'calculate-safe', 'calculate-expression')
   recalculateOn?: 'OnFieldChange' | 'OnLoad' | 'OnSubmitOnly'; // When to recalculate
   resultType?: 'Decimal' | 'Integer' | 'Text'; // Result data type
 }
@@ -241,6 +243,7 @@ export interface CreateFormFieldDto {
   // Calculation properties (for Calculated field type)
   expressionText?: string; // Expression text for calculated fields
   calculationMode?: 'Expression' | 'Formula'; // Calculation mode
+  calculationOperation?: string; // Calculation operation ID (e.g., 'calculate-safe', 'calculate-expression')
   recalculateOn?: 'OnFieldChange' | 'OnLoad' | 'OnSubmitOnly'; // When to recalculate
   resultType?: 'Decimal' | 'Integer' | 'Text'; // Result data type
   createdByUserId?: string;

@@ -565,6 +565,61 @@
              
             </div>
 
+            <!-- Calculation Operations (Math Operations) -->
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label class="form-label">
+                Calculation Operations
+                <i class="pi pi-info-circle" style="margin-left: 6px; color: #667eea; cursor: help;" 
+                   pTooltip="Click on an operation to add it to the expression"></i>
+              </label>
+              
+              <!-- Operations grouped by category -->
+              <div style="margin-top: 12px;">
+                <!-- Arithmetic Operations -->
+                <div style="margin-bottom: 16px;">
+                  <div style="font-weight: 600; color: #374151; margin-bottom: 8px; font-size: 13px;">
+                    <i class="pi pi-calculator" style="margin-right: 6px; color: #667eea;"></i>
+                    {{ translationService.getCurrentLanguage() === 'ar' ? 'العمليات الحسابية' : 'Arithmetic Operations' }}
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: #f0f9ff; border: 1px solid #93c5fd; border-radius: 6px;">
+                    <button 
+                      type="button"
+                      *ngFor="let operation of getOperationsByCategory('arithmetic')"
+                      (click)="addOperationToExpression(operation)"
+                      style="padding: 8px 16px; background: white; border: 1px solid #93c5fd; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; color: #1e40af; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px;"
+                      [title]="(translationService.getCurrentLanguage() === 'ar' ? operation.name : operation.nameEn) + ' - ' + operation.description"
+                      onmouseover="this.style.background='#dbeafe'; this.style.borderColor='#60a5fa'"
+                      onmouseout="this.style.background='white'; this.style.borderColor='#93c5fd'">
+                      <span style="font-family: 'Courier New', monospace; font-size: 16px;">{{ operation.symbol }}</span>
+                      <span style="font-size: 12px;">{{ translationService.getCurrentLanguage() === 'ar' ? operation.name : operation.nameEn }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Math Functions -->
+                <div style="margin-bottom: 16px;">
+                  <div style="font-weight: 600; color: #374151; margin-bottom: 8px; font-size: 13px;">
+                    <i class="pi pi-function" style="margin-right: 6px; color: #f59e0b;"></i>
+                    {{ translationService.getCurrentLanguage() === 'ar' ? 'الدوال الرياضية' : 'Math Functions' }}
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;">
+                    <button 
+                      type="button"
+                      *ngFor="let operation of getOperationsByCategory('function')"
+                      (click)="addOperationToExpression(operation)"
+                      style="padding: 8px 16px; background: white; border: 1px solid #fde68a; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; color: #92400e; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px;"
+                      [title]="(translationService.getCurrentLanguage() === 'ar' ? operation.name : operation.nameEn) + ' - ' + operation.description"
+                      onmouseover="this.style.background='#fef3c7'; this.style.borderColor='#fcd34d'"
+                      onmouseout="this.style.background='white'; this.style.borderColor='#fde68a'">
+                      <span style="font-family: 'Courier New', monospace; font-size: 16px;">{{ operation.symbol }}</span>
+                      <span style="font-size: 12px;">{{ translationService.getCurrentLanguage() === 'ar' ? operation.name : operation.nameEn }}</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
             <div class="form-group" style="grid-column: 1 / -1;">
               <label class="form-label">
                 Expression Text <span class="required">*</span>

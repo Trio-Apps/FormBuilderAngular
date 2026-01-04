@@ -22,6 +22,7 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { environment } from '../../../environments/environment';
 import { AttachmentTypesService } from '../../FormBuilder/services/attachment-types.service';
 import { CreateAttachmentTypeDto } from '../../FormBuilder/form-builder/models/attachment-types.model';
+import { CALCULATION_OPERATIONS, CalculationOperation, getRecommendedCalculationOperation } from '../../FormBuilder/constants/calculation-operations';
 
 @Component({
   selector: 'app-fields-list',
@@ -89,6 +90,35 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   // Grid Selection (for Grid field type)
   availableGrids: FormGridDto[] = [];
   selectedGridId: number | null = null;
+
+  // Calculation Operations (Backend operations - kept for backward compatibility)
+  calculationOperations: CalculationOperation[] = CALCULATION_OPERATIONS;
+  selectedCalculationOperation: CalculationOperation = getRecommendedCalculationOperation();
+
+  // All Available Math Operations for Expression Builder
+  mathOperations = [
+    // Basic Arithmetic Operations
+    { symbol: '+', name: 'جمع', nameEn: 'Add', description: 'Addition operation', category: 'arithmetic' },
+    { symbol: '-', name: 'طرح', nameEn: 'Subtract', description: 'Subtraction operation', category: 'arithmetic' },
+    { symbol: '*', name: 'ضرب', nameEn: 'Multiply', description: 'Multiplication operation', category: 'arithmetic' },
+    { symbol: '/', name: 'قسمة', nameEn: 'Divide', description: 'Division operation', category: 'arithmetic' },
+    { symbol: '%', name: 'باقي القسمة', nameEn: 'Modulo', description: 'Modulo/Remainder operation', category: 'arithmetic' },
+    { symbol: '^', name: 'أس', nameEn: 'Power', description: 'Power/Exponentiation operation', category: 'arithmetic' },
+    
+    // Math Functions
+    { symbol: 'MIN', name: 'الحد الأدنى', nameEn: 'Min', description: 'Minimum value function', category: 'function', template: 'MIN(,)' },
+    { symbol: 'MAX', name: 'الحد الأقصى', nameEn: 'Max', description: 'Maximum value function', category: 'function', template: 'MAX(,)' },
+    { symbol: 'SUM', name: 'المجموع', nameEn: 'Sum', description: 'Sum function', category: 'function', template: 'SUM(,)' },
+    { symbol: 'AVG', name: 'المتوسط', nameEn: 'Average', description: 'Average function', category: 'function', template: 'AVG(,)' },
+    { symbol: 'ABS', name: 'القيمة المطلقة', nameEn: 'Absolute', description: 'Absolute value function', category: 'function', template: 'ABS()' },
+    { symbol: 'ROUND', name: 'تقريب', nameEn: 'Round', description: 'Round function', category: 'function', template: 'ROUND(,)' },
+    { symbol: 'CEIL', name: 'تقريب لأعلى', nameEn: 'Ceiling', description: 'Ceiling function', category: 'function', template: 'CEIL()' },
+    { symbol: 'FLOOR', name: 'تقريب لأسفل', nameEn: 'Floor', description: 'Floor function', category: 'function', template: 'FLOOR()' },
+    { symbol: 'SQRT', name: 'الجذر التربيعي', nameEn: 'Square Root', description: 'Square root function', category: 'function', template: 'SQRT()' },
+    { symbol: 'POW', name: 'الأس', nameEn: 'Power', description: 'Power function', category: 'function', template: 'POW(,)' },
+    { symbol: 'LOG', name: 'اللوغاريتم', nameEn: 'Logarithm', description: 'Logarithm function', category: 'function', template: 'LOG()' },
+    { symbol: 'EXP', name: 'الأس الطبيعي', nameEn: 'Exponential', description: 'Exponential function', category: 'function', template: 'EXP()' }
+  ];
 
   // File Extensions Options
   availableFileExtensions = [
@@ -196,6 +226,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Calculation properties
       expressionText: [''],
       calculationMode: ['Expression'],
+      calculationOperation: [getRecommendedCalculationOperation().id], // Default to calculate-safe
       recalculateOn: ['OnFieldChange'],
       resultType: ['Decimal']
     });
@@ -215,10 +246,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           isEditable: false,
           isMandatory: false
         });
-        // Load all form fields for expression builder if not loaded
-        if (this.allFormFields.length === 0) {
-          this.loadAllFormFields();
-        }
+      }
+      // Load all form fields for expression builder if not loaded (always load, not just for calculated)
+      if (this.allFormFields.length === 0) {
+        this.loadAllFormFields();
       }
     });
 
@@ -417,6 +448,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.selectedGridId = null; // Reset grid selection
     this.availableGrids = []; // Reset grids list
     this.resetDataSourceConfig(); // Reset DataSource config
+    
+    // Load all form fields for expression builder (always load, not just for calculated fields)
+    if (this.allFormFields.length === 0) {
+      this.loadAllFormFields();
+    }
+    
     this.showFieldModal = true;
 
     let nextOrder = 1;
@@ -461,12 +498,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   openEditFieldModal(field: FormFieldDto): void {
     this.editingField = field;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
-    this.showFieldModal = true;
-
-    // Load all form fields for expression builder if editing calculated field
-    if (this.isCalculatedFieldType(field.fieldTypeId) && this.allFormFields.length === 0) {
+    
+    // Load all form fields for expression builder (always load, not just for calculated fields)
+    if (this.allFormFields.length === 0) {
       this.loadAllFormFields();
     }
+    
+    this.showFieldModal = true;
 
     // Debug: Log field data to check if expressionText is present
     console.log('[openEditFieldModal] Field data:', {
@@ -503,8 +541,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // Also check for null/undefined explicitly
     const expressionText = field.expressionText ?? (field as any).ExpressionText ?? '';
     const calculationMode = field.calculationMode ?? (field as any).CalculationMode ?? 'Expression';
+    const calculationOperation = (field as any).calculationOperation ?? (field as any).CalculationOperation ?? getRecommendedCalculationOperation().id;
     const recalculateOn = field.recalculateOn ?? (field as any).RecalculateOn ?? 'OnFieldChange';
     const resultType = field.resultType ?? (field as any).ResultType ?? 'Decimal';
+    
+    // Update selected calculation operation
+    const operation = this.calculationOperations.find(op => op.id === calculationOperation);
+    if (operation) {
+      this.selectedCalculationOperation = operation;
+    }
 
     console.log('[openEditFieldModal] Calculation properties:', {
       expressionText,
@@ -543,6 +588,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Calculation properties
       expressionText: expressionText,
       calculationMode: calculationMode,
+      calculationOperation: calculationOperation,
       recalculateOn: recalculateOn,
       resultType: resultType
     }, { emitEvent: false }); // Prevent triggering change listeners during initialization
@@ -763,6 +809,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         // Calculation properties
         expressionText: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.expressionText || undefined) : undefined,
         calculationMode: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.calculationMode || 'Expression') : undefined,
+        calculationOperation: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.calculationOperation || getRecommendedCalculationOperation().id) : undefined,
         recalculateOn: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.recalculateOn || 'OnFieldChange') : undefined,
         resultType: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.resultType || 'Decimal') : undefined
       };
@@ -836,6 +883,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         // Calculation properties
         expressionText: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.expressionText || undefined) : undefined,
         calculationMode: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.calculationMode || 'Expression') : undefined,
+        calculationOperation: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.calculationOperation || getRecommendedCalculationOperation().id) : undefined,
         recalculateOn: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.recalculateOn || 'OnFieldChange') : undefined,
         resultType: this.isCalculatedFieldType(fieldData.fieldTypeId) ? (fieldData.resultType || 'Decimal') : undefined,
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
@@ -1379,6 +1427,64 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.fieldForm.patchValue({
       expressionText: newExpression
     });
+  }
+
+  /**
+   * Add math operation to expression text
+   */
+  addOperationToExpression(operation: { symbol: string; name: string; nameEn: string; template?: string; category?: string }): void {
+    if (!operation) return;
+
+    const currentExpression = this.fieldForm.get('expressionText')?.value || '';
+    let operationText = operation.template || operation.symbol;
+    
+    // Handle constants (PI, E)
+    if (operation.category === 'constant') {
+      operationText = operation.symbol;
+    }
+    
+    // Add space before if expression is not empty and doesn't end with space or opening bracket
+    const lastChar = currentExpression.trim().slice(-1);
+    const needsSpace = currentExpression.trim() && 
+                      lastChar !== ' ' && 
+                      lastChar !== '(' && 
+                      lastChar !== '[' &&
+                      operation.symbol !== '(' &&
+                      operation.symbol !== ')' &&
+                      operation.symbol !== '[' &&
+                      operation.symbol !== ']' &&
+                      !['+', '-', '*', '/', '%', '^', '==', '!=', '>', '<', '>=', '<=', '&&', '||'].includes(operation.symbol);
+    const separator = needsSpace ? ' ' : '';
+    
+    const newExpression = currentExpression + separator + operationText;
+    
+    this.fieldForm.patchValue({
+      expressionText: newExpression
+    });
+    
+    // Focus back to textarea
+    setTimeout(() => {
+      const textarea = document.querySelector('textarea[formControlName="expressionText"]') as HTMLTextAreaElement;
+      if (textarea) {
+        textarea.focus();
+        // Move cursor to end
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      }
+    }, 100);
+  }
+
+  /**
+   * Get operations by category
+   */
+  getOperationsByCategory(category: string): any[] {
+    return this.mathOperations.filter(op => op.category === category);
+  }
+
+  /**
+   * Get all categories
+   */
+  getOperationCategories(): string[] {
+    return [...new Set(this.mathOperations.map(op => op.category).filter(c => c))];
   }
 
   /**
@@ -2473,6 +2579,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   /**
    * Handle DataSource type change
    */
+  /**
+   * Handle calculation operation change
+   */
+  onCalculationOperationChange(): void {
+    const operationId = this.fieldForm.get('calculationOperation')?.value;
+    const operation = this.calculationOperations.find(op => op.id === operationId);
+    if (operation) {
+      this.selectedCalculationOperation = operation;
+    }
+  }
+
   onDataSourceTypeChange(): void {
     this.dataSourceConfig.sourceType = this.dataSourceType;
 
