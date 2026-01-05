@@ -74,10 +74,13 @@
             <i class="pi pi-search"></i>
             <input
               type="text"
+              id="project-search"
+              name="project-search"
               placeholder="Search projects..."
               class="search-input"
               [(ngModel)]="searchTerm"
               (input)="onSearch()"
+              autocomplete="off"
             />
           </div>
           <div class="results-count">

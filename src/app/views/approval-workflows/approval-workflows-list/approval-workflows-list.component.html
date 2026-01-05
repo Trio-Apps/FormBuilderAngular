@@ -49,10 +49,13 @@
             <i class="pi pi-search"></i>
             <input
               type="text"
+              id="workflow-search"
+              name="workflow-search"
               placeholder="Search workflows..."
               class="search-input"
               [(ngModel)]="searchTerm"
               (input)="onSearchChange()"
+              autocomplete="off"
             />
           </div>
           <button pButton 
@@ -185,10 +188,12 @@
         <div class="field-input-wrapper">
           <input 
             type="text" 
-            id="name" 
+            id="workflow-name"
+            name="workflow-name"
             class="form-input"
             formControlName="name" 
             placeholder="Enter workflow name"
+            autocomplete="off"
             [class.input-error]="workflowForm.get('name')?.invalid && workflowForm.get('name')?.touched" />
         </div>
         <div *ngIf="workflowForm.get('name')?.invalid && workflowForm.get('name')?.touched" class="field-error">
@@ -204,9 +209,11 @@
         </label>
         <div class="field-input-wrapper">
           <select
-            id="documentTypeId"
+            id="workflow-document-type"
+            name="workflow-document-type"
             formControlName="documentTypeId"
             class="form-select"
+            autocomplete="off"
             [class.input-error]="workflowForm.get('documentTypeId')?.invalid && workflowForm.get('documentTypeId')?.touched">
             <option [value]="null">Select document type</option>
             <option *ngFor="let docType of documentTypes" [value]="docType.id">
@@ -218,9 +225,9 @@
           <i class="pi pi-exclamation-triangle"></i>
           <span>Document type is required</span>
         </div>
-        <div *ngIf="editingWorkflow !== null" class="field-hint">
-          <i class="pi pi-info-circle"></i>
-          Document type cannot be changed after creation
+        <div *ngIf="editingWorkflow !== null" class="field-hint field-hint-warning">
+          <i class="pi pi-exclamation-triangle"></i>
+          Changing document type may affect existing approval stages and submissions. Please review carefully.
         </div>
       </div>
 
@@ -230,9 +237,11 @@
           <div class="checkbox-option">
             <p-checkbox 
               formControlName="isActive"
-              [binary]="true">
+              [binary]="true"
+              inputId="workflow-is-active"
+              name="workflow-is-active">
             </p-checkbox>
-            <label class="checkbox-label">Active</label>
+            <label class="checkbox-label" for="workflow-is-active">Active</label>
           </div>
         </div>
         <div class="field-hint">

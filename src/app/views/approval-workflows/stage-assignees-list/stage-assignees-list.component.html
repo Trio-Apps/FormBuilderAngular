@@ -1,0 +1,361 @@
+<div class="fields-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" [routerLink]="['/approval-workflows', stage?.workflowId, 'stages']" title="Back to Approval Stages">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Stage Assignees</h1>
+          <p class="page-subtitle" *ngIf="stage">
+            Manage assignees for: <strong>{{ stage.stageName }}</strong>
+          </p>
+          <p class="page-subtitle" *ngIf="!stage && !loading.stage">
+            Manage stage assignees
+          </p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadAssignees()" [disabled]="loading.assignees" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openBulkUpdateModal()" [disabled]="loading.assignees || !stageId">
+          <i class="pi pi-users"></i>
+          <span>Bulk Update</span>
+        </button>
+        <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.assignees || !stageId">
+          <i class="pi pi-plus"></i>
+          <span>New Assignee</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a routerLink="/approval-workflows" class="breadcrumb-link">
+        <i class="pi pi-sitemap"></i>
+        <span>Approval Workflows</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a [routerLink]="['/approval-workflows', stage?.workflowId, 'stages']" class="breadcrumb-link">
+        <i class="pi pi-list"></i>
+        <span>Approval Stages</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-users"></i>
+        <span>Stage Assignees</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stage Info Section -->
+    <div *ngIf="stage" class="workflow-info-section" style="margin-bottom: 24px; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <i class="pi pi-info-circle" style="color: #667eea; font-size: 20px;"></i>
+        <div>
+          <strong>Stage Name:</strong> {{ stage.stageName }}<br>
+          <strong>Stage Order:</strong> {{ stage.stageOrder }}<br>
+          <strong>Final Stage:</strong> {{ stage.isFinalStage ? 'Yes' : 'No' }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Assignees Section -->
+    <div class="document-types-section">
+      <div class="section-header">
+        <h3>Stage Assignees List</h3>
+        <div class="header-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              placeholder="Search assignees..."
+              class="search-input"
+              [(ngModel)]="searchTerm"
+              (input)="onSearchChange()"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="loading.assignees" class="loading-container">
+        <i class="pi pi-spin pi-spinner"></i>
+        <p>Loading assignees...</p>
+      </div>
+
+      <div *ngIf="!loading.assignees && assignees.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-users"></i>
+        </div>
+        <h4>No Assignees Configured</h4>
+        <p>There are no assignees for this stage yet. Click "New Assignee" to add one.</p>
+        <button pButton label="New Assignee" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
+      </div>
+
+      <p-table *ngIf="!loading.assignees && assignees.length > 0" 
+        [value]="getPaginatedAssignees()" 
+        [paginator]="false"
+        styleClass="p-datatable-sm document-types-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>#</th>
+            <th>Type</th>
+            <th>Role/User</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-assignee let-rowIndex="rowIndex">
+          <tr>
+            <td>{{ first + rowIndex + 1 }}</td>
+            <td>
+              <span *ngIf="assignee.roleId" class="badge badge-info">
+                <i class="pi pi-shield"></i>
+                Role
+              </span>
+              <span *ngIf="assignee.userId" class="badge badge-success">
+                <i class="pi pi-user"></i>
+                User
+              </span>
+            </td>
+            <td>
+              <div class="document-name-cell">
+                <i class="pi" [ngClass]="assignee.roleId ? 'pi-shield' : 'pi-user'"></i>
+                <span>{{ getAssigneeDisplayName(assignee) }}</span>
+              </div>
+            </td>
+            <td>
+              <span *ngIf="assignee.isActive" class="badge badge-success">
+                <i class="pi pi-check"></i>
+                Active
+              </span>
+              <span *ngIf="!assignee.isActive" class="badge badge-danger">
+                <i class="pi pi-times"></i>
+                Inactive
+              </span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button pButton 
+                  icon="pi pi-pencil" 
+                  class="p-button-text p-button-sm action-btn" 
+                  (click)="openEditModal(assignee)"
+                  pTooltip="Edit"
+                  tooltipPosition="top"></button>
+                <button pButton 
+                  icon="pi pi-trash" 
+                  class="p-button-text p-button-sm action-btn action-btn-danger" 
+                  (click)="deleteAssignee(assignee)"
+                  [disabled]="loading.delete"
+                  pTooltip="Delete"
+                  tooltipPosition="top"></button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+
+      <p-paginator 
+        *ngIf="!loading.assignees && assignees.length > 0"
+        [first]="first"
+        [rows]="rows"
+        [totalRecords]="totalRecords"
+        [rowsPerPageOptions]="[10, 20, 50]"
+        (onPageChange)="onPageChange($event)"
+        styleClass="document-types-paginator">
+      </p-paginator>
+    </div>
+  </div>
+</div>
+
+<!-- Assignee Modal -->
+<p-dialog
+  [(visible)]="showModal"
+  [header]="(editingAssignee ? 'Edit' : 'New') + ' Assignee'"
+  [modal]="true"
+  [style]="{ width: '600px' }"
+  [closable]="true"
+  [autoZIndex]="true"
+  [baseZIndex]="10001"
+  (onHide)="closeModal()"
+>
+  <form [formGroup]="assigneeForm" (ngSubmit)="saveAssignee()">
+    <div class="form-display-section">
+      <!-- Assignee Type -->
+      <div class="form-field-wrapper">
+        <label class="field-label" for="assigneeType">
+          Assignee Type <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <select
+            id="assigneeType"
+            formControlName="assigneeType"
+            class="form-input"
+            [class.input-error]="assigneeForm.get('assigneeType')?.invalid && assigneeForm.get('assigneeType')?.touched">
+            <option value="role">Role-based</option>
+            <option value="user">User-based</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Role ID (if role-based) -->
+      <div class="form-field-wrapper" *ngIf="assigneeType === 'role'">
+        <label class="field-label" for="roleId">
+          Role ID <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <input 
+            type="text" 
+            id="roleId"
+            class="form-input"
+            formControlName="roleId" 
+            placeholder="Enter role ID"
+            [class.input-error]="assigneeForm.get('roleId')?.invalid && assigneeForm.get('roleId')?.touched" />
+        </div>
+        <div *ngIf="assigneeForm.get('roleId')?.invalid && assigneeForm.get('roleId')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>Role ID is required</span>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          Any user with this role can approve at this stage
+        </div>
+      </div>
+
+      <!-- User ID (if user-based) -->
+      <div class="form-field-wrapper" *ngIf="assigneeType === 'user'">
+        <label class="field-label" for="userId">
+          User ID <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <input 
+            type="text" 
+            id="userId"
+            class="form-input"
+            formControlName="userId" 
+            placeholder="Enter user ID"
+            [class.input-error]="assigneeForm.get('userId')?.invalid && assigneeForm.get('userId')?.touched" />
+        </div>
+        <div *ngIf="assigneeForm.get('userId')?.invalid && assigneeForm.get('userId')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>User ID is required</span>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          Only this specific user can approve at this stage
+        </div>
+      </div>
+
+      <!-- Active Status -->
+      <div class="form-field-wrapper">
+        <div class="checkbox-group">
+          <div class="checkbox-option">
+            <p-checkbox 
+              formControlName="isActive"
+              [binary]="true"
+              inputId="assigneeIsActive">
+            </p-checkbox>
+            <label class="checkbox-label" for="assigneeIsActive">Active</label>
+          </div>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          Inactive assignees will not be considered in the approval process
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeModal()" [disabled]="loading.save"></button>
+      <button type="submit" pButton 
+        [label]="(editingAssignee ? 'Update' : 'Create') + ' Assignee'" 
+        [icon]="editingAssignee ? 'pi pi-save' : 'pi pi-plus'"
+        [disabled]="assigneeForm.invalid || loading.save"
+        [loading]="loading.save"></button>
+    </div>
+  </form>
+</p-dialog>
+
+<!-- Bulk Update Modal -->
+<p-dialog
+  [(visible)]="showBulkUpdateModal"
+  header="Bulk Update Assignees"
+  [modal]="true"
+  [style]="{ width: '700px' }"
+  [closable]="true"
+  [autoZIndex]="true"
+  [baseZIndex]="10001"
+  (onHide)="closeBulkUpdateModal()"
+>
+  <form [formGroup]="bulkUpdateForm" (ngSubmit)="saveBulkUpdate()">
+    <div class="form-display-section">
+      <div class="field-hint" style="margin-bottom: 16px;">
+        <i class="pi pi-info-circle"></i>
+        This will replace all existing assignees for this stage with the selected roles and users.
+      </div>
+
+      <!-- Role IDs -->
+      <div class="form-field-wrapper">
+        <label class="field-label">Role IDs (Optional)</label>
+        <div class="field-input-wrapper">
+          <input 
+            type="text" 
+            class="form-input"
+            placeholder="Enter role IDs separated by commas (e.g., role1, role2)"
+            [(ngModel)]="selectedRoleIds"
+            [ngModelOptions]="{standalone: true}" />
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          Any user with any of these roles can approve at this stage
+        </div>
+      </div>
+
+      <!-- User IDs -->
+      <div class="form-field-wrapper">
+        <label class="field-label">User IDs (Optional)</label>
+        <div class="field-input-wrapper">
+          <input 
+            type="text" 
+            class="form-input"
+            placeholder="Enter user IDs separated by commas (e.g., user1, user2)"
+            [(ngModel)]="selectedUserIds"
+            [ngModelOptions]="{standalone: true}" />
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          These specific users can approve at this stage
+        </div>
+      </div>
+
+      <div class="field-hint" style="margin-top: 16px; color: #f59e0b;">
+        <i class="pi pi-exclamation-triangle"></i>
+        <strong>Warning:</strong> This will replace all existing assignees. Make sure to include all roles and users you want to keep.
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeBulkUpdateModal()" [disabled]="loading.bulkUpdate"></button>
+      <button type="submit" pButton 
+        label="Update Assignees" 
+        icon="pi pi-save"
+        [disabled]="loading.bulkUpdate || (selectedRoleIds.length === 0 && selectedUserIds.length === 0)"
+        [loading]="loading.bulkUpdate"></button>
+    </div>
+  </form>
+</p-dialog>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

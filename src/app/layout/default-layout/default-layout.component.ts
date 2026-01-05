@@ -189,6 +189,23 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         continue;
       }
 
+      // Show Approval Workflows with children (for all users)
+      if (item.name === 'Approval Workflows') {
+        // For User role, only show Approval Inbox (not Manage Workflows)
+        if (userRole !== 'Administration') {
+          filteredItems.push({
+            ...item,
+            children: item.children?.filter((child: any) => 
+              child.name === 'Approval Inbox' || child.name === 'Delegations'
+            ) || []
+          });
+        } else {
+          // For Admin, show all children
+          filteredItems.push(item);
+        }
+        continue;
+      }
+
       // Hide Projects section
       if (item.title === true && item.name === 'Projects') {
         continue; // Skip Projects title

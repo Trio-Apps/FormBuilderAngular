@@ -195,6 +195,8 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
       documentTypeId: null,
       isActive: true
     });
+    // Ensure documentTypeId is enabled when creating new workflow
+    this.workflowForm.get('documentTypeId')?.enable();
     this.showModal = true;
   }
 
@@ -205,8 +207,12 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
       documentTypeId: workflow.documentTypeId,
       isActive: workflow.isActive !== false
     });
-    // Disable documentTypeId field when editing (cannot change after creation)
-    this.workflowForm.get('documentTypeId')?.disable();
+    // Note: Document Type can be changed, but be aware that:
+    // - Approval Stages are linked to the workflow
+    // - Existing submissions may use this workflow with the old document type
+    // Keeping it enabled allows flexibility, but use with caution
+    // If you want to disable it, uncomment the line below:
+    // this.workflowForm.get('documentTypeId')?.disable();
     this.showModal = true;
   }
 
@@ -337,28 +343,75 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
   }
 
   toggleWorkflowStatus(workflow: ApprovalWorkflowDto): void {
-    if (!workflow || !workflow.id) return;
+    if (!workflow || !workflow.id) {
+      console.warn('[toggleWorkflowStatus] Invalid workflow:', workflow);
+      return;
+    }
+
+    if (this.loading.toggle) {
+      console.warn('[toggleWorkflowStatus] Toggle already in progress');
+      return;
+    }
 
     const newStatus = !workflow.isActive;
+    const action = newStatus ? 'activate' : 'deactivate';
+    
+    console.log(`[toggleWorkflowStatus] ${action} workflow ${workflow.id}, current status: ${workflow.isActive}, new status: ${newStatus}`);
+    
     this.loading.toggle = true;
-    this.approvalWorkflowService.toggleApprovalWorkflowStatus(workflow.id, newStatus).subscribe({
+    
+    // Use update endpoint directly since toggle-active doesn't exist
+    // Include documentTypeId to avoid backend validation errors
+    const updateDto: UpdateApprovalWorkflowDto = {
+      name: workflow.name,
+      documentTypeId: workflow.documentTypeId,
+      isActive: newStatus
+    };
+    
+    this.approvalWorkflowService.updateApprovalWorkflow(workflow.id, updateDto).subscribe({
       next: () => {
+        console.log(`[toggleWorkflowStatus] Successfully ${action}d workflow ${workflow.id}`);
         this.loading.toggle = false;
+        
+        // Update workflow in array immediately for better UX
+        const index = this.approvalWorkflows.findIndex(w => w.id === workflow.id);
+        if (index !== -1) {
+          this.approvalWorkflows[index].isActive = newStatus;
+          // Update filtered list too
+          const filteredIndex = this.filteredWorkflows.findIndex(w => w.id === workflow.id);
+          if (filteredIndex !== -1) {
+            this.filteredWorkflows[filteredIndex].isActive = newStatus;
+          }
+        }
+        
         this.messageService.add({
           severity: 'success',
           summary: 'Success',
-          detail: `Approval workflow ${newStatus ? 'activated' : 'deactivated'} successfully`
+          detail: `Approval workflow ${action}d successfully`
         });
+        
+        // Reload workflows to ensure data consistency
         this.loadApprovalWorkflows();
+        this.cdr.detectChanges();
       },
       error: (error: any) => {
         this.loading.toggle = false;
-        console.error('Error toggling approval workflow status:', error);
-        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to toggle approval workflow status';
+        console.error('[toggleWorkflowStatus] Error:', error);
+        
+        let errorMessage = 'Failed to toggle approval workflow status';
+        if (error?.error?.message) {
+          errorMessage = error.error.message;
+        } else if (error?.error?.errorMessage) {
+          errorMessage = error.error.errorMessage;
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+        
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: errorMessage
+          detail: errorMessage,
+          life: 5000
         });
         this.cdr.detectChanges();
       }

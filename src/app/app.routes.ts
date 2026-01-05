@@ -79,6 +79,38 @@ export const routes: Routes = [
         canActivate: [authGuard] // All authenticated users can access
       },
 
+      // ===== Stage Assignees =====
+      {
+        path: 'approval-workflows/:workflowId/stages/:stageId/assignees',
+        loadComponent: () => import('./views/approval-workflows/stage-assignees-list/stage-assignees-list.component')
+          .then(m => m.StageAssigneesListComponent),
+        canActivate: [authGuard]
+      },
+
+      // ===== Approval Delegations =====
+      {
+        path: 'approval-delegations',
+        loadComponent: () => import('./views/approval-workflows/approval-delegations-list/approval-delegations-list.component')
+          .then(m => m.ApprovalDelegationsListComponent),
+        canActivate: [authGuard]
+      },
+
+      // ===== Approval Inbox =====
+      {
+        path: 'approval-inbox',
+        loadComponent: () => import('./views/approval-workflows/approval-inbox/approval-inbox.component')
+          .then(m => m.ApprovalInboxComponent),
+        canActivate: [authGuard]
+      },
+
+      // ===== Approval History =====
+      {
+        path: 'form-submissions/:submissionId/approval-history',
+        loadComponent: () => import('./views/approval-workflows/approval-history/approval-history.component')
+          .then(m => m.ApprovalHistoryComponent),
+        canActivate: [authGuard]
+      },
+
       // ===== Form Submissions by Document Type =====
       {
         path: 'document-types/:documentTypeId/submissions',

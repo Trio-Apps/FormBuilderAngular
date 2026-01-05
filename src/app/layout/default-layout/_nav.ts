@@ -40,8 +40,28 @@ export const navItems: INavData[] = [
   },
   {
     name: 'Approval Workflows',
-    url: '/approval-workflows',
-    iconComponent: { name: 'cil-sitemap' }
+    iconComponent: { name: 'cil-sitemap' },
+    children: [
+      {
+        name: 'Manage Workflows',
+        url: '/approval-workflows',
+        iconComponent: { name: 'cil-list' }
+      },
+      {
+        name: 'Approval Inbox',
+        url: '/approval-inbox',
+        iconComponent: { name: 'cil-inbox' },
+        badge: {
+          color: 'danger',
+          text: 'NEW'
+        }
+      },
+      {
+        name: 'Delegations',
+        url: '/approval-delegations',
+        iconComponent: { name: 'cil-user' }
+      }
+    ]
   },
   {
     title: true,

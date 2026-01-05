@@ -70,10 +70,13 @@
             <i class="pi pi-search"></i>
             <input
               type="text"
+              id="stage-search"
+              name="stage-search"
               placeholder="Search stages..."
               class="search-input"
               [(ngModel)]="searchTerm"
               (input)="onSearchChange()"
+              autocomplete="off"
             />
           </div>
           <button pButton 
@@ -156,6 +159,12 @@
             <td>
               <div class="action-buttons">
                 <button pButton 
+                  icon="pi pi-users" 
+                  class="p-button-text p-button-sm action-btn" 
+                  [routerLink]="['/approval-workflows', workflowId, 'stages', stage.id, 'assignees']"
+                  pTooltip="Manage Assignees"
+                  tooltipPosition="top"></button>
+                <button pButton 
                   [icon]="stage.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'" 
                   class="p-button-text p-button-sm action-btn" 
                   (click)="toggleStageStatus(stage)"
@@ -215,10 +224,12 @@
         <div class="field-input-wrapper">
           <input 
             type="text" 
-            id="stageName" 
+            id="stageName"
+            name="stageName"
             class="form-input"
             formControlName="stageName" 
             placeholder="Enter stage name"
+            autocomplete="off"
             [class.input-error]="stageForm.get('stageName')?.invalid && stageForm.get('stageName')?.touched" />
         </div>
         <div *ngIf="stageForm.get('stageName')?.invalid && stageForm.get('stageName')?.touched" class="field-error">
@@ -235,12 +246,14 @@
         <div class="field-input-wrapper">
           <p-inputNumber
             id="stageOrder"
+            name="stageOrder"
             formControlName="stageOrder"
             [min]="1"
             [max]="999"
             [showButtons]="true"
             [class.ng-invalid]="stageForm.get('stageOrder')?.invalid && stageForm.get('stageOrder')?.touched"
-            styleClass="w-full">
+            styleClass="w-full"
+            autocomplete="off">
           </p-inputNumber>
         </div>
         <div *ngIf="stageForm.get('stageOrder')?.invalid && stageForm.get('stageOrder')?.touched" class="field-error">
@@ -257,24 +270,28 @@
             <label class="field-label-small" for="minAmount">Min Amount</label>
             <p-inputNumber
               id="minAmount"
+              name="minAmount"
               formControlName="minAmount"
               [min]="0"
               [maxFractionDigits]="2"
               [showButtons]="true"
               placeholder="0.00"
-              styleClass="w-full">
+              styleClass="w-full"
+              autocomplete="off">
             </p-inputNumber>
           </div>
           <div class="amount-field">
             <label class="field-label-small" for="maxAmount">Max Amount</label>
             <p-inputNumber
               id="maxAmount"
+              name="maxAmount"
               formControlName="maxAmount"
               [min]="0"
               [maxFractionDigits]="2"
               [showButtons]="true"
               placeholder="0.00"
-              styleClass="w-full">
+              styleClass="w-full"
+              autocomplete="off">
             </p-inputNumber>
           </div>
         </div>
@@ -291,7 +308,8 @@
             <p-checkbox 
               formControlName="isFinalStage"
               [binary]="true"
-              inputId="isFinalStage">
+              inputId="isFinalStage"
+              name="isFinalStage">
             </p-checkbox>
             <label class="checkbox-label" for="isFinalStage">Final Stage</label>
           </div>

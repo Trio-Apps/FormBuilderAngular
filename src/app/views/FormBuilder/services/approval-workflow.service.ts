@@ -206,7 +206,7 @@ export class ApprovalWorkflowService {
 
   /**
    * Toggle approval workflow active status
-   * PATCH /api/ApprovalWorkflow/{id}/toggle?isActive={isActive}
+   * PATCH /api/ApprovalWorkflow/{id}/toggle-active?isActive={isActive}
    */
   toggleApprovalWorkflowStatus(id: number, isActive: boolean): Observable<void> {
     const workflowId = Number(id);
@@ -216,7 +216,8 @@ export class ApprovalWorkflowService {
 
     console.log('[ApprovalWorkflowService] Toggling approval workflow status:', { id: workflowId, isActive });
 
-    return this.http.patch<any>(`${this.baseUrl}/${workflowId}/toggle`, null, {
+    // Try toggle-active endpoint first (same pattern as ApprovalStage)
+    return this.http.patch<any>(`${this.baseUrl}/${workflowId}/toggle-active`, null, {
       params: { isActive: isActive.toString() }
     }).pipe(
       map(() => {
@@ -224,9 +225,25 @@ export class ApprovalWorkflowService {
         return;
       }),
       catchError((error) => {
+        // If toggle-active fails, try using update endpoint as fallback
+        if (error?.status === 404 || error?.status === 405) {
+          console.warn('[ApprovalWorkflowService] toggle-active endpoint not found, trying update endpoint');
+          const updateDto: UpdateApprovalWorkflowDto = { isActive };
+          return this.updateApprovalWorkflow(workflowId, updateDto).pipe(
+            map(() => {
+              console.log('[ApprovalWorkflowService] Approval workflow status updated via update endpoint');
+              return;
+            }),
+            catchError((updateError) => {
+              console.error('[ApprovalWorkflowService] Error updating approval workflow status:', updateError);
+              const errorMessage = this.extractErrorMessage(updateError);
+              return throwError(() => new Error(errorMessage));
+            })
+          );
+        }
         console.error('[ApprovalWorkflowService] Error toggling approval workflow status:', error);
         const errorMessage = this.extractErrorMessage(error);
-        throw new Error(errorMessage);
+        return throwError(() => new Error(errorMessage));
       })
     );
   }
