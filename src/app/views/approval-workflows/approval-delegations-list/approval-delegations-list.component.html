@@ -54,8 +54,8 @@
         <ng-template pTemplate="body" let-delegation let-rowIndex="rowIndex">
           <tr>
             <td>{{ first + rowIndex + 1 }}</td>
-            <td>{{ delegation.fromUserName || delegation.fromUserId }}</td>
-            <td>{{ delegation.toUserName || delegation.toUserId }}</td>
+            <td>{{ delegation.fromUserName || getUserNameById(delegation.fromUserId) }}</td>
+            <td>{{ delegation.toUserName || getUserNameById(delegation.toUserId) }}</td>
             <td>{{ formatDate(delegation.startDate) }}</td>
             <td>{{ formatDate(delegation.endDate) }}</td>
             <td>
@@ -83,13 +83,60 @@
 <p-dialog [(visible)]="showModal" [header]="(editingDelegation ? 'Edit' : 'New') + ' Delegation'" [modal]="true" [style]="{ width: '600px' }" (onHide)="closeModal()">
   <form [formGroup]="delegationForm" (ngSubmit)="saveDelegation()">
     <div class="form-display-section">
+      <!-- From User Dropdown -->
       <div class="form-field-wrapper">
-        <label class="field-label">From User ID <span class="required-indicator">*</span></label>
-        <input type="text" class="form-input" formControlName="fromUserId" [readonly]="!!editingDelegation" />
+        <label class="field-label" for="fromUserId">
+          From User <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <select
+            id="fromUserId"
+            formControlName="fromUserId"
+            class="form-input"
+            [class.input-error]="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched"
+            [compareWith]="compareUsers">
+            <option [ngValue]="null">Select from user...</option>
+            <option *ngFor="let user of users" [ngValue]="user">
+              {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
+            </option>
+          </select>
+        </div>
+        <div *ngIf="loading.users" class="field-hint">
+          <i class="pi pi-spin pi-spinner"></i>
+          <span>Loading users...</span>
+        </div>
+        <div *ngIf="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>From user is required</span>
+        </div>
       </div>
+
+      <!-- To User Dropdown -->
       <div class="form-field-wrapper">
-        <label class="field-label">To User ID <span class="required-indicator">*</span></label>
-        <input type="text" class="form-input" formControlName="toUserId" />
+        <label class="field-label" for="toUserId">
+          To User <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <select
+            id="toUserId"
+            formControlName="toUserId"
+            class="form-input"
+            [class.input-error]="delegationForm.get('toUserId')?.invalid && delegationForm.get('toUserId')?.touched"
+            [compareWith]="compareUsers">
+            <option [ngValue]="null">Select to user...</option>
+            <option *ngFor="let user of users" [ngValue]="user">
+              {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
+            </option>
+          </select>
+        </div>
+        <div *ngIf="loading.users" class="field-hint">
+          <i class="pi pi-spin pi-spinner"></i>
+          <span>Loading users...</span>
+        </div>
+        <div *ngIf="delegationForm.get('toUserId')?.invalid && delegationForm.get('toUserId')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>To user is required</span>
+        </div>
       </div>
       <div class="form-field-wrapper">
         <label class="field-label">Start Date <span class="required-indicator">*</span></label>

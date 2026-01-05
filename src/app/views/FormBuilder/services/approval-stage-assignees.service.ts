@@ -9,24 +9,24 @@ import { environment } from '../../../environments/environment';
 export interface ApprovalStageAssigneeDto {
   id: number;
   stageId: number;
+  stageName?: string;  // Filled by Backend
   roleId?: string | null;
+  roleName?: string;   // Filled by Backend
   userId?: string | null;
+  userName?: string;   // Filled by Backend
   isActive: boolean;
-  roleName?: string;
-  userName?: string;
 }
 
 export interface CreateApprovalStageAssigneeDto {
   stageId: number;
-  roleId?: string | null;
-  userId?: string | null;
+  userId: string;  // Required - Backend extracts roleId automatically
+  roleId?: string; // Optional - Used as fallback if user has no role
   isActive?: boolean;
 }
 
 export interface UpdateApprovalStageAssigneeDto {
   stageId?: number;
-  roleId?: string | null;
-  userId?: string | null;
+  userId?: string;  // Backend extracts roleId automatically
   isActive?: boolean;
 }
 
@@ -117,24 +117,30 @@ export class ApprovalStageAssigneesService {
       return throwError(() => new Error('Stage ID is required'));
     }
 
-    // Validate that either roleId or userId is provided
-    if (!dto.roleId && !dto.userId) {
-      return throwError(() => new Error('Either roleId or userId must be provided'));
+    // Validate that userId is provided (required)
+    if (!dto.userId) {
+      return throwError(() => new Error('UserId is required'));
     }
 
-    // Validate that both are not provided
-    if (dto.roleId && dto.userId) {
-      return throwError(() => new Error('Cannot provide both roleId and userId. Please provide only one.'));
-    }
-
-    const createDto: CreateApprovalStageAssigneeDto = {
+    // Build DTO - userId is required, roleId is optional (used as fallback)
+    const createDto: any = {
       stageId: dto.stageId,
-      roleId: dto.roleId || null,
-      userId: dto.userId || null,
+      userId: dto.userId,
       isActive: dto.isActive !== undefined ? dto.isActive : true
     };
+    
+    // Include roleId if provided (for fallback when user has no role)
+    if (dto.roleId) {
+      createDto.roleId = dto.roleId;
+    }
 
     console.log('[ApprovalStageAssigneesService] Creating assignee:', createDto);
+    console.log('[ApprovalStageAssigneesService] DTO details:', {
+      stageId: createDto.stageId,
+      userId: createDto.userId,
+      roleId: createDto.roleId,
+      isActive: createDto.isActive
+    });
 
     return this.http.post<any>(this.baseUrl, createDto).pipe(
       map((response: any) => {
@@ -146,6 +152,13 @@ export class ApprovalStageAssigneesService {
       }),
       catchError((error) => {
         console.error('[ApprovalStageAssigneesService] Error creating assignee:', error);
+        console.error('[ApprovalStageAssigneesService] Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          error: error?.error,
+          url: error?.url,
+          requestBody: createDto
+        });
         const errorMessage = this.extractErrorMessage(error);
         throw new Error(errorMessage);
       })
@@ -162,14 +175,24 @@ export class ApprovalStageAssigneesService {
       return throwError(() => new Error(`Invalid assignee ID: ${id}`));
     }
 
-    // Validate that either roleId or userId is provided if updating
-    if (dto.roleId && dto.userId) {
-      return throwError(() => new Error('Cannot provide both roleId and userId. Please provide only one.'));
+    // Validate that userId is provided if updating
+    if (dto.userId === undefined || dto.userId === null) {
+      return throwError(() => new Error('UserId is required for update'));
     }
 
-    console.log('[ApprovalStageAssigneesService] Updating assignee:', { id: assigneeId, dto });
+    // Build update DTO - only userId is required, Backend extracts roleId automatically
+    const updateDto: any = {
+      userId: dto.userId,
+      isActive: dto.isActive !== undefined ? dto.isActive : undefined
+    };
 
-    return this.http.put<any>(`${this.baseUrl}/${assigneeId}`, dto).pipe(
+    if (dto.stageId !== undefined) {
+      updateDto.stageId = dto.stageId;
+    }
+
+    console.log('[ApprovalStageAssigneesService] Updating assignee:', { id: assigneeId, dto: updateDto });
+
+    return this.http.put<any>(`${this.baseUrl}/${assigneeId}`, updateDto).pipe(
       map(() => {
         console.log('[ApprovalStageAssigneesService] Assignee updated successfully');
         return;
@@ -191,15 +214,43 @@ export class ApprovalStageAssigneesService {
       return throwError(() => new Error('Stage ID is required'));
     }
 
-    console.log('[ApprovalStageAssigneesService] Bulk updating assignees:', dto);
+    // Ensure arrays are properly formatted as string arrays
+    const payload: any = {
+      stageId: dto.stageId
+    };
 
-    return this.http.post<any>(`${this.baseUrl}/bulk-update`, dto).pipe(
+    // Only include roleIds if array exists and has items
+    if (dto.roleIds && Array.isArray(dto.roleIds) && dto.roleIds.length > 0) {
+      payload.roleIds = dto.roleIds.map(id => String(id)).filter(id => id && id !== 'undefined' && id !== 'null');
+    }
+
+    // Only include userIds if array exists and has items
+    if (dto.userIds && Array.isArray(dto.userIds) && dto.userIds.length > 0) {
+      payload.userIds = dto.userIds.map(id => String(id)).filter(id => id && id !== 'undefined' && id !== 'null');
+    }
+
+    // Validate that at least one array has items
+    if ((!payload.roleIds || payload.roleIds.length === 0) && 
+        (!payload.userIds || payload.userIds.length === 0)) {
+      return throwError(() => new Error('At least one roleId or userId must be provided'));
+    }
+
+    console.log('[ApprovalStageAssigneesService] Bulk updating assignees with payload:', payload);
+
+    return this.http.post<any>(`${this.baseUrl}/bulk-update`, payload).pipe(
       map(() => {
         console.log('[ApprovalStageAssigneesService] Assignees bulk updated successfully');
         return;
       }),
       catchError((error) => {
         console.error('[ApprovalStageAssigneesService] Error bulk updating assignees:', error);
+        console.error('[ApprovalStageAssigneesService] Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          error: error?.error,
+          url: error?.url,
+          requestBody: payload
+        });
         const errorMessage = this.extractErrorMessage(error);
         throw new Error(errorMessage);
       })
@@ -244,19 +295,8 @@ export class ApprovalStageAssigneesService {
     let errorMessage = 'Failed to process request';
 
     if (errorResponse) {
-      if (typeof errorResponse === 'string') {
-        errorMessage = errorResponse;
-      } else if (errorResponse.message) {
-        errorMessage = errorResponse.message;
-      } else if (errorResponse.errorMessage) {
-        errorMessage = errorResponse.errorMessage;
-      } else if (errorResponse.title) {
-        errorMessage = errorResponse.title;
-      } else if (errorResponse.detail) {
-        errorMessage = errorResponse.detail;
-      } else if (errorResponse.errors && Array.isArray(errorResponse.errors)) {
-        errorMessage = errorResponse.errors.join(', ');
-      } else if (errorResponse.errors && typeof errorResponse.errors === 'object') {
+      // Check for validation errors first (ASP.NET Core ProblemDetails format)
+      if (errorResponse.errors && typeof errorResponse.errors === 'object') {
         const errorDetails: string[] = [];
         for (const [field, messages] of Object.entries(errorResponse.errors)) {
           if (Array.isArray(messages)) {
@@ -266,8 +306,23 @@ export class ApprovalStageAssigneesService {
           }
         }
         if (errorDetails.length > 0) {
-          errorMessage = errorDetails.join(', ');
+          return errorDetails.join(', ');
         }
+      } else if (errorResponse.errors && Array.isArray(errorResponse.errors)) {
+        return errorResponse.errors.join(', ');
+      }
+      
+      // Check for detail (most specific message in ProblemDetails)
+      if (errorResponse.detail) {
+        errorMessage = errorResponse.detail;
+      } else if (typeof errorResponse === 'string') {
+        errorMessage = errorResponse;
+      } else if (errorResponse.message) {
+        errorMessage = errorResponse.message;
+      } else if (errorResponse.errorMessage) {
+        errorMessage = errorResponse.errorMessage;
+      } else if (errorResponse.title) {
+        errorMessage = errorResponse.title;
       }
     } else if (error?.message) {
       errorMessage = error.message;

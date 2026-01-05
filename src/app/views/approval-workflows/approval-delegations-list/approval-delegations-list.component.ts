@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApprovalDelegationService, ApprovalDelegationDto, CreateApprovalDelegationDto, UpdateApprovalDelegationDto } from '../../FormBuilder/services/approval-delegation.service';
+import { UsersService, UserDto } from '../../FormBuilder/services/users.service';
 import { StorageService } from '../../../auth/storage.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -42,11 +43,16 @@ export class ApprovalDelegationsListComponent implements OnInit {
   delegations: ApprovalDelegationDto[] = [];
   filteredDelegations: ApprovalDelegationDto[] = [];
   currentUserId: string | null = null;
+  
+  // Users data for dropdowns
+  users: UserDto[] = [];
+  filteredUsers: UserDto[] = [];
 
   loading = {
     delegations: false,
     save: false,
-    delete: false
+    delete: false,
+    users: false
   };
 
   showModal = false;
@@ -60,6 +66,7 @@ export class ApprovalDelegationsListComponent implements OnInit {
 
   constructor(
     private delegationService: ApprovalDelegationService,
+    private usersService: UsersService,
     private storageService: StorageService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
@@ -68,8 +75,8 @@ export class ApprovalDelegationsListComponent implements OnInit {
     public translationService: TranslationService
   ) {
     this.delegationForm = this.fb.group({
-      fromUserId: ['', [Validators.required]],
-      toUserId: ['', [Validators.required]],
+      fromUserId: [null, [Validators.required]],
+      toUserId: [null, [Validators.required]],
       startDate: [null, [Validators.required]],
       endDate: [null, [Validators.required]],
       isActive: [true]
@@ -88,7 +95,71 @@ export class ApprovalDelegationsListComponent implements OnInit {
     // TODO: Adjust based on your auth implementation
     this.currentUserId = this.storageService.getUserId()?.toString() || null;
     
+    // Load users first, then delegations (so we can display user names)
+    this.loadUsers();
     this.loadDelegations();
+  }
+
+  loadUsers(): void {
+    this.loading.users = true;
+    // Disable user dropdowns while loading
+    this.delegationForm.get('fromUserId')?.disable();
+    this.delegationForm.get('toUserId')?.disable();
+    
+    this.usersService.getActiveUsers().subscribe({
+      next: (users: UserDto[]) => {
+        this.users = users || [];
+        this.filteredUsers = [...this.users];
+        this.loading.users = false;
+        // Enable user dropdowns after loading
+        this.delegationForm.get('fromUserId')?.enable();
+        this.delegationForm.get('toUserId')?.enable();
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Error loading users:', error);
+        this.users = [];
+        this.filteredUsers = [];
+        this.loading.users = false;
+        // Enable user dropdowns even on error
+        this.delegationForm.get('fromUserId')?.enable();
+        this.delegationForm.get('toUserId')?.enable();
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Warning',
+          detail: 'Failed to load users. Please refresh the page.'
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  compareUsers(user1: UserDto | null, user2: UserDto | null): boolean {
+    if (!user1 || !user2) return user1 === user2;
+    return user1.id === user2.id;
+  }
+
+  getUserDisplayName(user: UserDto): string {
+    return user.name || user.username || `User #${user.id}`;
+  }
+
+  getUserNameById(userId: string | null | undefined): string {
+    if (!userId) return '-';
+    
+    // First try to get from delegation data (if available)
+    // This will be handled in template
+    
+    // Then try to find in loaded users list
+    const userIdNum = parseInt(userId, 10);
+    if (!isNaN(userIdNum)) {
+      const user = this.users.find(u => u.id === userIdNum);
+      if (user) {
+        return this.getUserDisplayName(user);
+      }
+    }
+    
+    // Fallback to ID if user not found
+    return userId;
   }
 
   loadDelegations(): void {
@@ -153,9 +224,21 @@ export class ApprovalDelegationsListComponent implements OnInit {
     this.editingDelegation = null;
     this.showModal = true;
     
+    // Find current user object from users list
+    let currentUser: UserDto | null = null;
+    if (this.currentUserId) {
+      const currentUserIdNum = parseInt(this.currentUserId, 10);
+      currentUser = this.users.find(u => u.id === currentUserIdNum) || null;
+    }
+    
+    // Enable fromUserId control for new delegation
+    this.delegationForm.get('fromUserId')?.enable();
+    this.delegationForm.get('toUserId')?.enable();
+    this.delegationForm.get('isActive')?.enable(); // Enable for new delegation
+    
     this.delegationForm.reset({
-      fromUserId: this.currentUserId || '',
-      toUserId: '',
+      fromUserId: currentUser, // Set user object, not just ID
+      toUserId: null,
       startDate: null,
       endDate: null,
       isActive: true
@@ -177,12 +260,24 @@ export class ApprovalDelegationsListComponent implements OnInit {
       return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
     
+    // Find user objects from IDs
+    const fromUserIdNum = delegation.fromUserId ? parseInt(delegation.fromUserId, 10) : null;
+    const toUserIdNum = delegation.toUserId ? parseInt(delegation.toUserId, 10) : null;
+    
+    const fromUser = fromUserIdNum ? this.users.find(u => u.id === fromUserIdNum) || null : null;
+    const toUser = toUserIdNum ? this.users.find(u => u.id === toUserIdNum) || null : null;
+    
+    // Disable fromUserId control when editing (should not be changed)
+    this.delegationForm.get('fromUserId')?.disable();
+    this.delegationForm.get('toUserId')?.enable();
+    this.delegationForm.get('isActive')?.enable(); // Enable isActive checkbox for editing
+    
     this.delegationForm.patchValue({
-      fromUserId: delegation.fromUserId,
-      toUserId: delegation.toUserId,
+      fromUserId: fromUser, // Set user object, not just ID
+      toUserId: toUser, // Set user object, not just ID
       startDate: formatDateForInput(delegation.startDate),
       endDate: formatDateForInput(delegation.endDate),
-      isActive: delegation.isActive !== false
+      isActive: delegation.isActive !== false // Use original value from database
     });
   }
 
@@ -200,12 +295,42 @@ export class ApprovalDelegationsListComponent implements OnInit {
     this.loading.save = true;
     const formData = this.delegationForm.value;
 
+    // Helper function to extract ID from user object or value
+    const extractUserId = (value: any): string | null => {
+      if (!value) return null;
+      // If it's an object, extract id
+      if (typeof value === 'object' && value !== null) {
+        const id = value.id || value.Id || value.userId || value.UserId;
+        return id ? String(id) : null;
+      }
+      // If it's already a number or string, convert to string
+      return String(value);
+    };
+
     if (this.editingDelegation && this.editingDelegation.id) {
+      // Extract userId from user object
+      const toUserId = extractUserId(formData.toUserId);
+      
+      if (!toUserId) {
+        this.loading.save = false;
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please select a user to delegate to'
+        });
+        return;
+      }
+
+      // Get isActive value (use getRawValue if control is disabled)
+      const isActiveValue = this.delegationForm.get('isActive')?.disabled 
+        ? this.delegationForm.get('isActive')?.getRawValue() 
+        : formData.isActive;
+      
       const updateDto: UpdateApprovalDelegationDto = {
-        toUserId: formData.toUserId,
+        toUserId: toUserId,
         startDate: formData.startDate,
         endDate: formData.endDate,
-        isActive: formData.isActive !== undefined ? formData.isActive : true
+        isActive: isActiveValue !== undefined ? isActiveValue : true
       };
 
       this.delegationService.updateDelegation(this.editingDelegation.id, updateDto).subscribe({
@@ -232,13 +357,39 @@ export class ApprovalDelegationsListComponent implements OnInit {
         }
       });
     } else {
+      // Extract userIds from user objects
+      const fromUserId = extractUserId(formData.fromUserId);
+      const toUserId = extractUserId(formData.toUserId);
+      
+      if (!fromUserId) {
+        this.loading.save = false;
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please select a user to delegate from'
+        });
+        return;
+      }
+      
+      if (!toUserId) {
+        this.loading.save = false;
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please select a user to delegate to'
+        });
+        return;
+      }
+
       const createDto: CreateApprovalDelegationDto = {
-        fromUserId: formData.fromUserId,
-        toUserId: formData.toUserId,
+        fromUserId: fromUserId,
+        toUserId: toUserId,
         startDate: formData.startDate,
         endDate: formData.endDate,
         isActive: formData.isActive !== undefined ? formData.isActive : true
       };
+
+      console.log('[ApprovalDelegationsList] Creating delegation with DTO:', createDto);
 
       this.delegationService.createDelegation(createDto).subscribe({
         next: () => {
@@ -309,11 +460,50 @@ export class ApprovalDelegationsListComponent implements OnInit {
   }
 
   isDelegationActive(delegation: ApprovalDelegationDto): boolean {
-    if (!delegation.isActive) return false;
+    // First check if isActive flag is explicitly false
+    if (delegation.isActive === false) {
+      return false;
+    }
+    
+    // If isActive is not explicitly set to true, consider it inactive
+    if (delegation.isActive !== true) {
+      return false;
+    }
+    
+    // Check if current date is within the delegation period
     const now = new Date();
-    const start = new Date(delegation.startDate);
-    const end = new Date(delegation.endDate);
-    return now >= start && now <= end;
+    let start: Date;
+    let end: Date;
+    
+    try {
+      start = new Date(delegation.startDate);
+      end = new Date(delegation.endDate);
+    } catch (error) {
+      console.error('Error parsing dates in isDelegationActive:', error);
+      return false;
+    }
+    
+    // Validate dates
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return false;
+    }
+    
+    // Check if now is between start and end dates (inclusive)
+    const isWithinDateRange = now >= start && now <= end;
+    
+    // Debug logging (can be removed later)
+    if (!isWithinDateRange && delegation.isActive === true) {
+      console.log('[isDelegationActive] Delegation is marked active but outside date range:', {
+        id: delegation.id,
+        isActive: delegation.isActive,
+        now: now.toISOString(),
+        start: start.toISOString(),
+        end: end.toISOString(),
+        isWithinRange: isWithinDateRange
+      });
+    }
+    
+    return isWithinDateRange;
   }
 
   markFormGroupTouched(formGroup: FormGroup): void {
@@ -326,6 +516,10 @@ export class ApprovalDelegationsListComponent implements OnInit {
   closeModal(): void {
     this.showModal = false;
     this.editingDelegation = null;
+    // Enable all controls before resetting
+    this.delegationForm.get('fromUserId')?.enable();
+    this.delegationForm.get('toUserId')?.enable();
+    this.delegationForm.get('isActive')?.enable();
     this.delegationForm.reset();
   }
 }

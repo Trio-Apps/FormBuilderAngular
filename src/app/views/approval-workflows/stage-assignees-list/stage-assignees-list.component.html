@@ -120,10 +120,6 @@
           <tr>
             <td>{{ first + rowIndex + 1 }}</td>
             <td>
-              <span *ngIf="assignee.roleId" class="badge badge-info">
-                <i class="pi pi-shield"></i>
-                Role
-              </span>
               <span *ngIf="assignee.userId" class="badge badge-success">
                 <i class="pi pi-user"></i>
                 User
@@ -131,8 +127,11 @@
             </td>
             <td>
               <div class="document-name-cell">
-                <i class="pi" [ngClass]="assignee.roleId ? 'pi-shield' : 'pi-user'"></i>
-                <span>{{ getAssigneeDisplayName(assignee) }}</span>
+                <i class="pi pi-user"></i>
+                <span>{{ assignee.userName || getAssigneeDisplayName(assignee) }}</span>
+                <span *ngIf="assignee.roleName" class="text-muted" style="margin-left: 8px;">
+                  ({{ assignee.roleName }})
+                </span>
               </div>
             </td>
             <td>
@@ -192,66 +191,32 @@
 >
   <form [formGroup]="assigneeForm" (ngSubmit)="saveAssignee()">
     <div class="form-display-section">
-      <!-- Assignee Type -->
+      <!-- User -->
       <div class="form-field-wrapper">
-        <label class="field-label" for="assigneeType">
-          Assignee Type <span class="required-indicator">*</span>
+        <label class="field-label" for="userId">
+          User <span class="required-indicator">*</span>
         </label>
         <div class="field-input-wrapper">
           <select
-            id="assigneeType"
-            formControlName="assigneeType"
+            id="userId"
+            formControlName="userId"
             class="form-input"
-            [class.input-error]="assigneeForm.get('assigneeType')?.invalid && assigneeForm.get('assigneeType')?.touched">
-            <option value="role">Role-based</option>
-            <option value="user">User-based</option>
+            [class.input-error]="assigneeForm.get('userId')?.invalid && assigneeForm.get('userId')?.touched">
+            <option [value]="null">Select a user...</option>
+            <option *ngFor="let user of users" [value]="user.id">
+              {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
+            </option>
           </select>
         </div>
-      </div>
-
-      <!-- Role ID (if role-based) -->
-      <div class="form-field-wrapper" *ngIf="assigneeType === 'role'">
-        <label class="field-label" for="roleId">
-          Role ID <span class="required-indicator">*</span>
-        </label>
-        <div class="field-input-wrapper">
-          <input 
-            type="text" 
-            id="roleId"
-            class="form-input"
-            formControlName="roleId" 
-            placeholder="Enter role ID"
-            [class.input-error]="assigneeForm.get('roleId')?.invalid && assigneeForm.get('roleId')?.touched" />
-        </div>
-        <div *ngIf="assigneeForm.get('roleId')?.invalid && assigneeForm.get('roleId')?.touched" class="field-error">
-          <i class="pi pi-exclamation-triangle"></i>
-          <span>Role ID is required</span>
-        </div>
-        <div class="field-hint">
-          <i class="pi pi-info-circle"></i>
-          Any user with this role can approve at this stage
-        </div>
-      </div>
-
-      <!-- User ID (if user-based) -->
-      <div class="form-field-wrapper" *ngIf="assigneeType === 'user'">
-        <label class="field-label" for="userId">
-          User ID <span class="required-indicator">*</span>
-        </label>
-        <div class="field-input-wrapper">
-          <input 
-            type="text" 
-            id="userId"
-            class="form-input"
-            formControlName="userId" 
-            placeholder="Enter user ID"
-            [class.input-error]="assigneeForm.get('userId')?.invalid && assigneeForm.get('userId')?.touched" />
+        <div *ngIf="loading.users" class="field-hint">
+          <i class="pi pi-spin pi-spinner"></i>
+          <span>Loading users...</span>
         </div>
         <div *ngIf="assigneeForm.get('userId')?.invalid && assigneeForm.get('userId')?.touched" class="field-error">
           <i class="pi pi-exclamation-triangle"></i>
-          <span>User ID is required</span>
+          <span>User is required</span>
         </div>
-        <div class="field-hint">
+        <div class="field-hint" *ngIf="!loading.users">
           <i class="pi pi-info-circle"></i>
           Only this specific user can approve at this stage
         </div>
@@ -305,33 +270,28 @@
         This will replace all existing assignees for this stage with the selected roles and users.
       </div>
 
-      <!-- Role IDs -->
-      <div class="form-field-wrapper">
-        <label class="field-label">Role IDs (Optional)</label>
-        <div class="field-input-wrapper">
-          <input 
-            type="text" 
-            class="form-input"
-            placeholder="Enter role IDs separated by commas (e.g., role1, role2)"
-            [(ngModel)]="selectedRoleIds"
-            [ngModelOptions]="{standalone: true}" />
-        </div>
-        <div class="field-hint">
-          <i class="pi pi-info-circle"></i>
-          Any user with any of these roles can approve at this stage
-        </div>
-      </div>
-
       <!-- User IDs -->
       <div class="form-field-wrapper">
-        <label class="field-label">User IDs (Optional)</label>
+        <label class="field-label">Users (Optional)</label>
         <div class="field-input-wrapper">
-          <input 
-            type="text" 
-            class="form-input"
-            placeholder="Enter user IDs separated by commas (e.g., user1, user2)"
-            [(ngModel)]="selectedUserIds"
-            [ngModelOptions]="{standalone: true}" />
+          <p-multiSelect
+            formControlName="userIds"
+            [options]="users"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="Select users"
+            [filter]="true"
+            filterBy="name,username,email"
+            [showClear]="true"
+            styleClass="w-full"
+            [loading]="loading.users">
+            <ng-template pTemplate="item" let-user>
+              <div>
+                <div>{{ getUserDisplayName(user) }}</div>
+                <small class="text-muted">{{ user.username }} <span *ngIf="user.email">• {{ user.email }}</span></small>
+              </div>
+            </ng-template>
+          </p-multiSelect>
         </div>
         <div class="field-hint">
           <i class="pi pi-info-circle"></i>
@@ -341,7 +301,7 @@
 
       <div class="field-hint" style="margin-top: 16px; color: #f59e0b;">
         <i class="pi pi-exclamation-triangle"></i>
-        <strong>Warning:</strong> This will replace all existing assignees. Make sure to include all roles and users you want to keep.
+        <strong>Warning:</strong> This will replace all existing assignees. Make sure to include all users you want to keep.
       </div>
     </div>
 
@@ -350,7 +310,7 @@
       <button type="submit" pButton 
         label="Update Assignees" 
         icon="pi pi-save"
-        [disabled]="loading.bulkUpdate || (selectedRoleIds.length === 0 && selectedUserIds.length === 0)"
+        [disabled]="loading.bulkUpdate || bulkUpdateForm.get('userIds')?.value?.length === 0"
         [loading]="loading.bulkUpdate"></button>
     </div>
   </form>
