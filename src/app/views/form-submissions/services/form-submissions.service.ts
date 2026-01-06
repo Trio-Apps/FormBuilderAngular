@@ -259,6 +259,13 @@ export class FormSubmissionsService {
       }),
       catchError((error) => {
         console.error('Error creating form submission:', error);
+        console.error('Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          error: error?.error,
+          message: error?.error?.message || error?.error?.detail || error?.message,
+          url: error?.url
+        });
         throw error;
       })
     );

@@ -3444,182 +3444,106 @@ export class FormViewComponent implements OnInit {
           // Load document series from API
           const documentSeries = await this.documentTypesService.getDocumentSeriesByDocumentTypeId(documentTypeId).toPromise();
           
+          console.log('[FormView] Document series loaded from API:', documentSeries);
+          console.log('[FormView] Document series count:', documentSeries?.length || 0);
+          console.log('[FormView] Full API response:', JSON.stringify(documentSeries, null, 2));
+          
           if (documentSeries && documentSeries.length > 0) {
+            // Filter series by Project ID first to ensure backend validation passes
+            const projectSeries = documentSeries.filter((s: DocumentSeries) => s.projectId === projectId);
+            console.log(`[FormView] Found ${projectSeries.length} series for projectId ${projectId} out of ${documentSeries.length} total series`);
+
+            // Use project-specific series if available, otherwise fallback to all info (but warn)
+            const availableSeries = projectSeries.length > 0 ? projectSeries : documentSeries;
+
             // First priority: Use active series
-            const activeSeries = documentSeries.filter((s: DocumentSeries) => s.isActive);
+            const activeSeries = availableSeries.filter((s: DocumentSeries) => s.isActive);
+            console.log('[FormView] Active series found:', activeSeries.length, activeSeries);
             
             if (activeSeries.length > 0) {
               // Use default series or first available active series
               const defaultSeries = activeSeries.find((s: DocumentSeries) => s.isDefault) || activeSeries[0];
               if (defaultSeries && defaultSeries.id) {
                 actualSeriesId = defaultSeries.id;
+                console.log('[FormView] ✅ Using default/active series from API:', actualSeriesId, defaultSeries);
               }
             } else {
               // Second priority: Use any series (even if inactive) - better than default 1
-              const firstSeries = documentSeries.find((s: DocumentSeries) => s.id) || documentSeries[0];
-              if (firstSeries && firstSeries.id) {
-                actualSeriesId = firstSeries.id;
-                console.warn('[FormView] No active series found, using first available series (may be inactive):', actualSeriesId);
+              // Prefer one from the same project
+              const bestMatch = availableSeries.find((s: DocumentSeries) => s.id) || availableSeries[0];
+              if (bestMatch && bestMatch.id) {
+                actualSeriesId = bestMatch.id;
+                console.warn('[FormView] No active series found, using first available series (may be inactive):', actualSeriesId, bestMatch);
               }
-            }
-          }
-          
-          // If no series found, try to create one automatically (only if documentTypeId is valid)
-          if (!actualSeriesId || actualSeriesId === 0) {
-            if (documentTypeId && documentTypeId > 0) {
-              console.log('[FormView] No document series found, attempting to create one automatically...');
-              try {
-                // Generate a series code based on document type and project
-                const seriesCode = `SERIES-${documentTypeId}-${projectId}-${Date.now().toString().slice(-6)}`;
-                
-                const createSeriesDto: CreateDocumentSeriesDto = {
-                  documentTypeId: documentTypeId,
-                  projectId: projectId,
-                  seriesCode: seriesCode,
-                  nextNumber: 1,
-                  isDefault: true,
-                  isActive: true
-                };
-                
-                console.log('[FormView] Creating document series:', createSeriesDto);
-              
-              const newSeries = await new Promise<DocumentSeries>((resolve, reject) => {
-                this.documentTypesService.createDocumentSeries(createSeriesDto).subscribe({
-                  next: (result) => resolve(result),
-                  error: (err) => reject(err)
-                });
-              });
-              
-              if (newSeries && newSeries.id) {
-                actualSeriesId = newSeries.id;
-                console.log('[FormView] ✅ Document series created successfully:', actualSeriesId);
-              } else {
-                throw new Error('Failed to create document series - no ID returned');
-              }
-              } catch (createSeriesError: any) {
-                console.warn('[FormView] Failed to create document series automatically:', createSeriesError);
-                
-                // Check if error is due to invalid document type ID
-                const errorMessage = createSeriesError?.error?.message || createSeriesError?.message || '';
-                const isInvalidDocType = errorMessage.toLowerCase().includes('invalid document type') || 
-                                        createSeriesError?.status === 400;
-                
-                if (isInvalidDocType) {
-                  // Don't use fallback if document type is invalid - show error instead
-                  const currentLang = this.translationService.getCurrentLanguage();
-                  const errorMsg = currentLang === 'ar'
-                    ? `خطأ: نوع المستند غير صالح (documentTypeId: ${documentTypeId}). يرجى التأكد من أن نوع المستند موجود في النظام.`
-                    : `Error: Invalid document type (documentTypeId: ${documentTypeId}). Please ensure the document type exists in the system.`;
-                  alert(errorMsg);
-                  this.isSubmitting = false;
-                  return;
-                }
-                
-                // Fallback: use seriesId from query params or default
-                actualSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
-                console.warn('[FormView] Using fallback seriesId:', actualSeriesId);
-                
-                // Show user-friendly error message
-                const currentLang = this.translationService.getCurrentLanguage();
-                if (createSeriesError?.status === 401) {
-                  const errorMsg = currentLang === 'ar'
-                    ? 'تحذير: لا يمكن إنشاء Document Series تلقائياً (يتطلب تسجيل الدخول). سيتم استخدام القيمة الافتراضية.'
-                    : 'Warning: Cannot create Document Series automatically (requires authentication). Using default value.';
-                  console.warn('[FormView]', errorMsg);
-                } else {
-                  const errorMsg = currentLang === 'ar'
-                    ? `تحذير: فشل إنشاء Document Series تلقائياً: ${errorMessage}. سيتم استخدام القيمة الافتراضية.`
-                    : `Warning: Failed to create Document Series automatically: ${errorMessage}. Using default value.`;
-                  console.warn('[FormView]', errorMsg);
-                }
-              }
-            } else {
-              // documentTypeId is invalid, cannot proceed
-              const currentLang = this.translationService.getCurrentLanguage();
-              const errorMsg = currentLang === 'ar'
-                ? 'خطأ: لا يمكن المتابعة بدون نوع مستند صالح. يرجى التأكد من أن النموذج مرتبط بنوع مستند.'
-                : 'Error: Cannot proceed without a valid document type. Please ensure the form is linked to a document type.';
-              alert(errorMsg);
-              this.isSubmitting = false;
-              return;
-            }
-          }
-        } catch (seriesError: any) {
-          console.warn('[FormView] Error loading document series (may require auth), trying to create one...', seriesError);
-          
-          // Try to create a series if loading failed (only if documentTypeId is valid)
-          if (documentTypeId && documentTypeId > 0) {
-            try {
-              const seriesCode = `SERIES-${documentTypeId}-${projectId}-${Date.now().toString().slice(-6)}`;
-              
-              const createSeriesDto: CreateDocumentSeriesDto = {
-                documentTypeId: documentTypeId,
-                projectId: projectId,
-                seriesCode: seriesCode,
-                nextNumber: 1,
-                isDefault: true,
-                isActive: true
-              };
-              
-              console.log('[FormView] Creating document series after load error:', createSeriesDto);
-              
-              const newSeries = await new Promise<DocumentSeries>((resolve, reject) => {
-                this.documentTypesService.createDocumentSeries(createSeriesDto).subscribe({
-                  next: (result) => resolve(result),
-                  error: (err) => reject(err)
-                });
-              });
-              
-              if (newSeries && newSeries.id) {
-                actualSeriesId = newSeries.id;
-                console.log('[FormView] ✅ Document series created successfully after load error:', actualSeriesId);
-              } else {
-                throw new Error('Failed to create document series - no ID returned');
-              }
-            } catch (createSeriesError: any) {
-              console.warn('[FormView] Failed to create document series, using fallback:', createSeriesError);
-              
-              // Check if error is due to invalid document type ID
-              const errorMessage = createSeriesError?.error?.message || createSeriesError?.message || '';
-              const isInvalidDocType = errorMessage.toLowerCase().includes('invalid document type') || 
-                                      createSeriesError?.status === 400;
-              
-              if (isInvalidDocType) {
-                // Don't use fallback if document type is invalid - show error instead
-                const currentLang = this.translationService.getCurrentLanguage();
-                const errorMsg = currentLang === 'ar'
-                  ? `خطأ: نوع المستند غير صالح (documentTypeId: ${documentTypeId}). يرجى التأكد من أن نوع المستند موجود في النظام.`
-                  : `Error: Invalid document type (documentTypeId: ${documentTypeId}). Please ensure the document type exists in the system.`;
-                alert(errorMsg);
-                this.isSubmitting = false;
-                return;
-              }
-              
-              // Use seriesId from query params or default to 1
-              actualSeriesId = (seriesId && seriesId > 0) ? seriesId : 1;
             }
           } else {
-            // documentTypeId is invalid, cannot proceed
-            const currentLang = this.translationService.getCurrentLanguage();
-            const errorMsg = currentLang === 'ar'
-              ? 'خطأ: لا يمكن المتابعة بدون نوع مستند صالح. يرجى التأكد من أن النموذج مرتبط بنوع مستند.'
-              : 'Error: Cannot proceed without a valid document type. Please ensure the form is linked to a document type.';
-            alert(errorMsg);
-            this.isSubmitting = false;
-            return;
+            // API returned empty array - this might mean:
+            // 1. No series exist for this documentTypeId
+            // 2. API requires authentication
+            // 3. API filters by projectId and no match
+            console.warn('[FormView] ⚠️ API returned empty array for documentTypeId:', documentTypeId);
+            console.warn('[FormView] This might be because:');
+            console.warn('[FormView] 1. No series exist for this documentTypeId');
+            console.warn('[FormView] 2. API requires authentication');
+            console.warn('[FormView] 3. API filters by projectId (current projectId:', projectId, ')');
+            
+            // Use default series ID from query params or 1
+            actualSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
+            console.log('[FormView] Using fallback seriesId:', actualSeriesId, '(Note: Backend will validate if this exists)');
+          }
+        } catch (seriesError: any) {
+          console.warn('[FormView] Error loading document series:', seriesError);
+          console.warn('[FormView] Error details:', {
+            status: seriesError?.status,
+            message: seriesError?.message,
+            error: seriesError?.error
+          });
+          
+          // If API call failed, try to verify seriesId: 1 exists by calling getDocumentSeriesById
+          // This is a workaround if the list endpoint requires auth but the get by ID doesn't
+          if (!actualSeriesId || actualSeriesId === 0) {
+            const fallbackSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
+            console.log('[FormView] Attempting to verify seriesId exists:', fallbackSeriesId);
+            
+            try {
+              // Try to get the series by ID to verify it exists
+              const verifiedSeries = await this.documentTypesService.getDocumentSeriesById(fallbackSeriesId).toPromise();
+              if (verifiedSeries && verifiedSeries.id) {
+                // Verify it matches our documentTypeId and projectId
+                if (verifiedSeries.documentTypeId === documentTypeId) {
+                  actualSeriesId = verifiedSeries.id;
+                  console.log('[FormView] ✅ Verified series exists and matches documentTypeId:', actualSeriesId, verifiedSeries);
+                } else {
+                  console.warn('[FormView] Series exists but documentTypeId mismatch:', verifiedSeries.documentTypeId, '!=', documentTypeId);
+                  actualSeriesId = fallbackSeriesId; // Use it anyway, backend will validate
+                }
+              } else {
+                actualSeriesId = fallbackSeriesId;
+                console.warn('[FormView] Could not verify series, using fallback:', actualSeriesId);
+              }
+            } catch (verifyError: any) {
+              // If verification also fails, use the fallback
+              actualSeriesId = fallbackSeriesId;
+              console.warn('[FormView] Could not verify series existence, using fallback:', actualSeriesId);
+              console.warn('[FormView] Verification error:', verifyError);
+            }
           }
         }
       } else {
-        // If submission already exists, use existing seriesId
-        actualSeriesId = seriesId || 1;
+        // If submission already exists, use existing seriesId from query params or default to 1
+        actualSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
       }
       
-      // Ensure we have a valid seriesId
+      // Ensure we have a valid seriesId (use default 1 if still invalid)
       if (!actualSeriesId || actualSeriesId <= 0) {
-        actualSeriesId = 1; // Final fallback
+        actualSeriesId = 1; // Default series ID
       }
       
       console.log('[FormView] Final seriesId to use:', actualSeriesId);
+      
+      // Validate that we have a seriesId before proceeding
+      // Note: We'll let the backend validate if the seriesId actually exists
+      // If it doesn't exist, the backend will return a 400 error which we'll handle
 
       // Step 2: Create submission (same as FormSubmissionCreateComponent)
       let submission: FormSubmissionDto | undefined;
@@ -3630,12 +3554,13 @@ export class FormViewComponent implements OnInit {
         
         // Use createSubmission (same as FormSubmissionCreateComponent)
         // Note: This endpoint may require authentication
+        let createDto: CreateFormSubmissionDto | null = null;
         try {
           if (!this.form || !this.form.id) {
             throw new Error('Form or form.id is missing');
           }
           
-          const createDto: CreateFormSubmissionDto = {
+          createDto = {
             formBuilderId: this.form.id,
             documentTypeId: documentTypeId,
             seriesId: actualSeriesId,
@@ -3643,16 +3568,23 @@ export class FormViewComponent implements OnInit {
             status: 'Submitted'
           };
           
-          console.log('[FormView] Creating submission:', {
+          console.log('[FormView] Creating submission with full DTO:', createDto);
+          console.log('[FormView] Creating submission details:', {
             formBuilderId: createDto.formBuilderId,
             documentTypeId: createDto.documentTypeId,
             seriesId: createDto.seriesId,
             submittedByUserId: createDto.submittedByUserId,
+            status: createDto.status,
+            projectId: projectId,
             hasToken: !!token
           });
           
+          if (!createDto) {
+            throw new Error('createDto is null - cannot create submission');
+          }
+          
           submission = await new Promise<FormSubmissionDto>((resolve, reject) => {
-            this.formSubmissionsService.createSubmission(createDto).subscribe({
+            this.formSubmissionsService.createSubmission(createDto!).subscribe({
               next: (result) => resolve(result),
               error: (err) => reject(err)
             });
@@ -3681,10 +3613,51 @@ export class FormViewComponent implements OnInit {
               : `You are not authorized to create submission. Please login first.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}\n\nSolution: Please login and try again.`;
             alert(errorMsg);
           } else if (createError?.status === 400) {
-            const errorDetails = createError?.error?.message || createError?.error?.detail || createError?.message || 'Bad Request';
-            const errorMsg = currentLang === 'ar'
-              ? `خطأ في البيانات المرسلة (400).\n\nالتفاصيل: ${errorDetails}\n\nالحل: تأكد من أن جميع البيانات المطلوبة صحيحة ومكتملة.`
-              : `Bad Request (400).\n\nDetails: ${errorDetails}\n\nSolution: Ensure all required data is correct and complete.`;
+            const errorDetails = createError?.error?.message || createError?.error?.detail || createError?.error?.title || createError?.message || 'Bad Request';
+            console.error('[FormView] 400 Error details:', {
+              error: createError?.error,
+              errorString: JSON.stringify(createError?.error),
+              message: createError?.error?.message,
+              detail: createError?.error?.detail,
+              title: createError?.error?.title,
+              status: createError?.status,
+              statusText: createError?.statusText,
+              url: createError?.url,
+              seriesId: actualSeriesId,
+              documentTypeId: documentTypeId,
+              projectId: projectId,
+              createDto: createDto || {
+                formBuilderId: this.form?.id || 0,
+                documentTypeId: documentTypeId,
+                seriesId: actualSeriesId,
+                submittedByUserId: finalUserId,
+                status: 'Submitted'
+              }
+            });
+            
+            // Check if error is related to seriesId not existing
+            const errorMessage = errorDetails.toLowerCase();
+            const isSeriesError = errorMessage.includes('series') || 
+                                 errorMessage.includes('foreign key') ||
+                                 errorMessage.includes('entity changes') ||
+                                 errorMessage.includes('constraint') ||
+                                 errorMessage.includes('document series');
+            
+            let errorMsg: string;
+            if (isSeriesError) {
+              // The series might exist in DB but backend validation failed
+              // This could be due to:
+              // 1. Series exists but doesn't match documentTypeId/projectId combination
+              // 2. Series is inactive
+              // 3. Backend validation issue
+              errorMsg = currentLang === 'ar'
+                ? `خطأ في التحقق من سلسلة الوثائق (seriesId: ${actualSeriesId}).\n\nالتفاصيل: ${errorDetails}\n\nملاحظة: السلسلة قد تكون موجودة في قاعدة البيانات ولكن لا تطابق نوع المستند (documentTypeId: ${documentTypeId}) أو المشروع (projectId: ${projectId}).\n\nالحل: تأكد من أن السلسلة موجودة ومطابقة لنوع المستند والمشروع المحددين.`
+                : `Error validating document series (seriesId: ${actualSeriesId}).\n\nDetails: ${errorDetails}\n\nNote: The series may exist in the database but doesn't match the document type (documentTypeId: ${documentTypeId}) or project (projectId: ${projectId}).\n\nSolution: Ensure the series exists and matches the specified document type and project.`;
+            } else {
+              errorMsg = currentLang === 'ar'
+                ? `خطأ في البيانات المرسلة (400).\n\nالتفاصيل: ${errorDetails}\n\nالحل: تأكد من أن جميع البيانات المطلوبة صحيحة ومكتملة.`
+                : `Bad Request (400).\n\nDetails: ${errorDetails}\n\nSolution: Ensure all required data is correct and complete.`;
+            }
             alert(errorMsg);
           } else {
             const errorMsg = createError?.error?.message || createError?.errorMessage || createError?.message || 'Failed to create submission';
