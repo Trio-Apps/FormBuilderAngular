@@ -20,10 +20,7 @@
         <button class="btn-icon" (click)="loadAssignees()" [disabled]="loading.assignees" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openBulkUpdateModal()" [disabled]="loading.assignees || !stageId">
-          <i class="pi pi-users"></i>
-          <span>Bulk Update</span>
-        </button>
+        
         <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.assignees || !stageId">
           <i class="pi pi-plus"></i>
           <span>New Assignee</span>

@@ -8,7 +8,7 @@
         </div>
       </div>
       <div class="nav-right">
-        <button class="btn-icon" (click)="loadInbox()" [disabled]="loading.inbox" title="Refresh">
+        <button class="btn-icon" (click)="refreshData()" [disabled]="loading.inbox" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
       </div>
@@ -20,6 +20,15 @@
       <div class="section-header">
         <h3>Pending Approvals</h3>
         <div class="header-actions">
+          <button 
+            pButton 
+            [label]="showAllSubmissions ? 'Show Inbox Only' : 'Show All Submissions'" 
+            [icon]="showAllSubmissions ? 'pi pi-filter' : 'pi pi-list'" 
+            class="p-button-secondary p-button-sm" 
+            (click)="toggleView()"
+            [disabled]="loading.inbox"
+            style="margin-right: 10px;">
+          </button>
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input type="text" placeholder="Search..." class="search-input" [(ngModel)]="searchTerm" (input)="onSearchChange()" />
@@ -102,7 +111,15 @@
     </div>
     <div class="dialog-footer">
       <button type="button" pButton label="Cancel" class="p-button-secondary" (click)="closeActionModal()" [disabled]="loading.action"></button>
-      <button type="submit" pButton [label]="actionType" [disabled]="loading.action" [loading]="loading.action"></button>
+      <button 
+        type="submit" 
+        pButton 
+        [label]="actionType" 
+        [disabled]="loading.action" 
+        [loading]="loading.action"
+        [class]="actionType === 'Approved' ? 'p-button-success' : actionType === 'Rejected' ? 'p-button-danger' : 'p-button-warning'"
+        (click)="processAction()">
+      </button>
     </div>
   </form>
 </p-dialog>

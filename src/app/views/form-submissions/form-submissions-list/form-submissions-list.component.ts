@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { FormSubmissionsService, FormSubmissionDto, FormSubmissionDetailDto, CreateFormSubmissionDto, UpdateFormSubmissionDto } from '../services/form-submissions.service';
+import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../models/approve-reject-submission.model';
 import { FormSubmissionValuesService, FormSubmissionValueDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto, BulkFormSubmissionValuesDto } from '../services/form-submission-values.service';
 import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
 import { FileUploadService } from '../../FormBuilder/services/file-upload.service';
@@ -26,6 +27,8 @@ import { CheckboxModule } from 'primeng/checkbox';
 import { CalculatedFieldComponent } from '../../public-form/components/calculated-field.component';
 import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
+import { StorageService } from '../../../auth/storage.service';
+import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
@@ -89,7 +92,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     series: false,
     tabs: false,
     fields: false,
-    uploading: false
+    uploading: false,
+    approveReject: false
   };
 
   // Modals
@@ -104,6 +108,14 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   editingFieldValue: FormSubmissionValueDto | null = null;
   editSubmissionValuesForm!: FormGroup; // Form for editing all submission values
   submissionFields: FormFieldDto[] = []; // Fields for the selected submission
+
+  // Approve/Reject Modal
+  showApproveRejectModal = false;
+  approveRejectForm!: FormGroup;
+  selectedSubmissionForAction: FormSubmissionDto | null = null;
+  actionType: 'approve' | 'reject' | null = null;
+  currentStageId: number | null = null;
+  loadingApproveReject = false;
 
   // Search & Filter
   searchTerm = '';
@@ -141,7 +153,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     private confirmationService: ConfirmationService,
     public translationService: TranslationService,
     private authService: AuthService,
-    public fileUploadService: FileUploadService
+    public fileUploadService: FileUploadService,
+    private storageService: StorageService,
+    private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService
   ) {
     // Initialize forms
     this.submissionForm = this.fb.group({
@@ -168,6 +182,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
     // Initialize form for editing submission values
     this.editSubmissionValuesForm = this.fb.group({});
+
+    // Initialize approve/reject form
+    this.approveRejectForm = this.fb.group({
+      comments: ['']
+    });
 
     // Subscribe to tabId changes to update selectedTabId
     this.addSubmissionForm.get('tabId')?.valueChanges.subscribe(tabId => {
@@ -3043,6 +3062,227 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     
     console.log(`[FormSubmissionsList] getFileNameFromValue - ❌ No file name found for field ${fieldValue.fieldId}`);
     return null;
+  }
+
+  /**
+   * Open approve/reject modal
+   */
+  openApproveRejectModal(submission: FormSubmissionDto, actionType: 'approve' | 'reject'): void {
+    this.selectedSubmissionForAction = submission;
+    this.actionType = actionType;
+    this.approveRejectForm.reset({ comments: '' });
+    this.currentStageId = null;
+    
+    // Try to get current stage from approval inbox
+    const currentUserId = this.storageService.getUserId()?.toString() || this.authService.userName();
+    if (currentUserId && submission.status === 'Submitted') {
+      this.loadingApproveReject = true;
+      this.approvalWorkflowRuntimeService.getApprovalInboxForUser(currentUserId).subscribe({
+        next: (inboxItems: ApprovalInboxItemDto[]) => {
+          const inboxItem = inboxItems.find(item => item.submissionId === submission.id);
+          if (inboxItem) {
+            this.currentStageId = inboxItem.stageId;
+          }
+          this.loadingApproveReject = false;
+          this.showApproveRejectModal = true;
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('Error loading approval inbox:', error);
+          this.loadingApproveReject = false;
+          // Still show modal, user can enter stageId manually if needed
+          this.showApproveRejectModal = true;
+          this.cdr.detectChanges();
+        }
+      });
+    } else {
+      // If not submitted or no user ID, show modal anyway
+      this.showApproveRejectModal = true;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Process approve/reject action
+   */
+  processApproveRejectAction(): void {
+    if (!this.selectedSubmissionForAction || !this.actionType) {
+      return;
+    }
+
+    // Check if user is authenticated
+    const token = this.storageService.getToken();
+    if (!token) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Authentication Required',
+        detail: 'Please log in to approve or reject submissions.',
+        life: 5000
+      });
+      return;
+    }
+
+    const formData = this.approveRejectForm.value;
+    const currentUserId = this.storageService.getUserId()?.toString() || this.authService.userName();
+    
+    if (!currentUserId) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'User ID not found. Please log in again.',
+        life: 5000
+      });
+      return;
+    }
+
+    // If stageId is not found from inbox, we need to get it from the workflow
+    // For now, we'll require it to be set. In a real scenario, you might want to
+    // load it from the submission's workflow or allow manual entry
+    if (!this.currentStageId) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Stage ID not found. Please ensure the submission is in a workflow stage.'
+      });
+      return;
+    }
+
+    this.loadingApproveReject = true;
+
+    if (this.actionType === 'approve') {
+      // Use DTO-based method
+      const approveDto: ApproveSubmissionDto = {
+        submissionId: this.selectedSubmissionForAction.id,
+        stageId: this.currentStageId,
+        actionByUserId: currentUserId,
+        comments: formData.comments || null
+      };
+
+      this.formSubmissionsService.approveSubmissionDto(approveDto).subscribe({
+        next: (response: ApiResponse<FormSubmissionDto>) => {
+          this.loadingApproveReject = false;
+          
+          if (response.statusCode === 200 || response.success) {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: response.message || 'Form submission approved successfully'
+            });
+            this.closeApproveRejectModal();
+            this.loadSubmissions(); // Reload submissions to update status
+          } else {
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'Warning',
+              detail: response.message || 'Approval completed with warnings'
+            });
+          }
+        },
+        error: (error) => {
+          this.loadingApproveReject = false;
+          console.error('Error approving submission:', error);
+          
+          // Extract detailed error message
+          let errorMessage = 'Failed to approve form submission';
+          
+          if (error?.message) {
+            errorMessage = error.message;
+          } else if (error?.error?.message) {
+            errorMessage = error.error.message;
+          } else if (error?.status === 404) {
+            errorMessage = 'Approve endpoint not found. Please ensure the backend API is running and contains the /api/FormSubmissions/approve endpoint.';
+          } else if (error?.status === 401) {
+            errorMessage = 'Unauthorized. Please log in again.';
+          } else if (error?.status === 0) {
+            errorMessage = 'Cannot connect to the server. Please ensure the backend API is running on https://localhost:7276';
+          }
+          
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage,
+            life: 5000
+          });
+          this.cdr.detectChanges();
+        }
+      });
+    } else if (this.actionType === 'reject') {
+      // Use DTO-based method
+      const rejectDto: RejectSubmissionDto = {
+        submissionId: this.selectedSubmissionForAction.id,
+        stageId: this.currentStageId,
+        actionByUserId: currentUserId,
+        comments: formData.comments || null
+      };
+
+      this.formSubmissionsService.rejectSubmissionDto(rejectDto).subscribe({
+        next: (response: ApiResponse<FormSubmissionDto>) => {
+          this.loadingApproveReject = false;
+          
+          if (response.statusCode === 200 || response.success) {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: response.message || 'Form submission rejected successfully'
+            });
+            this.closeApproveRejectModal();
+            this.loadSubmissions(); // Reload submissions to update status
+          } else {
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'Warning',
+              detail: response.message || 'Rejection completed with warnings'
+            });
+          }
+        },
+        error: (error) => {
+          this.loadingApproveReject = false;
+          console.error('Error rejecting submission:', error);
+          
+          // Extract detailed error message
+          let errorMessage = 'Failed to reject form submission';
+          
+          if (error?.message) {
+            errorMessage = error.message;
+          } else if (error?.error?.message) {
+            errorMessage = error.error.message;
+          } else if (error?.status === 404) {
+            errorMessage = 'Reject endpoint not found. Please ensure the backend API is running and contains the /api/FormSubmissions/reject endpoint.';
+          } else if (error?.status === 401) {
+            errorMessage = 'Unauthorized. Please log in again.';
+          } else if (error?.status === 0) {
+            errorMessage = 'Cannot connect to the server. Please ensure the backend API is running on https://localhost:7276';
+          }
+          
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage,
+            life: 5000
+          });
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  /**
+   * Close approve/reject modal
+   */
+  closeApproveRejectModal(): void {
+    this.showApproveRejectModal = false;
+    this.selectedSubmissionForAction = null;
+    this.actionType = null;
+    this.currentStageId = null;
+    this.approveRejectForm.reset({ comments: '' });
+  }
+
+  /**
+   * Check if submission can be approved/rejected
+   */
+  canApproveReject(submission: FormSubmissionDto): boolean {
+    // Only allow approve/reject for Submitted status
+    return submission.status === 'Submitted';
   }
 }
 

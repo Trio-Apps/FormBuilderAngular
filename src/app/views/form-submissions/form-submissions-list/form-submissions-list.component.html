@@ -151,6 +151,20 @@
                   pTooltip="Edit"
                   tooltipPosition="top"></button>
                 <button pButton 
+                  *ngIf="canApproveReject(submission)"
+                  icon="pi pi-check" 
+                  class="p-button-text p-button-sm action-btn action-btn-success" 
+                  (click)="openApproveRejectModal(submission, 'approve')"
+                  pTooltip="Approve"
+                  tooltipPosition="top"></button>
+                <button pButton 
+                  *ngIf="canApproveReject(submission)"
+                  icon="pi pi-times" 
+                  class="p-button-text p-button-sm action-btn action-btn-danger" 
+                  (click)="openApproveRejectModal(submission, 'reject')"
+                  pTooltip="Reject"
+                  tooltipPosition="top"></button>
+                <button pButton 
                   icon="pi pi-trash" 
                   class="p-button-text p-button-sm action-btn action-btn-danger" 
                   (click)="deleteSubmission(submission)"
@@ -862,6 +876,71 @@
       </button>
     </div>
   </form>
+</p-dialog>
+
+<!-- Approve/Reject Modal -->
+<p-dialog
+  [(visible)]="showApproveRejectModal"
+  [header]="actionType === 'approve' ? 'Approve Form Submission' : 'Reject Form Submission'"
+  [modal]="true"
+  [style]="{ width: '500px' }"
+  [draggable]="false"
+  [resizable]="false"
+  [autoZIndex]="true"
+  [baseZIndex]="10001"
+  (onHide)="closeApproveRejectModal()">
+  
+  <div *ngIf="selectedSubmissionForAction" class="approve-reject-modal-content">
+    <div class="form-group">
+      <label><strong>Document Number:</strong> {{ selectedSubmissionForAction.documentNumber || '-' }}</label>
+    </div>
+    <div class="form-group">
+      <label><strong>Status:</strong> 
+        <span [ngClass]="'badge ' + getStatusClass(selectedSubmissionForAction.status)">
+          {{ selectedSubmissionForAction.status }}
+        </span>
+      </label>
+    </div>
+    
+    <form [formGroup]="approveRejectForm" (ngSubmit)="processApproveRejectAction()">
+      <div class="form-group">
+        <label for="comments">Comments <span class="text-muted">(Optional)</span></label>
+        <textarea
+          id="comments"
+          formControlName="comments"
+          rows="4"
+          placeholder="Enter your comments..."
+          class="form-control"
+          [class.is-invalid]="approveRejectForm.get('comments')?.invalid && approveRejectForm.get('comments')?.touched">
+        </textarea>
+      </div>
+
+      <div *ngIf="loadingApproveReject" class="loading-overlay">
+        <i class="pi pi-spin pi-spinner"></i>
+        <span>Processing...</span>
+      </div>
+
+      <div class="dialog-footer">
+        <button 
+          type="button" 
+          pButton 
+          label="Cancel" 
+          icon="pi pi-times" 
+          class="p-button-secondary" 
+          (click)="closeApproveRejectModal()" 
+          [disabled]="loadingApproveReject">
+        </button>
+        <button 
+          type="submit" 
+          pButton 
+          [label]="actionType === 'approve' ? 'Approve' : 'Reject'" 
+          [icon]="actionType === 'approve' ? 'pi pi-check' : 'pi pi-times'" 
+          [class]="actionType === 'approve' ? 'p-button-success' : 'p-button-danger'" 
+          [disabled]="loadingApproveReject || approveRejectForm.invalid">
+        </button>
+      </div>
+    </form>
+  </div>
 </p-dialog>
 
 <p-toast></p-toast>

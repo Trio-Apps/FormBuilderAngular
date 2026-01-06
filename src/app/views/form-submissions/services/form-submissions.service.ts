@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
+import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../models/approve-reject-submission.model';
 
 export interface FormSubmissionDto {
   id: number;
@@ -435,6 +436,271 @@ export class FormSubmissionsService {
         throw new Error(errorMessage);
       })
     );
+  }
+
+  /**
+   * Approve form submission (using DTO)
+   * POST /api/FormSubmissions/approve
+   * 
+   * This endpoint:
+   * - Changes submission status to "Approved"
+   * - Updates UpdatedDate
+   * - Creates a record in DocumentApprovalHistory with ActionType = "Approved"
+   */
+  approveSubmissionDto(dto: ApproveSubmissionDto): Observable<ApiResponse<FormSubmissionDto>> {
+    return this.http.post<any>(`${this.baseUrl}/approve`, dto).pipe(
+      map((response: any) => {
+        // Handle ApiResponse wrapper or direct object response
+        if (response && typeof response === 'object') {
+          if (response.statusCode !== undefined) {
+            return response as ApiResponse<FormSubmissionDto>;
+          }
+          if (response.success !== undefined) {
+            return {
+              statusCode: response.success ? 200 : 400,
+              message: response.message || 'Operation completed',
+              data: response.data || response
+            } as ApiResponse<FormSubmissionDto>;
+          }
+          // Direct object response - wrap it
+          return {
+            statusCode: 200,
+            message: 'Submission approved successfully',
+            data: response.data || response.result || response
+          } as ApiResponse<FormSubmissionDto>;
+        }
+        return {
+          statusCode: 200,
+          message: 'Submission approved successfully',
+          data: response
+        } as ApiResponse<FormSubmissionDto>;
+      }),
+      catchError((error) => {
+        console.error(`[FormSubmissionsService] Error approving form submission:`, error);
+        return this.handleApproveRejectError(error, 'approve');
+      })
+    );
+  }
+
+  /**
+   * Approve form submission (legacy method - kept for backward compatibility)
+   * POST /api/FormSubmissions/approve
+   * 
+   * This endpoint:
+   * - Changes submission status to "Approved"
+   * - Updates UpdatedDate
+   * - Creates a record in DocumentApprovalHistory with ActionType = "Approved"
+   */
+  approveSubmission(
+    submissionId: number,
+    stageId: number,
+    actionByUserId: string,
+    comments?: string | null
+  ): Observable<FormSubmissionDto> {
+    return this.http.post<any>(`${this.baseUrl}/approve`, {
+      submissionId,
+      stageId,
+      actionByUserId,
+      comments: comments || null
+    }).pipe(
+      map((response: any) => {
+        // Handle ServiceResult<T> or direct object response
+        if (response && typeof response === 'object') {
+          if (response.success !== undefined) {
+            return response.data || response;
+          }
+          if (!response.id) {
+            return response.data || response.result || response;
+          }
+        }
+        return response;
+      }),
+      catchError((error) => {
+        console.error(`[FormSubmissionsService] Error approving form submission ${submissionId}:`, error);
+        
+        // Extract error message with better handling for 404
+        const errorResponse = error?.error;
+        let errorMessage = 'Failed to approve form submission';
+        
+        // Handle 404 specifically
+        if (error?.status === 404) {
+          errorMessage = 'Approve endpoint not found (404). Please ensure the backend API is running and the endpoint /api/FormSubmissions/approve exists.';
+        } else if (error?.status === 401) {
+          errorMessage = 'Unauthorized. Please log in again.';
+        } else if (error?.status === 403) {
+          errorMessage = 'You do not have permission to approve this submission.';
+        } else if (errorResponse) {
+          if (typeof errorResponse === 'string') {
+            errorMessage = errorResponse;
+          } else if (errorResponse.message) {
+            errorMessage = errorResponse.message;
+          } else if (errorResponse.errorMessage) {
+            errorMessage = errorResponse.errorMessage;
+          } else if (errorResponse.title) {
+            errorMessage = errorResponse.title;
+          } else if (errorResponse.detail) {
+            errorMessage = errorResponse.detail;
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+
+        throw new Error(errorMessage);
+      })
+    );
+  }
+
+  /**
+   * Reject form submission (using DTO)
+   * POST /api/FormSubmissions/reject
+   * 
+   * This endpoint:
+   * - Changes submission status to "Rejected"
+   * - Updates UpdatedDate
+   * - Creates a record in DocumentApprovalHistory with ActionType = "Rejected"
+   */
+  rejectSubmissionDto(dto: RejectSubmissionDto): Observable<ApiResponse<FormSubmissionDto>> {
+    return this.http.post<any>(`${this.baseUrl}/reject`, dto).pipe(
+      map((response: any) => {
+        // Handle ApiResponse wrapper or direct object response
+        if (response && typeof response === 'object') {
+          if (response.statusCode !== undefined) {
+            return response as ApiResponse<FormSubmissionDto>;
+          }
+          if (response.success !== undefined) {
+            return {
+              statusCode: response.success ? 200 : 400,
+              message: response.message || 'Operation completed',
+              data: response.data || response
+            } as ApiResponse<FormSubmissionDto>;
+          }
+          // Direct object response - wrap it
+          return {
+            statusCode: 200,
+            message: 'Submission rejected successfully',
+            data: response.data || response.result || response
+          } as ApiResponse<FormSubmissionDto>;
+        }
+        return {
+          statusCode: 200,
+          message: 'Submission rejected successfully',
+          data: response
+        } as ApiResponse<FormSubmissionDto>;
+      }),
+      catchError((error) => {
+        console.error(`[FormSubmissionsService] Error rejecting form submission:`, error);
+        return this.handleApproveRejectError(error, 'reject');
+      })
+    );
+  }
+
+  /**
+   * Reject form submission (legacy method - kept for backward compatibility)
+   * POST /api/FormSubmissions/reject
+   * 
+   * This endpoint:
+   * - Changes submission status to "Rejected"
+   * - Updates UpdatedDate
+   * - Creates a record in DocumentApprovalHistory with ActionType = "Rejected"
+   */
+  rejectSubmission(
+    submissionId: number,
+    stageId: number,
+    actionByUserId: string,
+    comments?: string | null
+  ): Observable<FormSubmissionDto> {
+    return this.http.post<any>(`${this.baseUrl}/reject`, {
+      submissionId,
+      stageId,
+      actionByUserId,
+      comments: comments || null
+    }).pipe(
+      map((response: any) => {
+        // Handle ServiceResult<T> or direct object response
+        if (response && typeof response === 'object') {
+          if (response.success !== undefined) {
+            return response.data || response;
+          }
+          if (!response.id) {
+            return response.data || response.result || response;
+          }
+        }
+        return response;
+      }),
+      catchError((error) => {
+        console.error(`[FormSubmissionsService] Error rejecting form submission ${submissionId}:`, error);
+        
+        // Extract error message with better handling for 404
+        const errorResponse = error?.error;
+        let errorMessage = 'Failed to reject form submission';
+        
+        // Handle 404 specifically
+        if (error?.status === 404) {
+          errorMessage = 'Reject endpoint not found (404). Please ensure the backend API is running and the endpoint /api/FormSubmissions/reject exists.';
+        } else if (error?.status === 401) {
+          errorMessage = 'Unauthorized. Please log in again.';
+        } else if (error?.status === 403) {
+          errorMessage = 'You do not have permission to reject this submission.';
+        } else if (errorResponse) {
+          if (typeof errorResponse === 'string') {
+            errorMessage = errorResponse;
+          } else if (errorResponse.message) {
+            errorMessage = errorResponse.message;
+          } else if (errorResponse.errorMessage) {
+            errorMessage = errorResponse.errorMessage;
+          } else if (errorResponse.title) {
+            errorMessage = errorResponse.title;
+          } else if (errorResponse.detail) {
+            errorMessage = errorResponse.detail;
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+
+        throw new Error(errorMessage);
+      })
+    );
+  }
+
+  /**
+   * Helper method to handle approve/reject errors consistently
+   */
+  private handleApproveRejectError(error: any, action: 'approve' | 'reject'): Observable<never> {
+    const errorResponse = error?.error;
+    let errorMessage = `Failed to ${action} form submission`;
+    
+    // Handle 404 specifically
+    if (error?.status === 404) {
+      errorMessage = `${action === 'approve' ? 'Approve' : 'Reject'} endpoint not found (404). Please ensure the backend API is running and the endpoint /api/FormSubmissions/${action} exists.`;
+    } else if (error?.status === 401) {
+      errorMessage = 'Unauthorized. Please log in again.';
+    } else if (error?.status === 403) {
+      errorMessage = `You do not have permission to ${action} this submission.`;
+    } else if (errorResponse) {
+      if (typeof errorResponse === 'string') {
+        errorMessage = errorResponse;
+      } else if (errorResponse.message) {
+        errorMessage = errorResponse.message;
+      } else if (errorResponse.errorMessage) {
+        errorMessage = errorResponse.errorMessage;
+      } else if (errorResponse.title) {
+        errorMessage = errorResponse.title;
+      } else if (errorResponse.detail) {
+        errorMessage = errorResponse.detail;
+      }
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
+
+    const apiError: ApiResponse<FormSubmissionDto> = {
+      statusCode: error?.status || 500,
+      message: errorMessage,
+      data: undefined
+    };
+
+    return new Observable(observer => {
+      observer.error(apiError);
+    });
   }
 }
 
