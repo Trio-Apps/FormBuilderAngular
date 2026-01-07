@@ -237,8 +237,10 @@
     <i class="pi pi-info-circle"></i>
     <span>{{ translationService.translate('formView.gridNotConfigured') || 'Grid is not configured yet.' }}</span>
     <div style="margin-top: 1rem; font-size: 0.875rem; color: #6b7280; text-align: left; max-width: 500px; margin-left: auto; margin-right: auto;">
-      <p *ngIf="!field.gridId"><strong>Issue:</strong> Field does not have a Grid ID configured.</p>
-      <p *ngIf="field.gridId && !grid"><strong>Issue:</strong> Grid with ID {{ field.gridId }} not found.</p>
+      <p *ngIf="field && !field.gridId"><strong>Issue:</strong> Field does not have a Grid ID configured.</p>
+      <p *ngIf="field && field.gridId && !grid"><strong>Issue:</strong> Grid with ID {{ field.gridId }} not found.</p>
+      <p *ngIf="!field && !gridId"><strong>Issue:</strong> Grid ID is not provided.</p>
+      <p *ngIf="gridId && !grid"><strong>Issue:</strong> Grid with ID {{ gridId }} not found.</p>
       <p *ngIf="grid && columns.length === 0"><strong>Issue:</strong> Grid has no columns configured.</p>
       <p style="margin-top: 0.5rem;"><strong>Solution:</strong> Please configure the Grid in the admin panel and link it to this field.</p>
     </div>

@@ -21,6 +21,8 @@ import { catchError, of, forkJoin, Observable } from 'rxjs';
 import { GridViewComponent } from './components/grid-view.component';
 import { CalculatedFieldComponent } from './components/calculated-field.component';
 import { CalculationEngineService } from '../FormBuilder/services/calculation-engine.service';
+import { GridService } from '../FormBuilder/services/grid.service';
+import { FormGridDto } from '../FormBuilder/form-builder/models/grid-dto.model';
 
 @Component({
   selector: 'app-form-view',
@@ -75,6 +77,9 @@ export class FormViewComponent implements OnInit {
   // Grid components reference
   @ViewChildren(GridViewComponent) gridViewComponents!: QueryList<GridViewComponent>;
 
+  // Grids for each tab (grids that are not associated with fields)
+  tabGrids: { [tabId: number]: FormGridDto[] } = {};
+
   // Default allowed file types (matching backend validation)
   private readonly DEFAULT_ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx', 'doc', 'docx'];
 
@@ -97,7 +102,8 @@ export class FormViewComponent implements OnInit {
     private documentTypesService: DocumentTypesService,
     private storageService: StorageService,
     private calculationEngine: CalculationEngineService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private gridService: GridService
   ) { }
 
   ngOnInit(): void {
@@ -386,6 +392,9 @@ export class FormViewComponent implements OnInit {
           this.activeTabIndex = 0;
           this.loading = false;
 
+          // Load grids for each tab (grids not associated with fields)
+          this.loadTabGrids();
+
           // Initialize form rules after form is loaded
           this.initializeFormRules();
 
@@ -500,6 +509,10 @@ export class FormViewComponent implements OnInit {
                 this.tabs = tabsWithFields.sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
                 this.activeTabIndex = 0;
                 this.loading = false;
+                
+                // Load grids for each tab (grids not associated with fields)
+                this.loadTabGrids();
+                
                 // Initialize uploaded files arrays (don't load yet - files will be loaded after first upload)
                 this.tabs.forEach(tab => {
                   tab.fields?.forEach(field => {
@@ -542,6 +555,9 @@ export class FormViewComponent implements OnInit {
                   .sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
                 this.activeTabIndex = 0;
                 this.loading = false;
+                
+                // Load grids for each tab (grids not associated with fields)
+                this.loadTabGrids();
               }
             }
           });
@@ -998,6 +1014,61 @@ export class FormViewComponent implements OnInit {
    */
   isLoadingFieldOptions(field: FormFieldDto): boolean {
     return field.id ? (this.loadingFieldOptions[field.id] || false) : false;
+  }
+
+  /**
+   * Load grids for each tab (grids that are not associated with fields)
+   */
+  private loadTabGrids(): void {
+    if (!this.tabs || this.tabs.length === 0) {
+      return;
+    }
+
+    // Get all gridIds that are already associated with fields
+    const fieldGridIds = new Set<number>();
+    this.tabs.forEach(tab => {
+      tab.fields?.forEach(field => {
+        if (field.gridId && field.gridId > 0) {
+          fieldGridIds.add(field.gridId);
+        }
+      });
+    });
+
+    // Load grids for each tab
+    this.tabs.forEach(tab => {
+      if (!tab.id) return;
+
+      // Try to load grids - use getGridsByTabId first, then filter for active ones
+      this.gridService.getGridsByTabId(tab.id).subscribe({
+        next: (response) => {
+          const allGrids = response.data || [];
+          // Filter for active grids only
+          const activeGrids = allGrids.filter(grid => grid.isActive);
+          // Filter out grids that are already associated with fields
+          const standaloneGrids = activeGrids.filter(grid => !fieldGridIds.has(grid.id));
+          // Sort by gridOrder
+          standaloneGrids.sort((a, b) => (a.gridOrder || 0) - (b.gridOrder || 0));
+          this.tabGrids[tab.id] = standaloneGrids;
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          // Silently handle 404 (no grids for this tab) - this is normal
+          if (error?.status === 404) {
+            this.tabGrids[tab.id] = [];
+          } else {
+            console.warn(`[FormView] Failed to load grids for tab ${tab.id}:`, error);
+            this.tabGrids[tab.id] = [];
+          }
+        }
+      });
+    });
+  }
+
+  /**
+   * Get grids for a specific tab
+   */
+  getTabGrids(tabId: number): FormGridDto[] {
+    return this.tabGrids[tabId] || [];
   }
 
   // ===== Field Type Helpers =====

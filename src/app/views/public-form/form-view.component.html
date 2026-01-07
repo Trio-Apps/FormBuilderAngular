@@ -327,8 +327,29 @@
         </div>
       </div>
 
+      <!-- Standalone Grids (grids not associated with fields) -->
+      <div class="tab-section" *ngIf="tab.id && getTabGrids(tab.id) && getTabGrids(tab.id).length > 0">
+        <div class="form-field" *ngFor="let grid of getTabGrids(tab.id)">
+          <!-- Grid Label -->
+          <label class="field-label">
+            {{ translationService.getCurrentLanguage() === 'ar' && grid.foreignGridName ? grid.foreignGridName : grid.gridName }}
+          </label>
+
+          <!-- Grid View -->
+          <div class="field-input-wrapper">
+            <app-grid-view 
+              [gridId]="grid.id"
+              [gridTitle]="translationService.getCurrentLanguage() === 'ar' && grid.foreignGridName ? grid.foreignGridName : grid.gridName"
+              [submissionId]="submissionId"
+              [formBuilderId]="form?.id || 0"
+              [isReadOnly]="false">
+            </app-grid-view>
+          </div>
+        </div>
+      </div>
+
       <!-- Empty Tab Message -->
-      <div class="empty-tab-message" *ngIf="!tab.fields || tab.fields.length === 0">
+      <div class="empty-tab-message" *ngIf="(!tab.fields || tab.fields.length === 0) && (!tab.id || !getTabGrids(tab.id) || getTabGrids(tab.id).length === 0)">
         <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'لا توجد حقول في هذا التبويب.' : 'No fields in this
           tab.' }}</p>
       </div>

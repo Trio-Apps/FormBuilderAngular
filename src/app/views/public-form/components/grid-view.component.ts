@@ -36,7 +36,9 @@ import { switchMap, map } from 'rxjs/operators';
   styleUrls: ['./grid-view.component.scss']
 })
 export class GridViewComponent implements OnInit, OnChanges {
-  @Input() field!: FormFieldDto;
+  @Input() field?: FormFieldDto; // Optional - can be used with gridId instead
+  @Input() gridId?: number; // Alternative to field - allows displaying grid directly without field
+  @Input() gridTitle?: string; // Title for grid when displayed without field
   @Input() submissionId: number = 0;
   @Input() formBuilderId: number = 0;
   @Input() isReadOnly: boolean = false; // If true, grid is read-only (e.g., after submission approval)
@@ -63,7 +65,8 @@ export class GridViewComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['field'] && !changes['field'].firstChange) {
+    if ((changes['field'] && !changes['field'].firstChange) || 
+        (changes['gridId'] && !changes['gridId'].firstChange)) {
       this.loadGrid();
     }
     if (changes['submissionId'] && !changes['submissionId'].firstChange) {
@@ -72,32 +75,44 @@ export class GridViewComponent implements OnInit, OnChanges {
   }
 
   /**
-   * Load grid schema (columns) from field configuration
+   * Load grid schema (columns) from field configuration or gridId
    */
   private loadGrid(): void {
-    if (!this.field) {
-      console.error('[GridView] Field is not provided');
-      return;
+    // Determine gridId to use
+    let targetGridId: number | undefined;
+    
+    if (this.gridId && this.gridId > 0) {
+      // Use gridId input directly (for standalone grids)
+      targetGridId = this.gridId;
+    } else if (this.field?.gridId && this.field.gridId > 0) {
+      // Use gridId from field
+      targetGridId = this.field.gridId;
     }
 
-    console.log('[GridView] Loading grid for field:', {
-      fieldId: this.field.id,
-      fieldCode: this.field.fieldCode,
-      fieldName: this.field.fieldName,
-      gridId: this.field.gridId,
+    if (!targetGridId) {
+      // If no gridId available, try other methods only if field is provided
+      if (!this.field) {
+        console.error('[GridView] Neither field nor gridId is provided');
+        return;
+      }
+    }
+
+    console.log('[GridView] Loading grid:', {
+      fieldId: this.field?.id,
+      fieldCode: this.field?.fieldCode,
+      fieldName: this.field?.fieldName,
+      gridId: targetGridId || this.gridId,
       formBuilderId: this.formBuilderId,
-      submissionId: this.submissionId,
-      fieldTypeName: this.field.fieldTypeName,
-      fieldTypeId: this.field.fieldTypeId
+      submissionId: this.submissionId
     });
 
     this.loading = true;
     this.error = '';
 
-    // Priority 1: Use field.gridId directly (preferred method)
-    if (this.field.gridId && this.field.gridId > 0) {
-      console.log('[GridView] ✅ Loading grid by ID:', this.field.gridId);
-      this.gridService.getGridById(this.field.gridId).subscribe({
+    // Priority 1: Use gridId directly (from input or field)
+    if (targetGridId && targetGridId > 0) {
+      console.log('[GridView] ✅ Loading grid by ID:', targetGridId);
+      this.gridService.getGridById(targetGridId).subscribe({
         next: (response: ApiResponse<FormGridDto>) => {
           console.log('[GridView] Grid loaded:', response);
           if (response.data && response.data.id) {
@@ -116,6 +131,14 @@ export class GridViewComponent implements OnInit, OnChanges {
           this.loading = false;
         }
       });
+      return;
+    }
+
+    // If we reach here, we need field to continue
+    if (!this.field) {
+      console.error('[GridView] Field is required when gridId is not provided');
+      this.error = 'Grid configuration is missing';
+      this.loading = false;
       return;
     }
 
@@ -155,7 +178,7 @@ export class GridViewComponent implements OnInit, OnChanges {
     }
 
     // Priority 3: Get grid by code from form builder (fallback)
-    if (this.formBuilderId > 0 && this.field.fieldCode) {
+    if (this.formBuilderId > 0 && this.field?.fieldCode) {
       console.log('[GridView] Trying to load grid by code:', {
         gridCode: this.field.fieldCode,
         formBuilderId: this.formBuilderId
@@ -178,7 +201,7 @@ export class GridViewComponent implements OnInit, OnChanges {
             console.warn('[GridView] Grid endpoint returned 404, trying fallback method');
             this.tryLoadGridFromFormBuilderList();
           } else {
-            this.error = `Error loading grid: ${error?.message || 'Unknown error'}. The grid with code '${this.field.fieldCode}' may not exist for this form.`;
+            this.error = `Error loading grid: ${error?.message || 'Unknown error'}. The grid with code '${this.field?.fieldCode}' may not exist for this form.`;
             this.loading = false;
           }
         }
@@ -187,21 +210,25 @@ export class GridViewComponent implements OnInit, OnChanges {
     }
 
     // No grid ID found
-    console.error('[GridView] ❌ No grid ID found for field:', {
-      fieldId: this.field.id,
-      fieldCode: this.field.fieldCode,
-      fieldName: this.field.fieldName,
-      gridId: this.field.gridId,
-      defaultValueJson: this.field.defaultValueJson,
-      formBuilderId: this.formBuilderId,
-      fieldTypeName: this.field.fieldTypeName,
-      fieldTypeId: this.field.fieldTypeId
-    });
-    
-    // Show helpful error message
-    this.error = `Grid field "${this.field.fieldName || this.field.fieldCode}" is not linked to a Grid. ` +
-                 `Please go to the admin panel and select a Grid for this field. ` +
-                 `(Field ID: ${this.field.id}, Field Code: ${this.field.fieldCode})`;
+    if (this.field) {
+      console.error('[GridView] ❌ No grid ID found for field:', {
+        fieldId: this.field.id,
+        fieldCode: this.field.fieldCode,
+        fieldName: this.field.fieldName,
+        gridId: this.field.gridId,
+        defaultValueJson: this.field.defaultValueJson,
+        formBuilderId: this.formBuilderId,
+        fieldTypeName: this.field.fieldTypeName,
+        fieldTypeId: this.field.fieldTypeId
+      });
+      
+      // Show helpful error message
+      this.error = `Grid field "${this.field.fieldName || this.field.fieldCode}" is not linked to a Grid. ` +
+                   `Please go to the admin panel and select a Grid for this field. ` +
+                   `(Field ID: ${this.field.id}, Field Code: ${this.field.fieldCode})`;
+    } else {
+      this.error = 'Grid ID is required but not provided.';
+    }
     this.loading = false;
   }
 
@@ -212,6 +239,12 @@ export class GridViewComponent implements OnInit, OnChanges {
   private tryLoadGridFromFormBuilderList(): void {
     if (!this.formBuilderId || this.formBuilderId <= 0) {
       this.error = 'Cannot load grid: Form Builder ID is missing.';
+      this.loading = false;
+      return;
+    }
+
+    if (!this.field) {
+      this.error = 'Cannot load grid: Field is required for fallback method.';
       this.loading = false;
       return;
     }
@@ -229,17 +262,17 @@ export class GridViewComponent implements OnInit, OnChanges {
 
         // Try to find grid by code
         let foundGrid: FormGridDto | null = null;
-        if (this.field.fieldCode) {
+        if (this.field?.fieldCode) {
           foundGrid = grids.find(g => 
-            g.gridCode?.toLowerCase() === this.field.fieldCode?.toLowerCase()
+            g.gridCode?.toLowerCase() === this.field?.fieldCode?.toLowerCase()
           ) || null;
         }
 
         // If not found by code, try to find by field name
-        if (!foundGrid && this.field.fieldName) {
+        if (!foundGrid && this.field?.fieldName) {
           foundGrid = grids.find(g => 
-            g.gridName?.toLowerCase().includes(this.field.fieldName?.toLowerCase() || '') ||
-            this.field.fieldName?.toLowerCase().includes(g.gridName?.toLowerCase() || '')
+            g.gridName?.toLowerCase().includes(this.field?.fieldName?.toLowerCase() || '') ||
+            this.field?.fieldName?.toLowerCase().includes(g.gridName?.toLowerCase() || '')
           ) || null;
         }
 
@@ -255,7 +288,7 @@ export class GridViewComponent implements OnInit, OnChanges {
           this.loadColumns();
         } else {
           console.warn('[GridView] ❌ Grid not found in form builder list. Available grids:', grids.map(g => g.gridCode || g.gridName));
-          this.error = `Grid not found for field "${this.field.fieldName || this.field.fieldCode}". ` +
+          this.error = `Grid not found for field "${this.field?.fieldName || this.field?.fieldCode}". ` +
                        `Available grids: ${grids.length > 0 ? grids.map(g => g.gridCode || g.gridName).join(', ') : 'None'}. ` +
                        `Please ensure the field is linked to a Grid in the admin panel.`;
           this.loading = false;
@@ -264,7 +297,7 @@ export class GridViewComponent implements OnInit, OnChanges {
       error: (error) => {
         console.error('[GridView] Error loading grids from form builder:', error);
         this.error = `Error loading grids: ${error?.message || 'Unknown error'}. ` +
-                     `The grid with code '${this.field.fieldCode}' may not exist for this form. ` +
+                     `The grid with code '${this.field?.fieldCode}' may not exist for this form. ` +
                      `Please check the backend endpoint /api/FormGrids/active-by-form-builder/${this.formBuilderId} or ensure the field has a valid gridId.`;
         this.loading = false;
       }
@@ -817,6 +850,11 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Get grid title (multilingual)
    */
   getGridTitle(): string {
+    // Use gridTitle input if provided (for standalone grids)
+    if (this.gridTitle) {
+      return this.gridTitle;
+    }
+    
     if (!this.grid) {
       return 'Grid';
     }
