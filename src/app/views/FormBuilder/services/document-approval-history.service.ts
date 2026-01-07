@@ -11,13 +11,17 @@ export type ApprovalActionType = 'Approved' | 'Rejected' | 'Returned' | 'Pending
 export interface DocumentApprovalHistoryDto {
   id: number;
   submissionId: number;
+  documentNumber?: string;
+  formName?: string;
+  documentTypeName?: string;
+  submissionStatus?: string;
   stageId: number;
+  stageName?: string;
   actionType: ApprovalActionType;
   actionByUserId: string;
+  actionByUserName?: string | null;
   actionDate: string | Date;
   comments?: string | null;
-  actionByUserName?: string;
-  stageName?: string;
   isDelegated?: boolean;
   delegatedFromUserId?: string | null;
   delegatedFromUserName?: string | null;
@@ -121,6 +125,53 @@ export class DocumentApprovalHistoryService {
       catchError((error) => {
         console.error(`Error fetching approval history for user ${userId}:`, error);
         return of([]);
+      })
+    );
+  }
+
+  /**
+   * Get all approval history
+   * GET /api/DocumentApprovalHistory/all
+   * 
+   * Note: This endpoint requires [Authorize] attribute in the backend controller.
+   * Only authenticated users with proper authorization can access this endpoint.
+   */
+  getAllApprovalHistory(): Observable<DocumentApprovalHistoryDto[]> {
+    return this.http.get<any>(`${this.baseUrl}/all`).pipe(
+      map((response: any) => {
+        // Handle ApiResponse wrapper
+        let data: any[] = [];
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          if (response.statusCode !== undefined) {
+            data = response.data || [];
+          } else if (response.success !== undefined) {
+            data = response.data || [];
+          } else {
+            data = response.data || response.items || response.result || [];
+          }
+        } else {
+          data = Array.isArray(response) ? response : [];
+        }
+        
+        // Debug: Log first item to check structure
+        if (data.length > 0) {
+          console.log('[DocumentApprovalHistoryService] Sample item structure:', data[0]);
+          console.log('[DocumentApprovalHistoryService] Items with submissionStatus:', 
+            data.filter(item => item.submissionStatus).map(item => ({
+              id: item.id,
+              submissionId: item.submissionId,
+              submissionStatus: item.submissionStatus,
+              documentNumber: item.documentNumber
+            }))
+          );
+        }
+        
+        return data;
+      }),
+      catchError((error) => {
+        console.error('Error fetching all approval history:', error);
+        const errorMessage = this.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
       })
     );
   }

@@ -268,19 +268,72 @@ export class ApprovalWorkflowRuntimeService {
     }
 
     const encodedUserId = encodeURIComponent(userId);
-    return this.http.get<any>(`${this.baseUrl}/inbox/${encodedUserId}`).pipe(
+    const url = `${this.baseUrl}/inbox/${encodedUserId}`;
+    
+    console.log('[ApprovalWorkflowRuntimeService] Fetching inbox for user:', {
+      userId: userId,
+      encodedUserId: encodedUserId,
+      url: url
+    });
+    
+    return this.http.get<any>(url).pipe(
       map((response: any) => {
+        console.log('[ApprovalWorkflowRuntimeService] Raw response from API:', response);
+        
         // Handle ServiceResult<T> or direct array response
+        let data: any[] = [];
         if (response && typeof response === 'object' && !Array.isArray(response)) {
           if (response.success !== undefined) {
-            return response.data || [];
+            data = response.data || [];
+          } else {
+            data = response.data || response.items || response.result || [];
           }
-          return response.data || response.items || response.result || [];
+        } else {
+          data = Array.isArray(response) ? response : [];
         }
-        return Array.isArray(response) ? response : [];
+        
+        console.log('[ApprovalWorkflowRuntimeService] Parsed inbox items:', {
+          count: data.length,
+          items: data.map((item: any) => ({
+            submissionId: item.submissionId,
+            stageId: item.stageId,
+            stageName: item.stageName,
+            documentNumber: item.documentNumber,
+            workflowId: item.workflowId,
+            workflowName: item.workflowName
+          }))
+        });
+        
+        // Check for items with stageId = 0
+        const itemsWithZeroStageId = data.filter((item: any) => item.stageId === 0 || !item.stageId);
+        if (itemsWithZeroStageId.length > 0) {
+          console.warn('[ApprovalWorkflowRuntimeService] ⚠️ Found items with stageId = 0:', {
+            count: itemsWithZeroStageId.length,
+            items: itemsWithZeroStageId.map((item: any) => ({
+              submissionId: item.submissionId,
+              stageId: item.stageId,
+              stageName: item.stageName,
+              documentNumber: item.documentNumber
+            }))
+          });
+          console.warn('[ApprovalWorkflowRuntimeService] This means backend returned items but user is NOT assigned as Stage Assignee');
+          console.warn('[ApprovalWorkflowRuntimeService] Check backend endpoint: GET /api/ApprovalWorkflowRuntime/inbox/{userId}');
+          console.warn('[ApprovalWorkflowRuntimeService] Verify:');
+          console.warn('  1. Backend checks Stage Assignees correctly');
+          console.warn('  2. userId/username matches Stage Assignees');
+          console.warn('  3. Stage Assignees are active (IsActive = true)');
+        }
+        
+        return data;
       }),
       catchError((error) => {
-        console.error(`Error fetching approval inbox for user ${userId}:`, error);
+        console.error(`[ApprovalWorkflowRuntimeService] Error fetching approval inbox for user ${userId}:`, {
+          error: error,
+          status: error?.status,
+          statusText: error?.statusText,
+          errorMessage: error?.error,
+          url: url
+        });
         return of([]);
       })
     );

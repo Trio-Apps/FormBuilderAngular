@@ -42,7 +42,7 @@ export interface BulkUpdateAssigneesDto {
 export class ApprovalStageAssigneesService {
   private baseUrl = `${environment.apiUrl}/ApprovalStageAssignees`;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
   // ==================== CRUD Operations ====================
 
@@ -108,8 +108,9 @@ export class ApprovalStageAssigneesService {
   }
 
   /**
-   * Create assignee (Role-based or User-based)
+   * Create assignee (User-based assignment)
    * POST /api/ApprovalStageAssignees
+   * Backend automatically extracts roleId from the provided userId
    */
   createAssignee(dto: CreateApprovalStageAssigneeDto): Observable<ApprovalStageAssigneeDto> {
     // Validate required fields
@@ -122,16 +123,18 @@ export class ApprovalStageAssigneesService {
       return throwError(() => new Error('UserId is required'));
     }
 
-    // Build DTO - userId is required, roleId is optional (used as fallback)
+    // Build DTO - userId is required, roleId is optional (used as fallback if user has no role)
+    // Backend automatically extracts roleId from userId if not provided
     const createDto: any = {
       stageId: dto.stageId,
       userId: dto.userId,
+      roleId: dto.roleId || null,
       isActive: dto.isActive !== undefined ? dto.isActive : true
     };
-    
-    // Include roleId if provided (for fallback when user has no role)
-    if (dto.roleId) {
-      createDto.roleId = dto.roleId;
+
+    // Log intent
+    if (!dto.roleId) {
+      console.log('[ApprovalStageAssigneesService] roleId not provided, backend will extract it from userId');
     }
 
     console.log('[ApprovalStageAssigneesService] Creating assignee:', createDto);
@@ -230,8 +233,8 @@ export class ApprovalStageAssigneesService {
     }
 
     // Validate that at least one array has items
-    if ((!payload.roleIds || payload.roleIds.length === 0) && 
-        (!payload.userIds || payload.userIds.length === 0)) {
+    if ((!payload.roleIds || payload.roleIds.length === 0) &&
+      (!payload.userIds || payload.userIds.length === 0)) {
       return throwError(() => new Error('At least one roleId or userId must be provided'));
     }
 
@@ -274,7 +277,7 @@ export class ApprovalStageAssigneesService {
       }),
       catchError((error) => {
         console.error('[ApprovalStageAssigneesService] Error deleting assignee:', error);
-        
+
         if (error.status === 404) {
           throw new Error('Assignee not found');
         }
@@ -311,7 +314,7 @@ export class ApprovalStageAssigneesService {
       } else if (errorResponse.errors && Array.isArray(errorResponse.errors)) {
         return errorResponse.errors.join(', ');
       }
-      
+
       // Check for detail (most specific message in ProblemDetails)
       if (errorResponse.detail) {
         errorMessage = errorResponse.detail;

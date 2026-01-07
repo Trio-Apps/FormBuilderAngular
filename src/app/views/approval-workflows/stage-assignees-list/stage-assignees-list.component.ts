@@ -99,10 +99,11 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     private confirmationService: ConfirmationService,
     public translationService: TranslationService
   ) {
-    // Initialize the assignee form - Role only (takes roleId from selected user's role)
+    // Initialize the assignee form - User-based assignment
+    // Backend automatically extracts roleId from the selected user
     this.assigneeForm = this.fb.group({
       stageId: [null, [Validators.required]],
-      userId: [null, [Validators.required]], // User dropdown, but we'll extract roleId from it
+      userId: [null, [Validators.required]], // User selection - Backend extracts roleId automatically
       isActive: [true]
     });
 
@@ -131,7 +132,7 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
           this.loadStage();
           this.loadAssignees();
           this.loadUsers();
-          this.loadUserGroups(); // Load user groups to find "user" role as fallback
+          this.loadUserGroups(); // Load user groups for fallback role assignment if needed
         } else {
           this.messageService.add({
             severity: 'warn',
@@ -305,7 +306,7 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     this.editingAssignee = null;
     this.showModal = true;
     
-    // Reset form with default values - User only
+    // Reset form with default values - User-based assignment
     this.assigneeForm.reset({
       stageId: this.stageId,
       userId: null,
@@ -324,10 +325,10 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     this.editingAssignee = assignee;
     this.showModal = true;
     
-    // Convert string ID to number for dropdown - User only
+    // Convert string ID to number for dropdown
     const userId = assignee.userId ? parseInt(assignee.userId, 10) : null;
     
-    // Patch form values - User only
+    // Patch form values - User-based assignment
     this.assigneeForm.patchValue({
       stageId: assignee.stageId,
       userId: userId,
@@ -349,7 +350,7 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     
     this.showBulkUpdateModal = true;
     
-    // Pre-select current assignees - User only
+    // Pre-select current assignees - User-based assignment
     const currentUsers: UserDto[] = [];
     
     this.assignees.forEach(assignee => {
@@ -421,10 +422,37 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
       ? this.assigneeForm.get('isActive')?.value 
       : true;
 
-    // Create DTO - only userId is required, Backend extracts roleId automatically
+    // Try to get roleId from userGroups if available (Backend requires RoleId)
+    // First, try to find "user" role as default
+    let roleId: string | undefined;
+    
+    if (this.userGroups && this.userGroups.length > 0) {
+      const userRole = this.userGroups.find(g => 
+        g.name?.toLowerCase() === 'user' || 
+        g.name?.toLowerCase() === 'users' ||
+        g.foreignName?.toLowerCase() === 'user'
+      );
+      
+      if (userRole) {
+        roleId = String(userRole.id);
+        console.log('[StageAssigneesList] Found default "user" role:', roleId);
+      } else {
+        // If "user" role not found, use first active role
+        const firstActiveRole = this.userGroups.find(g => g.isActive);
+        if (firstActiveRole) {
+          roleId = String(firstActiveRole.id);
+          console.log('[StageAssigneesList] Using first active role:', roleId);
+        }
+      }
+    } else {
+      console.warn('[StageAssigneesList] userGroups not loaded yet, roleId will be null');
+    }
+
+    // Create DTO - include roleId if available (Backend requires it)
     const createDto: CreateApprovalStageAssigneeDto = {
       stageId: stageId,
-      userId: userId,  // Only userId - Backend extracts roleId automatically
+      userId: userId,
+      roleId: roleId, // Include roleId if available
       isActive: isActive
     };
 
@@ -520,41 +548,57 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
             errorMessage = error.message;
           }
           
-          // Check if error is "User does not have an active role"
+          // Check if error is related to RoleId being required
           const errorMessageLower = errorMessage.toLowerCase();
-          if (errorMessageLower.includes('does not have an active role') || 
-              errorMessageLower.includes('user does not have') ||
-              errorMessageLower.includes('no active role')) {
+          const isRoleIdRequired = errorMessageLower.includes('roleid') && 
+                                   (errorMessageLower.includes('required') || 
+                                    errorMessageLower.includes('field is required'));
+          
+          const isUserRoleError = errorMessageLower.includes('does not have an active role') || 
+                                  errorMessageLower.includes('user does not have') ||
+                                  errorMessageLower.includes('no active role');
+          
+          // If RoleId is required or user has no role, try to get roleId from userGroups
+          if (isRoleIdRequired || isUserRoleError) {
+            console.log('[StageAssigneesList] RoleId is required or user has no role, attempting to find roleId...');
             
-            // Find "user" role in userGroups as fallback
-            const userRole = this.userGroups.find(g => 
+            // Try to find the user's role from userGroups
+            // First, try to find a role that matches the user (if we have user info)
+            let userRole: UserGroupDto | undefined;
+            
+            // Try to find "user" role as fallback
+            userRole = this.userGroups.find(g => 
               g.name?.toLowerCase() === 'user' || 
               g.name?.toLowerCase() === 'users' ||
               g.foreignName?.toLowerCase() === 'user'
             );
             
+            // If not found, try to get the first active role
+            if (!userRole && this.userGroups.length > 0) {
+              userRole = this.userGroups.find(g => g.isActive) || this.userGroups[0];
+            }
+            
             if (userRole) {
-              console.log('[StageAssigneesList] User has no role, using "user" role as fallback:', userRole);
+              console.log('[StageAssigneesList] Found role to use:', userRole);
               
-              // Retry with roleId = user role ID
-              // Note: We need to send both userId and roleId in this case
-              const retryDto: any = {
+              // Retry with roleId
+              const retryDto: CreateApprovalStageAssigneeDto = {
                 stageId: createDto.stageId,
                 userId: createDto.userId,
-                roleId: String(userRole.id), // Use "user" role ID
+                roleId: String(userRole.id), // Include roleId
                 isActive: createDto.isActive
               };
               
               console.log('[StageAssigneesList] Retrying with roleId:', retryDto);
               
               // Retry the request with roleId
-              this.assigneesService.createAssignee(retryDto as any).subscribe({
+              this.assigneesService.createAssignee(retryDto).subscribe({
                 next: () => {
                   this.loading.save = false;
                   this.messageService.add({ 
                     severity: 'success', 
                     summary: 'Success', 
-                    detail: 'Assignee created successfully (using default "user" role)' 
+                    detail: `Assignee created successfully${isRoleIdRequired ? ' (roleId included)' : ' (using default role)'}` 
                   });
                   this.closeModal();
                   this.loadAssignees();
@@ -562,10 +606,11 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
                 error: (retryError: any) => {
                   this.loading.save = false;
                   console.error('Error retrying with roleId:', retryError);
+                  let retryErrorMessage = this.extractErrorMessage(retryError);
                   this.messageService.add({ 
                     severity: 'error', 
                     summary: 'Error', 
-                    detail: errorMessage,
+                    detail: retryErrorMessage || errorMessage,
                     life: 5000
                   });
                   this.cdr.detectChanges();
@@ -573,7 +618,13 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
               });
               return; // Exit early, retry is in progress
             } else {
-              console.warn('[StageAssigneesList] User has no role and "user" role not found in userGroups');
+              console.warn('[StageAssigneesList] No role found in userGroups. Please ensure roles are loaded.');
+              this.messageService.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'RoleId is required but no role was found. Please ensure the user has a role assigned.',
+                life: 5000
+              });
             }
           }
           
@@ -629,7 +680,7 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
       return String(value);
     };
 
-    // Extract IDs from arrays - User only
+    // Extract IDs from arrays - User-based assignment
     const userIdsString: string[] = userIds
       .map((item: any) => extractId(item))
       .filter((id: string | null): id is string => id !== null && id !== 'undefined' && id !== 'null');
@@ -647,7 +698,6 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
 
     const bulkDto: BulkUpdateAssigneesDto = {
       stageId: this.stageId,
-      roleIds: undefined, // Always undefined - User only
       userIds: userIdsString.length > 0 ? userIdsString : undefined
     };
 
@@ -749,6 +799,49 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
       const control = formGroup.get(key);
       control?.markAsTouched();
     });
+  }
+
+  /**
+   * Extract error message from error object
+   */
+  private extractErrorMessage(error: any): string {
+    let errorMessage = 'Failed to process request';
+    
+    if (error?.error) {
+      // Check for validation errors (ASP.NET Core ProblemDetails format)
+      if (error.error.errors && typeof error.error.errors === 'object') {
+        const errorDetails: string[] = [];
+        for (const [field, messages] of Object.entries(error.error.errors)) {
+          if (Array.isArray(messages)) {
+            messages.forEach((msg: string) => errorDetails.push(`${field}: ${msg}`));
+          } else {
+            errorDetails.push(`${field}: ${messages}`);
+          }
+        }
+        if (errorDetails.length > 0) {
+          return errorDetails.join(', ');
+        }
+      } else if (error.error.errors && Array.isArray(error.error.errors)) {
+        return error.error.errors.join(', ');
+      }
+      
+      // Extract main error message
+      if (error.error.detail) {
+        errorMessage = error.error.detail;
+      } else if (typeof error.error === 'string') {
+        errorMessage = error.error;
+      } else if (error.error.message) {
+        errorMessage = error.error.message;
+      } else if (error.error.errorMessage) {
+        errorMessage = error.error.errorMessage;
+      } else if (error.error.title) {
+        errorMessage = error.error.title;
+      }
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
+    
+    return errorMessage;
   }
 
   closeModal(): void {

@@ -60,6 +60,11 @@ export const navItems: INavData[] = [
         name: 'Delegations',
         url: '/approval-delegations',
         iconComponent: { name: 'cil-user' }
+      },
+      {
+        name: 'Approvals History',
+        url: '/approvals-history',
+        iconComponent: { name: 'cil-clock' }
       }
     ]
   },

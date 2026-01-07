@@ -33,7 +33,7 @@ export class UsersService {
   // Try different possible endpoint names
   private baseUrl = `${environment.apiUrl}/Users`;
   private userGroupsUrl = `${environment.apiUrl}/UserGroups`;
-  
+
   // Alternative endpoint names (fallback)
   private alternativeUsersUrl = `${environment.apiUrl}/Account/Users`;
   private alternativeUserGroupsUrl = `${environment.apiUrl}/Account/UserGroups`;
@@ -51,7 +51,7 @@ export class UsersService {
         alternativeUsers: this.alternativeUsersUrl,
         alternativeUserGroups: this.alternativeUserGroupsUrl
       });
-      
+
       // Test API connectivity
       this.checkApiHealth();
     }
@@ -65,11 +65,11 @@ export class UsersService {
     // Try to access Swagger UI or a known endpoint
     const swaggerUrl = environment.links?.apiDocs || 'https://localhost:7276/swagger';
     const healthCheckUrl = `${environment.apiUrl.replace('/api', '')}/swagger/v1/swagger.json`;
-    
+
     console.log('[UsersService] Checking API health...');
     console.log('[UsersService] Swagger URL:', swaggerUrl);
     console.log('[UsersService] Health check URL:', healthCheckUrl);
-    
+
     // Try to fetch Swagger JSON (doesn't require auth)
     fetch(healthCheckUrl, { method: 'HEAD', mode: 'no-cors' })
       .then(() => {
@@ -115,14 +115,14 @@ export class UsersService {
   getActiveUsers(): Observable<UserDto[]> {
     const token = this.storageService.getToken();
     const url = `${this.baseUrl}/active`;
-    
+
     // Debug logging
     if (environment.config?.enableDebug) {
       console.log('[UsersService] getActiveUsers - URL:', url);
       console.log('[UsersService] getActiveUsers - Token exists:', !!token);
       console.log('[UsersService] getActiveUsers - Token preview:', token ? `${token.substring(0, 20)}...` : 'N/A');
     }
-    
+
     // Try primary endpoint first
     return this.http.get<any>(url).pipe(
       tap((response) => {
@@ -152,7 +152,7 @@ export class UsersService {
           fullUrl: url,
           apiBaseUrl: environment.apiUrl
         });
-        
+
         // Special handling for 404 - likely API server not running or routes not registered
         if (error.status === 404) {
           console.error('[UsersService] ⚠️ 404 Error - Possible causes:');
@@ -161,7 +161,7 @@ export class UsersService {
           console.error('  3. Route may not exist:', url);
           console.error('  4. Check Swagger UI at:', environment.links?.apiDocs || 'https://localhost:7276/swagger');
         }
-        
+
         // If 404 or 401, try alternative endpoint
         if (error?.status === 404 || error?.status === 401) {
           console.warn(`[UsersService] Primary endpoint failed (${error.status}), trying alternative...`);
@@ -187,7 +187,7 @@ export class UsersService {
                 url: altError.url,
                 message: altError.message
               });
-              
+
               // If still fails, try getting all users and filter client-side
               console.warn('[UsersService] Alternative endpoint failed, trying getAllUsers...');
               return this.getAllUsers().pipe(
@@ -269,14 +269,15 @@ export class UsersService {
   getActiveUserGroups(): Observable<UserGroupDto[]> {
     const token = this.storageService.getToken();
     const url = `${this.userGroupsUrl}/active`;
-    
+    const rolesUrl = `${environment.apiUrl}/Roles/active`;
+
     // Debug logging
     if (environment.config?.enableDebug) {
       console.log('[UsersService] getActiveUserGroups - URL:', url);
       console.log('[UsersService] getActiveUserGroups - Token exists:', !!token);
       console.log('[UsersService] getActiveUserGroups - Token preview:', token ? `${token.substring(0, 20)}...` : 'N/A');
     }
-    
+
     // Try primary endpoint first
     return this.http.get<any>(url).pipe(
       tap((response) => {
@@ -306,7 +307,7 @@ export class UsersService {
           fullUrl: url,
           apiBaseUrl: environment.apiUrl
         });
-        
+
         // Special handling for 404 - likely API server not running or routes not registered
         if (error.status === 404) {
           console.error('[UsersService] ⚠️ 404 Error - Possible causes:');
@@ -315,7 +316,7 @@ export class UsersService {
           console.error('  3. Route may not exist:', url);
           console.error('  4. Check Swagger UI at:', environment.links?.apiDocs || 'https://localhost:7276/swagger');
         }
-        
+
         // If 404 or 401, try alternative endpoint
         if (error?.status === 404 || error?.status === 401) {
           console.warn(`[UsersService] Primary endpoint failed (${error.status}), trying alternative...`);
@@ -341,10 +342,23 @@ export class UsersService {
                 url: altError.url,
                 message: altError.message
               });
-              
+
               // If still fails, try getting all groups and filter client-side
-              console.warn('[UsersService] Alternative endpoint failed, trying getAllUserGroups...');
-              return this.getAllUserGroups().pipe(
+              // If still fails, try Roles endpoint
+              console.warn('[UsersService] Alternative endpoint failed, trying Roles endpoint...');
+              return this.http.get<any>(`${environment.apiUrl}/Roles/active`).pipe(
+                map((response: any) => {
+                  if (response && typeof response === 'object' && !Array.isArray(response)) {
+                    if (response.success !== undefined) return response.data || [];
+                    return response.data || response.items || response.result || [];
+                  }
+                  return Array.isArray(response) ? response : [];
+                }),
+                catchError(() => {
+                  console.warn('[UsersService] Roles endpoint failed, trying getAllUserGroups...');
+                  return this.getAllUserGroups();
+                })
+              ).pipe(
                 map((groups: UserGroupDto[]) => {
                   return groups.filter(g => g.isActive !== false);
                 }),

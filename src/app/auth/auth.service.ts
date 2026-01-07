@@ -15,6 +15,7 @@ export interface LoginResponse {
   success: boolean;
   token?: string;
   role?: string;
+  userId?: string | number; // User ID from backend
   expiresAt?: string;
   errorMessage?: string;
 }
@@ -38,10 +39,30 @@ export class AuthService {
     }).pipe(
       tap((response: LoginResponse) => {
         if (response.success && response.token) {
+          // Extract userId from response or from JWT token
+          let userId: number | undefined = undefined;
+          
+          // Try to get userId from response
+          if (response.userId) {
+            userId = typeof response.userId === 'string' ? parseInt(response.userId, 10) : response.userId;
+          } else {
+            // Try to extract userId from JWT token
+            try {
+              const payload = JSON.parse(atob(response.token.split('.')[1]));
+              if (payload.userId || payload.sub || payload.nameid) {
+                const tokenUserId = payload.userId || payload.sub || payload.nameid;
+                userId = typeof tokenUserId === 'string' ? parseInt(tokenUserId, 10) : tokenUserId;
+              }
+            } catch (e) {
+              console.warn('[AuthService] Could not extract userId from token');
+            }
+          }
+          
           this.setSession(
             response.token,
             credentials.username,
-            response.role || 'User'
+            response.role || 'User',
+            userId
           );
         }
       }),
@@ -71,9 +92,16 @@ export class AuthService {
     return this.storageService.getRole();
   }
 
-  private setSession(token: string, username: string, role: string): void {
+  private setSession(token: string, username: string, role: string, userId?: number): void {
     this.storageService.setToken(token);
-    this.storageService.setUserInfo(username, role);
+    this.storageService.setUserInfo(username, role, userId);
+    
+    console.log('[AuthService] Session set:', {
+      username: username,
+      role: role,
+      userId: userId,
+      hasToken: !!token
+    });
   }
 
   private clearSession(): void {

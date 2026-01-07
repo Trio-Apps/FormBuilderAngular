@@ -1,0 +1,128 @@
+<div class="fields-page-container">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <div class="nav-title-section">
+          <h1 class="page-title">Approvals History</h1>
+          <p class="page-subtitle">View all approval and rejection actions</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="refreshData()" [disabled]="loading.history" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="document-types-section">
+      <div class="section-header">
+        <h3>All Approval History</h3>
+        <div class="header-actions">
+          <select 
+            class="filter-select"
+            [(ngModel)]="selectedActionType"
+            (change)="onActionTypeChange()"
+            [disabled]="loading.history">
+            <option *ngFor="let type of actionTypes" [value]="type.value">
+              {{ type.label }}
+            </option>
+          </select>
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input 
+              type="text" 
+              placeholder="Search by document number, form, type, user, stage, or comments..." 
+              class="search-input" 
+              [(ngModel)]="searchTerm" 
+              (input)="onSearchChange()" />
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="loading.history" class="loading-container">
+        <i class="pi pi-spin pi-spinner"></i>
+        <p>Loading approval history...</p>
+      </div>
+
+      <div *ngIf="!loading.history && filteredItems.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-history"></i>
+        </div>
+        <h4>No Approval History Found</h4>
+        <p *ngIf="searchTerm || selectedActionType !== 'all'">
+          No approval history matches your current filters. Try adjusting your search criteria.
+        </p>
+        <p *ngIf="!searchTerm && selectedActionType === 'all'">
+          No approval history records found in the system.
+        </p>
+      </div>
+
+      <p-table 
+        *ngIf="!loading.history && filteredItems.length > 0" 
+        [value]="getPaginatedItems()" 
+        [paginator]="false"
+        styleClass="p-datatable-sm document-types-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>#</th>
+            <th>Document Number</th>
+            <th>Form Name</th>
+            <th>Document Type</th>
+            <th>Status</th>
+            <th>Stage</th>
+            <th>Action Type</th>
+            <th>Action By</th>
+            <th>Action Date</th>
+            <th>Comments</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item let-rowIndex="rowIndex">
+          <tr>
+            <td>{{ first + rowIndex + 1 }}</td>
+            <td>
+              <span class="document-number">{{ item.documentNumber || '-' }}</span>
+            </td>
+            <td>{{ item.formName || '-' }}</td>
+            <td>{{ item.documentTypeName || '-' }}</td>
+            <td>
+              <span [class]="getStatusBadgeClass(item.submissionStatus)">
+                {{ item.submissionStatus || '-' }}
+              </span>
+            </td>
+            <td>
+              <span class="badge badge-info">{{ item.stageName || '-' }}</span>
+            </td>
+            <td>
+              <span [class]="getActionTypeBadgeClass(item.actionType)">
+                <i [class]="getActionTypeIcon(item.actionType)"></i>
+                {{ item.actionType }}
+              </span>
+            </td>
+            <td>{{ item.actionByUserName || item.actionByUserId || '-' }}</td>
+            <td>{{ formatDate(item.actionDate) }}</td>
+            <td>
+              <span *ngIf="item.comments" class="comments-text" [pTooltip]="item.comments">
+                {{ item.comments.length > 50 ? (item.comments.substring(0, 50) + '...') : item.comments }}
+              </span>
+              <span *ngIf="!item.comments">-</span>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+
+      <p-paginator 
+        *ngIf="!loading.history && filteredItems.length > 0"
+        [first]="first" 
+        [rows]="rows" 
+        [totalRecords]="totalRecords"
+        [rowsPerPageOptions]="[10, 20, 50]" 
+        (onPageChange)="onPageChange($event)">
+      </p-paginator>
+    </div>
+  </div>
+</div>
+
+<p-toast></p-toast>
+

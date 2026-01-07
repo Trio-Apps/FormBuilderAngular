@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto, ProcessApprovalActionDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
+import { ApprovalStageAssigneesService } from '../../FormBuilder/services/approval-stage-assignees.service';
 import { FormSubmissionsService, FormSubmissionDto } from '../../form-submissions/services/form-submissions.service';
 import { StorageService } from '../../../auth/storage.service';
 import { AuthService } from '../../../auth/auth.service';
@@ -45,6 +46,7 @@ export class ApprovalInboxComponent implements OnInit {
   filteredItems: ApprovalInboxItemDto[] = [];
   allSubmissions: FormSubmissionDto[] = []; // All submissions with Submitted status
   currentUserId: string | null = null;
+  currentUsername: string | null = null; // Store username separately in case backend needs it
   showAllSubmissions = false; // Toggle between inbox and all submissions
 
   loading = {
@@ -64,6 +66,7 @@ export class ApprovalInboxComponent implements OnInit {
 
   constructor(
     private runtimeService: ApprovalWorkflowRuntimeService,
+    private stageAssigneesService: ApprovalStageAssigneesService,
     private formSubmissionsService: FormSubmissionsService,
     private storageService: StorageService,
     private authService: AuthService,
@@ -88,23 +91,52 @@ export class ApprovalInboxComponent implements OnInit {
 
     // Get current user ID - try multiple sources
     // First try: getUserId from storage
-    const userId = this.storageService.getUserId();
+    let userId = this.storageService.getUserId();
     // Second try: get username from storage
-    const username = this.storageService.getUsername() || this.authService.userName();
+    let username = this.storageService.getUsername() || this.authService.userName();
     
-    // Use userId if available, otherwise use username
+    // Third try: Extract userId from JWT token if not found
+    if (!userId) {
+      const token = this.storageService.getToken();
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          // Try different possible claims for userId
+          const tokenUserId = payload.userId || payload.sub || payload.nameid || payload.unique_name;
+          if (tokenUserId) {
+            userId = typeof tokenUserId === 'string' && !isNaN(parseInt(tokenUserId, 10)) 
+              ? parseInt(tokenUserId, 10) 
+              : null;
+            console.log('[ApprovalInbox] Extracted userId from JWT token:', userId);
+          }
+        } catch (e) {
+          console.warn('[ApprovalInbox] Could not extract userId from token:', e);
+        }
+      }
+    }
+    
+    // Store both separately
+    this.currentUsername = username || null;
+    
+    // IMPORTANT: Backend may use userId OR username for Stage Assignees
+    // Priority: userId (number) > username (string)
+    // We'll try userId first, then username if userId doesn't work
     this.currentUserId = userId?.toString() || username || null;
     
-    console.log('[ApprovalInbox] User identification:', {
-      userId: userId,
-      username: username,
-      currentUserId: this.currentUserId,
-      hasToken: this.storageService.hasToken()
-    });
+    console.log('========================================');
+    console.log('[ApprovalInbox] 🔍 User Identification');
+    console.log('========================================');
+    console.log('userId from storage:', userId);
+    console.log('username from storage:', username);
+    console.log('currentUserId (will try first):', this.currentUserId);
+    console.log('currentUsername (fallback):', this.currentUsername);
+    console.log('hasToken:', this.storageService.hasToken());
+    console.log('Note: Will try userId first, then username if needed');
+    console.log('========================================');
     
     if (this.currentUserId) {
+      // Only load inbox - this will show only items where user is assigned as Stage Assignee
       this.loadInbox();
-      this.loadAllSubmissions(); // Also load all submitted submissions
     } else {
       console.error('[ApprovalInbox] No user ID or username found');
       this.messageService.add({
@@ -118,13 +150,179 @@ export class ApprovalInboxComponent implements OnInit {
   loadInbox(): void {
     if (!this.currentUserId) return;
 
+    // Log all possible user identifiers for debugging
+    const userId = this.storageService.getUserId();
+    const username = this.storageService.getUsername();
+    const role = this.storageService.getRole();
+    
+    console.log('[ApprovalInbox] Loading inbox with user info:', {
+      currentUserId: this.currentUserId,
+      userIdFromStorage: userId,
+      usernameFromStorage: username,
+      roleFromStorage: role,
+      authServiceUserName: this.authService.userName(),
+      apiUrl: `${this.runtimeService['baseUrl']}/inbox/${encodeURIComponent(this.currentUserId)}`
+    });
+
     this.loading.inbox = true;
-    this.runtimeService.getApprovalInboxForUser(this.currentUserId).subscribe({
+    
+    // Try with userId first
+    this.loadInboxWithUserId(this.currentUserId);
+  }
+
+  /**
+   * Load inbox with specific userId/username
+   */
+  private loadInboxWithUserId(userIdentifier: string | null, isRetry: boolean = false): void {
+    if (!userIdentifier) {
+      this.loading.inbox = false;
+      return;
+    }
+
+    console.log('========================================');
+    console.log('[ApprovalInbox] 📥 Loading Inbox');
+    console.log('========================================');
+    console.log('User Identifier:', userIdentifier);
+    console.log('Is Retry:', isRetry);
+    console.log('API URL:', `${this.runtimeService['baseUrl']}/inbox/${encodeURIComponent(userIdentifier)}`);
+    console.log('========================================');
+    
+    this.runtimeService.getApprovalInboxForUser(userIdentifier).subscribe({
       next: (items: ApprovalInboxItemDto[]) => {
-        this.inboxItems = items || [];
+        // IMPORTANT: Filter out items with stageId = 0 (NOT ASSIGNED TO YOU)
+        // Only show items where user is actually assigned as Stage Assignee
+        const allItems = items || [];
+        
+        // Strict filtering: Only items with stageId > 0 are assigned to this user
+        // Items with stageId = 0, null, undefined, or negative are NOT assigned
+        const assignedItems = allItems.filter(item => {
+          const stageId = item.stageId;
+          return stageId !== null && stageId !== undefined && stageId > 0;
+        });
+        
+        const unassignedItems = allItems.filter(item => {
+          const stageId = item.stageId;
+          return stageId === null || stageId === undefined || stageId === 0 || stageId < 0;
+        });
+        
+        // CRITICAL: Only show assigned items - this ensures only the selected user in Stage Assignees can approve/reject
+        // If user is not in Stage Assignees, inboxItems will be empty (no items shown)
+        // IMPORTANT: Backend should only return items with stageId > 0 if user is in Stage Assignees
+        // If Backend returns items with stageId > 0 but user is NOT in Stage Assignees, this is a Backend issue
+        this.inboxItems = assignedItems;
         this.filteredItems = [...this.inboxItems];
         this.totalRecords = this.filteredItems.length;
         this.loading.inbox = false;
+        
+        // Additional verification: Log warning if items are shown but user might not be in Stage Assignees
+        if (assignedItems.length > 0) {
+          console.log('[ApprovalInbox] ⚠️ IMPORTANT: Verifying user assignment...');
+          console.log('[ApprovalInbox] Items shown:', assignedItems.length);
+          console.log('[ApprovalInbox] User identifier:', userIdentifier);
+          console.log('[ApprovalInbox] Please verify in Backend that this user is in Stage Assignees');
+        }
+        
+        console.log('========================================');
+        console.log('[ApprovalInbox] ✅ Response Received');
+        console.log('========================================');
+        console.log('User Identifier:', userIdentifier);
+        console.log('Is Retry:', isRetry);
+        console.log('Total Items from Backend:', allItems.length);
+        console.log('Assigned Items (stageId > 0):', assignedItems.length);
+        console.log('Unassigned Items (stageId = 0):', unassignedItems.length);
+        console.log('Items Shown (filtered):', this.inboxItems.length);
+        console.log('Assigned Items Details:', assignedItems.map(item => ({
+          submissionId: item.submissionId,
+          stageId: item.stageId,
+          stageName: item.stageName,
+          documentNumber: item.documentNumber,
+          workflowId: item.workflowId,
+          workflowName: item.workflowName
+        })));
+        if (unassignedItems.length > 0) {
+          console.log('Unassigned Items (hidden):', unassignedItems.map(item => ({
+            submissionId: item.submissionId,
+            stageId: item.stageId,
+            stageName: item.stageName,
+            documentNumber: item.documentNumber
+          })));
+        }
+        console.log('========================================');
+        
+        // If no assigned items found, try alternative user identifier
+        if (assignedItems.length === 0 && unassignedItems.length > 0) {
+          console.warn('========================================');
+          console.warn('[ApprovalInbox] ⚠️ NO ASSIGNED ITEMS FOUND');
+          console.warn('========================================');
+          console.warn('All items have stageId = 0 (not assigned to you)');
+          console.warn('This means backend does NOT recognize user as Stage Assignee');
+          console.warn('User identifier used:', userIdentifier);
+          console.warn('Unassigned items (hidden):', unassignedItems.length);
+          console.warn('========================================');
+          
+          // Try alternative identifier if this is first attempt
+          if (!isRetry) {
+            // If we used userId, try with username
+            if (userIdentifier === this.currentUserId && this.currentUsername && this.currentUsername !== this.currentUserId) {
+              console.log('[ApprovalInbox] Retrying with username instead of userId...');
+              console.log('[ApprovalInbox] userId tried:', this.currentUserId, 'username will try:', this.currentUsername);
+              this.loadInboxWithUserId(this.currentUsername, true);
+              return; // Don't update UI yet, wait for retry
+            }
+            // If we used username, try with userId
+            else if (userIdentifier === this.currentUsername) {
+              const userId = this.storageService.getUserId();
+              if (userId && userId.toString() !== this.currentUsername) {
+                console.log('[ApprovalInbox] Retrying with userId instead of username...');
+                console.log('[ApprovalInbox] username tried:', this.currentUsername, 'userId will try:', userId.toString());
+                this.loadInboxWithUserId(userId.toString(), true);
+                return; // Don't update UI yet, wait for retry
+              }
+            }
+          }
+          
+          // If both attempts failed or no alternative identifier, show message
+          console.warn('========================================');
+          console.warn('User is NOT assigned as Stage Assignee');
+          console.warn('Checked identifiers:', {
+            userId: this.storageService.getUserId(),
+            username: this.currentUsername,
+            tried: userIdentifier
+          });
+          console.warn('========================================');
+          console.warn('Please verify:');
+          console.warn('1. User is assigned in Stage Assignees');
+          console.warn('2. userId/username in Stage Assignees matches logged-in user');
+          console.warn('3. Stage Assignees are active (IsActive = true)');
+          console.warn('========================================');
+          
+          // Show warning message - user is not assigned as Stage Assignee
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'لا توجد موافقات مخصصة لك',
+            detail: `You are not assigned as Stage Assignee for any stage. Please check Stage Assignees configuration.`,
+            life: 10000
+          });
+        } else if (assignedItems.length > 0) {
+          console.log('[ApprovalInbox] ✅ Successfully loaded', assignedItems.length, 'assigned items');
+          if (isRetry) {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: `Found ${assignedItems.length} items using ${userIdentifier}`,
+              life: 5000
+            });
+          }
+        } else if (allItems.length === 0) {
+          console.log('[ApprovalInbox] No items found in inbox');
+          this.messageService.add({
+            severity: 'info',
+            summary: 'No Pending Approvals',
+            detail: 'You have no pending approvals at this time.',
+            life: 5000
+          });
+        }
+        
         this.cdr.detectChanges();
       },
       error: (error) => {
@@ -132,58 +330,36 @@ export class ApprovalInboxComponent implements OnInit {
         this.inboxItems = [];
         this.filteredItems = [];
         this.loading.inbox = false;
-        // Don't show error if we have all submissions as fallback
-        if (this.allSubmissions.length === 0) {
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load approval inbox'
-          });
-        }
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load approval inbox. Only items assigned to you will be shown.'
+        });
         this.cdr.detectChanges();
       }
     });
   }
 
   /**
-   * Load all submissions with Submitted status
-   * تحميل جميع الـ Submissions بحالة Submitted
+   * Load all submissions with Submitted status (for "Show All Submissions" toggle)
+   * تحميل جميع الـ Submissions بحالة Submitted (للعرض فقط، لا للموافقة)
+   * Note: This is only for viewing, not for approval. Only inbox items can be approved.
    */
   loadAllSubmissions(): void {
+    // Only load if user wants to see all submissions (not for approval)
+    if (!this.showAllSubmissions) {
+      return;
+    }
+    
     this.loading.inbox = true;
     this.formSubmissionsService.getAllSubmissions().subscribe({
       next: (submissions: FormSubmissionDto[]) => {
-        // Filter only Submitted status submissions
-        this.allSubmissions = (submissions || []).filter(sub => sub.status === 'Submitted' || sub.status === 'Pending');
-        
-        // Update status to "Pending" for submissions that are "Submitted"
-        const submissionsToUpdate = this.allSubmissions.filter(sub => sub.status === 'Submitted');
-        
-        if (submissionsToUpdate.length > 0) {
-          // Update each submission status to "Pending" using updateSubmission instead
-          const updateObservables = submissionsToUpdate.map(sub => 
-            this.formSubmissionsService.updateSubmission(sub.id, { status: 'Pending' }).pipe(
-              catchError((error) => {
-                console.error(`Error updating submission ${sub.id} status to Pending:`, error);
-                return of(null); // Continue even if update fails
-              })
-            )
-          );
-          
-          // Wait for all updates to complete
-          forkJoin(updateObservables).subscribe({
-            next: () => {
-              console.log(`Updated ${submissionsToUpdate.length} submissions to Pending status`);
-              this.processSubmissionsForDisplay();
-            },
-            error: (error) => {
-              console.error('Error updating submissions status:', error);
-              this.processSubmissionsForDisplay();
-            }
-          });
-        } else {
-          this.processSubmissionsForDisplay();
-        }
+        // Filter only Submitted status submissions (for viewing only)
+        this.allSubmissions = (submissions || []).filter(sub => 
+          sub.status === 'Submitted' || sub.status === 'Pending'
+        );
+        this.loading.inbox = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Error loading all submissions:', error);
@@ -195,99 +371,56 @@ export class ApprovalInboxComponent implements OnInit {
   }
 
   /**
-   * Process submissions for display in inbox
-   */
-  private processSubmissionsForDisplay(): void {
-    // Reload submissions to get updated status
-    this.formSubmissionsService.getAllSubmissions().subscribe({
-      next: (submissions: FormSubmissionDto[]) => {
-        // Filter Pending and Submitted status submissions
-        this.allSubmissions = (submissions || []).filter(sub => 
-          sub.status === 'Submitted' || sub.status === 'Pending'
-        );
-        
-        // Convert FormSubmissionDto to ApprovalInboxItemDto format for display
-        if (this.allSubmissions.length > 0 && this.inboxItems.length === 0) {
-          // If inbox is empty but we have submissions, show them
-          this.inboxItems = this.allSubmissions.map((sub, index) => ({
-            submissionId: sub.id,
-            stageId: 0, // Will be set when user tries to approve/reject
-            stageName: 'Pending Approval',
-            stageOrder: index + 1,
-            documentNumber: sub.documentNumber || `SUB-${sub.id}`,
-            documentTypeName: sub.documentTypeName || 'Unknown',
-            submittedByUserId: sub.submittedByUserId || '',
-            submittedByUserName: sub.submittedByUserName || sub.submittedByUserId || 'Unknown',
-            submittedDate: sub.submittedDate,
-            workflowId: 0,
-            workflowName: 'Default Workflow'
-          }));
-          this.filteredItems = [...this.inboxItems];
-          this.totalRecords = this.filteredItems.length;
-        }
-        
-        this.loading.inbox = false;
-        this.cdr.detectChanges();
-      },
-      error: (error) => {
-        console.error('Error reloading submissions:', error);
-        this.loading.inbox = false;
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  /**
-   * Refresh both inbox and all submissions
+   * Refresh inbox (only items where user is assigned as Stage Assignee)
    */
   refreshData(): void {
     this.loadInbox();
-    this.loadAllSubmissions();
+    // Only load all submissions if user is viewing "Show All Submissions"
+    if (this.showAllSubmissions) {
+      this.loadAllSubmissions();
+    }
   }
 
   /**
    * Toggle between inbox items and all submissions
+   * IMPORTANT: Only inbox items (where user is Stage Assignee) can be approved
+   * When showing all submissions, we still only show assigned items (stageId > 0)
    */
   toggleView(): void {
     this.showAllSubmissions = !this.showAllSubmissions;
     if (this.showAllSubmissions) {
-      // Show all submitted/pending submissions
-      if (this.allSubmissions.length > 0) {
-        this.inboxItems = this.allSubmissions.map((sub, index) => ({
-          submissionId: sub.id,
-          stageId: 0,
-          stageName: 'Pending Approval',
-          stageOrder: index + 1,
-          documentNumber: sub.documentNumber || `SUB-${sub.id}`,
-          documentTypeName: sub.documentTypeName || 'Unknown',
-          submittedByUserId: sub.submittedByUserId || '',
-          submittedByUserName: sub.submittedByUserName || sub.submittedByUserId || 'Unknown',
-          submittedDate: sub.submittedDate,
-          workflowId: 0,
-          workflowName: 'Default Workflow'
-        }));
-      } else {
-        // Reload submissions if not already loaded
-        this.loadAllSubmissions();
-      }
+      // Load all submissions for reference, but still only show assigned items
+      this.loadAllSubmissions();
+      // Keep showing only inbox items (assigned items with stageId > 0)
+      // Don't convert all submissions because user can only approve assigned items
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Info',
+        detail: 'You can only approve items assigned to you in Stage Assignees.',
+        life: 5000
+      });
     } else {
-      // Reload inbox items
+      // Reload inbox items (only items where user is Stage Assignee)
       this.loadInbox();
     }
-    this.filteredItems = [...this.inboxItems];
+    // CRITICAL: Always filter to show only assigned items (stageId > 0)
+    this.filteredItems = this.inboxItems.filter(item => item.stageId > 0);
     this.totalRecords = this.filteredItems.length;
     this.first = 0;
   }
 
   filterItems(): void {
+    // CRITICAL: Always filter to show only assigned items (stageId > 0)
+    const assignedItems = this.inboxItems.filter(item => item.stageId > 0);
+    
     if (!this.searchTerm.trim()) {
-      this.filteredItems = [...this.inboxItems];
+      this.filteredItems = assignedItems;
       this.totalRecords = this.filteredItems.length;
       return;
     }
 
     const term = this.searchTerm.toLowerCase();
-    this.filteredItems = this.inboxItems.filter(item =>
+    this.filteredItems = assignedItems.filter(item =>
       item.documentNumber?.toLowerCase().includes(term) ||
       item.documentTypeName?.toLowerCase().includes(term) ||
       item.stageName?.toLowerCase().includes(term) ||
@@ -334,6 +467,43 @@ export class ApprovalInboxComponent implements OnInit {
         summary: 'Error',
         detail: 'No item selected'
       });
+      return;
+    }
+
+    // CRITICAL: Check if user is assigned to this stage (only items from inbox can be approved)
+    // If stageId is 0 or item is not in inbox, user is not assigned
+    // This is a security check to prevent unauthorized approvals
+    if (this.selectedItem.stageId === 0 || !this.selectedItem.stageId || this.selectedItem.stageId < 0) {
+      console.error('[ApprovalInbox] ⚠️ SECURITY: User tried to approve item with stageId = 0');
+      console.error('[ApprovalInbox] This should not happen - item should be filtered out');
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Access Denied',
+        detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
+        life: 5000
+      });
+      this.loading.action = false;
+      return;
+    }
+    
+    // Double-check: Verify item is in inboxItems (assigned items)
+    const isInInbox = this.inboxItems.find(item => 
+      item.submissionId === this.selectedItem!.submissionId && 
+      item.stageId === this.selectedItem!.stageId &&
+      item.stageId > 0
+    );
+    
+    if (!isInInbox) {
+      console.error('[ApprovalInbox] ⚠️ SECURITY: Item not found in inbox items');
+      console.error('[ApprovalInbox] Item:', this.selectedItem);
+      console.error('[ApprovalInbox] Inbox items:', this.inboxItems.map(i => ({ submissionId: i.submissionId, stageId: i.stageId })));
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Access Denied',
+        detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
+        life: 5000
+      });
+      this.loading.action = false;
       return;
     }
 

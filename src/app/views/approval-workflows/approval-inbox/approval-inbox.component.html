@@ -75,6 +75,8 @@
             <td>{{ item.submittedByUserName || item.submittedByUserId || '-' }}</td>
             <td>{{ formatDate(item.submittedDate) }}</td>
             <td>
+              <!-- Only show action buttons for items assigned to this user (stageId > 0) -->
+              <!-- Items with stageId = 0 are filtered out and won't appear here -->
               <div class="action-buttons">
                 <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" (click)="openActionModal(item, 'Approved')" pTooltip="Approve"></button>
                 <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" (click)="openActionModal(item, 'Rejected')" pTooltip="Reject"></button>

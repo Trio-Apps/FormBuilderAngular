@@ -103,6 +103,14 @@ export const routes: Routes = [
         canActivate: [authGuard]
       },
 
+      // ===== Approvals History ===== (Admin only)
+      {
+        path: 'approvals-history',
+        loadComponent: () => import('./views/approval-workflows/approvals-history-list/approvals-history-list.component')
+          .then(m => m.ApprovalsHistoryListComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
       // ===== Approval History =====
       {
         path: 'form-submissions/:submissionId/approval-history',

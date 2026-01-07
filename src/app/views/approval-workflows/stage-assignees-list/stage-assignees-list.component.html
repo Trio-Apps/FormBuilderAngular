@@ -107,8 +107,8 @@
         <ng-template pTemplate="header">
           <tr>
             <th>#</th>
-            <th>Type</th>
-            <th>Role/User</th>
+            <th>User</th>
+            <th>Role</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -117,19 +117,16 @@
           <tr>
             <td>{{ first + rowIndex + 1 }}</td>
             <td>
-              <span *ngIf="assignee.userId" class="badge badge-success">
-                <i class="pi pi-user"></i>
-                User
-              </span>
-            </td>
-            <td>
               <div class="document-name-cell">
                 <i class="pi pi-user"></i>
                 <span>{{ assignee.userName || getAssigneeDisplayName(assignee) }}</span>
-                <span *ngIf="assignee.roleName" class="text-muted" style="margin-left: 8px;">
-                  ({{ assignee.roleName }})
-                </span>
               </div>
+            </td>
+            <td>
+              <span *ngIf="assignee.roleName" class="badge badge-info">
+                {{ assignee.roleName }}
+              </span>
+              <span *ngIf="!assignee.roleName" class="text-muted">-</span>
             </td>
             <td>
               <span *ngIf="assignee.isActive" class="badge badge-success">
@@ -262,10 +259,10 @@
 >
   <form [formGroup]="bulkUpdateForm" (ngSubmit)="saveBulkUpdate()">
     <div class="form-display-section">
-      <div class="field-hint" style="margin-bottom: 16px;">
-        <i class="pi pi-info-circle"></i>
-        This will replace all existing assignees for this stage with the selected roles and users.
-      </div>
+        <div class="field-hint" style="margin-bottom: 16px;">
+          <i class="pi pi-info-circle"></i>
+          This will replace all existing assignees for this stage with the selected users. Backend will automatically extract roles from users.
+        </div>
 
       <!-- User IDs -->
       <div class="form-field-wrapper">

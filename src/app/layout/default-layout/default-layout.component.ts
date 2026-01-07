@@ -191,7 +191,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
 
       // Show Approval Workflows with children (for all users)
       if (item.name === 'Approval Workflows') {
-        // For User role, only show Approval Inbox (not Manage Workflows)
+        // For User role, only show Approval Inbox (not Manage Workflows or Approvals History)
         if (userRole !== 'Administration') {
           filteredItems.push({
             ...item,
@@ -200,7 +200,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
             ) || []
           });
         } else {
-          // For Admin, show all children
+          // For Admin, show all children including Approvals History
           filteredItems.push(item);
         }
         continue;
