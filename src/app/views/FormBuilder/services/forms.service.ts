@@ -108,6 +108,11 @@ export class FormsService {
           error: error
         });
         
+        // If 404, the form doesn't exist - try alternatives but don't spam logs
+        if (error?.status === 404) {
+          console.warn('[FormsService] Form not found (404) - trying alternative endpoints');
+        }
+        
         // Try alternative endpoints only if primary fails
         return this.tryAlternativeEndpoints(encodedCode, normalizedCode);
       })
@@ -148,6 +153,8 @@ export class FormsService {
   // Alternative method to search for form using formCode from forms list
   private searchFormByCode(formCode: string): Observable<FormBuilderDto | null> {
     console.log('[FormsService] Searching in forms list for:', formCode);
+    console.warn('[FormsService] ⚠️ All direct endpoints failed. Trying to search in forms list as last resort.');
+    console.warn('[FormsService] This may indicate that the backend endpoint "/api/FormBuilder/code/{formCode}" is not implemented.');
     
     // Get all forms (or a large number) and search for the requested form
     return this.getForms(1, 1000).pipe(
@@ -176,7 +183,14 @@ export class FormsService {
             // Still return the form, but the caller should check isPublished/isActive
           }
         } else {
-          console.warn('[FormsService] Form not found in list. Available codes:', 
+          console.error('[FormsService] ❌ Form not found in list after trying all endpoints');
+          console.error('[FormsService] Tried endpoints:', [
+            `${this.baseUrl}/code/${encodeURIComponent(formCode)}`,
+            `${this.baseUrl}/by-code/${encodeURIComponent(formCode)}`,
+            `${this.baseUrl}/public/code/${encodeURIComponent(formCode)}`,
+            'Forms list search'
+          ]);
+          console.warn('[FormsService] Available form codes:', 
             result.items.map(f => f.formCode).join(', '));
         }
         

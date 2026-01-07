@@ -179,9 +179,6 @@
                   <button class="action-btn action-duplicate" (click)="navigateToGridColumns(grid.id)" [title]="translateLabel('grids.manageColumns') || 'Manage Columns'">
                     <i class="pi pi-list"></i>
                   </button>
-                  <button class="action-btn action-table" (click)="navigateToGridRows(grid.id)" [title]="translateLabel('grids.manageRows') || 'Manage Rows'">
-                    <i class="pi pi-bars"></i>
-                  </button>
                   <button class="action-btn action-delete" (click)="deleteGrid(grid.id)" [title]="translateLabel('common.delete') || 'Delete'">
                     <i class="pi pi-trash"></i>
                   </button>
@@ -272,6 +269,32 @@
           min="1"
           [placeholder]="translateLabel('grids.gridOrder') || 'Grid Order'"
         />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.minRows') || 'Minimum Rows' }}</label>
+        <input
+          type="number"
+          class="form-control"
+          [(ngModel)]="minRows"
+          name="minRows"
+          min="0"
+          [placeholder]="translateLabel('grids.enterMinRows') || 'Enter minimum rows (optional)'"
+        />
+        <small class="form-text text-muted">{{ translateLabel('grids.minRowsHelp') || 'Minimum number of rows required. Leave empty for no minimum.' }}</small>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.maxRows') || 'Maximum Rows' }}</label>
+        <input
+          type="number"
+          class="form-control"
+          [(ngModel)]="maxRows"
+          name="maxRows"
+          min="1"
+          [placeholder]="translateLabel('grids.enterMaxRows') || 'Enter maximum rows (optional)'"
+        />
+        <small class="form-text text-muted">{{ translateLabel('grids.maxRowsHelp') || 'Maximum number of rows allowed. Leave empty for no maximum.' }}</small>
       </div>
 
       <div class="mb-3">

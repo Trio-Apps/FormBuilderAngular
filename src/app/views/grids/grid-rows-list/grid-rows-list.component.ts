@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, FormControl, Validators } from '@angular/forms';
 import { GridService } from '../../FormBuilder/services/grid.service';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
@@ -15,8 +15,10 @@ import {
   UpdateFormSubmissionGridRowDto,
   UpdateFormSubmissionGridCellDto
 } from '../../FormBuilder/form-builder/models/grid-dto.model';
-import { Subscription, forkJoin } from 'rxjs';
+import { Subscription, forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { TranslationService } from '../../../core/services/translation.service';
+import { GridRulesUtils, RowValidationResult } from '../../FormBuilder/utils/grid-rules.utils';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -26,6 +28,18 @@ import { DialogModule } from 'primeng/dialog';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
+
+// Interface for form controls
+interface CellFormGroup {
+  columnId: FormControl<number | null>;
+  cellValue: FormControl<string | null>;
+}
+
+interface RowFormType {
+  rowIndex: FormControl<number | null>;
+  isActive: FormControl<boolean | null>;
+  cells: FormArray<FormGroup<CellFormGroup>>;
+}
 
 @Component({
   selector: 'app-grid-rows-list',
@@ -63,9 +77,12 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
 
   // Row Modal
   showRowModal = false;
-  rowForm: FormGroup;
+  rowForm: FormGroup<RowFormType>;
   editingRow: FormSubmissionGridRowDto | null = null;
   currentInputLanguage: 'en' | 'ar' = 'en';
+  savingRow = false;
+  
+  private subscriptions: Subscription[] = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -77,10 +94,10 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     public translationService: TranslationService,
     private fb: FormBuilder
   ) {
-    this.rowForm = this.fb.group({
-      rowIndex: [0],
-      isActive: [true],
-      cells: this.fb.array([])
+    this.rowForm = this.fb.group<RowFormType>({
+      rowIndex: this.fb.control(0),
+      isActive: this.fb.control(true),
+      cells: this.fb.array<FormGroup<CellFormGroup>>([])
     });
   }
 
@@ -97,18 +114,21 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
         this.loadColumns();
       }
     });
+    
+    if (this.routeSubscription) {
+      this.subscriptions.push(this.routeSubscription);
+    }
   }
 
   ngOnDestroy(): void {
-    if (this.routeSubscription) {
-      this.routeSubscription.unsubscribe();
-    }
+    // Cleanup all subscriptions
+    this.subscriptions.forEach(sub => sub.unsubscribe());
   }
 
   loadTabAndFormId(): void {
     if (!this.tabId) return;
     
-    this.tabsService.getTabById(this.tabId).subscribe({
+    const subscription = this.tabsService.getTabById(this.tabId).subscribe({
       next: (tab) => {
         if (tab && tab.formBuilderId) {
           this.formBuilderId = tab.formBuilderId;
@@ -118,13 +138,15 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
         // Silently fail - formBuilderId is optional
       }
     });
+    
+    this.subscriptions.push(subscription);
   }
 
   loadGrid(): void {
     if (!this.gridId) return;
     
     this.loading = true;
-    this.gridService.getGridById(this.gridId).subscribe({
+    const subscription = this.gridService.getGridById(this.gridId).subscribe({
       next: (response) => {
         if (response.data) {
           this.grid = response.data;
@@ -137,25 +159,50 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
         }
         this.loading = false;
       },
-      error: () => {
+      error: (error) => {
         this.loading = false;
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to load grid'
+          detail: this.getErrorMessage(error, 'Failed to load grid')
         });
       }
     });
+    
+    this.subscriptions.push(subscription);
   }
 
   loadColumns(): void {
-    if (!this.gridId) return;
+    if (!this.gridId) {
+      console.warn('[GridRowsList] Cannot load columns: gridId is missing');
+      return;
+    }
     
-    this.gridService.getActiveColumnsByGrid(this.gridId).subscribe({
+    const subscription = this.gridService.getActiveColumnsByGrid(this.gridId).subscribe({
       next: (response) => {
-        if (response.data) {
+        if (response && response.data) {
           this.columns = (response.data || []).sort((a, b) => (a.columnOrder || 0) - (b.columnOrder || 0));
+          
+          if (this.columns.length === 0) {
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'No Columns Found',
+              detail: 'This grid has no columns configured. Please add columns to the grid first.',
+              life: 5000
+            });
+          } else {
+            console.log(`[GridRowsList] Loaded ${this.columns.length} columns for grid ${this.gridId}`);
+          }
+        } else {
+          this.columns = [];
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'No Columns Found',
+            detail: 'This grid has no columns configured. Please add columns to the grid first.',
+            life: 5000
+          });
         }
+        
         // Load available submissions after columns are loaded
         this.loadAvailableSubmissions();
         // After loading columns, try to load rows if we have a submission ID
@@ -163,14 +210,21 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
           this.loadRows();
         }
       },
-      error: () => {
+      error: (error) => {
+        console.error('[GridRowsList] Error loading columns:', error);
+        this.columns = [];
+        const errorMessage = this.getErrorMessage(error, 'Failed to load columns');
+        
         this.messageService.add({
           severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to load columns'
+          summary: 'Error Loading Columns',
+          detail: errorMessage,
+          life: 5000
         });
       }
     });
+    
+    this.subscriptions.push(subscription);
   }
 
   /**
@@ -181,7 +235,7 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
 
     this.loadingSubmissions = true;
     // Try to get submissions with grid data
-    this.gridService.getSubmissionsWithGridData(this.gridId).subscribe({
+    const subscription = this.gridService.getSubmissionsWithGridData(this.gridId).subscribe({
       next: (response) => {
         if (response.data && response.data.length > 0) {
           // Sort submissions by ID (descending - newest first)
@@ -201,6 +255,8 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
         this.extractSubmissionsFromRows();
       }
     });
+    
+    this.subscriptions.push(subscription);
   }
 
   /**
@@ -245,7 +301,7 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     }
     
     this.loading = true;
-    this.gridService.getRowsBySubmissionAndGrid(this.selectedSubmissionId, this.gridId).subscribe({
+    const subscription = this.gridService.getRowsBySubmissionAndGrid(this.selectedSubmissionId, this.gridId).subscribe({
       next: (response) => {
         if (response && response.data) {
           this.rows = (response.data || []).sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0));
@@ -271,11 +327,13 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: error?.error?.message || 'Failed to load rows'
+            detail: this.getErrorMessage(error, 'Failed to load rows')
           });
         }
       }
     });
+    
+    this.subscriptions.push(subscription);
   }
 
   loadCellsForRows(): void {
@@ -292,29 +350,63 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Load cells for all rows with valid IDs
-    const cellObservables = rowsWithIds.map(row => 
-      this.gridService.getCellsByRow(row.id!)
-    );
+    // Use a single API call if available, otherwise use forkJoin
+    if ((this.gridService as any).getCellsByRowIds) {
+      // Use bulk API if available
+      const rowIds = rowsWithIds.map(row => row.id!);
+      const subscription = (this.gridService as any).getCellsByRowIds(rowIds).subscribe({
+        next: (response: any) => {
+          this.processCellsResponse(response);
+          this.loading = false;
+        },
+        error: () => this.loading = false
+      });
+      
+      this.subscriptions.push(subscription);
+    } else {
+      // Fallback to individual calls
+      const cellObservables = rowsWithIds.map(row => 
+        this.gridService.getCellsByRow(row.id!).pipe(
+          catchError(() => of({ data: [] })) // Handle individual failures gracefully
+        )
+      );
 
-    forkJoin(cellObservables).subscribe({
-      next: (responses) => {
-        responses.forEach((response, index) => {
-          if (response && response.data && rowsWithIds[index]) {
-            const rowIndex = this.rows.findIndex(r => r.id === rowsWithIds[index].id);
-            if (rowIndex >= 0) {
-              this.rows[rowIndex].cells = response.data || [];
+      const subscription = forkJoin(cellObservables).subscribe({
+        next: (responses) => {
+          responses.forEach((response: any, index) => {
+            if (response && response.data && rowsWithIds[index]) {
+              const rowIndex = this.rows.findIndex(r => r.id === rowsWithIds[index].id);
+              if (rowIndex >= 0) {
+                this.rows[rowIndex].cells = response.data || [];
+              }
             }
-          }
-        });
-        this.loading = false;
-      },
-      error: (error) => {
-        console.error('Error loading cells for rows:', error);
-        this.loading = false;
-        // Continue even if cells fail to load - rows are still displayed
-      }
-    });
+          });
+          this.loading = false;
+        },
+        error: (error) => {
+          console.error('Error loading cells for rows:', error);
+          this.loading = false;
+          // Continue even if cells fail to load - rows are still displayed
+        }
+      });
+      
+      this.subscriptions.push(subscription);
+    }
+  }
+
+  private processCellsResponse(response: any): void {
+    // Implement this method if you have a bulk cells API
+    // This would process the response and assign cells to rows
+    if (response?.data) {
+      // Assuming response.data is an array of cells grouped by rowId
+      // You'll need to implement the actual logic based on your API response
+      Object.keys(response.data).forEach(rowId => {
+        const rowIndex = this.rows.findIndex(r => r.id === +rowId);
+        if (rowIndex >= 0) {
+          this.rows[rowIndex].cells = response.data[rowId];
+        }
+      });
+    }
   }
 
   getCellValue(row: FormSubmissionGridRowDto, columnId: number): string {
@@ -360,7 +452,7 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
         this.loading = true;
-        this.gridService.deleteRow(row.id!).subscribe({
+        const subscription = this.gridService.deleteRow(row.id!).subscribe({
           next: () => {
             this.messageService.add({
               severity: 'success',
@@ -369,15 +461,17 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
             });
             this.loadRows();
           },
-          error: () => {
+          error: (error) => {
             this.loading = false;
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
-              detail: 'Failed to delete row'
+              detail: this.getErrorMessage(error, 'Failed to delete row')
             });
           }
         });
+        
+        this.subscriptions.push(subscription);
       }
     });
   }
@@ -386,8 +480,18 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     this.router.navigate(['../grids', this.tabId], { relativeTo: this.route });
   }
 
+  navigateToColumns(): void {
+    if (this.gridId) {
+      this.router.navigate(['columns', this.gridId], { relativeTo: this.route });
+    }
+  }
+
   getActiveRowsCount(): number {
     return this.rows.filter(row => row.isActive).length;
+  }
+
+  getVisibleColumnsCount(): number {
+    return GridRulesUtils.getVisibleColumns(this.columns).length;
   }
 
   translateLabel(key: string): string {
@@ -413,10 +517,28 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     if (!this.columns || this.columns.length === 0) {
       this.messageService.add({
         severity: 'warn',
-        summary: 'Warning',
-        detail: 'No columns found. Please ensure the grid has columns configured.'
+        summary: 'No Columns Configured',
+        detail: 'This grid has no columns. Please configure columns for this grid first. You can add columns from the Grid Columns page.',
+        life: 6000
       });
+      // Navigate to columns page to add columns
+      setTimeout(() => {
+        this.router.navigate(['columns', this.gridId], { relativeTo: this.route });
+      }, 2000);
       return;
+    }
+
+    // Check Grid Rules - Max Rows validation
+    if (this.grid) {
+      const canAddValidation = GridRulesUtils.canAddRow(this.grid, this.rows.length);
+      if (!canAddValidation.isValid) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Cannot Add Row',
+          detail: canAddValidation.message
+        });
+        return;
+      }
     }
 
     this.editingRow = null;
@@ -426,9 +548,9 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     // Add form controls for each column
     this.columns.forEach(column => {
       if (column.id) {
-        const cellControl = this.fb.group({
-          columnId: [column.id],
-          cellValue: [column.defaultValue || '', column.isRequired ? Validators.required : null]
+        const cellControl = this.fb.group<CellFormGroup>({
+          columnId: this.fb.control(column.id, Validators.required),
+          cellValue: this.fb.control(column.defaultValue || '', column.isRequired ? Validators.required : null)
         });
         this.cellsFormArray.push(cellControl);
       }
@@ -455,9 +577,9 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     // Add form controls for each column with existing values
     this.columns.forEach(column => {
       const cellValue = this.getCellValue(row, column.id);
-      const cellControl = this.fb.group({
-        columnId: [column.id],
-        cellValue: [cellValue || column.defaultValue || '', column.isRequired ? Validators.required : null]
+      const cellControl = this.fb.group<CellFormGroup>({
+        columnId: this.fb.control(column.id, Validators.required),
+        cellValue: this.fb.control(cellValue || column.defaultValue || '', column.isRequired ? Validators.required : null)
       });
       this.cellsFormArray.push(cellControl);
     });
@@ -478,6 +600,7 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
       rowIndex: 0,
       isActive: true
     });
+    this.savingRow = false;
   }
 
   setInputLanguage(lang: 'en' | 'ar'): void {
@@ -486,7 +609,7 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
 
   saveRow(): void {
     if (this.rowForm.invalid) {
-      this.rowForm.markAllAsTouched();
+      this.markFormGroupTouched(this.rowForm);
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation',
@@ -513,8 +636,32 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.loading = true;
+    this.savingRow = true;
     const formValue = this.rowForm.value;
+
+    // Validate row data against column rules
+    const rowData = this.buildRowDataObject(formValue.cells || []);
+    const rowValidation = GridRulesUtils.validateRowData(this.columns, rowData);
+
+    if (!rowValidation.isValid) {
+      this.savingRow = false;
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Validation Failed',
+        detail: rowValidation.errors.map(e => e.message).join(', ')
+      });
+      return;
+    }
+
+    // Show warnings if any
+    if (rowValidation.warnings.length > 0) {
+      const warningMessages = rowValidation.warnings.map(w => w.message).join(', ');
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation Warnings',
+        detail: warningMessages
+      });
+    }
 
     if (this.editingRow && this.editingRow.id) {
       // Update existing row
@@ -523,13 +670,13 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
         isActive: formValue.isActive !== false
       };
 
-      this.gridService.updateRow(this.editingRow.id, updateDto).subscribe({
+      const subscription = this.gridService.updateRow(this.editingRow.id, updateDto).subscribe({
         next: (response) => {
           if (response.statusCode === 200 || response.statusCode === 204) {
             // Update cells
-            this.updateCells(this.editingRow!.id!, formValue.cells);
+            this.updateCells(this.editingRow!.id!, formValue.cells || []);
           } else {
-            this.loading = false;
+            this.savingRow = false;
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
@@ -538,15 +685,17 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
           }
         },
         error: (error) => {
-          this.loading = false;
+          this.savingRow = false;
           console.error('Error updating row:', error);
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: error?.error?.message || error?.message || 'Failed to update row'
+            detail: this.getErrorMessage(error, 'Failed to update row')
           });
         }
       });
+      
+      this.subscriptions.push(subscription);
     } else {
       // Create new row
       const createDto: CreateFormSubmissionGridRowDto = {
@@ -556,15 +705,15 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
         isActive: formValue.isActive !== false
       };
 
-      this.gridService.createRow(createDto).subscribe({
+      const subscription = this.gridService.createRow(createDto).subscribe({
         next: (response) => {
           if (response.statusCode === 200 || response.statusCode === 201) {
             const newRowId = response.data?.id;
             if (newRowId) {
               // Create cells
-              this.createCells(newRowId, formValue.cells);
+              this.createCells(newRowId, formValue.cells || []);
             } else {
-              this.loading = false;
+              this.savingRow = false;
               this.messageService.add({
                 severity: 'error',
                 summary: 'Error',
@@ -572,7 +721,7 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
               });
             }
           } else {
-            this.loading = false;
+            this.savingRow = false;
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
@@ -581,22 +730,24 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
           }
         },
         error: (error) => {
-          this.loading = false;
+          this.savingRow = false;
           console.error('Error creating row:', error);
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: error?.error?.message || error?.message || 'Failed to create row'
+            detail: this.getErrorMessage(error, 'Failed to create row')
           });
         }
       });
+      
+      this.subscriptions.push(subscription);
     }
   }
 
   private createCells(rowId: number, cells: any[]): void {
     if (!cells || cells.length === 0) {
       // No cells to create, just reload rows
-      this.loading = false;
+      this.savingRow = false;
       this.closeRowModal();
       this.loadRows();
       this.messageService.add({
@@ -609,19 +760,24 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
 
     // Filter out empty cells if needed, or create all cells
     const cellObservables = cells
-      .filter(cell => cell && cell.columnId) // Ensure cell has columnId
-      .map(cell => {
+      .filter((cell: any) => cell && cell.columnId) // Ensure cell has columnId
+      .map((cell: any) => {
         const createCellDto: CreateFormSubmissionGridCellDto = {
           rowId: rowId,
           columnId: cell.columnId,
           cellValue: cell.cellValue || ''
         };
-        return this.gridService.createCell(createCellDto);
+        return this.gridService.createCell(createCellDto).pipe(
+          catchError(error => {
+            console.error('Error creating cell:', error);
+            return of({ statusCode: 500, message: 'Failed to create cell' });
+          })
+        );
       });
 
     if (cellObservables.length === 0) {
       // No valid cells to create
-      this.loading = false;
+      this.savingRow = false;
       this.closeRowModal();
       this.loadRows();
       this.messageService.add({
@@ -632,15 +788,15 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    forkJoin(cellObservables).subscribe({
-      next: (responses) => {
+    const subscription = forkJoin(cellObservables).subscribe({
+      next: (responses: any[]) => {
         // Check if all cells were created successfully
-        const failed = responses.some(r => r.statusCode !== 200 && r.statusCode !== 201);
+        const failed = responses.some((r: any) => r.statusCode !== 200 && r.statusCode !== 201);
         if (failed) {
           console.warn('Some cells failed to create:', responses);
         }
-        
-        this.loading = false;
+
+        this.savingRow = false;
         this.closeRowModal();
         this.loadRows();
         this.messageService.add({
@@ -649,23 +805,26 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
           detail: 'Row created successfully'
         });
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error creating cells:', error);
-        this.loading = false;
+        this.savingRow = false;
         this.messageService.add({
           severity: 'warn',
           summary: 'Warning',
           detail: 'Row created but some cells failed to save. Please edit the row to add cells.'
         });
+        this.closeRowModal();
         this.loadRows();
       }
     });
+    
+    this.subscriptions.push(subscription);
   }
 
   private updateCells(rowId: number, cells: any[]): void {
     if (!cells || cells.length === 0) {
       // No cells to update, just reload rows
-      this.loading = false;
+      this.savingRow = false;
       this.closeRowModal();
       this.loadRows();
       this.messageService.add({
@@ -677,24 +836,29 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     }
 
     // First, get existing cells
-    this.gridService.getCellsByRow(rowId).subscribe({
-      next: (response) => {
+    const subscription = this.gridService.getCellsByRow(rowId).subscribe({
+      next: (response: any) => {
         const existingCells = response.data || [];
-        
+
         // Update or create cells
         const cellObservables: any[] = [];
-        
+
         cells
-          .filter(cell => cell && cell.columnId) // Ensure cell has columnId
-          .forEach(cell => {
-            const existingCell = existingCells.find(ec => ec.columnId === cell.columnId);
-            
+          .filter((cell: any) => cell && cell.columnId) // Ensure cell has columnId
+          .forEach((cell: any) => {
+            const existingCell = existingCells.find((ec: any) => ec.columnId === cell.columnId);
+
             if (existingCell && existingCell.id) {
               // Update existing cell
               cellObservables.push(
                 this.gridService.updateCell(existingCell.id, {
                   cellValue: cell.cellValue || ''
-                })
+                }).pipe(
+                  catchError(error => {
+                    console.error('Error updating cell:', error);
+                    return of({ statusCode: 500, message: 'Failed to update cell' });
+                  })
+                )
               );
             } else {
               // Create new cell
@@ -703,20 +867,25 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
                 columnId: cell.columnId,
                 cellValue: cell.cellValue || ''
               };
-              cellObservables.push(this.gridService.createCell(createCellDto));
+              cellObservables.push(this.gridService.createCell(createCellDto).pipe(
+                catchError(error => {
+                  console.error('Error creating cell:', error);
+                  return of({ statusCode: 500, message: 'Failed to create cell' });
+                })
+              ));
             }
           });
 
         if (cellObservables.length > 0) {
-          forkJoin(cellObservables).subscribe({
-            next: (responses) => {
+          const forkJoinSubscription = forkJoin(cellObservables).subscribe({
+            next: (responses: any[]) => {
               // Check if all cells were updated/created successfully
-              const failed = responses.some(r => r.statusCode !== 200 && r.statusCode !== 201 && r.statusCode !== 204);
+              const failed = responses.some((r: any) => r.statusCode !== 200 && r.statusCode !== 201 && r.statusCode !== 204);
               if (failed) {
                 console.warn('Some cells failed to update:', responses);
               }
-              
-              this.loading = false;
+
+              this.savingRow = false;
               this.closeRowModal();
               this.loadRows();
               this.messageService.add({
@@ -725,19 +894,22 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
                 detail: 'Row updated successfully'
               });
             },
-            error: (error) => {
+            error: (error: any) => {
               console.error('Error updating cells:', error);
-              this.loading = false;
+              this.savingRow = false;
               this.messageService.add({
                 severity: 'warn',
                 summary: 'Warning',
                 detail: 'Row updated but some cells failed to save'
               });
+              this.closeRowModal();
               this.loadRows();
             }
           });
+          
+          this.subscriptions.push(forkJoinSubscription);
         } else {
-          this.loading = false;
+          this.savingRow = false;
           this.closeRowModal();
           this.loadRows();
           this.messageService.add({
@@ -751,20 +923,22 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
         console.error('Error loading existing cells:', error);
         // Try to create all cells as new if we can't load existing ones
         const cellObservables = cells
-          .filter(cell => cell && cell.columnId)
-          .map(cell => {
+          .filter((cell: any) => cell && cell.columnId)
+          .map((cell: any) => {
             const createCellDto: CreateFormSubmissionGridCellDto = {
               rowId: rowId,
               columnId: cell.columnId,
               cellValue: cell.cellValue || ''
             };
-            return this.gridService.createCell(createCellDto);
+            return this.gridService.createCell(createCellDto).pipe(
+              catchError(() => of({ statusCode: 500, message: 'Failed to create cell' }))
+            );
           });
 
         if (cellObservables.length > 0) {
-          forkJoin(cellObservables).subscribe({
+          const forkJoinSubscription = forkJoin(cellObservables).subscribe({
             next: () => {
-              this.loading = false;
+              this.savingRow = false;
               this.closeRowModal();
               this.loadRows();
               this.messageService.add({
@@ -774,7 +948,7 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
               });
             },
             error: () => {
-              this.loading = false;
+              this.savingRow = false;
               this.messageService.add({
                 severity: 'error',
                 summary: 'Error',
@@ -782,8 +956,10 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
               });
             }
           });
+          
+          this.subscriptions.push(forkJoinSubscription);
         } else {
-          this.loading = false;
+          this.savingRow = false;
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
@@ -792,14 +968,27 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
         }
       }
     });
+    
+    this.subscriptions.push(subscription);
   }
 
-  getCellFormControl(index: number): FormGroup {
-    return this.cellsFormArray.at(index) as FormGroup;
+  getCellFormControl(index: number): FormGroup<CellFormGroup> {
+    return this.cellsFormArray.at(index) as FormGroup<CellFormGroup>;
   }
 
   getColumnForCell(index: number): FormGridColumnDto {
     return this.columns[index];
+  }
+
+  private buildRowDataObject(cells: any[]): any {
+    const rowData: any = {};
+    cells.forEach((cell: any, index: number) => {
+      const column = this.columns && this.columns[index];
+      if (column && column.columnCode) {
+        rowData[column.columnCode] = cell.cellValue;
+      }
+    });
+    return rowData;
   }
 
   getInputType(column: FormGridColumnDto): string {
@@ -825,5 +1014,42 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     }
     return option.optionText || option.optionValue || '';
   }
-}
 
+  getCellErrorMessage(index: number): string {
+    const cellControl = this.getCellFormControl(index);
+    const column = this.getColumnForCell(index);
+    
+    const cellValueControl = cellControl.get('cellValue');
+    if (cellValueControl?.hasError('required')) {
+      return `${this.getColumnLabel(column)} is required`;
+    }
+    
+    return '';
+  }
+
+  private markFormGroupTouched(formGroup: FormGroup): void {
+    Object.keys(formGroup.controls).forEach(key => {
+      const control = formGroup.get(key);
+      if (control) {
+        control.markAsTouched();
+        if (control instanceof FormGroup) {
+          this.markFormGroupTouched(control);
+        } else if (control instanceof FormArray) {
+          control.controls.forEach(ctrl => {
+            if (ctrl instanceof FormGroup) {
+              this.markFormGroupTouched(ctrl);
+            } else {
+              ctrl.markAsTouched();
+            }
+          });
+        }
+      }
+    });
+  }
+
+  private getErrorMessage(error: any, defaultMessage: string): string {
+    if (error?.error?.message) return error.error.message;
+    if (error?.message) return error.message;
+    return defaultMessage;
+  }
+}

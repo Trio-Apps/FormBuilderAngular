@@ -265,6 +265,29 @@ export class FormViewComponent implements OnInit {
         console.log('[FormView] Current Language:', this.translationService.getCurrentLanguage());
         console.log('[FormView] Tabs found:', apiTabs.length);
 
+        // Log all fields to check for Grid fields
+        apiTabs.forEach((tab, tabIndex) => {
+          if (tab.fields && tab.fields.length > 0) {
+            console.log(`[FormView] Tab ${tabIndex + 1} (${tab.tabName}) has ${tab.fields.length} fields`);
+            tab.fields.forEach((field, fieldIndex) => {
+              const fieldType = this.getFieldType(field);
+              console.log(`[FormView] Field ${fieldIndex + 1}:`, {
+                id: field.id,
+                code: field.fieldCode,
+                name: field.fieldName,
+                typeName: field.fieldTypeName,
+                fieldTypeId: field.fieldTypeId,
+                gridId: field.gridId,
+                detectedType: fieldType,
+                fieldTypeObject: field.fieldType
+              });
+              if (field.gridId) {
+                console.log(`[FormView] ⚠️ Grid field found: ${field.fieldName} (ID: ${field.id}, GridId: ${field.gridId})`);
+              }
+            });
+          }
+        });
+
         if (apiTabs && apiTabs.length > 0) {
           // API returned Tabs + Fields (or just Tabs)
           // Filter and sort tabs (only active ones)
@@ -401,7 +424,15 @@ export class FormViewComponent implements OnInit {
           if (this.formCode && this.formCode.toUpperCase().includes('COPY')) {
             reason = `Form "${this.formCode}" not found. The duplicated form may not be published or active. Please check the form settings in the admin panel.`;
           } else {
-            reason = `Form "${this.formCode}" not found (404). Please check if the form code is correct and the form is published.`;
+            reason = `Form "${this.formCode}" not found (404). ` +
+                     `Possible causes:\n` +
+                     `1. The form code is incorrect\n` +
+                     `2. The form is not published or not active\n` +
+                     `3. The API endpoint "/api/FormBuilder/code/{formCode}" may not exist in the backend\n\n` +
+                     `Please check:\n` +
+                     `- Verify the form code in the admin panel\n` +
+                     `- Ensure the form is published and active\n` +
+                     `- Check if the backend endpoint is implemented`;
           }
         } else if (error?.status === 403) {
           reason = 'Access denied (403). You may not have permission to view this form.';
@@ -976,14 +1007,65 @@ export class FormViewComponent implements OnInit {
     const ft = field.fieldType;
     const typeName = (field.fieldTypeName || ft?.typeName || '').toLowerCase().trim();
     const dataType = (ft?.dataType || '').toLowerCase().trim();
+    
+    // Declare fieldCodeLower and fieldNameLower once at the beginning
+    const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+    const fieldNameLower = (field.fieldName || '').toLowerCase();
+
+    // Debug: Log field info for Grid fields
+    if (field.gridId || typeName.includes('grid') || fieldCodeLower.includes('grid')) {
+      console.log('[FormView] getFieldType() called for potential Grid field:', {
+        fieldId: field.id,
+        fieldCode: field.fieldCode,
+        fieldName: field.fieldName,
+        gridId: field.gridId,
+        typeName: typeName,
+        fieldTypeName: field.fieldTypeName,
+        fieldTypeId: field.fieldTypeId,
+        fieldTypeObject: ft
+      });
+    }
 
     // Check for Calculated type first
     if (typeName === 'calculated' || this.calculationEngine.isCalculatedField(field)) {
       return 'calculated';
     }
 
-    // Check for Grid type
-    if (typeName === 'grid') {
+    // Check for Grid type - Priority 1: If field has gridId, it's definitely a Grid
+    if (field.gridId && field.gridId > 0) {
+      console.log('[FormView] ✅ Grid field detected by gridId:', {
+        fieldId: field.id,
+        fieldCode: field.fieldCode,
+        fieldName: field.fieldName,
+        gridId: field.gridId,
+        typeName: typeName
+      });
+      return 'grid';
+    }
+
+    // Check for Grid type - Priority 2: By field code (if fieldCode contains "grid")
+    if (fieldCodeLower.includes('grid') && fieldCodeLower === 'grid') {
+      console.log('[FormView] ✅ Grid field detected by fieldCode:', {
+        fieldId: field.id,
+        fieldCode: field.fieldCode,
+        fieldName: field.fieldName,
+        gridId: field.gridId,
+        typeName: typeName,
+        fieldTypeName: field.fieldTypeName
+      });
+      return 'grid';
+    }
+
+    // Check for Grid type - Priority 3: By type name
+    if (typeName === 'grid' || typeName === 'line items' || typeName === 'lineitems') {
+      console.log('[FormView] ✅ Grid field detected by type name:', {
+        fieldId: field.id,
+        fieldCode: field.fieldCode,
+        fieldName: field.fieldName,
+        typeName: typeName,
+        fieldTypeName: field.fieldTypeName,
+        gridId: field.gridId
+      });
       return 'grid';
     }
 
@@ -1041,8 +1123,19 @@ export class FormViewComponent implements OnInit {
       return 'file';
     }
 
-    // Grid / Line Items Grid
-    if (combined.includes('grid') || typeName.includes('grid') || typeName.includes('line items') || typeName.includes('lineitems')) {
+    // Grid / Line Items Grid - Fallback check
+    if (combined.includes('grid') || typeName.includes('grid') || typeName.includes('line items') || typeName.includes('lineitems') ||
+        fieldCodeLower === 'grid' || fieldNameLower.includes('grid')) {
+      console.log('[FormView] ✅ Grid field detected (fallback):', {
+        fieldId: field.id,
+        fieldCode: field.fieldCode,
+        fieldName: field.fieldName,
+        typeName: typeName,
+        combined: combined,
+        gridId: field.gridId,
+        fieldTypeName: field.fieldTypeName,
+        detectedBy: fieldCodeLower === 'grid' ? 'fieldCode' : (fieldNameLower.includes('grid') ? 'fieldName' : 'typeName/combined')
+      });
       return 'grid';
     }
 

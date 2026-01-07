@@ -102,10 +102,98 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     );
   }
   
-  // No token - log warning for protected endpoints
+  // No token - handle requests without authentication
+  const isPublicFormViewRoute = router.url.includes('/forms/view/');
+  const isPublicFormEndpoint = req.url.includes('/FormBuilder/code/') || 
+                               req.url.includes('/FormBuilder/by-code/') ||
+                               req.url.includes('/FormBuilder/public/') ||
+                               req.url.includes('/FormRules/form/') ||
+                               req.url.includes('/FormFields/tab/') ||
+                               req.url.includes('/FormGrids/') ||
+                               req.url.includes('/FormTabs/') ||
+                               isPublicFormViewRoute;
+  
   if (isDebugMode && !req.url.includes('/account/login') && !req.url.includes('/account/register')) {
-    console.warn('[AuthInterceptor] Request without token:', req.url);
+    console.warn('[AuthInterceptor] Request without token:', {
+      url: req.url,
+      method: req.method,
+      isPublicFormViewRoute: isPublicFormViewRoute,
+      isPublicFormEndpoint: isPublicFormEndpoint,
+      currentRoute: router.url
+    });
   }
   
-  return next(req);
+  // Handle errors for requests without token (especially for public forms)
+  return next(req).pipe(
+    catchError((error: HttpErrorResponse) => {
+      // Handle 401 for requests without token
+      if (error.status === 401) {
+        // Don't redirect for public form endpoints or when on public form view route
+        if (isPublicFormEndpoint || isPublicFormViewRoute) {
+          if (isDebugMode) {
+            console.log('[AuthInterceptor] Public form endpoint - allowing 401 without redirect:', req.url);
+          }
+          // Just return the error, don't redirect
+          return throwError(() => error);
+        }
+        
+        // For other endpoints, redirect to login if not already there
+        const isLoginPage = router.url.includes('/pages/login');
+        if (!isLoginPage) {
+          if (isDebugMode) {
+            console.warn('[AuthInterceptor] 401 Unauthorized (no token) - redirecting to login');
+          }
+          storageService.clear();
+          router.navigate(['/pages/login'], {
+            queryParams: { returnUrl: router.url }
+          });
+        }
+      }
+      
+      // Log 404 errors for debugging (especially for public forms)
+      if (error.status === 404) {
+        if (isDebugMode) {
+          const isKnownMissing = [
+            '/api/FormSubmissionGridRows/grid/',
+            '/api/FormSubmissionGridRows/submission/',
+            '/api/FormSubmissionGridRows/complete',
+            '/api/FormSubmissionGridRows/bulk',
+            '/api/FormSubmissionGridCells/bulk'
+          ].some(endpoint => req.url.includes(endpoint));
+          
+          if (!isKnownMissing) {
+            console.error('[AuthInterceptor] ⚠️ 404 Not Found:', {
+              url: req.url,
+              method: req.method,
+              isPublicFormEndpoint: isPublicFormEndpoint,
+              isPublicFormViewRoute: isPublicFormViewRoute,
+              currentRoute: router.url,
+              note: '404 instead of 401 suggests:',
+              possibleCauses: [
+                'API server may not be running',
+                'Route/Controller may not be registered',
+                'Controller may not be discovered',
+                'Check Swagger UI to verify endpoints exist'
+              ]
+            });
+            
+            // Additional diagnostic info
+            console.error('[AuthInterceptor] Diagnostic Info:', {
+              apiBaseUrl: req.url.split('/api')[0] + '/api',
+              endpoint: req.url.split('/api')[1],
+              method: req.method,
+              headers: {
+                authorization: req.headers.get('Authorization') ? 'Present' : 'Missing',
+                contentType: req.headers.get('Content-Type') || 'Not set'
+              }
+            });
+          } else if (isPublicFormEndpoint) {
+            console.log('[AuthInterceptor] 404 for public form endpoint (may be expected):', req.url);
+          }
+        }
+      }
+      
+      return throwError(() => error);
+    })
+  );
 };

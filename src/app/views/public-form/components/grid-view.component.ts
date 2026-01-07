@@ -2,6 +2,7 @@ import { Component, Input, OnInit, OnChanges, SimpleChanges } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { GridService } from '../../FormBuilder/services/grid.service';
+import { GridColumnDataSourcesService } from '../../FormBuilder/services/grid-column-data-sources.service';
 import {
   FormFieldDto,
   FormTabDto
@@ -15,10 +16,12 @@ import {
   BulkGridRowDto,
   BulkGridCellDto,
   ApiResponse,
-  GridValidationResultDto
+  GridValidationResultDto,
+  ValidationErrorDto,
+  DropdownOptionDto
 } from '../../FormBuilder/form-builder/models/grid-dto.model';
 import { TranslationService } from '../../../core/services/translation.service';
-import { catchError, of, Observable } from 'rxjs';
+import { catchError, of, Observable, forkJoin } from 'rxjs';
 import { switchMap, map } from 'rxjs/operators';
 
 /**
@@ -36,9 +39,11 @@ export class GridViewComponent implements OnInit, OnChanges {
   @Input() field!: FormFieldDto;
   @Input() submissionId: number = 0;
   @Input() formBuilderId: number = 0;
+  @Input() isReadOnly: boolean = false; // If true, grid is read-only (e.g., after submission approval)
 
   grid: FormGridDto | null = null;
   columns: FormGridColumnDto[] = [];
+  visibleColumns: FormGridColumnDto[] = []; // Filtered columns based on visibility
   rows: FormSubmissionGridRowDto[] = [];
   gridData: { [rowIndex: number]: { [columnId: number]: string } } = {};
 
@@ -49,6 +54,7 @@ export class GridViewComponent implements OnInit, OnChanges {
 
   constructor(
     private gridService: GridService,
+    private dataSourcesService: GridColumnDataSourcesService,
     public translationService: TranslationService
   ) {}
 
@@ -70,31 +76,56 @@ export class GridViewComponent implements OnInit, OnChanges {
    */
   private loadGrid(): void {
     if (!this.field) {
+      console.error('[GridView] Field is not provided');
       return;
     }
+
+    console.log('[GridView] Loading grid for field:', {
+      fieldId: this.field.id,
+      fieldCode: this.field.fieldCode,
+      fieldName: this.field.fieldName,
+      gridId: this.field.gridId,
+      formBuilderId: this.formBuilderId,
+      submissionId: this.submissionId,
+      fieldTypeName: this.field.fieldTypeName,
+      fieldTypeId: this.field.fieldTypeId
+    });
 
     this.loading = true;
     this.error = '';
 
     // Priority 1: Use field.gridId directly (preferred method)
-    if (this.field.gridId) {
+    if (this.field.gridId && this.field.gridId > 0) {
+      console.log('[GridView] ✅ Loading grid by ID:', this.field.gridId);
       this.gridService.getGridById(this.field.gridId).subscribe({
         next: (response: ApiResponse<FormGridDto>) => {
+          console.log('[GridView] Grid loaded:', response);
           if (response.data && response.data.id) {
             this.grid = response.data;
+            console.log('[GridView] Grid data:', this.grid);
             this.loadColumns();
           } else {
-            this.error = 'Grid not found';
+            console.warn('[GridView] Grid not found in response:', response);
+            this.error = 'Grid not found. Please check if the Grid exists in the database.';
             this.loading = false;
           }
         },
-        error: () => {
-          this.error = 'Error loading grid';
+        error: (error) => {
+          console.error('[GridView] Error loading grid:', error);
+          this.error = 'Error loading grid: ' + (error?.message || 'Unknown error');
           this.loading = false;
         }
       });
       return;
     }
+
+    // Warning: Field is detected as Grid but has no gridId
+    console.warn('[GridView] ⚠️ Grid field detected but no gridId found:', {
+      fieldId: this.field.id,
+      fieldCode: this.field.fieldCode,
+      fieldName: this.field.fieldName,
+      gridId: this.field.gridId
+    });
 
     // Priority 2: Try to get gridId from defaultValueJson if available
     try {
@@ -125,27 +156,119 @@ export class GridViewComponent implements OnInit, OnChanges {
 
     // Priority 3: Get grid by code from form builder (fallback)
     if (this.formBuilderId > 0 && this.field.fieldCode) {
+      console.log('[GridView] Trying to load grid by code:', {
+        gridCode: this.field.fieldCode,
+        formBuilderId: this.formBuilderId
+      });
+      
       this.gridService.getGridByCode(this.field.fieldCode, this.formBuilderId).subscribe({
         next: (response: ApiResponse<FormGridDto>) => {
           if (response.data && response.data.id) {
+            console.log('[GridView] ✅ Grid loaded by code:', response.data);
             this.grid = response.data;
             this.loadColumns();
           } else {
-            this.error = 'Grid not found';
-            this.loading = false;
+            console.warn('[GridView] Grid not found by code, trying fallback method');
+            this.tryLoadGridFromFormBuilderList();
           }
         },
-        error: () => {
-          this.error = 'Error loading grid';
-          this.loading = false;
+        error: (error) => {
+          console.error('[GridView] Error loading grid by code:', error);
+          if (error?.status === 404) {
+            console.warn('[GridView] Grid endpoint returned 404, trying fallback method');
+            this.tryLoadGridFromFormBuilderList();
+          } else {
+            this.error = `Error loading grid: ${error?.message || 'Unknown error'}. The grid with code '${this.field.fieldCode}' may not exist for this form.`;
+            this.loading = false;
+          }
         }
       });
       return;
     }
 
     // No grid ID found
-    this.error = 'Grid ID not configured. Please link a Grid to this field.';
+    console.error('[GridView] ❌ No grid ID found for field:', {
+      fieldId: this.field.id,
+      fieldCode: this.field.fieldCode,
+      fieldName: this.field.fieldName,
+      gridId: this.field.gridId,
+      defaultValueJson: this.field.defaultValueJson,
+      formBuilderId: this.formBuilderId,
+      fieldTypeName: this.field.fieldTypeName,
+      fieldTypeId: this.field.fieldTypeId
+    });
+    
+    // Show helpful error message
+    this.error = `Grid field "${this.field.fieldName || this.field.fieldCode}" is not linked to a Grid. ` +
+                 `Please go to the admin panel and select a Grid for this field. ` +
+                 `(Field ID: ${this.field.id}, Field Code: ${this.field.fieldCode})`;
     this.loading = false;
+  }
+
+  /**
+   * Fallback: Try to load grid from form builder's grid list
+   * This is used when getGridByCode fails (e.g., endpoint doesn't exist or grid not found)
+   */
+  private tryLoadGridFromFormBuilderList(): void {
+    if (!this.formBuilderId || this.formBuilderId <= 0) {
+      this.error = 'Cannot load grid: Form Builder ID is missing.';
+      this.loading = false;
+      return;
+    }
+
+    console.log('[GridView] Trying fallback: Loading all grids for form builder:', this.formBuilderId);
+    
+    this.gridService.getActiveGridsByFormBuilder(this.formBuilderId).subscribe({
+      next: (response: ApiResponse<FormGridDto[]>) => {
+        const grids = response.data || [];
+        console.log('[GridView] Found grids for form builder:', grids.length, grids.map(g => ({
+          id: g.id,
+          gridCode: g.gridCode,
+          name: g.gridName
+        })));
+
+        // Try to find grid by code
+        let foundGrid: FormGridDto | null = null;
+        if (this.field.fieldCode) {
+          foundGrid = grids.find(g => 
+            g.gridCode?.toLowerCase() === this.field.fieldCode?.toLowerCase()
+          ) || null;
+        }
+
+        // If not found by code, try to find by field name
+        if (!foundGrid && this.field.fieldName) {
+          foundGrid = grids.find(g => 
+            g.gridName?.toLowerCase().includes(this.field.fieldName?.toLowerCase() || '') ||
+            this.field.fieldName?.toLowerCase().includes(g.gridName?.toLowerCase() || '')
+          ) || null;
+        }
+
+        // If still not found and there's only one grid, use it
+        if (!foundGrid && grids.length === 1) {
+          console.log('[GridView] Only one grid found, using it as fallback');
+          foundGrid = grids[0];
+        }
+
+        if (foundGrid && foundGrid.id) {
+          console.log('[GridView] ✅ Grid found in form builder list:', foundGrid);
+          this.grid = foundGrid;
+          this.loadColumns();
+        } else {
+          console.warn('[GridView] ❌ Grid not found in form builder list. Available grids:', grids.map(g => g.gridCode || g.gridName));
+          this.error = `Grid not found for field "${this.field.fieldName || this.field.fieldCode}". ` +
+                       `Available grids: ${grids.length > 0 ? grids.map(g => g.gridCode || g.gridName).join(', ') : 'None'}. ` +
+                       `Please ensure the field is linked to a Grid in the admin panel.`;
+          this.loading = false;
+        }
+      },
+      error: (error) => {
+        console.error('[GridView] Error loading grids from form builder:', error);
+        this.error = `Error loading grids: ${error?.message || 'Unknown error'}. ` +
+                     `The grid with code '${this.field.fieldCode}' may not exist for this form. ` +
+                     `Please check the backend endpoint /api/FormGrids/active-by-form-builder/${this.formBuilderId} or ensure the field has a valid gridId.`;
+        this.loading = false;
+      }
+    });
   }
 
   /**
@@ -161,19 +284,45 @@ export class GridViewComponent implements OnInit, OnChanges {
         this.columns = response.data || [];
         this.columns.sort((a, b) => (a.columnOrder || 0) - (b.columnOrder || 0));
         
-        // Load column options from validationRules if available
+        console.log('[GridView] Loaded columns:', this.columns.length);
+        console.log('[GridView] Columns data:', this.columns);
+        
+        if (this.columns.length === 0) {
+          this.error = 'No columns found. Please ensure the grid has columns configured.';
+          this.loading = false;
+          return;
+        }
+        
+        // Set default visibility and read-only if not set
         this.columns.forEach(column => {
-          if (column.dataType === 'select' && column.validationRules) {
-            try {
-              const rules = JSON.parse(column.validationRules);
-              if (rules.columnOptions && Array.isArray(rules.columnOptions)) {
-                column.columnOptions = rules.columnOptions;
-              }
-            } catch {
-              // Invalid JSON, ignore
-            }
+          // Ensure isActive is true if not set (since we're using getActiveColumnsByGrid)
+          if (column.isActive === undefined || column.isActive === null) {
+            column.isActive = true;
+          }
+          
+          // Set default visibility to true if not set
+          if (column.isVisible === undefined || column.isVisible === null) {
+            column.isVisible = true;
+          }
+          
+          if (column.isReadOnly === undefined) {
+            column.isReadOnly = false;
           }
         });
+        
+        // Load column options from Data Sources or validationRules
+        this.loadColumnOptions();
+        
+        // Filter visible columns
+        this.updateVisibleColumns();
+        
+        // Check if we have visible columns
+        if (this.visibleColumns.length === 0) {
+          console.warn('[GridView] No visible columns found after filtering');
+          this.error = 'No visible columns found. Please check column visibility settings.';
+          this.loading = false;
+          return;
+        }
         
         // Initialize grid data structure
         this.initializeGridData();
@@ -185,11 +334,96 @@ export class GridViewComponent implements OnInit, OnChanges {
           this.loading = false;
         }
       },
-      error: () => {
-        this.error = 'Error loading columns';
+      error: (error) => {
+        console.error('[GridView] Error loading columns:', error);
+        this.error = 'Error loading columns. Please try again later.';
         this.loading = false;
       }
     });
+  }
+
+  /**
+   * Load column options from Data Sources or validationRules
+   */
+  private loadColumnOptions(): void {
+    const columnsWithDataSources = this.columns.filter(col => 
+      col.dataType === 'select' && (col.dataSourceId || col.validationRules)
+    );
+
+    if (columnsWithDataSources.length === 0) {
+      return;
+    }
+
+    // Load options for columns with dataSourceId
+    const dataSourceObservables = columnsWithDataSources
+      .filter(col => col.dataSourceId)
+      .map(col => {
+        return this.gridService.loadColumnOptions(col.id!).pipe(
+          map(response => ({ columnId: col.id, options: response.data || [] })),
+          catchError(() => of({ columnId: col.id, options: [] }))
+        );
+      });
+
+    if (dataSourceObservables.length > 0) {
+      forkJoin(dataSourceObservables).subscribe({
+        next: (results) => {
+          results.forEach(result => {
+            const column = this.columns.find(c => c.id === result.columnId);
+            if (column && result.options.length > 0) {
+              // Convert DropdownOptionDto to GridColumnOptionDto format
+              column.columnOptions = result.options.map(opt => ({
+                id: 0,
+                columnId: column.id,
+                optionValue: opt.value,
+                optionText: opt.text,
+                foreignOptionText: opt.foreignText,
+                optionOrder: opt.order || 0,
+                isActive: opt.isActive !== false
+              }));
+            }
+          });
+        },
+        error: () => {
+          // Continue even if data source loading fails
+        }
+      });
+    }
+
+    // Load options from validationRules for columns without dataSourceId
+    columnsWithDataSources
+      .filter(col => !col.dataSourceId && col.validationRules)
+      .forEach(column => {
+        try {
+          const rules = JSON.parse(column.validationRules!);
+          if (rules.columnOptions && Array.isArray(rules.columnOptions)) {
+            column.columnOptions = rules.columnOptions;
+          }
+        } catch {
+          // Invalid JSON, ignore
+        }
+      });
+  }
+
+  /**
+   * Update visible columns based on column visibility settings
+   */
+  private updateVisibleColumns(): void {
+    // Filter columns that are visible and active
+    this.visibleColumns = this.columns.filter(col => {
+      const isVisible = col.isVisible !== false;
+      const isActive = col.isActive !== false;
+      return isVisible && isActive;
+    });
+    
+    console.log('[GridView] Total columns:', this.columns.length);
+    console.log('[GridView] Visible columns:', this.visibleColumns.length);
+    console.log('[GridView] Columns:', this.columns.map(c => ({ 
+      id: c.id, 
+      name: c.columnName, 
+      code: c.columnCode, 
+      isVisible: c.isVisible, 
+      isActive: c.isActive 
+    })));
   }
 
   /**
@@ -284,13 +518,14 @@ export class GridViewComponent implements OnInit, OnChanges {
       }];
     }
 
-    // Initialize data structure for all rows
+    // Initialize data structure for all rows using visible columns
     this.rows.forEach((row) => {
       if (!this.gridData[row.rowIndex]) {
         this.gridData[row.rowIndex] = {};
       }
-      this.columns.forEach((col) => {
-        if (!this.gridData[row.rowIndex][col.id]) {
+      // Use visibleColumns instead of all columns to ensure we only initialize visible ones
+      this.visibleColumns.forEach((col) => {
+        if (col.id && !this.gridData[row.rowIndex][col.id]) {
           this.gridData[row.rowIndex][col.id] = col.defaultValue || '';
         }
       });
@@ -308,6 +543,17 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Set cell value
    */
   setCellValue(rowIndex: number, columnId: number, value: string): void {
+    // Check if grid is read-only
+    if (this.isReadOnly) {
+      return;
+    }
+
+    // Check if column is read-only
+    const column = this.columns.find(c => c.id === columnId);
+    if (column && this.isColumnReadOnly(column)) {
+      return;
+    }
+
     if (!this.gridData[rowIndex]) {
       this.gridData[rowIndex] = {};
     }
@@ -318,6 +564,18 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Add new row
    */
   addRow(): void {
+    // Check if grid is read-only
+    if (this.isReadOnly) {
+      this.error = 'Grid is read-only. Cannot add rows.';
+      return;
+    }
+
+    // Check maximum rows constraint
+    if (this.grid?.maxRows && this.rows.length >= this.grid.maxRows) {
+      this.error = `Maximum ${this.grid.maxRows} rows allowed. Cannot add more rows.`;
+      return;
+    }
+
     const maxIndex = this.rows.length > 0
       ? Math.max(...this.rows.map(r => r.rowIndex || 0))
       : -1;
@@ -339,12 +597,27 @@ export class GridViewComponent implements OnInit, OnChanges {
     this.columns.forEach((col) => {
       this.gridData[newIndex][col.id] = col.defaultValue || '';
     });
+
+    // Clear error if successful
+    this.error = '';
   }
 
   /**
    * Remove row
    */
   removeRow(rowIndex: number): void {
+    // Check if grid is read-only
+    if (this.isReadOnly) {
+      this.error = 'Grid is read-only. Cannot delete rows.';
+      return;
+    }
+
+    // Check minimum rows constraint
+    if (this.grid?.minRows && this.rows.length <= this.grid.minRows) {
+      this.error = `Minimum ${this.grid.minRows} rows required. Cannot delete row.`;
+      return;
+    }
+
     const index = this.rows.findIndex(r => r.rowIndex === rowIndex);
     if (index >= 0) {
       const row = this.rows[index];
@@ -356,6 +629,7 @@ export class GridViewComponent implements OnInit, OnChanges {
             this.rows.splice(index, 1);
             delete this.gridData[rowIndex];
             this.reindexRows();
+            this.error = ''; // Clear error if successful
           },
           error: () => {
             this.error = 'Error deleting row';
@@ -366,6 +640,7 @@ export class GridViewComponent implements OnInit, OnChanges {
         this.rows.splice(index, 1);
         delete this.gridData[rowIndex];
         this.reindexRows();
+        this.error = ''; // Clear error if successful
       }
     }
   }
@@ -394,6 +669,51 @@ export class GridViewComponent implements OnInit, OnChanges {
       return of({ isValid: true, errors: [], warnings: [] });
     }
 
+    const errors: ValidationErrorDto[] = [];
+
+    // Validate minimum rows
+    if (this.grid.minRows && this.rows.length < this.grid.minRows) {
+      errors.push({
+        field: 'grid',
+        message: `Minimum ${this.grid.minRows} rows required. Currently have ${this.rows.length} rows.`,
+        rowIndex: undefined,
+        columnId: undefined
+      });
+    }
+
+    // Validate maximum rows
+    if (this.grid.maxRows && this.rows.length > this.grid.maxRows) {
+      errors.push({
+        field: 'grid',
+        message: `Maximum ${this.grid.maxRows} rows allowed. Currently have ${this.rows.length} rows.`,
+        rowIndex: undefined,
+        columnId: undefined
+      });
+    }
+
+    // Validate required columns
+    this.rows.forEach((row) => {
+      this.columns.forEach((col) => {
+        if (col.isRequired && col.isVisible !== false) {
+          const cellValue = this.getCellValue(row.rowIndex, col.id);
+          if (!cellValue || cellValue.trim() === '') {
+            errors.push({
+              field: col.columnCode,
+              message: `${col.columnName} is required`,
+              rowIndex: row.rowIndex,
+              columnId: col.id
+            });
+          }
+        }
+      });
+    });
+
+    // If there are local validation errors, return them
+    if (errors.length > 0) {
+      return of({ isValid: false, errors, warnings: [] });
+    }
+
+    // Otherwise, call backend validation
     const bulkData: BulkSaveGridDataDto = {
       submissionId: this.submissionId,
       gridId: this.grid.id,
@@ -526,6 +846,25 @@ export class GridViewComponent implements OnInit, OnChanges {
   }
 
   /**
+   * Check if column is read-only
+   */
+  isColumnReadOnly(column: FormGridColumnDto): boolean {
+    // Grid-level read-only takes precedence
+    if (this.isReadOnly) {
+      return true;
+    }
+    // Column-level read-only
+    return column.isReadOnly === true;
+  }
+
+  /**
+   * Check if column is visible
+   */
+  isColumnVisible(column: FormGridColumnDto): boolean {
+    return column.isVisible !== false;
+  }
+
+  /**
    * Get input type for column
    */
   getInputType(column: FormGridColumnDto): string {
@@ -561,6 +900,50 @@ export class GridViewComponent implements OnInit, OnChanges {
       return option.foreignOptionText;
     }
     return option.optionText || option.optionValue || '';
+  }
+
+  /**
+   * Get add row button tooltip
+   */
+  getAddRowTooltip(): string {
+    if (this.isReadOnly) {
+      return this.translationService.translate('grids.readOnlyGrid') || 'Grid is read-only';
+    }
+    if (this.grid?.maxRows && this.rows.length >= this.grid.maxRows) {
+      return this.translationService.translate('grids.maxRowsReached') || `Maximum ${this.grid.maxRows} rows reached`;
+    }
+    return this.translationService.translate('grids.addRow') || 'Add new row';
+  }
+
+  /**
+   * Get remove row button tooltip
+   */
+  getRemoveRowTooltip(rowIndex: number): string {
+    if (this.isReadOnly) {
+      return this.translationService.translate('grids.readOnlyGrid') || 'Grid is read-only';
+    }
+    if (this.grid?.minRows && this.rows.length <= this.grid.minRows) {
+      return this.translationService.translate('grids.minRowsRequired') || `Minimum ${this.grid.minRows} rows required`;
+    }
+    return this.translationService.translate('grids.removeRow') || 'Remove row';
+  }
+
+  /**
+   * Check if can add row
+   */
+  canAddRow(): boolean {
+    if (this.isReadOnly) return false;
+    if (this.grid?.maxRows && this.rows.length >= this.grid.maxRows) return false;
+    return true;
+  }
+
+  /**
+   * Check if can remove row
+   */
+  canRemoveRow(): boolean {
+    if (this.isReadOnly) return false;
+    if (this.grid?.minRows && this.rows.length <= this.grid.minRows) return false;
+    return true;
   }
 
   /**

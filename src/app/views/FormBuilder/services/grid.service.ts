@@ -21,6 +21,7 @@ import {
   GridStatsDto,
   GridSummaryDto,
   GridValidationResultDto,
+  DropdownOptionDto,
   ApiResponse
 } from '../form-builder/models/grid-dto.model';
 
@@ -117,6 +118,16 @@ export class GridService {
   }
 
   /**
+   * Validate grid rules before saving data
+   * Note: This endpoint may not exist yet in backend
+   */
+  validateGridRules(gridId: number, data: any): Observable<ApiResponse<any>> {
+    return this.http.post<ApiResponse<any>>(`${this.baseUrl}/FormGrids/${gridId}/validate-rules`, data).pipe(
+      catchError(() => of({ statusCode: 500, message: 'Error validating grid rules', data: null }))
+    );
+  }
+
+  /**
    * Update grid
    */
   updateGrid(id: number, grid: UpdateFormGridDto): Observable<ApiResponse<FormGridDto>> {
@@ -199,6 +210,7 @@ export class GridService {
   /**
    * Get submission IDs that have rows for this grid
    * This helps users select which submission to view/edit
+   * Note: This endpoint may not be implemented in the backend yet
    */
   getSubmissionsWithGridData(gridId: number): Observable<ApiResponse<number[]>> {
     // Try to get unique submission IDs that have rows for this grid
@@ -206,10 +218,15 @@ export class GridService {
     return this.http.get<ApiResponse<number[]>>(
       `${this.baseUrl}/FormSubmissionGridRows/grid/${gridId}/submissions`
     ).pipe(
-      catchError(() => {
-        // If endpoint doesn't exist, return empty array
-        console.warn('Endpoint for getting submissions with grid data not available');
-        return of({ statusCode: 200, message: 'No submissions found', data: [] });
+      catchError((error) => {
+        // Handle expected 404 for missing endpoint gracefully
+        if (error?.status === 404) {
+          console.info(`Grid service: Submissions endpoint not yet implemented for grid ${gridId}. Using fallback.`);
+          return of({ statusCode: 200, message: 'Submissions endpoint not available, using fallback', data: [] });
+        } else {
+          console.warn(`Grid service: Error loading submissions for grid ${gridId}:`, error?.message || error);
+          return of({ statusCode: 500, message: 'Error loading submissions', data: [] });
+        }
       })
     );
   }
@@ -477,6 +494,147 @@ export class GridService {
         data: { gridId, gridName: '', totalRows: 0, activeRows: 0, totalCells: 0 }
       }))
     );
+  }
+
+  // ===== Grid Column Dropdown Options =====
+
+  /**
+   * Load dropdown options for a grid column
+   * Supports Static, LookupTable, and API data sources
+   */
+  loadColumnOptions(columnId: number): Observable<ApiResponse<DropdownOptionDto[]>> {
+    return this.http.get<ApiResponse<DropdownOptionDto[]>>(
+      `${this.baseUrl}/GridColumnDataSources/options/${columnId}`
+    ).pipe(
+      catchError(() => of({
+        statusCode: 500,
+        message: 'Error loading dropdown options',
+        data: []
+      }))
+    );
+  }
+
+  /**
+   * Load dropdown options for multiple columns at once
+   * Useful for optimizing grid loading
+   */
+  loadMultipleColumnOptions(columnIds: number[]): Observable<ApiResponse<{ [columnId: number]: DropdownOptionDto[] }>> {
+    return this.http.post<ApiResponse<{ [columnId: number]: DropdownOptionDto[] }>>(
+      `${this.baseUrl}/GridColumnDataSources/options/batch`,
+      { columnIds }
+    ).pipe(
+      catchError(() => of({
+        statusCode: 500,
+        message: 'Error loading dropdown options',
+        data: {}
+      }))
+    );
+  }
+
+  // ===== Grid Rules Validation (Client-side helpers) =====
+
+  /**
+   * Validate minimum rows rule
+   */
+  validateMinRows(grid: FormGridDto, currentRows: number): { isValid: boolean; message?: string } {
+    if (grid.minRows && currentRows < grid.minRows) {
+      return {
+        isValid: false,
+        message: `Grid requires at least ${grid.minRows} rows. Currently has ${currentRows}.`
+      };
+    }
+    return { isValid: true };
+  }
+
+  /**
+   * Validate maximum rows rule
+   */
+  validateMaxRows(grid: FormGridDto, currentRows: number): { isValid: boolean; message?: string } {
+    if (grid.maxRows && currentRows > grid.maxRows) {
+      return {
+        isValid: false,
+        message: `Grid allows maximum ${grid.maxRows} rows. Currently has ${currentRows}.`
+      };
+    }
+    return { isValid: true };
+  }
+
+  /**
+   * Validate column visibility rules
+   */
+  isColumnVisible(column: FormGridColumnDto): boolean {
+    // Basic visibility check - can be extended with complex rules
+    return column.isVisible !== false;
+  }
+
+  /**
+   * Check if column is read-only
+   */
+  isColumnReadOnly(column: FormGridColumnDto): boolean {
+    return column.isReadOnly === true;
+  }
+
+  /**
+   * Get visible columns only
+   */
+  getVisibleColumns(columns: FormGridColumnDto[]): FormGridColumnDto[] {
+    return columns.filter(column => this.isColumnVisible(column));
+  }
+
+  /**
+   * Get required columns
+   */
+  getRequiredColumns(columns: FormGridColumnDto[]): FormGridColumnDto[] {
+    return columns.filter(column => column.isRequired);
+  }
+
+  /**
+   * Validate row data against column rules
+   */
+  validateRowData(columns: FormGridColumnDto[], rowData: any): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    const requiredColumns = this.getRequiredColumns(columns);
+
+    // Check required fields
+    requiredColumns.forEach(column => {
+      const value = rowData[column.columnCode];
+      if (value === null || value === undefined || value === '') {
+        errors.push(`${column.columnName} is required`);
+      }
+    });
+
+    // Check data types (basic validation)
+    columns.forEach(column => {
+      const value = rowData[column.columnCode];
+      if (value !== null && value !== undefined && value !== '') {
+        if (!this.validateDataType(value, column.dataType)) {
+          errors.push(`${column.columnName} has invalid data type`);
+        }
+      }
+    });
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Basic data type validation
+   */
+  private validateDataType(value: any, dataType: string): boolean {
+    switch (dataType?.toLowerCase()) {
+      case 'number':
+        return !isNaN(Number(value));
+      case 'date':
+        return !isNaN(Date.parse(value));
+      case 'boolean':
+        return typeof value === 'boolean' || value === 'true' || value === 'false';
+      case 'email':
+        return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+      default:
+        return true; // text and select types are always valid
+    }
   }
 }
 

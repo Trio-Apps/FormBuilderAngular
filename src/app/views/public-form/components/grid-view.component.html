@@ -12,21 +12,59 @@
   </div>
 
   <!-- Grid Content -->
-  <div *ngIf="!loading && !error && grid && columns.length > 0" class="grid-content">
+  <div *ngIf="!loading && !error && grid && columns.length > 0 && visibleColumns.length > 0" class="grid-content">
     <!-- Grid Header -->
     <div class="grid-header">
-      <h4 class="grid-title">
-        <i class="pi pi-table" style="font-size: 1.125rem; color: #667eea;"></i>
-        {{ getGridTitle() }}
-      </h4>
-      <button 
-        type="button" 
-        class="btn-add-row"
-        (click)="addRow()"
-        [disabled]="saving">
-        <i class="pi pi-plus"></i>
-        <span>{{ translationService.translate('formView.addRow') || 'Add Row' }}</span>
-      </button>
+      <div class="grid-header-left">
+        <h4 class="grid-title">
+          <i class="pi pi-table" style="font-size: 1.125rem; color: #667eea;"></i>
+          {{ getGridTitle() }}
+        </h4>
+        <!-- Grid Stats -->
+        <div class="grid-stats" *ngIf="grid">
+          <span class="stat-item">
+            <i class="pi pi-list" style="font-size: 0.75rem;"></i>
+            <strong>{{ rows.length }}</strong> {{ translationService.translate('grids.rows') || 'Rows' }}
+          </span>
+          <span class="stat-item" *ngIf="grid.minRows">
+            <i class="pi pi-arrow-down" style="font-size: 0.75rem;"></i>
+            Min: <strong>{{ grid.minRows }}</strong>
+          </span>
+          <span class="stat-item" *ngIf="grid.maxRows">
+            <i class="pi pi-arrow-up" style="font-size: 0.75rem;"></i>
+            Max: <strong>{{ grid.maxRows }}</strong>
+          </span>
+          <span class="stat-item">
+            <i class="pi pi-eye" style="font-size: 0.75rem;"></i>
+            <strong>{{ visibleColumns.length }}</strong> {{ translationService.translate('grids.columns') || 'Columns' }}
+          </span>
+        </div>
+      </div>
+      <div class="grid-header-right">
+        <button 
+          type="button" 
+          class="btn-add-row"
+          (click)="addRow()"
+          [disabled]="saving || isReadOnly || !canAddRow()"
+          [title]="getAddRowTooltip()">
+          <i class="pi pi-plus"></i>
+          <span>{{ translationService.translate('formView.addRow') || 'Add Row' }}</span>
+        </button>
+      </div>
+      <!-- Error Message -->
+      <div *ngIf="error" class="grid-error-message">
+        <i class="pi pi-exclamation-triangle"></i>
+        <span>{{ error }}</span>
+      </div>
+      <!-- Min/Max Rows Warning -->
+      <div *ngIf="grid && grid.minRows && rows.length < grid.minRows" class="grid-warning-message">
+        <i class="pi pi-info-circle"></i>
+        <span>{{ translationService.translate('grids.minRowsWarning') || 'Minimum' }} {{ grid.minRows }} {{ translationService.translate('grids.rowsRequired') || 'rows required' }}</span>
+      </div>
+      <div *ngIf="grid && grid.maxRows && rows.length >= grid.maxRows" class="grid-info-message">
+        <i class="pi pi-check-circle"></i>
+        <span>{{ translationService.translate('grids.maxRowsReached') || 'Maximum rows reached' }} ({{ grid.maxRows }})</span>
+      </div>
     </div>
 
     <!-- Grid Table -->
@@ -37,13 +75,23 @@
           <tr>
             <th class="col-index">#</th>
             <th 
-              *ngFor="let column of columns" 
+              *ngFor="let column of visibleColumns" 
               class="col-data"
-              [class.required]="isColumnRequired(column)">
-              {{ getColumnLabel(column) }}
-              <span *ngIf="isColumnRequired(column)" class="required-indicator">*</span>
+              [class.required]="isColumnRequired(column)"
+              [class.read-only]="isColumnReadOnly(column)">
+              <div class="column-header-content">
+                <span class="column-name">{{ getColumnLabel(column) }}</span>
+                <div class="column-badges">
+                  <span *ngIf="isColumnRequired(column)" class="badge badge-required" [title]="translationService.translate('common.required') || 'Required'">
+                    *
+                  </span>
+                  <span *ngIf="isColumnReadOnly(column)" class="badge badge-readonly" [title]="translationService.translate('common.readOnly') || 'Read-only'">
+                    <i class="pi pi-lock"></i>
+                  </span>
+                </div>
+              </div>
             </th>
-            <th class="col-actions">
+            <th class="col-actions" *ngIf="!isReadOnly">
               <i class="pi pi-cog" style="font-size: 0.75rem;"></i>
             </th>
           </tr>
@@ -56,7 +104,11 @@
             <td class="col-index">{{ i + 1 }}</td>
 
             <!-- Row Cells -->
-            <td *ngFor="let column of columns" class="col-data" [class.has-error]="hasError(row.rowIndex, column.id)">
+            <td *ngFor="let column of visibleColumns" 
+                class="col-data" 
+                [class.has-error]="hasError(row.rowIndex, column.id)" 
+                [class.read-only]="isColumnReadOnly(column)"
+                [class.required]="isColumnRequired(column)">
               <ng-container [ngSwitch]="getInputType(column)">
                 <!-- Text/Email/Number Input -->
                 <input
@@ -68,6 +120,8 @@
                   (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
                   [placeholder]="column.defaultValue || ''"
                   [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
                 />
                 <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
                   {{ getError(row.rowIndex, column.id) }}
@@ -81,6 +135,8 @@
                   (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
                   [placeholder]="column.defaultValue || ''"
                   [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
                 />
                 <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
                   {{ getError(row.rowIndex, column.id) }}
@@ -94,6 +150,8 @@
                   (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
                   [placeholder]="column.defaultValue || ''"
                   [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
                 />
                 <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
                   {{ getError(row.rowIndex, column.id) }}
@@ -106,6 +164,8 @@
                   [value]="getCellValue(row.rowIndex, column.id)"
                   (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
                   [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
                 />
                 <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
                   {{ getError(row.rowIndex, column.id) }}
@@ -118,7 +178,8 @@
                   [class.is-invalid]="hasError(row.rowIndex, column.id)"
                   [value]="getCellValue(row.rowIndex, column.id)"
                   (change)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
-                  [required]="isColumnRequired(column)">
+                  [required]="isColumnRequired(column)"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly">
                   <option value="">{{ translationService.translate('formView.selectOption') || 'Select...' }}</option>
                   <option
                     *ngFor="let option of getColumnOptions(column)"
@@ -133,13 +194,13 @@
             </td>
 
             <!-- Actions Column -->
-            <td class="col-actions">
+            <td class="col-actions" *ngIf="!isReadOnly">
               <button
                 type="button"
                 class="btn-remove-row"
                 (click)="removeRow(row.rowIndex)"
-                [disabled]="saving"
-                [title]="translationService.translate('formView.removeRow') || 'Remove Row'">
+                [disabled]="saving || !canRemoveRow()"
+                [title]="getRemoveRowTooltip(row.rowIndex)">
                 <i class="pi pi-trash"></i>
               </button>
             </td>
@@ -147,7 +208,7 @@
 
           <!-- Empty State -->
           <tr *ngIf="rows.length === 0" class="empty-row">
-            <td [attr.colspan]="columns.length + 2" class="empty-message">
+            <td [attr.colspan]="visibleColumns.length + (isReadOnly ? 1 : 2)" class="empty-message">
               <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
                 <i class="pi pi-inbox" style="font-size: 2.5rem; color: #9ca3af; opacity: 0.5;"></i>
                 <span>{{ translationService.translate('formView.noRows') || 'No rows added yet. Click "Add Row" to start.' }}</span>
@@ -175,6 +236,22 @@
   <div *ngIf="!loading && !error && (!grid || columns.length === 0)" class="grid-empty">
     <i class="pi pi-info-circle"></i>
     <span>{{ translationService.translate('formView.gridNotConfigured') || 'Grid is not configured yet.' }}</span>
+    <div style="margin-top: 1rem; font-size: 0.875rem; color: #6b7280; text-align: left; max-width: 500px; margin-left: auto; margin-right: auto;">
+      <p *ngIf="!field.gridId"><strong>Issue:</strong> Field does not have a Grid ID configured.</p>
+      <p *ngIf="field.gridId && !grid"><strong>Issue:</strong> Grid with ID {{ field.gridId }} not found.</p>
+      <p *ngIf="grid && columns.length === 0"><strong>Issue:</strong> Grid has no columns configured.</p>
+      <p style="margin-top: 0.5rem;"><strong>Solution:</strong> Please configure the Grid in the admin panel and link it to this field.</p>
+    </div>
+  </div>
+
+  <!-- No Visible Columns -->
+  <div *ngIf="!loading && !error && grid && columns.length > 0 && visibleColumns.length === 0" class="grid-empty">
+    <i class="pi pi-exclamation-triangle"></i>
+    <span>{{ translationService.translate('formView.noVisibleColumns') || 'No visible columns found. Please check column visibility settings.' }}</span>
+    <div style="margin-top: 1rem; font-size: 0.875rem; color: #6b7280;">
+      <p>Total columns: {{ columns.length }}</p>
+      <p>Visible columns: {{ visibleColumns.length }}</p>
+    </div>
   </div>
 </div>
 

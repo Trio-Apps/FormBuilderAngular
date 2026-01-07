@@ -328,6 +328,38 @@
         </div>
       </div>
 
+      <div class="mb-3">
+        <label class="form-label d-block">{{ translateLabel('grids.columns.readOnly') || 'Read-Only' }}</label>
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="isReadOnly"
+            formControlName="isReadOnly"
+          />
+          <label class="form-check-label" for="isReadOnly">
+            {{ columnForm.get('isReadOnly')?.value ? (translateLabel('common.yes') || 'Yes') : (translateLabel('common.no') || 'No') }}
+          </label>
+        </div>
+        <small class="form-text text-muted">{{ translateLabel('grids.columns.readOnlyHelp') || 'Read-only columns cannot be edited by users' }}</small>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label d-block">{{ translateLabel('grids.columns.visible') || 'Visible' }}</label>
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="isVisible"
+            formControlName="isVisible"
+          />
+          <label class="form-check-label" for="isVisible">
+            {{ columnForm.get('isVisible')?.value ? (translateLabel('common.yes') || 'Yes') : (translateLabel('common.no') || 'No') }}
+          </label>
+        </div>
+        <small class="form-text text-muted">{{ translateLabel('grids.columns.visibleHelp') || 'Hidden columns are not displayed to users' }}</small>
+      </div>
+
       <div class="form-group active-status-group">
         <label class="active-status-label">{{ translateLabel('common.status') || 'ACTIVE STATUS' }}</label>
         <div class="checkbox-wrapper">
@@ -342,6 +374,63 @@
             <span class="checkbox-custom"></span>
             <span class="status-text">{{ columnForm.get('isActive')?.value ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}</span>
           </label>
+        </div>
+      </div>
+
+      <!-- Data Source Section (for Select type) -->
+      <div class="mb-3" *ngIf="columnForm.get('dataType')?.value === 'select'">
+        <div class="form-section-header">
+          <h5 class="section-title">
+            <i class="pi pi-database"></i>
+            {{ translateLabel('grids.columns.dataSource') || 'Data Source' }}
+          </h5>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-secondary"
+            (click)="openDataSourceModal()"
+            title="{{ translateLabel('grids.columns.manageDataSources') || 'Manage Data Sources' }}">
+            <i class="pi pi-cog"></i>
+          </button>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">{{ translateLabel('grids.columns.selectDataSource') || 'Select Data Source' }}</label>
+          <select
+            class="form-control"
+            formControlName="dataSourceId"
+            (change)="onDataSourceChange($event)">
+            <option [value]="null">{{ translateLabel('grids.columns.noDataSource') || 'No Data Source (Manual Options)' }}</option>
+            <option *ngFor="let dataSource of dataSources" [value]="dataSource.id">
+              {{ dataSource.sourceType }} - ID: {{ dataSource.id }}
+            </option>
+          </select>
+        </div>
+
+        <div class="mb-2" *ngIf="columnForm.get('dataSourceId')?.value">
+          <button
+            type="button"
+            class="btn btn-sm btn-info"
+            (click)="testDropdownOptions(editingColumn?.id)"
+            [disabled]="loadingOptions"
+            title="{{ translateLabel('grids.columns.testDataSource') || 'Test Data Source' }}">
+            <i class="pi pi-search" *ngIf="!loadingOptions"></i>
+            <i class="pi pi-spin pi-spinner" *ngIf="loadingOptions"></i>
+            {{ loadingOptions ? (translateLabel('common.loading') || 'Loading...') : (translateLabel('grids.columns.test') || 'Test') }}
+          </button>
+
+          <div class="mt-2" *ngIf="dropdownOptions.length > 0">
+            <small class="text-success">
+              {{ translateLabel('grids.columns.optionsLoaded') || 'Options loaded' }}: {{ dropdownOptions.length }}
+            </small>
+            <div class="options-preview mt-1">
+              <small *ngFor="let option of dropdownOptions.slice(0, 3)" class="d-block text-muted">
+                {{ option.value }} - {{ option.text }}
+              </small>
+              <small *ngIf="dropdownOptions.length > 3" class="text-muted">
+                ... {{ translateLabel('grids.columns.andMore') || 'and' }} {{ dropdownOptions.length - 3 }} {{ translateLabel('grids.columns.moreOptions') || 'more options' }}
+              </small>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -425,6 +514,171 @@
           pButton
           type="submit"
           [disabled]="columnForm.invalid || loading"
+          class="p-button-primary"
+        >
+          <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>
+          {{ translateLabel('common.save') || 'Save' }}
+        </button>
+      </div>
+    </form>
+  </p-dialog>
+
+  <!-- Data Source Modal -->
+  <p-dialog
+    [(visible)]="showDataSourceModal"
+    [modal]="true"
+    [header]="selectedDataSource ? (translateLabel('grids.columns.editDataSource') || 'Edit Data Source') : (translateLabel('grids.columns.addDataSource') || 'Add Data Source')"
+    [style]="{ width: '600px' }"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="closeDataSourceModal()"
+  >
+    <form [formGroup]="dataSourceForm" (ngSubmit)="saveDataSource()">
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.columns.sourceType') || 'Source Type' }} <span class="text-danger">*</span></label>
+        <select
+          class="form-control"
+          formControlName="sourceType"
+          [class.is-invalid]="dataSourceForm.get('sourceType')?.invalid && dataSourceForm.get('sourceType')?.touched">
+          <option value="Static">{{ translateLabel('grids.columns.staticOptions') || 'Static Options' }}</option>
+          <option value="LookupTable">{{ translateLabel('grids.columns.lookupTable') || 'Lookup Table' }}</option>
+          <option value="API">{{ translateLabel('grids.columns.apiEndpoint') || 'API Endpoint' }}</option>
+        </select>
+      </div>
+
+      <!-- API Source Fields -->
+      <div *ngIf="dataSourceForm.get('sourceType')?.value === 'API'">
+        <div class="mb-3">
+          <label class="form-label">{{ translateLabel('grids.columns.apiUrl') || 'API URL' }}</label>
+          <input
+            type="url"
+            class="form-control"
+            formControlName="apiUrl"
+            [placeholder]="translateLabel('grids.columns.enterApiUrl') || 'https://api.example.com/data'"
+          />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ translateLabel('grids.columns.apiPath') || 'JSON Path' }}</label>
+          <input
+            type="text"
+            class="form-control"
+            formControlName="apiPath"
+            [placeholder]="translateLabel('grids.columns.apiPathHelp') || '$.data or $.result.items'"
+          />
+          <small class="form-text text-muted">{{ translateLabel('grids.columns.apiPathExample') || 'JSON path to extract data array' }}</small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ translateLabel('grids.columns.httpMethod') || 'HTTP Method' }}</label>
+          <select class="form-control" formControlName="httpMethod">
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+          </select>
+        </div>
+
+        <div class="mb-3" *ngIf="dataSourceForm.get('httpMethod')?.value === 'POST'">
+          <label class="form-label">{{ translateLabel('grids.columns.requestBody') || 'Request Body (JSON)' }}</label>
+          <textarea
+            class="form-control"
+            formControlName="requestBodyJson"
+            rows="3"
+            placeholder="{{ translateLabel('grids.columns.requestBodyExample') || '{ &quot;status&quot;: &quot;active&quot; }' }}"
+          ></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ translateLabel('grids.columns.valuePath') || 'Value Path' }}</label>
+          <input
+            type="text"
+            class="form-control"
+            formControlName="valuePath"
+            [placeholder]="translateLabel('grids.columns.valuePathExample') || 'id or $.id'"
+          />
+          <small class="form-text text-muted">{{ translateLabel('grids.columns.valuePathHelp') || 'Path to extract option value' }}</small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ translateLabel('grids.columns.textPath') || 'Text Path' }}</label>
+          <input
+            type="text"
+            class="form-control"
+            formControlName="textPath"
+            [placeholder]="translateLabel('grids.columns.textPathExample') || 'name or $.name'"
+          />
+          <small class="form-text text-muted">{{ translateLabel('grids.columns.textPathHelp') || 'Path to extract option text' }}</small>
+        </div>
+      </div>
+
+      <!-- Lookup Table Source Fields -->
+      <div *ngIf="dataSourceForm.get('sourceType')?.value === 'LookupTable'">
+        <div class="mb-3">
+          <label class="form-label">{{ translateLabel('grids.columns.tableName') || 'Table Name' }}</label>
+          <input
+            type="text"
+            class="form-control"
+            formControlName="apiUrl"
+            [placeholder]="translateLabel('grids.columns.tableNameExample') || 'Items, Categories, etc.'"
+          />
+          <small class="form-text text-muted">{{ translateLabel('grids.columns.tableNameHelp') || 'Database table name to lookup data from' }}</small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ translateLabel('grids.columns.valueColumn') || 'Value Column' }}</label>
+          <input
+            type="text"
+            class="form-control"
+            formControlName="valuePath"
+            [placeholder]="translateLabel('grids.columns.valueColumnExample') || 'Id, Code, etc.'"
+          />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ translateLabel('grids.columns.textColumn') || 'Text Column' }}</label>
+          <input
+            type="text"
+            class="form-control"
+            formControlName="textPath"
+            [placeholder]="translateLabel('grids.columns.textColumnExample') || 'Name, Title, etc.'"
+          />
+        </div>
+      </div>
+
+      <!-- Static Options Note -->
+      <div *ngIf="dataSourceForm.get('sourceType')?.value === 'Static'" class="alert alert-info">
+        <i class="pi pi-info-circle"></i>
+        {{ translateLabel('grids.columns.staticOptionsNote') || 'Static options will be managed through the Column Options section above.' }}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label d-block">{{ translateLabel('common.active') || 'Active' }}</label>
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="dataSourceIsActive"
+            formControlName="isActive"
+          />
+          <label class="form-check-label" for="dataSourceIsActive">
+            {{ dataSourceForm.get('isActive')?.value ? (translateLabel('common.yes') || 'Yes') : (translateLabel('common.no') || 'No') }}
+          </label>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button
+          pButton
+          type="button"
+          [label]="translateLabel('common.cancel') || 'Cancel'"
+          (click)="closeDataSourceModal()"
+          class="p-button-text"
+        >
+        </button>
+
+        <button
+          pButton
+          type="submit"
+          [disabled]="dataSourceForm.invalid || loading"
           class="p-button-primary"
         >
           <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>

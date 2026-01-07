@@ -5,8 +5,18 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Va
 import { GridService } from '../../FormBuilder/services/grid.service';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FieldsService } from '../../FormBuilder/services/fields.service';
+import { GridColumnDataSourcesService } from '../../FormBuilder/services/grid-column-data-sources.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
-import { FormGridColumnDto, CreateFormGridColumnDto, UpdateFormGridColumnDto, FormGridDto, GridColumnOptionDto } from '../../FormBuilder/form-builder/models/grid-dto.model';
+import {
+  FormGridColumnDto,
+  CreateFormGridColumnDto,
+  UpdateFormGridColumnDto,
+  FormGridDto,
+  GridColumnOptionDto,
+  GridColumnDataSourceDto,
+  CreateGridColumnDataSourceDto,
+  DropdownOptionDto
+} from '../../FormBuilder/form-builder/models/grid-dto.model';
 import { FieldTypeDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { Subscription } from 'rxjs';
 import { TranslationService } from '../../../core/services/translation.service';
@@ -61,6 +71,14 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   // Column Options
   showOptionsSection = false;
 
+  // Data Sources
+  dataSources: GridColumnDataSourceDto[] = [];
+  selectedDataSource: GridColumnDataSourceDto | null = null;
+  showDataSourceModal = false;
+  dataSourceForm!: FormGroup;
+  dropdownOptions: DropdownOptionDto[] = [];
+  loadingOptions = false;
+
   // Data Types
   dataTypes = [
     { value: 'text', label: 'Text', labelAr: 'نص' },
@@ -77,6 +95,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     private gridService: GridService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
+    private dataSourcesService: GridColumnDataSourcesService,
     private fb: FormBuilder,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
@@ -91,8 +110,23 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       dataType: ['text', Validators.required],
       isRequired: [false],
       isActive: [true],
+      isReadOnly: [false],
+      isVisible: [true],
+      dataSourceId: [null],
       defaultValue: [''],
       columnOptions: this.fb.array([])
+    });
+
+    this.dataSourceForm = this.fb.group({
+      sourceType: ['Static', Validators.required],
+      apiUrl: [''],
+      apiPath: [''],
+      httpMethod: ['GET'],
+      requestBodyJson: [''],
+      valuePath: [''],
+      textPath: [''],
+      configurationJson: [''],
+      isActive: [true]
     });
 
     // Watch dataType changes to show/hide options section
@@ -114,10 +148,11 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadFieldTypes();
+    this.loadDataSources();
     this.routeSubscription = this.route.params.subscribe(params => {
       const newTabId = +params['tabId'];
       const newGridId = +params['gridId'];
-      
+
       if (newTabId && newGridId) {
         this.tabId = newTabId;
         this.gridId = newGridId;
@@ -268,6 +303,186 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadDataSources(): void {
+    this.dataSourcesService.getDataSources().subscribe({
+      next: (response) => {
+        if (response.data) {
+          this.dataSources = response.data.filter(ds => ds.isActive);
+        }
+      },
+      error: (error) => {
+        console.error('[GridColumnsList] Error loading data sources:', error);
+        this.dataSources = [];
+      }
+    });
+  }
+
+  loadDropdownOptions(dataSourceId?: number): void {
+    if (!dataSourceId) return;
+
+    this.loadingOptions = true;
+    this.dataSourcesService.getOptionsByDataSource(dataSourceId).subscribe({
+      next: (response) => {
+        if (response.data) {
+          this.dropdownOptions = response.data.map(option => ({
+            value: option.optionValue,
+            text: option.optionText,
+            foreignText: option.foreignOptionText,
+            order: option.optionOrder,
+            isActive: option.isActive
+          }));
+        }
+        this.loadingOptions = false;
+      },
+      error: (error) => {
+        console.error('[GridColumnsList] Error loading dropdown options:', error);
+        this.dropdownOptions = [];
+        this.loadingOptions = false;
+      }
+    });
+  }
+
+  testDropdownOptions(columnId?: number): void {
+    if (!columnId) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Column ID is required to test dropdown options'
+      });
+      return;
+    }
+
+    this.loadingOptions = true;
+    this.gridService.loadColumnOptions(columnId).subscribe({
+      next: (response) => {
+        if (response.data) {
+          this.dropdownOptions = response.data;
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `Loaded ${response.data.length} dropdown options`
+          });
+        }
+        this.loadingOptions = false;
+      },
+      error: (error) => {
+        console.error('[GridColumnsList] Error testing dropdown options:', error);
+        this.loadingOptions = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load dropdown options'
+        });
+      }
+    });
+  }
+
+  openDataSourceModal(dataSource?: GridColumnDataSourceDto): void {
+    if (dataSource) {
+      this.selectedDataSource = dataSource;
+      this.dataSourceForm.patchValue({
+        sourceType: dataSource.sourceType,
+        apiUrl: dataSource.apiUrl || '',
+        apiPath: dataSource.apiPath || '',
+        httpMethod: dataSource.httpMethod || 'GET',
+        requestBodyJson: dataSource.requestBodyJson || '',
+        valuePath: dataSource.valuePath || '',
+        textPath: dataSource.textPath || '',
+        configurationJson: dataSource.configurationJson || '',
+        isActive: dataSource.isActive
+      });
+    } else {
+      this.selectedDataSource = null;
+      this.dataSourceForm.reset({
+        sourceType: 'Static',
+        apiUrl: '',
+        apiPath: '',
+        httpMethod: 'GET',
+        requestBodyJson: '',
+        valuePath: '',
+        textPath: '',
+        configurationJson: '',
+        isActive: true
+      });
+    }
+    this.showDataSourceModal = true;
+  }
+
+  closeDataSourceModal(): void {
+    this.showDataSourceModal = false;
+    this.selectedDataSource = null;
+    this.dropdownOptions = [];
+  }
+
+  saveDataSource(): void {
+    if (this.dataSourceForm.invalid) {
+      this.dataSourceForm.markAllAsTouched();
+      return;
+    }
+
+    const formValue = this.dataSourceForm.value;
+
+    if (this.selectedDataSource) {
+      // Update existing data source
+      this.dataSourcesService.updateDataSource(this.selectedDataSource.id, formValue).subscribe({
+        next: (response) => {
+          if (response.statusCode === 200) {
+            this.loadDataSources();
+            this.closeDataSourceModal();
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: 'Data source updated successfully'
+            });
+          }
+        },
+        error: (error) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error?.error?.message || 'Failed to update data source'
+          });
+        }
+      });
+    } else {
+      // Create new data source
+      const createDto: CreateGridColumnDataSourceDto = {
+        columnId: 0, // Will be set when assigning to column
+        sourceType: formValue.sourceType,
+        apiUrl: formValue.apiUrl || undefined,
+        apiPath: formValue.apiPath || undefined,
+        httpMethod: formValue.httpMethod || undefined,
+        requestBodyJson: formValue.requestBodyJson || undefined,
+        valuePath: formValue.valuePath || undefined,
+        textPath: formValue.textPath || undefined,
+        configurationJson: formValue.configurationJson || undefined,
+        isActive: formValue.isActive !== false,
+        createdByUserId: 'system' // TODO: Get from auth service
+      };
+
+      this.dataSourcesService.createDataSource(createDto).subscribe({
+        next: (response) => {
+          if (response.statusCode === 200 || response.statusCode === 201) {
+            this.loadDataSources();
+            this.closeDataSourceModal();
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: 'Data source created successfully'
+            });
+          }
+        },
+        error: (error) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error?.error?.message || 'Failed to create data source'
+          });
+        }
+      });
+    }
+  }
+
   get filteredColumns(): FormGridColumnDto[] {
     if (!this.searchTerm.trim()) {
       return this.columns;
@@ -292,6 +507,8 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         dataType: column.dataType || 'text',
         isRequired: column.isRequired || false,
         isActive: column.isActive !== false,
+        isReadOnly: column.isReadOnly || false,
+        isVisible: column.isVisible !== false,
         defaultValue: column.defaultValue || ''
       }, { emitEvent: false });
       
@@ -320,6 +537,8 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         dataType: 'text',
         isRequired: false,
         isActive: true,
+        isReadOnly: false,
+        isVisible: true,
         defaultValue: ''
       }, { emitEvent: false });
       this.showOptionsSection = false;
@@ -390,7 +609,9 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       columnOrder: 1,
       dataType: 'text',
       isRequired: false,
-      isActive: true
+      isActive: true,
+      isReadOnly: false,
+      isVisible: true
     });
   }
 
@@ -423,7 +644,9 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         columnOrder: Number(columnData.columnOrder || 1),
         dataType: columnData.dataType,
         isRequired: columnData.isRequired || false,
-        isActive: columnData.isActive !== false
+        isActive: columnData.isActive !== false,
+        isReadOnly: columnData.isReadOnly || false,
+        isVisible: columnData.isVisible !== false
       };
 
       if (columnData.defaultValue) {
@@ -472,6 +695,8 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         dataType: columnData.dataType,
         isRequired: columnData.isRequired || false,
         isActive: columnData.isActive !== false,
+        isReadOnly: columnData.isReadOnly || false,
+        isVisible: columnData.isVisible !== false,
         defaultValue: columnData.defaultValue || undefined,
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
       };
@@ -609,5 +834,26 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       }
     });
   }
+
+  private buildRowDataObject(cells: any[]): any {
+    const rowData: any = {};
+    cells.forEach((cell, index) => {
+      const column = this.columns[index];
+      if (column) {
+        rowData[column.columnCode] = cell.cellValue;
+      }
+    });
+    return rowData;
+  }
+
+  onDataSourceChange(event: any): void {
+    const dataSourceId = event.target.value;
+    if (dataSourceId) {
+      this.loadDropdownOptions(parseInt(dataSourceId));
+    } else {
+      this.dropdownOptions = [];
+    }
+  }
+
 }
 

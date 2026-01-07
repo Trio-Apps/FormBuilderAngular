@@ -51,7 +51,9 @@
 
         <!-- Field Display -->
         <div class="form-field" *ngFor="let field of tab.fields"
-          [style.display]="isFieldVisible(field) ? 'block' : 'none'">
+          [style.display]="isFieldVisible(field) ? 'block' : 'none'"
+          [attr.data-field-type]="getFieldType(field)"
+          [attr.data-grid-id]="field.gridId">
 
           <!-- Field Label -->
           <label class="field-label">
@@ -66,6 +68,8 @@
 
           <!-- Field Input (Google Forms style - preview only, empty answer) -->
           <div class="field-input-wrapper">
+            <!-- Debug: Field Type (uncomment for debugging) -->
+            <!-- <small style="color: #999; font-size: 0.75rem;">Field: {{ field.fieldName }} | Type: {{ getFieldType(field) }} | GridId: {{ field.gridId }} | FieldTypeName: {{ field.fieldTypeName }}</small> -->
             <ng-container [ngSwitch]="getFieldType(field)">
 
               <!-- Text Input -->
@@ -284,13 +288,32 @@
               </div>
 
               <!-- Grid (Line Items Grid) -->
-              <app-grid-view *ngSwitchCase="'grid'" [field]="field" [submissionId]="submissionId"
-                [formBuilderId]="form?.id || 0">
+              <app-grid-view 
+                *ngSwitchCase="'grid'" 
+                [field]="field" 
+                [submissionId]="submissionId"
+                [formBuilderId]="form?.id || 0"
+                [isReadOnly]="!isFieldEditable(field)">
               </app-grid-view>
 
-              <!-- Default: Text -->
-              <input *ngSwitchDefault type="text" class="form-input" [placeholder]="getFieldPlaceholder(field)"
-                [value]="getDefaultValue(field)" />
+              <!-- Default: Text or Grid fallback -->
+              <ng-container *ngSwitchDefault>
+                <!-- If field has gridId, show Grid component -->
+                <app-grid-view 
+                  *ngIf="field.gridId && field.gridId > 0"
+                  [field]="field" 
+                  [submissionId]="submissionId"
+                  [formBuilderId]="form?.id || 0"
+                  [isReadOnly]="!isFieldEditable(field)">
+                </app-grid-view>
+                <!-- Otherwise show text input -->
+                <input 
+                  *ngIf="!field.gridId || field.gridId <= 0"
+                  type="text" 
+                  class="form-input" 
+                  [placeholder]="getFieldPlaceholder(field)"
+                  [value]="getDefaultValue(field)" />
+              </ng-container>
 
             </ng-container>
           </div>

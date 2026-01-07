@@ -50,6 +50,28 @@
     </nav>
   </div>
 
+  <!-- Grid Rules Summary -->
+  <div class="grid-rules-summary" *ngIf="grid">
+    <div class="rules-container">
+      <div class="rule-item" *ngIf="grid.minRows">
+        <i class="pi pi-info-circle"></i>
+        <span>{{ translateLabel('grids.rows.minRows') || 'Minimum Rows' }}: {{ grid.minRows }}</span>
+      </div>
+      <div class="rule-item" *ngIf="grid.maxRows">
+        <i class="pi pi-exclamation-triangle"></i>
+        <span>{{ translateLabel('grids.rows.maxRows') || 'Maximum Rows' }}: {{ grid.maxRows }}</span>
+      </div>
+      <div class="rule-item">
+        <i class="pi pi-list"></i>
+        <span>{{ translateLabel('grids.rows.currentRows') || 'Current Rows' }}: {{ getActiveRowsCount() }}</span>
+      </div>
+      <div class="rule-item">
+        <i class="pi pi-eye"></i>
+        <span>{{ translateLabel('grids.rows.visibleColumns') || 'Visible Columns' }}: {{ getVisibleColumnsCount() }}</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Content -->
   <div class="main-content">
     <!-- Submission Selection -->
@@ -192,8 +214,21 @@
         <p>{{ translateLabel('grids.rows.loadingRows') || 'Loading rows...' }}</p>
       </div>
 
+      <!-- No Columns Warning -->
+      <div *ngIf="!loading && columns.length === 0" class="empty-state warning-state">
+        <div class="empty-icon">
+          <i class="pi pi-exclamation-triangle" style="color: #f59e0b;"></i>
+        </div>
+        <h3>{{ translateLabel('grids.rows.noColumnsFound') || 'No Columns Configured' }}</h3>
+        <p>{{ translateLabel('grids.rows.noColumnsHint') || 'This grid has no columns configured. Please add columns to the grid first.' }}</p>
+        <button class="btn-primary" (click)="navigateToColumns()">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.rows.addColumns') || 'Add Columns' }}</span>
+        </button>
+      </div>
+
       <!-- Empty State -->
-      <div *ngIf="!loading && (!selectedSubmissionId || filteredRows.length === 0)" class="empty-state">
+      <div *ngIf="!loading && columns.length > 0 && (!selectedSubmissionId || filteredRows.length === 0)" class="empty-state">
         <div class="empty-icon">
           <i class="pi pi-inbox"></i>
         </div>

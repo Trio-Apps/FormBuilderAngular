@@ -14,6 +14,9 @@ export interface FormGridDto {
   gridCode: string;
   gridOrder: number;
   isActive: boolean;
+  minRows?: number; // Minimum number of rows required
+  maxRows?: number; // Maximum number of rows allowed
+  validationRules?: string; // JSON string for grid-level validation rules
   createdByUserId?: string;
   createdDate?: string;
   updatedDate?: string | null;
@@ -28,6 +31,9 @@ export interface CreateFormGridDto {
   gridCode: string;
   gridOrder: number;
   isActive: boolean;
+  minRows?: number; // Minimum number of rows required
+  maxRows?: number; // Maximum number of rows allowed
+  validationRules?: string; // JSON string for grid-level validation rules
   createdByUserId?: string;
 }
 
@@ -38,6 +44,9 @@ export interface UpdateFormGridDto {
   gridCode?: string;
   gridOrder?: number;
   isActive?: boolean;
+  minRows?: number; // Minimum number of rows required
+  maxRows?: number; // Maximum number of rows allowed
+  validationRules?: string; // JSON string for grid-level validation rules
 }
 
 // ===== Form Grid Column (Column Definition) =====
@@ -52,6 +61,9 @@ export interface FormGridColumnDto {
   dataType: string; // 'text', 'number', 'date', 'email', 'select', etc.
   isRequired: boolean;
   isActive: boolean;
+  isReadOnly?: boolean; // Column is read-only (cannot be edited)
+  isVisible?: boolean; // Column visibility (default: true)
+  dataSourceId?: number; // Links to data source for dropdown columns
   defaultValue?: string;
   validationRules?: string; // JSON string for validation rules
   createdByUserId?: string;
@@ -59,6 +71,7 @@ export interface FormGridColumnDto {
   updatedDate?: string | null;
   // For select/radio/checkbox types
   columnOptions?: GridColumnOptionDto[];
+  dataSource?: GridColumnDataSourceDto; // Navigation property
 }
 
 export interface CreateFormGridColumnDto {
@@ -71,6 +84,9 @@ export interface CreateFormGridColumnDto {
   dataType: string;
   isRequired: boolean;
   isActive: boolean;
+  isReadOnly?: boolean; // Column is read-only (cannot be edited)
+  isVisible?: boolean; // Column visibility (default: true)
+  dataSourceId?: number; // Links to data source for dropdown columns
   defaultValue?: string;
   validationRules?: string;
   createdByUserId?: string;
@@ -85,6 +101,9 @@ export interface UpdateFormGridColumnDto {
   dataType?: string;
   isRequired?: boolean;
   isActive?: boolean;
+  isReadOnly?: boolean; // Column is read-only (cannot be edited)
+  isVisible?: boolean; // Column visibility
+  dataSourceId?: number; // Links to data source for dropdown columns
   defaultValue?: string;
   validationRules?: string;
 }
@@ -92,11 +111,15 @@ export interface UpdateFormGridColumnDto {
 export interface GridColumnOptionDto {
   id?: number;
   columnId?: number;
+  dataSourceId?: number; // Links to data source for static options
   optionValue: string;
   optionText: string;
-  foreignOptionText?: string;
+  foreignOptionText?: string; // Arabic option text
   optionOrder?: number;
   isActive?: boolean;
+  createdByUserId?: string;
+  createdDate?: string;
+  updatedDate?: string | null;
 }
 
 // ===== Form Submission Grid Row (Row Data) =====
@@ -215,6 +238,79 @@ export interface ValidationWarningDto {
   message: string;
   rowIndex?: number;
   columnId?: number;
+}
+
+// ===== Grid Column Data Sources (for Dropdown columns) =====
+export interface GridColumnDataSourceDto {
+  id: number;
+  columnId: number;
+  sourceType: 'Static' | 'LookupTable' | 'API'; // Type of data source
+  apiUrl?: string; // For API sources
+  apiPath?: string; // JSON path to extract data
+  httpMethod?: string; // HTTP method for API calls
+  requestBodyJson?: string; // Request body for API calls
+  valuePath?: string; // JSON path for option values
+  textPath?: string; // JSON path for option text
+  configurationJson?: string; // Additional configuration
+  isActive: boolean;
+  createdByUserId?: string;
+  createdDate?: string;
+  updatedDate?: string | null;
+}
+
+export interface CreateGridColumnDataSourceDto {
+  columnId: number;
+  sourceType: 'Static' | 'LookupTable' | 'API';
+  apiUrl?: string;
+  apiPath?: string;
+  httpMethod?: string;
+  requestBodyJson?: string;
+  valuePath?: string;
+  textPath?: string;
+  configurationJson?: string;
+  isActive?: boolean;
+  createdByUserId?: string;
+}
+
+export interface UpdateGridColumnDataSourceDto {
+  sourceType?: 'Static' | 'LookupTable' | 'API';
+  apiUrl?: string;
+  apiPath?: string;
+  httpMethod?: string;
+  requestBodyJson?: string;
+  valuePath?: string;
+  textPath?: string;
+  configurationJson?: string;
+  isActive?: boolean;
+}
+
+// ===== Grid Column Options (Static dropdown options) =====
+export interface CreateGridColumnOptionDto {
+  columnId?: number;
+  dataSourceId?: number;
+  optionValue: string;
+  optionText: string;
+  foreignOptionText?: string;
+  optionOrder?: number;
+  isActive?: boolean;
+  createdByUserId?: string;
+}
+
+export interface UpdateGridColumnOptionDto {
+  optionValue?: string;
+  optionText?: string;
+  foreignOptionText?: string;
+  optionOrder?: number;
+  isActive?: boolean;
+}
+
+// ===== Dropdown Options Response =====
+export interface DropdownOptionDto {
+  value: string;
+  text: string;
+  foreignText?: string; // Arabic text
+  order?: number;
+  isActive?: boolean;
 }
 
 // ===== API Response Wrapper =====

@@ -200,13 +200,6 @@ export const routes: Routes = [
               .then(m => m.GridColumnsListComponent) 
           },
           
-          // إدارة Grid Rows (مثال: form-builder/grids/10/rows/5)
-          { 
-            path: 'grids/:tabId/rows/:gridId', 
-            loadComponent: () => import('./views/grids/grid-rows-list/grid-rows-list.component')
-              .then(m => m.GridRowsListComponent) 
-          },
-          
           // إدارة أنواع المستندات (Document Types) - مرتبطة بفورم معين
           { 
             path: 'document-types/:formId', 

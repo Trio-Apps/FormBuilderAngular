@@ -53,6 +53,8 @@ export class GridsListComponent implements OnInit, OnDestroy {
   gridCode = '';
   gridOrder = 1;
   isActive = true;
+  minRows?: number;
+  maxRows?: number;
   editingGrid: FormGridDto | null = null;
   currentInputLanguage: 'en' | 'ar' = 'en'; // Language toggle for input fields
 
@@ -179,6 +181,8 @@ export class GridsListComponent implements OnInit, OnDestroy {
       this.gridCode = grid.gridCode || '';
       this.gridOrder = grid.gridOrder || 1;
       this.isActive = grid.isActive !== false;
+      this.minRows = grid.minRows;
+      this.maxRows = grid.maxRows;
     } else {
       this.editingGrid = null;
       this.gridName = '';
@@ -186,6 +190,8 @@ export class GridsListComponent implements OnInit, OnDestroy {
       this.gridCode = '';
       this.gridOrder = this.grids.length + 1;
       this.isActive = true;
+      this.minRows = undefined;
+      this.maxRows = undefined;
     }
     this.showGridModal = true;
   }
@@ -209,6 +215,8 @@ export class GridsListComponent implements OnInit, OnDestroy {
     this.gridCode = '';
     this.gridOrder = 1;
     this.isActive = true;
+    this.minRows = undefined;
+    this.maxRows = undefined;
   }
 
   saveGrid(): void {
@@ -247,7 +255,9 @@ export class GridsListComponent implements OnInit, OnDestroy {
         foreignGridName: this.foreignGridName || undefined,
         gridCode: this.gridCode,
         gridOrder: this.gridOrder,
-        isActive: this.isActive
+        isActive: this.isActive,
+        minRows: this.minRows,
+        maxRows: this.maxRows
       };
       
       this.gridService.updateGrid(this.editingGrid.id, updateDto).subscribe({
@@ -280,6 +290,8 @@ export class GridsListComponent implements OnInit, OnDestroy {
         gridCode: this.gridCode.toUpperCase(),
         gridOrder: this.gridOrder,
         isActive: this.isActive,
+        minRows: this.minRows,
+        maxRows: this.maxRows,
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
       };
       
@@ -309,10 +321,6 @@ export class GridsListComponent implements OnInit, OnDestroy {
 
   navigateToGridColumns(gridId: number): void {
     this.router.navigate(['columns', gridId], { relativeTo: this.route });
-  }
-
-  navigateToGridRows(gridId: number): void {
-    this.router.navigate(['rows', gridId], { relativeTo: this.route });
   }
 
   deleteGrid(id: number): void {
