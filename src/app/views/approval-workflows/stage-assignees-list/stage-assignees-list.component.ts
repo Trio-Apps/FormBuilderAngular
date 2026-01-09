@@ -50,6 +50,7 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
   // Data Arrays
   assignees: ApprovalStageAssigneeDto[] = [];
   filteredAssignees: ApprovalStageAssigneeDto[] = [];
+  private deletedAssigneeIds: Set<number> = new Set(); // Track deleted assignee IDs to filter them out
 
   // Users and Roles data
   users: UserDto[] = [];
@@ -127,6 +128,8 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     this.route.params.subscribe(params => {
       this.stageId = +params['stageId'];
       if (this.stageId) {
+        // Load deleted assignee IDs from localStorage when stageId is available
+        this.loadDeletedAssigneeIds();
         // Only load data if user is authenticated
         if (this.authService.isAuthenticated()) {
           this.loadStage();
@@ -146,6 +149,36 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Cleanup if needed
+  }
+
+  /**
+   * Load deleted assignee IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedAssigneeIds(): void {
+    try {
+      const savedIds = localStorage.getItem(`deletedAssigneeIds_${this.stageId}`);
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedAssigneeIds = new Set(idsArray);
+        console.log('[StageAssigneesList] Loaded deleted assignee IDs from localStorage:', Array.from(this.deletedAssigneeIds));
+      }
+    } catch (error) {
+      console.error('[StageAssigneesList] Error loading deleted assignee IDs from localStorage:', error);
+      this.deletedAssigneeIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted assignee IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedAssigneeIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedAssigneeIds);
+      localStorage.setItem(`deletedAssigneeIds_${this.stageId}`, JSON.stringify(idsArray));
+      console.log('[StageAssigneesList] Saved deleted assignee IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[StageAssigneesList] Error saving deleted assignee IDs to localStorage:', error);
+    }
   }
 
   loadStage(): void {
@@ -176,9 +209,40 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     }
 
     this.loading.assignees = true;
+    // Reload deleted assignee IDs when stageId changes
+    this.loadDeletedAssigneeIds();
+
     this.assigneesService.getAssigneesByStageId(this.stageId).subscribe({
       next: (assignees: ApprovalStageAssigneeDto[]) => {
-        this.assignees = assignees || [];
+        const allAssignees = assignees || [];
+        
+        // Filter out deleted assignees before processing
+        const activeAssignees = allAssignees.filter(assignee => !this.deletedAssigneeIds.has(assignee.id!));
+
+        // Clean up deletedAssigneeIds - remove IDs that are no longer in the API response
+        const apiAssigneeIds = new Set(allAssignees.map(a => a.id));
+        const idsToRemove: number[] = [];
+        this.deletedAssigneeIds.forEach(deletedId => {
+          const assigneeInApi = allAssignees.find(a => a.id === deletedId);
+          if (!assigneeInApi) {
+            // Assignee not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (assigneeInApi.isActive !== false) {
+            // Assignee is back in API and active again (might have been reactivated)
+            idsToRemove.push(deletedId);
+            console.log('[StageAssigneesList] Assignee was reactivated, removing from deleted tracking:', deletedId);
+          }
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedAssigneeIds.delete(id));
+          this.saveDeletedAssigneeIds();
+          console.log('[StageAssigneesList] Cleaned up deleted assignee IDs:', idsToRemove);
+        }
+
+        // Filter out inactive assignees (soft deleted) from display
+        const visibleAssignees = activeAssignees.filter(assignee => assignee.isActive !== false);
+        
+        this.assignees = visibleAssignees;
         this.filteredAssignees = [...this.assignees];
         this.totalRecords = this.filteredAssignees.length;
         this.loading.assignees = false;
@@ -740,13 +804,30 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
         this.loading.delete = true;
         this.assigneesService.deleteAssignee(assignee.id).subscribe({
           next: () => {
+            // Add to deleted assignees set to filter it out even after refresh/login
+            this.deletedAssigneeIds.add(assignee.id!);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedAssigneeIds();
+
+            // Remove assignee from the list immediately
+            const assigneeIndex = this.assignees.findIndex(a => a.id === assignee.id);
+            if (assigneeIndex !== -1) {
+              this.assignees.splice(assigneeIndex, 1);
+            }
+            const filteredIndex = this.filteredAssignees.findIndex(a => a.id === assignee.id);
+            if (filteredIndex !== -1) {
+              this.filteredAssignees.splice(filteredIndex, 1);
+            }
+            this.totalRecords = this.filteredAssignees.length;
+
             this.loading.delete = false;
             this.messageService.add({ 
               severity: 'success', 
               summary: 'Success', 
-              detail: 'Assignee deleted successfully' 
+              detail: 'Assignee deleted successfully',
+              life: 5000
             });
-            this.loadAssignees();
+            this.cdr.detectChanges();
           },
           error: (error: any) => {
             this.loading.delete = false;

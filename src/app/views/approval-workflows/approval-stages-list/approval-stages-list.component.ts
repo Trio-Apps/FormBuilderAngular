@@ -51,6 +51,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
   // Data Arrays
   approvalStages: ApprovalStageDto[] = [];
   filteredStages: ApprovalStageDto[] = [];
+  private deletedStageIds: Set<number> = new Set(); // Track deleted stage IDs to filter them out
 
   // Loading States
   loading = {
@@ -111,6 +112,8 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     this.route.params.subscribe(params => {
       this.workflowId = +params['workflowId'];
       if (this.workflowId) {
+        // Load deleted stage IDs from localStorage when workflowId is available
+        this.loadDeletedStageIds();
         this.loadWorkflow();
         this.loadApprovalStages();
       }
@@ -119,6 +122,36 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Cleanup if needed
+  }
+
+  /**
+   * Load deleted stage IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedStageIds(): void {
+    try {
+      const savedIds = localStorage.getItem(`deletedStageIds_${this.workflowId}`);
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedStageIds = new Set(idsArray);
+        console.log('[ApprovalStagesList] Loaded deleted stage IDs from localStorage:', Array.from(this.deletedStageIds));
+      }
+    } catch (error) {
+      console.error('[ApprovalStagesList] Error loading deleted stage IDs from localStorage:', error);
+      this.deletedStageIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted stage IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedStageIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedStageIds);
+      localStorage.setItem(`deletedStageIds_${this.workflowId}`, JSON.stringify(idsArray));
+      console.log('[ApprovalStagesList] Saved deleted stage IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[ApprovalStagesList] Error saving deleted stage IDs to localStorage:', error);
+    }
   }
 
   loadWorkflow(): void {
@@ -182,8 +215,39 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     this.loading.stages = true;
     this.approvalStageService.getAllByWorkflowId(this.workflowId).subscribe({
       next: (stages: ApprovalStageDto[]) => {
+        const allStages = stages || [];
+        
+        // Reload deleted stage IDs when workflowId changes
+        this.loadDeletedStageIds();
+
+        // Filter out deleted stages before processing
+        const activeStages = allStages.filter(stage => !this.deletedStageIds.has(stage.id!));
+
+        // Clean up deletedStageIds - remove IDs that are no longer in the API response
+        const apiStageIds = new Set(allStages.map(s => s.id));
+        const idsToRemove: number[] = [];
+        this.deletedStageIds.forEach(deletedId => {
+          const stageInApi = allStages.find(s => s.id === deletedId);
+          if (!stageInApi) {
+            // Stage not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (stageInApi.isActive !== false) {
+            // Stage is back in API and active again (might have been reactivated)
+            idsToRemove.push(deletedId);
+            console.log('[ApprovalStagesList] Stage was reactivated, removing from deleted tracking:', deletedId);
+          }
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedStageIds.delete(id));
+          this.saveDeletedStageIds();
+          console.log('[ApprovalStagesList] Cleaned up deleted stage IDs:', idsToRemove);
+        }
+
+        // Filter out inactive stages (soft deleted) from display
+        const visibleStages = activeStages.filter(stage => stage.isActive !== false);
+        
         // Sort by stageOrder
-        this.approvalStages = (stages || []).sort((a, b) => a.stageOrder - b.stageOrder);
+        this.approvalStages = visibleStages.sort((a, b) => a.stageOrder - b.stageOrder);
         this.filteredStages = [...this.approvalStages];
         this.totalRecords = this.filteredStages.length;
         this.loading.stages = false;
@@ -467,13 +531,33 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
         this.loading.delete = true;
         this.approvalStageService.delete(stage.id).subscribe({
           next: () => {
+            // Add to deleted stages set to filter it out even after refresh/login
+            this.deletedStageIds.add(stage.id!);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedStageIds();
+
+            // Remove stage from the list immediately
+            const stageIndex = this.approvalStages.findIndex(s => s.id === stage.id);
+            if (stageIndex !== -1) {
+              this.approvalStages.splice(stageIndex, 1);
+            }
+            
+            // Update filtered list
+            const filteredIndex = this.filteredStages.findIndex(s => s.id === stage.id);
+            if (filteredIndex !== -1) {
+              this.filteredStages.splice(filteredIndex, 1);
+            }
+            
+            this.totalRecords = this.filteredStages.length;
+
             this.loading.delete = false;
             this.messageService.add({ 
               severity: 'success', 
               summary: 'Success', 
-              detail: 'Approval stage deleted successfully' 
+              detail: 'Approval stage deleted successfully',
+              life: 5000
             });
-            this.loadApprovalStages();
+            this.cdr.detectChanges();
           },
           error: (error: any) => {
             this.loading.delete = false;
@@ -495,6 +579,14 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     if (!stage || !stage.id) return;
 
     const newStatus = !stage.isActive;
+    
+    // If reactivating, remove from deletedStageIds if it was tracked as deleted
+    if (newStatus && this.deletedStageIds.has(stage.id)) {
+      this.deletedStageIds.delete(stage.id);
+      this.saveDeletedStageIds();
+      console.log('[ApprovalStagesList] Removed reactivated stage from deletedStageIds:', stage.id);
+    }
+
     this.loading.toggle = true;
     this.approvalStageService.toggleActive(stage.id, newStatus).subscribe({
       next: () => {

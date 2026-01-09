@@ -34,6 +34,7 @@ export class FieldOptionsListComponent implements OnInit, OnDestroy {
   fieldOptions: FieldOptionDto[] = [];
   filteredFieldOptions: FieldOptionDto[] = [];
   fields: FormFieldDto[] = [];
+  private deletedFieldOptionIds: Set<number> = new Set(); // Track deleted field option IDs to filter them out
 
   // Loading States
   loading = {
@@ -80,6 +81,8 @@ export class FieldOptionsListComponent implements OnInit, OnDestroy {
         this.fieldId = +params['fieldId'];
         this.selectedFieldId = this.fieldId;
         this.fieldOptionForm.patchValue({ fieldId: this.fieldId });
+        // Load deleted field option IDs from localStorage when fieldId is available
+        this.loadDeletedFieldOptionIds();
         this.loadFieldOptions();
       }
     });
@@ -89,6 +92,38 @@ export class FieldOptionsListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Cleanup if needed
+  }
+
+  /**
+   * Load deleted field option IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedFieldOptionIds(): void {
+    try {
+      if (!this.selectedFieldId) return;
+      const savedIds = localStorage.getItem(`deletedFieldOptionIds_${this.selectedFieldId}`);
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedFieldOptionIds = new Set(idsArray);
+        console.log('[FieldOptionsList] Loaded deleted field option IDs from localStorage:', Array.from(this.deletedFieldOptionIds));
+      }
+    } catch (error) {
+      console.error('[FieldOptionsList] Error loading deleted field option IDs from localStorage:', error);
+      this.deletedFieldOptionIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted field option IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedFieldOptionIds(): void {
+    try {
+      if (!this.selectedFieldId) return;
+      const idsArray = Array.from(this.deletedFieldOptionIds);
+      localStorage.setItem(`deletedFieldOptionIds_${this.selectedFieldId}`, JSON.stringify(idsArray));
+      console.log('[FieldOptionsList] Saved deleted field option IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[FieldOptionsList] Error saving deleted field option IDs to localStorage:', error);
+    }
   }
 
   loadFields(): void {
@@ -108,7 +143,38 @@ export class FieldOptionsListComponent implements OnInit, OnDestroy {
     this.loading.fieldOptions = true;
     this.fieldOptionsService.getFieldOptionsByFieldId(this.selectedFieldId).subscribe({
       next: (options: FieldOptionDto[]) => {
-        this.fieldOptions = options.sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0));
+        const allOptions = options || [];
+        
+        // Reload deleted field option IDs when fieldId changes
+        this.loadDeletedFieldOptionIds();
+
+        // Filter out deleted field options before processing
+        const activeOptions = allOptions.filter(option => !this.deletedFieldOptionIds.has(option.id!));
+
+        // Clean up deletedFieldOptionIds - remove IDs that are no longer in the API response
+        const apiOptionIds = new Set(allOptions.map(o => o.id));
+        const idsToRemove: number[] = [];
+        this.deletedFieldOptionIds.forEach(deletedId => {
+          const optionInApi = allOptions.find(o => o.id === deletedId);
+          if (!optionInApi) {
+            // Option not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (optionInApi.isActive !== false) {
+            // Option is back in API and active again (might have been reactivated)
+            idsToRemove.push(deletedId);
+            console.log('[FieldOptionsList] Field option was reactivated, removing from deleted tracking:', deletedId);
+          }
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedFieldOptionIds.delete(id));
+          this.saveDeletedFieldOptionIds();
+          console.log('[FieldOptionsList] Cleaned up deleted field option IDs:', idsToRemove);
+        }
+
+        // Filter out inactive field options (soft deleted) from display
+        const visibleOptions = activeOptions.filter(option => option.isActive !== false);
+        
+        this.fieldOptions = visibleOptions.sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0));
         this.filteredFieldOptions = [...this.fieldOptions];
         this.loading.fieldOptions = false;
         this.cdr.detectChanges();
@@ -125,6 +191,8 @@ export class FieldOptionsListComponent implements OnInit, OnDestroy {
   onFieldChange(): void {
     if (this.selectedFieldId) {
       this.fieldOptionForm.patchValue({ fieldId: this.selectedFieldId });
+      // Load deleted field option IDs from localStorage when field changes
+      this.loadDeletedFieldOptionIds();
       this.loadFieldOptions();
     }
   }
@@ -257,9 +325,24 @@ export class FieldOptionsListComponent implements OnInit, OnDestroy {
         this.loading.delete = true;
         this.fieldOptionsService.deleteFieldOption(optionId).subscribe({
           next: () => {
+            // Add to deleted field options set to filter it out even after refresh/login
+            this.deletedFieldOptionIds.add(optionId);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedFieldOptionIds();
+
+            // Remove field option from the list immediately
+            const optionIndex = this.fieldOptions.findIndex(o => o.id === optionId);
+            if (optionIndex !== -1) {
+              this.fieldOptions.splice(optionIndex, 1);
+            }
+            const filteredIndex = this.filteredFieldOptions.findIndex(o => o.id === optionId);
+            if (filteredIndex !== -1) {
+              this.filteredFieldOptions.splice(filteredIndex, 1);
+            }
+
             this.loading.delete = false;
-            this.loadFieldOptions();
             this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field option deleted successfully' });
+            this.cdr.detectChanges();
           },
           error: () => {
             this.loading.delete = false;
@@ -283,6 +366,12 @@ export class FieldOptionsListComponent implements OnInit, OnDestroy {
       accept: () => {
         this.fieldOptionsService.updateFieldOption(fieldOption.id!, { isActive: newStatus }).subscribe({
           next: () => {
+            // If reactivating, remove from deleted field options set
+            if (newStatus && this.deletedFieldOptionIds.has(fieldOption.id!)) {
+              this.deletedFieldOptionIds.delete(fieldOption.id!);
+              this.saveDeletedFieldOptionIds();
+            }
+            
             this.loadFieldOptions();
             this.messageService.add({ 
               severity: 'success', 

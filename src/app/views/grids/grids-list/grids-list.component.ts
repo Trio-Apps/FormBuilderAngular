@@ -45,6 +45,7 @@ export class GridsListComponent implements OnInit, OnDestroy {
   loading = false;
   private routeSubscription?: Subscription;
   searchTerm = '';
+  private deletedGridIds: Set<number> = new Set(); // Track deleted grid IDs to filter them out
   
   // Grid Modal
   showGridModal = false;
@@ -84,6 +85,9 @@ export class GridsListComponent implements OnInit, OnDestroy {
   loadTabAndFormId(): void {
     if (!this.tabId) return;
     
+    // Load deleted grid IDs from localStorage when tabId is available
+    this.loadDeletedGridIds();
+    
     this.tabsService.getTabById(this.tabId).subscribe({
       next: (tab) => {
         if (tab && tab.formBuilderId) {
@@ -114,6 +118,36 @@ export class GridsListComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Load deleted grid IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedGridIds(): void {
+    try {
+      const savedIds = localStorage.getItem(`deletedGridIds_${this.tabId}`);
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedGridIds = new Set(idsArray);
+        console.log('[GridsList] Loaded deleted grid IDs from localStorage:', Array.from(this.deletedGridIds));
+      }
+    } catch (error) {
+      console.error('[GridsList] Error loading deleted grid IDs from localStorage:', error);
+      this.deletedGridIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted grid IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedGridIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedGridIds);
+      localStorage.setItem(`deletedGridIds_${this.tabId}`, JSON.stringify(idsArray));
+      console.log('[GridsList] Saved deleted grid IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[GridsList] Error saving deleted grid IDs to localStorage:', error);
+    }
+  }
+
   loadGrids(): void {
     if (!this.tabId || isNaN(this.tabId)) {
       this.loading = false;
@@ -136,9 +170,40 @@ export class GridsListComponent implements OnInit, OnDestroy {
           gridsData = response.data || [];
         }
         
-        this.grids = Array.isArray(gridsData) ? gridsData.filter(grid => 
+        let allGrids = Array.isArray(gridsData) ? gridsData.filter(grid => 
           grid.tabId === this.tabId
         ) : [];
+
+        // Reload deleted grid IDs when tabId changes
+        this.loadDeletedGridIds();
+
+        // Filter out deleted grids before processing
+        const activeGrids = allGrids.filter(grid => !this.deletedGridIds.has(grid.id!));
+
+        // Clean up deletedGridIds - remove IDs that are no longer in the API response
+        const apiGridIds = new Set(allGrids.map(g => g.id));
+        const idsToRemove: number[] = [];
+        this.deletedGridIds.forEach(deletedId => {
+          const gridInApi = allGrids.find(g => g.id === deletedId);
+          if (!gridInApi) {
+            // Grid not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (gridInApi.isActive !== false) {
+            // Grid is back in API and active again (might have been reactivated)
+            idsToRemove.push(deletedId);
+            console.log('[GridsList] Grid was reactivated, removing from deleted tracking:', deletedId);
+          }
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedGridIds.delete(id));
+          this.saveDeletedGridIds();
+          console.log('[GridsList] Cleaned up deleted grid IDs:', idsToRemove);
+        }
+
+        // Filter out inactive grids (soft deleted) from display
+        const visibleGrids = activeGrids.filter(grid => grid.isActive !== false);
+        
+        this.grids = visibleGrids;
         
         this.loading = false;
       },
@@ -328,24 +393,49 @@ export class GridsListComponent implements OnInit, OnDestroy {
     if (!gridToDelete) return;
 
     this.confirmationService.confirm({
-      message: `Delete "${gridToDelete.gridName}"?`,
+      message: `Are you sure you want to delete "${gridToDelete.gridName}"?`,
       header: 'Confirm Delete',
       icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-secondary',
       accept: () => {
+        this.loading = true;
         this.gridService.deleteGrid(id).subscribe({
           next: () => {
-            this.loadGrids();
+            // Add to deleted grids set to filter it out even after refresh/login
+            this.deletedGridIds.add(id);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedGridIds();
+
+            // Remove grid from the list immediately
+            const gridIndex = this.grids.findIndex(g => g.id === id);
+            if (gridIndex !== -1) {
+              this.grids.splice(gridIndex, 1);
+            }
+
+            this.loading = false;
             this.messageService.add({
               severity: 'success',
-              summary: 'Deleted',
-              detail: 'Grid deleted successfully'
+              summary: 'Success',
+              detail: 'Grid deleted successfully',
+              life: 5000
             });
           },
-          error: () => {
+          error: (error: any) => {
+            this.loading = false;
+            console.error('[GridsList] Error deleting grid:', error);
+            
+            let errorMessage = 'Failed to delete grid';
+            if (error?.error?.message) {
+              errorMessage = error.error.message;
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
-              detail: 'Failed to delete grid'
+              detail: errorMessage
             });
           }
         });

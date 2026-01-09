@@ -1,5 +1,7 @@
 // src/app/views/FormBuilder/form-builder/models/grid-dto.model.ts
 
+import { FieldTypeDto } from './form-builder-dto.model';
+
 /**
  * Grid DTOs for Form Grid (Line Items Grid) functionality
  */
@@ -72,6 +74,7 @@ export interface FormGridColumnDto {
   // For select/radio/checkbox types
   columnOptions?: GridColumnOptionDto[];
   dataSource?: GridColumnDataSourceDto; // Navigation property
+  fieldType?: FieldTypeDto; // Navigation property - FieldType details
 }
 
 export interface CreateFormGridColumnDto {

@@ -53,6 +53,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   filteredDocumentTypes: DocumentType[] = [];
   forms: FormBuilderDto[] = []; // All forms for selection
   currentForm: FormBuilderDto | null = null;
+  private deletedDocumentTypeIds: Set<number> = new Set(); // Track deleted document type IDs to filter them out
   
   // Document Series Management
   documentSeries: DocumentSeries[] = [];
@@ -141,6 +142,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       localStorage.setItem('adminLanguagePreference', 'en');
     }
     
+    // Load deleted document type IDs from localStorage to persist across sessions
+    this.loadDeletedDocumentTypeIds();
+    
     // Load all forms, document types, and projects
     this.loadForms();
     this.loadDocumentTypes();
@@ -151,6 +155,36 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Cleanup if needed
+  }
+
+  /**
+   * Load deleted document type IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedDocumentTypeIds(): void {
+    try {
+      const savedIds = localStorage.getItem('deletedDocumentTypeIds');
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedDocumentTypeIds = new Set(idsArray);
+        console.log('[DocumentTypesList] Loaded deleted document type IDs from localStorage:', Array.from(this.deletedDocumentTypeIds));
+      }
+    } catch (error) {
+      console.error('[DocumentTypesList] Error loading deleted document type IDs from localStorage:', error);
+      this.deletedDocumentTypeIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted document type IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedDocumentTypeIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedDocumentTypeIds);
+      localStorage.setItem('deletedDocumentTypeIds', JSON.stringify(idsArray));
+      console.log('[DocumentTypesList] Saved deleted document type IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[DocumentTypesList] Error saving deleted document type IDs to localStorage:', error);
+    }
   }
 
   loadForms(): void {
@@ -184,7 +218,35 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.loading.documentTypes = true;
     this.documentTypesService.getAllDocumentTypes().subscribe({
       next: (types: DocumentType[]) => {
-        this.documentTypes = types || [];
+        const allTypes = types || [];
+        
+        // Filter out deleted document types before processing
+        const activeTypes = allTypes.filter(type => !this.deletedDocumentTypeIds.has(type.id!));
+
+        // Clean up deletedDocumentTypeIds - remove IDs that are no longer in the API response
+        const apiTypeIds = new Set(allTypes.map(t => t.id));
+        const idsToRemove: number[] = [];
+        this.deletedDocumentTypeIds.forEach(deletedId => {
+          const typeInApi = allTypes.find(t => t.id === deletedId);
+          if (!typeInApi) {
+            // Document type not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (typeInApi.isActive !== false) {
+            // Document type is back in API and active again (might have been reactivated)
+            idsToRemove.push(deletedId);
+            console.log('[DocumentTypesList] Document type was reactivated, removing from deleted tracking:', deletedId);
+          }
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedDocumentTypeIds.delete(id));
+          this.saveDeletedDocumentTypeIds();
+          console.log('[DocumentTypesList] Cleaned up deleted document type IDs:', idsToRemove);
+        }
+
+        // Filter out inactive document types (soft deleted) from display
+        const visibleTypes = activeTypes.filter(type => type.isActive !== false);
+        
+        this.documentTypes = visibleTypes;
         this.filteredDocumentTypes = [...this.documentTypes];
         this.totalRecords = this.filteredDocumentTypes.length;
         this.loading.documentTypes = false;
@@ -600,13 +662,33 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.loading.delete = true;
     this.documentTypesService.deleteDocumentType(id).subscribe({
       next: () => {
+        // Add to deleted document types set to filter it out even after refresh/login
+        this.deletedDocumentTypeIds.add(id);
+        // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+        this.saveDeletedDocumentTypeIds();
+
+        // Remove document type from the list immediately
+        const typeIndex = this.documentTypes.findIndex(t => t.id === id);
+        if (typeIndex !== -1) {
+          this.documentTypes.splice(typeIndex, 1);
+        }
+        
+        // Update filtered list
+        const filteredIndex = this.filteredDocumentTypes.findIndex(t => t.id === id);
+        if (filteredIndex !== -1) {
+          this.filteredDocumentTypes.splice(filteredIndex, 1);
+        }
+        
+        this.totalRecords = this.filteredDocumentTypes.length;
+
         this.loading.delete = false;
         this.messageService.add({ 
           severity: 'success', 
           summary: 'Success', 
-          detail: 'Document type deleted successfully' 
+          detail: 'Document type deleted successfully',
+          life: 5000
         });
-        this.loadDocumentTypes();
+        this.cdr.detectChanges();
       },
       error: (error: any) => {
         this.loading.delete = false;

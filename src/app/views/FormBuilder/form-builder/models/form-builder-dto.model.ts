@@ -306,10 +306,11 @@ export interface PreviewDataSourceRequestDto {
 }
 
 export interface ApiResponse<T> {
-  success?: boolean;
-  data?: T;
-  message?: string;
-  errors?: any;
+  statusCode?: number;      // HTTP status code (200 for success)
+  success?: boolean;        // Legacy support
+  data?: T;                 // Response data
+  message?: string;         // Success or error message
+  errors?: any;             // Error details if any
 }
 
 // ==================== Form Rules Interfaces ====================

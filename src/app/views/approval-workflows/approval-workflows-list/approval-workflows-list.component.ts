@@ -46,6 +46,7 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
   approvalWorkflows: ApprovalWorkflowDto[] = [];
   filteredWorkflows: ApprovalWorkflowDto[] = [];
   documentTypes: DocumentType[] = [];
+  private deletedWorkflowIds: Set<number> = new Set(); // Track deleted workflow IDs to filter them out
 
   // Loading States
   loading = {
@@ -96,6 +97,9 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
       localStorage.setItem('adminLanguagePreference', 'en');
     }
 
+    // Load deleted workflow IDs from localStorage to persist across sessions
+    this.loadDeletedWorkflowIds();
+
     this.loadDocumentTypes();
     this.loadApprovalWorkflows();
   }
@@ -104,11 +108,69 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
     // Cleanup if needed
   }
 
+  /**
+   * Load deleted workflow IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedWorkflowIds(): void {
+    try {
+      const savedIds = localStorage.getItem('deletedWorkflowIds');
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedWorkflowIds = new Set(idsArray);
+        console.log('[ApprovalWorkflowsList] Loaded deleted workflow IDs from localStorage:', Array.from(this.deletedWorkflowIds));
+      }
+    } catch (error) {
+      console.error('[ApprovalWorkflowsList] Error loading deleted workflow IDs from localStorage:', error);
+      this.deletedWorkflowIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted workflow IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedWorkflowIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedWorkflowIds);
+      localStorage.setItem('deletedWorkflowIds', JSON.stringify(idsArray));
+      console.log('[ApprovalWorkflowsList] Saved deleted workflow IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[ApprovalWorkflowsList] Error saving deleted workflow IDs to localStorage:', error);
+    }
+  }
+
   loadApprovalWorkflows(): void {
     this.loading.workflows = true;
     this.approvalWorkflowService.getAllApprovalWorkflows().subscribe({
       next: (workflows: ApprovalWorkflowDto[]) => {
-        this.approvalWorkflows = workflows || [];
+        const allWorkflows = workflows || [];
+        
+        // Filter out deleted workflows before processing
+        const activeWorkflows = allWorkflows.filter(workflow => !this.deletedWorkflowIds.has(workflow.id!));
+
+        // Clean up deletedWorkflowIds - remove IDs that are no longer in the API response
+        const apiWorkflowIds = new Set(allWorkflows.map(w => w.id));
+        const idsToRemove: number[] = [];
+        this.deletedWorkflowIds.forEach(deletedId => {
+          const workflowInApi = allWorkflows.find(w => w.id === deletedId);
+          if (!workflowInApi) {
+            // Workflow not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (workflowInApi.isActive !== false) {
+            // Workflow is back in API and active again (might have been reactivated)
+            idsToRemove.push(deletedId);
+            console.log('[ApprovalWorkflowsList] Workflow was reactivated, removing from deleted tracking:', deletedId);
+          }
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedWorkflowIds.delete(id));
+          this.saveDeletedWorkflowIds();
+          console.log('[ApprovalWorkflowsList] Cleaned up deleted workflow IDs:', idsToRemove);
+        }
+
+        // Filter out inactive workflows (soft deleted) from display
+        const visibleWorkflows = activeWorkflows.filter(workflow => workflow.isActive !== false);
+        
+        this.approvalWorkflows = visibleWorkflows;
         this.filteredWorkflows = [...this.approvalWorkflows];
         this.totalRecords = this.filteredWorkflows.length;
         this.loading.workflows = false;
@@ -309,13 +371,33 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
         this.loading.delete = true;
         this.approvalWorkflowService.deleteApprovalWorkflow(workflow.id).subscribe({
           next: () => {
+            // Add to deleted workflows set to filter it out even after refresh/login
+            this.deletedWorkflowIds.add(workflow.id!);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedWorkflowIds();
+
+            // Remove workflow from the list immediately
+            const workflowIndex = this.approvalWorkflows.findIndex(w => w.id === workflow.id);
+            if (workflowIndex !== -1) {
+              this.approvalWorkflows.splice(workflowIndex, 1);
+            }
+            
+            // Update filtered list
+            const filteredIndex = this.filteredWorkflows.findIndex(w => w.id === workflow.id);
+            if (filteredIndex !== -1) {
+              this.filteredWorkflows.splice(filteredIndex, 1);
+            }
+            
+            this.totalRecords = this.filteredWorkflows.length;
+
             this.loading.delete = false;
             this.messageService.add({
               severity: 'success',
               summary: 'Success',
-              detail: 'Approval workflow deleted successfully'
+              detail: 'Approval workflow deleted successfully',
+              life: 5000
             });
-            this.loadApprovalWorkflows();
+            this.cdr.detectChanges();
           },
           error: (error: any) => {
             this.loading.delete = false;
@@ -359,6 +441,13 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
     console.log(`[toggleWorkflowStatus] ${action} workflow ${workflow.id}, current status: ${workflow.isActive}, new status: ${newStatus}`);
     
     this.loading.toggle = true;
+    
+    // If reactivating, remove from deletedWorkflowIds if it was tracked as deleted
+    if (newStatus && this.deletedWorkflowIds.has(workflow.id)) {
+      this.deletedWorkflowIds.delete(workflow.id);
+      this.saveDeletedWorkflowIds();
+      console.log('[ApprovalWorkflowsList] Removed reactivated workflow from deletedWorkflowIds:', workflow.id);
+    }
     
     // Use update endpoint directly since toggle-active doesn't exist
     // Include documentTypeId to avoid backend validation errors

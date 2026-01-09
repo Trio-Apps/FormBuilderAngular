@@ -52,6 +52,7 @@ export class FormsListComponent implements OnInit, OnDestroy {
   loading = false;
   private routerSubscription?: Subscription;
   private windowFocusHandler: () => void;
+  private deletedFormIds: Set<number> = new Set(); // Track deleted form IDs to filter them out
 
   // Form Modal
   showFormModal = false;
@@ -97,6 +98,10 @@ export class FormsListComponent implements OnInit, OnDestroy {
       this.translationService.setLanguage('en');
       localStorage.setItem('adminLanguagePreference', 'en');
     }
+    
+    // Load deleted form IDs from sessionStorage to persist across page refreshes
+    this.loadDeletedFormIds();
+    
     this.loadForms();
     
     // Listen to router navigation events to refresh data when returning to this page
@@ -145,6 +150,36 @@ export class FormsListComponent implements OnInit, OnDestroy {
     window.removeEventListener('focus', this.windowFocusHandler);
   }
 
+  /**
+   * Load deleted form IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedFormIds(): void {
+    try {
+      const savedIds = localStorage.getItem('deletedFormIds');
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedFormIds = new Set(idsArray);
+        console.log('[FormsList] Loaded deleted form IDs from localStorage:', Array.from(this.deletedFormIds));
+      }
+    } catch (error) {
+      console.error('[FormsList] Error loading deleted form IDs from localStorage:', error);
+      this.deletedFormIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted form IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedFormIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedFormIds);
+      localStorage.setItem('deletedFormIds', JSON.stringify(idsArray));
+      console.log('[FormsList] Saved deleted form IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[FormsList] Error saving deleted form IDs to localStorage:', error);
+    }
+  }
+
   loadForms(page: number = this.currentPage): void {
     this.loading = true;
     this.forms = [];
@@ -158,13 +193,52 @@ export class FormsListComponent implements OnInit, OnDestroy {
         const forms = paged.items || [];
         // Removed console.log to reduce console noise in production
         // console.log('[FormsList] Forms loaded from API:', forms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
-        this.totalItems = paged.totalCount || forms.length;
+        
+        // Filter out deleted forms before processing
+        const activeForms = forms.filter(form => !this.deletedFormIds.has(form.id!));
+        
+        // Clean up deletedFormIds:
+        // 1. Remove IDs that are no longer in the API response (hard deleted from server)
+        // 2. Keep IDs that are in API response but inactive (soft deleted - still in DB but isActive = false)
+        const apiFormIds = new Set(forms.map(f => f.id));
+        const idsToRemove: number[] = [];
+        this.deletedFormIds.forEach(deletedId => {
+          const formInApi = forms.find(f => f.id === deletedId);
+          if (!formInApi) {
+            // Form not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (formInApi.isActive !== false) {
+            // Form is back in API and active again (might have been reactivated)
+            // Remove from deleted tracking so it can be displayed again
+            idsToRemove.push(deletedId);
+            console.log('[FormsList] Form was reactivated, removing from deleted tracking:', deletedId);
+          }
+          // If form is in API but inactive (isActive === false), keep it in deletedFormIds to hide it
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedFormIds.delete(id));
+          this.saveDeletedFormIds(); // Update localStorage
+          console.log('[FormsList] Cleaned up deleted form IDs:', idsToRemove);
+        }
+        
+        // Filter out inactive forms (soft deleted) from display
+        // These forms were deactivated (isActive = false) but still exist in the database
+        // They should be hidden from the list even if they're in the API response
+        const visibleForms = activeForms.filter(form => form.isActive !== false);
+        
+        // Adjust totalItems to account for:
+        // - Forms in deletedFormIds (tracked as deleted)
+        // - Forms that are inactive (soft deleted with isActive = false)
+        const deletedCount = forms.length - activeForms.length;
+        const inactiveCount = activeForms.length - visibleForms.length;
+        // Only count forms that are actually visible (not deleted, not inactive)
+        this.totalItems = Math.max(0, (paged.totalCount || forms.length) - deletedCount - inactiveCount);
         this.totalPages = paged.totalPages || Math.max(1, Math.ceil(this.totalItems / this.itemsPerPage));
         this.itemsPerPage = paged.pageSize || this.itemsPerPage;
         this.currentPage = paged.page || page;
 
-        // Load tabs and fields count for each form
-        this.loadFormsWithCounts(forms);
+        // Load tabs and fields count for each form (only visible active forms, excluding deleted and inactive)
+        this.loadFormsWithCounts(visibleForms);
       },
       error: () => {
         this.loading = false;
@@ -178,6 +252,9 @@ export class FormsListComponent implements OnInit, OnDestroy {
   }
 
   loadFormsWithCounts(forms: FormBuilderDto[]): void {
+    // Note: forms parameter is already filtered to exclude deleted forms (activeForms)
+    // No need to filter again here
+    
     if (forms.length === 0) {
       this.filteredForms = [];
       // totalItems already set from API response if available
@@ -189,7 +266,7 @@ export class FormsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Create observables to load tabs for each form
+    // Create observables to load tabs for each form (only for active forms, not deleted ones)
     const tabsObservables = forms.map(form => {
       // تحقق من أن form.id موجود وصحيح
       if (!form.id || isNaN(form.id)) {
@@ -228,10 +305,12 @@ export class FormsListComponent implements OnInit, OnDestroy {
         });
 
         // No need to load fields, just update forms with tabs count
+        // Note: forms parameter is already filtered to exclude deleted forms
         this.updateFormsWithCounts(forms, tabsMap);
       },
       error: () => {
         // Continue with forms even if tabs loading fails - set counts to 0
+        // Note: forms parameter is already filtered to exclude deleted forms
         const formsWithZeroCounts = forms.map(form => ({
           ...form,
           tabs: [],
@@ -793,25 +872,258 @@ export class FormsListComponent implements OnInit, OnDestroy {
     const formToDelete = this.forms.find(f => f.id === id);
     if (!formToDelete) return;
 
+    // Determine warning message based on form status
+    const isInactive = formToDelete.isActive === false;
+    const warningMessage = isInactive
+      ? 'This form is inactive. It will be permanently deleted.'
+      : 'This form may have submissions. If it has submissions, it will be deactivated instead of deleted.';
+
     this.confirmationService.confirm({
-      message: `Delete "${formToDelete.formName}"?`,
+      message: `Are you sure you want to delete "${formToDelete.formName}"? ${warningMessage}`,
       header: 'Confirm Delete',
       icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-secondary',
       accept: () => {
+        this.loading = true;
         this.formsService.deleteForm(id).subscribe({
-          next: () => {
-            this.loadForms();
+          next: (response) => {
+            // Determine success message and delete type based on API response
+            let successMessage = 'Form deleted successfully';
+            let isSoftDelete = false;
+            let wasActuallyDeleted = false;
+            
+            if (response?.message) {
+              successMessage = response.message;
+              
+              // Determine if it was soft delete (deactivated) or hard delete
+              // API returns: "Form has been deactivated successfully" for soft delete
+              // API returns: "Form deleted successfully" for hard delete
+              const messageLower = response.message.toLowerCase();
+              if (messageLower.includes('deactivated')) {
+                isSoftDelete = true;
+              } else if (messageLower.includes('deleted successfully') && !messageLower.includes('deactivated')) {
+                wasActuallyDeleted = true;
+              }
+            } else {
+              // If no message but response is successful, assume it was deleted
+              wasActuallyDeleted = true;
+            }
+            
+            // Log for debugging
+            console.log('[FormsList] Delete response:', {
+              response,
+              isSoftDelete,
+              wasActuallyDeleted,
+              message: successMessage
+            });
+            
+            // For soft delete (deactivation), the form is still in the database but isActive = false
+            // For hard delete, the form is permanently removed from the database
+            // In both cases, we track the ID to hide it from the list
+            
+            // Add to deleted forms set to filter it out even after refresh/login
+            this.deletedFormIds.add(id);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedFormIds();
+            
+            // Remove form from the list immediately (both soft and hard delete)
+            const formIndex = this.forms.findIndex(f => f.id === id);
+            if (formIndex !== -1) {
+              this.forms.splice(formIndex, 1);
+            }
+            
+            // Update filtered forms and pagination
+            // filterForms() will repopulate filteredForms from this.forms (without the deleted form)
+            // and will also update totalItems correctly
+            this.filterForms();
+            this.updatePagination();
+            
+            // Force change detection to update UI immediately
+            this.cdr.detectChanges();
+            
+            this.loading = false;
+            
+            // Show success message
             this.messageService.add({
               severity: 'success',
-              summary: 'Deleted',
-              detail: 'Form deleted successfully'
+              summary: 'Success',
+              detail: successMessage,
+              life: 5000
             });
+            
+            // Note: We track deleted form IDs in deletedFormIds set (stored in localStorage)
+            // - For soft delete: Form is deactivated (isActive = false) but still in DB
+            //   We track it so it won't appear in the list even if API returns it
+            // - For hard delete: Form is permanently deleted from DB
+            //   We track it until API confirms it's gone, then we clean it up
+            // The deletedFormIds persists across page refreshes, logout/login, and browser sessions
           },
-          error: () => {
+          error: (error: any) => {
+            console.error('[FormsList] Error deleting form:', error);
+            console.error('[FormsList] Error details:', {
+              status: error?.status,
+              statusText: error?.statusText,
+              error: error?.error,
+              errorString: JSON.stringify(error?.error, null, 2),
+              message: error?.message,
+              url: error?.url
+            });
+            
+            // Log the actual error response body if available
+            if (error?.error) {
+              console.error('[FormsList] Error response body:', error.error);
+              if (typeof error.error === 'object') {
+                console.error('[FormsList] Error response keys:', Object.keys(error.error));
+                console.error('[FormsList] Full error object:', JSON.stringify(error.error, null, 2));
+              }
+            }
+            
+            let errorMessage = 'Failed to delete form';
+            
+            // Extract error message from various response formats
+            if (error?.error) {
+              if (typeof error.error === 'string') {
+                errorMessage = error.error;
+              } else if (error.error.message) {
+                errorMessage = error.error.message;
+              } else if (error.error.errorMessage) {
+                errorMessage = error.error.errorMessage;
+              } else if (error.error.title) {
+                errorMessage = error.error.title;
+              } else if (error.error.errors && Array.isArray(error.error.errors)) {
+                errorMessage = error.error.errors.join(', ');
+              }
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+            
+            // Check for specific error codes from API
+            if (error?.error?.error === 'FormBuilder_CannotDeleteHasSubmissions') {
+              errorMessage = 'Cannot delete this form because it has form submissions. Please delete all submissions first, then try again.';
+            } else if (error?.error?.error && typeof error.error.error === 'string') {
+              // Handle other specific error codes
+              const errorCode = error.error.error;
+              if (errorCode.includes('CannotDelete') || errorCode.includes('HasSubmissions')) {
+                errorMessage = 'Cannot delete this form because it has associated data (submissions, tabs, fields, grids, etc.). Please delete the associated data first.';
+              } else {
+                errorMessage = errorCode;
+              }
+            }
+            
+            // Check for specific error types in message
+            const errorText = errorMessage.toLowerCase();
+            if (errorText.includes('foreign key') || errorText.includes('constraint') || errorText.includes('reference')) {
+              errorMessage = 'Cannot delete this form because it has associated data (submissions, tabs, fields, grids, etc.). Please delete the associated data first.';
+            } else if (error?.status === 400) {
+              if (errorMessage === 'Failed to delete form') {
+                errorMessage = 'Bad request (400). The form may have associated data that prevents deletion. Please check the console for more details.';
+              }
+            } else if (error?.status === 404) {
+              errorMessage = 'Form not found (404). The form may have already been deleted.';
+            } else if (error?.status === 403) {
+              errorMessage = 'Permission denied (403). You do not have permission to delete this form.';
+            } else if (error?.status === 500) {
+              errorMessage = 'Server error (500). Please try again later or contact support.';
+            } else if (error?.status === 0 || error?.statusText === 'Unknown Error') {
+              errorMessage = 'Cannot connect to server. Please ensure the backend server is running.';
+            }
+            
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
-              detail: 'Failed to delete form'
+              detail: errorMessage,
+              life: 10000 // Show for 10 seconds
+            });
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Reactivate soft-deleted form
+   * @param id Form ID
+   */
+  reactivateForm(id: number): void {
+    const formToReactivate = this.forms.find(f => f.id === id);
+    if (!formToReactivate) return;
+
+    this.confirmationService.confirm({
+      message: `Are you sure you want to reactivate "${formToReactivate.formName}"?`,
+      header: 'Confirm Reactivate',
+      icon: 'pi pi-check-circle',
+      acceptButtonStyleClass: 'p-button-success',
+      rejectButtonStyleClass: 'p-button-secondary',
+      accept: () => {
+        this.loading = true;
+        this.formsService.reactivateForm(id).subscribe({
+          next: (response) => {
+            // Remove form from deletedFormIds if it was tracked as deleted
+            // This allows it to appear in the list again after reactivation
+            if (this.deletedFormIds.has(id)) {
+              this.deletedFormIds.delete(id);
+              this.saveDeletedFormIds(); // Update localStorage
+              console.log('[FormsList] Removed reactivated form from deletedFormIds:', id);
+            }
+            
+            this.loading = false;
+            this.loadForms();
+            
+            const successMessage = response?.message || 'Form reactivated successfully';
+            
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: successMessage,
+              life: 5000
+            });
+          },
+          error: (error: any) => {
+            this.loading = false;
+            console.error('[FormsList] Error reactivating form:', error);
+            console.error('[FormsList] Error details:', {
+              status: error?.status,
+              statusText: error?.statusText,
+              error: error?.error,
+              errorString: JSON.stringify(error?.error, null, 2),
+              message: error?.message,
+              url: error?.url
+            });
+            
+            let errorMessage = 'Failed to reactivate form';
+            
+            // Extract error message from various response formats
+            if (error?.error) {
+              const errorResponse = error.error;
+              
+              // Check for specific error codes
+              if (typeof errorResponse === 'string') {
+                errorMessage = errorResponse;
+              } else if (errorResponse.error) {
+                // Check for specific error codes like "FormBuilder_CannotReactivate"
+                const errorCode = errorResponse.error;
+                if (errorCode.includes('CannotReactivate') || errorCode.includes('CannotActivate')) {
+                  errorMessage = 'Cannot reactivate this form. Please check the form status.';
+                } else {
+                  errorMessage = errorCode;
+                }
+              } else if (errorResponse.message) {
+                errorMessage = errorResponse.message;
+              } else if (errorResponse.errorMessage) {
+                errorMessage = errorResponse.errorMessage;
+              } else if (errorResponse.title) {
+                errorMessage = errorResponse.title;
+              }
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+            
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: errorMessage,
+              life: 5000
             });
           }
         });

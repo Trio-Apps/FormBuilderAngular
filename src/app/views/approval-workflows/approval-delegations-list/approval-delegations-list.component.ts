@@ -43,6 +43,7 @@ export class ApprovalDelegationsListComponent implements OnInit {
   delegations: ApprovalDelegationDto[] = [];
   filteredDelegations: ApprovalDelegationDto[] = [];
   currentUserId: string | null = null;
+  private deletedDelegationIds: Set<number> = new Set(); // Track deleted delegation IDs to filter them out
   
   // Users data for dropdowns
   users: UserDto[] = [];
@@ -95,6 +96,9 @@ export class ApprovalDelegationsListComponent implements OnInit {
     // TODO: Adjust based on your auth implementation
     this.currentUserId = this.storageService.getUserId()?.toString() || null;
     
+    // Load deleted delegation IDs from localStorage
+    this.loadDeletedDelegationIds();
+    
     // Load users first, then delegations (so we can display user names)
     this.loadUsers();
     this.loadDelegations();
@@ -143,6 +147,36 @@ export class ApprovalDelegationsListComponent implements OnInit {
     return user.name || user.username || `User #${user.id}`;
   }
 
+  /**
+   * Load deleted delegation IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedDelegationIds(): void {
+    try {
+      const savedIds = localStorage.getItem('deletedDelegationIds');
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedDelegationIds = new Set(idsArray);
+        console.log('[ApprovalDelegationsList] Loaded deleted delegation IDs from localStorage:', Array.from(this.deletedDelegationIds));
+      }
+    } catch (error) {
+      console.error('[ApprovalDelegationsList] Error loading deleted delegation IDs from localStorage:', error);
+      this.deletedDelegationIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted delegation IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedDelegationIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedDelegationIds);
+      localStorage.setItem('deletedDelegationIds', JSON.stringify(idsArray));
+      console.log('[ApprovalDelegationsList] Saved deleted delegation IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[ApprovalDelegationsList] Error saving deleted delegation IDs to localStorage:', error);
+    }
+  }
+
   getUserNameById(userId: string | null | undefined): string {
     if (!userId) return '-';
     
@@ -164,9 +198,40 @@ export class ApprovalDelegationsListComponent implements OnInit {
 
   loadDelegations(): void {
     this.loading.delegations = true;
+    // Reload deleted delegation IDs when loading delegations
+    this.loadDeletedDelegationIds();
+
     this.delegationService.getAllDelegations().subscribe({
       next: (delegations: ApprovalDelegationDto[]) => {
-        this.delegations = delegations || [];
+        const allDelegations = delegations || [];
+        
+        // Filter out deleted delegations before processing
+        const activeDelegations = allDelegations.filter(delegation => !this.deletedDelegationIds.has(delegation.id!));
+
+        // Clean up deletedDelegationIds - remove IDs that are no longer in the API response
+        const apiDelegationIds = new Set(allDelegations.map(d => d.id));
+        const idsToRemove: number[] = [];
+        this.deletedDelegationIds.forEach(deletedId => {
+          const delegationInApi = allDelegations.find(d => d.id === deletedId);
+          if (!delegationInApi) {
+            // Delegation not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (delegationInApi.isActive !== false) {
+            // Delegation is back in API and active again (might have been reactivated)
+            idsToRemove.push(deletedId);
+            console.log('[ApprovalDelegationsList] Delegation was reactivated, removing from deleted tracking:', deletedId);
+          }
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedDelegationIds.delete(id));
+          this.saveDeletedDelegationIds();
+          console.log('[ApprovalDelegationsList] Cleaned up deleted delegation IDs:', idsToRemove);
+        }
+
+        // Filter out inactive delegations (soft deleted) from display
+        const visibleDelegations = activeDelegations.filter(delegation => delegation.isActive !== false);
+        
+        this.delegations = visibleDelegations;
         this.filteredDelegations = [...this.delegations];
         this.totalRecords = this.filteredDelegations.length;
         this.loading.delegations = false;
@@ -429,13 +494,30 @@ export class ApprovalDelegationsListComponent implements OnInit {
         this.loading.delete = true;
         this.delegationService.deleteDelegation(delegation.id).subscribe({
           next: () => {
+            // Add to deleted delegations set to filter it out even after refresh/login
+            this.deletedDelegationIds.add(delegation.id!);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedDelegationIds();
+
+            // Remove delegation from the list immediately
+            const delegationIndex = this.delegations.findIndex(d => d.id === delegation.id);
+            if (delegationIndex !== -1) {
+              this.delegations.splice(delegationIndex, 1);
+            }
+            const filteredIndex = this.filteredDelegations.findIndex(d => d.id === delegation.id);
+            if (filteredIndex !== -1) {
+              this.filteredDelegations.splice(filteredIndex, 1);
+            }
+            this.totalRecords = this.filteredDelegations.length;
+
             this.loading.delete = false;
             this.messageService.add({ 
               severity: 'success', 
               summary: 'Success', 
-              detail: 'Delegation deleted successfully' 
+              detail: 'Delegation deleted successfully',
+              life: 5000
             });
-            this.loadDelegations();
+            this.cdr.detectChanges();
           },
           error: (error: any) => {
             this.loading.delete = false;

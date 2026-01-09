@@ -3,9 +3,11 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { GridService } from '../../FormBuilder/services/grid.service';
 import { GridColumnDataSourcesService } from '../../FormBuilder/services/grid-column-data-sources.service';
+import { FieldsService } from '../../FormBuilder/services/fields.service';
 import {
   FormFieldDto,
-  FormTabDto
+  FormTabDto,
+  FieldTypeDto
 } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import {
   FormGridDto,
@@ -48,6 +50,7 @@ export class GridViewComponent implements OnInit, OnChanges {
   visibleColumns: FormGridColumnDto[] = []; // Filtered columns based on visibility
   rows: FormSubmissionGridRowDto[] = [];
   gridData: { [rowIndex: number]: { [columnId: number]: string } } = {};
+  fieldTypes: FieldTypeDto[] = []; // Field types for determining input type
 
   loading = false;
   saving = false;
@@ -57,17 +60,51 @@ export class GridViewComponent implements OnInit, OnChanges {
   constructor(
     private gridService: GridService,
     private dataSourcesService: GridColumnDataSourcesService,
+    private fieldsService: FieldsService,
     public translationService: TranslationService
   ) {}
 
   ngOnInit(): void {
+    // Load field types first, then load grid
+    this.loadFieldTypes(() => {
     this.loadGrid();
+    });
+  }
+
+  /**
+   * Load field types to determine input types for columns
+   */
+  private loadFieldTypes(callback?: () => void): void {
+    this.fieldsService.getFieldTypes().subscribe({
+      next: (types: FieldTypeDto[]) => {
+        this.fieldTypes = types.filter(type => type.isActive && type.id && type.typeName);
+        console.log('[GridView] Loaded field types:', this.fieldTypes.length);
+        if (callback) {
+          callback();
+        }
+      },
+      error: (error) => {
+        console.warn('[GridView] Error loading field types:', error);
+        this.fieldTypes = [];
+        // Still load grid even if field types fail
+        if (callback) {
+          callback();
+        }
+      }
+    });
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if ((changes['field'] && !changes['field'].firstChange) || 
         (changes['gridId'] && !changes['gridId'].firstChange)) {
+      // Reload field types if needed, then load grid
+      if (this.fieldTypes.length === 0) {
+        this.loadFieldTypes(() => {
+          this.loadGrid();
+        });
+      } else {
       this.loadGrid();
+      }
     }
     if (changes['submissionId'] && !changes['submissionId'].firstChange) {
       this.loadGridData();
@@ -320,14 +357,34 @@ export class GridViewComponent implements OnInit, OnChanges {
         console.log('[GridView] Loaded columns:', this.columns.length);
         console.log('[GridView] Columns data:', this.columns);
         
+        // Log columnOptions if present
+        this.columns.forEach(col => {
+          if (col.columnOptions && col.columnOptions.length > 0) {
+            console.log('[GridView] Column has options from API:', {
+              columnId: col.id,
+              columnName: col.columnName,
+              optionsCount: col.columnOptions.length,
+              options: col.columnOptions
+            });
+          }
+        });
+        
         if (this.columns.length === 0) {
           this.error = 'No columns found. Please ensure the grid has columns configured.';
           this.loading = false;
           return;
         }
         
-        // Set default visibility and read-only if not set
+        // Link fieldTypes to columns if not already present
         this.columns.forEach(column => {
+          // If fieldType is not already loaded from API, find it from fieldTypes array
+          if (!column.fieldType && column.fieldTypeId && this.fieldTypes.length > 0) {
+            const fieldType = this.fieldTypes.find(ft => ft.id === column.fieldTypeId);
+            if (fieldType) {
+              column.fieldType = fieldType;
+            }
+          }
+          
           // Ensure isActive is true if not set (since we're using getActiveColumnsByGrid)
           if (column.isActive === undefined || column.isActive === null) {
             column.isActive = true;
@@ -376,65 +433,112 @@ export class GridViewComponent implements OnInit, OnChanges {
   }
 
   /**
-   * Load column options from Data Sources or validationRules
+   * Load column options from validationRules, columnOptions (from API), or Data Sources
    */
   private loadColumnOptions(): void {
-    const columnsWithDataSources = this.columns.filter(col => 
-      col.dataType === 'select' && (col.dataSourceId || col.validationRules)
-    );
+    // Filter columns that have options (either from fieldType.hasOptions or dataType === 'select')
+    const columnsWithOptions = this.columns.filter(col => {
+      return col.fieldType?.hasOptions === true || col.dataType === 'select';
+    });
 
-    if (columnsWithDataSources.length === 0) {
+    if (columnsWithOptions.length === 0) {
       return;
     }
 
-    // Load options for columns with dataSourceId
-    const dataSourceObservables = columnsWithDataSources
-      .filter(col => col.dataSourceId)
-      .map(col => {
+    console.log('[GridView] Loading options for columns with hasOptions:', columnsWithOptions.map(c => ({
+      id: c.id,
+      name: c.columnName,
+      fieldTypeId: c.fieldTypeId,
+      hasOptions: c.fieldType?.hasOptions,
+      dataSourceId: c.dataSourceId,
+      hasColumnOptions: !!(c.columnOptions && c.columnOptions.length > 0),
+      hasValidationRules: !!c.validationRules
+    })));
+
+    // Priority 1: Use columnOptions if already loaded from API
+    columnsWithOptions.forEach(column => {
+      if (column.columnOptions && column.columnOptions.length > 0) {
+        console.log('[GridView] Column already has options loaded from API:', {
+          columnId: column.id,
+          columnName: column.columnName,
+          optionsCount: column.columnOptions.length
+        });
+      }
+    });
+
+    // Priority 2: Load options from validationRules (where options are stored as JSON)
+    columnsWithOptions
+      .filter(col => (!col.columnOptions || col.columnOptions.length === 0) && col.validationRules)
+      .forEach(column => {
+        try {
+          const rules = JSON.parse(column.validationRules!);
+          if (rules.columnOptions && Array.isArray(rules.columnOptions) && rules.columnOptions.length > 0) {
+            column.columnOptions = rules.columnOptions;
+            console.log('[GridView] ✅ Loaded options from validationRules for column:', {
+              columnId: column.id,
+              columnName: column.columnName,
+              optionsCount: column.columnOptions?.length || 0,
+              options: column.columnOptions
+            });
+          }
+        } catch (error) {
+          console.warn('[GridView] Failed to parse validationRules for column:', {
+            columnId: column.id,
+            columnName: column.columnName,
+            validationRules: column.validationRules,
+            error: error
+          });
+        }
+      });
+
+    // Priority 3: Load options from DataSource API (only for columns with dataSourceId and no options yet)
+    const columnsNeedingDataSourceOptions = columnsWithOptions.filter(col => 
+      col.dataSourceId && (!col.columnOptions || col.columnOptions.length === 0)
+    );
+
+    if (columnsNeedingDataSourceOptions.length > 0) {
+      const dataSourceObservables = columnsNeedingDataSourceOptions.map(col => {
         return this.gridService.loadColumnOptions(col.id!).pipe(
           map(response => ({ columnId: col.id, options: response.data || [] })),
-          catchError(() => of({ columnId: col.id, options: [] }))
+          catchError((error) => {
+            console.warn('[GridView] Failed to load options from DataSource for column:', {
+              columnId: col.id,
+              columnName: col.columnName,
+              error: error
+            });
+            return of({ columnId: col.id, options: [] });
+          })
         );
       });
 
-    if (dataSourceObservables.length > 0) {
       forkJoin(dataSourceObservables).subscribe({
         next: (results) => {
           results.forEach(result => {
             const column = this.columns.find(c => c.id === result.columnId);
             if (column && result.options.length > 0) {
-              // Convert DropdownOptionDto to GridColumnOptionDto format
-              column.columnOptions = result.options.map(opt => ({
-                id: 0,
+              // Convert to GridColumnOptionDto format
+              column.columnOptions = result.options.map((opt: any) => ({
+                id: opt.id || 0,
                 columnId: column.id,
-                optionValue: opt.value,
-                optionText: opt.text,
-                foreignOptionText: opt.foreignText,
-                optionOrder: opt.order || 0,
+                optionValue: opt.optionValue || opt.value,
+                optionText: opt.optionText || opt.text,
+                foreignOptionText: opt.foreignOptionText || opt.foreignText,
+                optionOrder: opt.optionOrder || opt.order || 0,
                 isActive: opt.isActive !== false
               }));
+              console.log('[GridView] ✅ Loaded options from DataSource for column:', {
+                columnId: column.id,
+                columnName: column.columnName,
+                optionsCount: column.columnOptions.length
+              });
             }
           });
         },
-        error: () => {
-          // Continue even if data source loading fails
+        error: (error) => {
+          console.error('[GridView] Error loading column options from DataSource:', error);
         }
       });
     }
-
-    // Load options from validationRules for columns without dataSourceId
-    columnsWithDataSources
-      .filter(col => !col.dataSourceId && col.validationRules)
-      .forEach(column => {
-        try {
-          const rules = JSON.parse(column.validationRules!);
-          if (rules.columnOptions && Array.isArray(rules.columnOptions)) {
-            column.columnOptions = rules.columnOptions;
-          }
-        } catch {
-          // Invalid JSON, ignore
-        }
-      });
   }
 
   /**
@@ -906,11 +1010,23 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Get input type for column
    */
   getInputType(column: FormGridColumnDto): string {
+    // First, check if column has fieldType with hasOptions (Radio, Select, Checkbox)
+    if (column.fieldType?.hasOptions === true) {
+      return 'select';
+    }
+    
+    // Check if column has options directly (from columnOptions)
+    if (column.columnOptions && column.columnOptions.length > 0) {
+      return 'select';
+    }
+    
+    // Check dataType for other input types
     const dataType = (column.dataType || '').toLowerCase();
     
     if (dataType.includes('email')) return 'email';
     if (dataType.includes('number') || dataType.includes('numeric')) return 'number';
     if (dataType.includes('date')) return 'date';
+    if (dataType === 'select') return 'select';
     
     return 'text';
   }

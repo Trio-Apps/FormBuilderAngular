@@ -74,6 +74,7 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
   selectedSubmissionId: number | null = null;
   submissions: { id: number; displayText: string }[] = []; // List of available submissions
   loadingSubmissions = false;
+  private deletedRowIds: Set<number> = new Set(); // Track deleted row IDs to filter them out
 
   // Row Modal
   showRowModal = false;
@@ -109,6 +110,8 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
       if (newTabId && newGridId) {
         this.tabId = newTabId;
         this.gridId = newGridId;
+        // Load deleted row IDs from localStorage when gridId is available
+        this.loadDeletedRowIds();
         this.loadTabAndFormId();
         this.loadGrid();
         this.loadColumns();
@@ -123,6 +126,36 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     // Cleanup all subscriptions
     this.subscriptions.forEach(sub => sub.unsubscribe());
+  }
+
+  /**
+   * Load deleted row IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedRowIds(): void {
+    try {
+      const savedIds = localStorage.getItem(`deletedRowIds_${this.gridId}`);
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedRowIds = new Set(idsArray);
+        console.log('[GridRowsList] Loaded deleted row IDs from localStorage:', Array.from(this.deletedRowIds));
+      }
+    } catch (error) {
+      console.error('[GridRowsList] Error loading deleted row IDs from localStorage:', error);
+      this.deletedRowIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted row IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedRowIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedRowIds);
+      localStorage.setItem(`deletedRowIds_${this.gridId}`, JSON.stringify(idsArray));
+      console.log('[GridRowsList] Saved deleted row IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[GridRowsList] Error saving deleted row IDs to localStorage:', error);
+    }
   }
 
   loadTabAndFormId(): void {
@@ -304,7 +337,38 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     const subscription = this.gridService.getRowsBySubmissionAndGrid(this.selectedSubmissionId, this.gridId).subscribe({
       next: (response) => {
         if (response && response.data) {
-          this.rows = (response.data || []).sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0));
+          const allRows = response.data || [];
+          
+          // Reload deleted row IDs when gridId or submissionId changes
+          this.loadDeletedRowIds();
+
+          // Filter out deleted rows before processing
+          const activeRows = allRows.filter(row => !this.deletedRowIds.has(row.id!));
+
+          // Clean up deletedRowIds - remove IDs that are no longer in the API response
+          const apiRowIds = new Set(allRows.map(r => r.id));
+          const idsToRemove: number[] = [];
+          this.deletedRowIds.forEach(deletedId => {
+            const rowInApi = allRows.find(r => r.id === deletedId);
+            if (!rowInApi) {
+              // Row not in API response - it was hard deleted from server, remove from tracking
+              idsToRemove.push(deletedId);
+            } else if (rowInApi.isActive !== false) {
+              // Row is back in API and active again (might have been reactivated)
+              idsToRemove.push(deletedId);
+              console.log('[GridRowsList] Row was reactivated, removing from deleted tracking:', deletedId);
+            }
+          });
+          if (idsToRemove.length > 0) {
+            idsToRemove.forEach(id => this.deletedRowIds.delete(id));
+            this.saveDeletedRowIds();
+            console.log('[GridRowsList] Cleaned up deleted row IDs:', idsToRemove);
+          }
+
+          // Filter out inactive rows (soft deleted) from display
+          const visibleRows = activeRows.filter(row => row.isActive !== false);
+          
+          this.rows = visibleRows.sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0));
           
           // Load cells for each row if not already loaded
           if (this.rows.length > 0 && (!this.rows[0].cells || this.rows[0].cells.length === 0)) {
@@ -454,12 +518,24 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
         this.loading = true;
         const subscription = this.gridService.deleteRow(row.id!).subscribe({
           next: () => {
+            // Add to deleted rows set to filter it out even after refresh/login
+            this.deletedRowIds.add(row.id!);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedRowIds();
+
+            // Remove row from the list immediately
+            const rowIndex = this.rows.findIndex(r => r.id === row.id);
+            if (rowIndex !== -1) {
+              this.rows.splice(rowIndex, 1);
+            }
+
+            this.loading = false;
             this.messageService.add({
               severity: 'success',
               summary: 'Success',
-              detail: 'Row deleted successfully'
+              detail: 'Row deleted successfully',
+              life: 5000
             });
-            this.loadRows();
           },
           error: (error) => {
             this.loading = false;

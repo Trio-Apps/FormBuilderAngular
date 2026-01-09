@@ -590,6 +590,16 @@
     }
   }
 
+  &.action-reactivate {
+    color: #10b981;
+    border-color: #10b981;
+
+    &:hover {
+      background: #10b981;
+      color: white;
+    }
+  }
+
   &.action-delete {
     color: #ef4444;
     border-color: #ef4444;

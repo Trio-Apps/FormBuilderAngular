@@ -51,6 +51,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   // Data Arrays
   fields: FormFieldDto[] = [];
   allFormFields: FormFieldDto[] = []; // All fields from all tabs for expression builder
+  private deletedFieldIds: Set<number> = new Set(); // Track deleted field IDs to filter them out
   fieldTypes: FieldTypeDto[] = [];
   filteredFieldTypes: FieldTypeDto[] = [];
   regexOptions = [
@@ -264,6 +265,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.tabId = +params['tabId'];
 
       if (this.tabId) {
+        // Load deleted field IDs from localStorage when tabId is available
+        this.loadDeletedFieldIds();
         // Get formBuilderId from tab data first, then load fields
         this.loadTabAndFormId();
         this.loadFieldTypes();
@@ -344,6 +347,36 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Load deleted field IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedFieldIds(): void {
+    try {
+      const savedIds = localStorage.getItem(`deletedFieldIds_${this.tabId}`);
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedFieldIds = new Set(idsArray);
+        console.log('[FieldsList] Loaded deleted field IDs from localStorage:', Array.from(this.deletedFieldIds));
+      }
+    } catch (error) {
+      console.error('[FieldsList] Error loading deleted field IDs from localStorage:', error);
+      this.deletedFieldIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted field IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedFieldIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedFieldIds);
+      localStorage.setItem(`deletedFieldIds_${this.tabId}`, JSON.stringify(idsArray));
+      console.log('[FieldsList] Saved deleted field IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[FieldsList] Error saving deleted field IDs to localStorage:', error);
+    }
+  }
+
   loadFields(): void {
     if (!this.tabId) {
       return;
@@ -357,8 +390,37 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         // getFields الآن يرجع FormFieldDto[] مباشرة بعد استخراج data من response
         console.log('[loadFields] Fields loaded from API:', fields);
         
+        // Reload deleted field IDs when tabId changes
+        this.loadDeletedFieldIds();
+
+        // Filter out deleted fields before processing
+        const activeFields = fields.filter(field => !this.deletedFieldIds.has(field.id!));
+
+        // Clean up deletedFieldIds - remove IDs that are no longer in the API response
+        const apiFieldIds = new Set(fields.map(f => f.id));
+        const idsToRemove: number[] = [];
+        this.deletedFieldIds.forEach(deletedId => {
+          const fieldInApi = fields.find(f => f.id === deletedId);
+          if (!fieldInApi) {
+            // Field not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (fieldInApi.isActive !== false) {
+            // Field is back in API and active again (might have been reactivated)
+            idsToRemove.push(deletedId);
+            console.log('[FieldsList] Field was reactivated, removing from deleted tracking:', deletedId);
+          }
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedFieldIds.delete(id));
+          this.saveDeletedFieldIds();
+          console.log('[FieldsList] Cleaned up deleted field IDs:', idsToRemove);
+        }
+
+        // Filter out inactive fields (soft deleted) from display
+        const visibleFields = activeFields.filter(field => field.isActive !== false);
+        
         // Check for calculated fields and their expressionText
-        const calculatedFields = fields.filter(f => 
+        const calculatedFields = visibleFields.filter(f => 
           f.expressionText || (f as any).ExpressionText || 
           f.fieldTypeName?.toLowerCase() === 'calculated' ||
           f.fieldType?.typeName?.toLowerCase() === 'calculated'
@@ -379,7 +441,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           console.log('[loadFields] No calculated fields found in response');
         }
         
-        this.fields = this.sortFieldsByOrder(fields || []);
+        this.fields = this.sortFieldsByOrder(visibleFields || []);
         this.loading.fields = false;
         this.cdr.detectChanges();
       },
@@ -970,6 +1032,14 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.loading.delete = true;
         this.fieldsService.deleteField(fieldId).subscribe({
           next: () => {
+            // Add to deleted fields set to filter it out even after refresh/login
+            this.deletedFieldIds.add(fieldId);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedFieldIds();
+
+            // Remove field from array immediately
+            this.fields = this.fields.filter(f => f.id !== fieldId);
+
             this.loading.delete = false;
             const currentLang = this.translationService.getCurrentLanguage();
             const successMessage = currentLang === 'ar' 
@@ -978,11 +1048,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             this.messageService.add({ 
               severity: 'success', 
               summary: currentLang === 'ar' ? 'نجاح' : 'Success', 
-              detail: successMessage 
+              detail: successMessage,
+              life: 5000
             });
 
-            // Remove field from array
-            this.fields = this.fields.filter(f => f.id !== fieldId);
             this.cdr.detectChanges();
           },
           error: (error: any) => {

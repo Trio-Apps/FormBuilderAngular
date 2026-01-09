@@ -212,9 +212,19 @@
                     <i class="pi pi-shield"></i>
                   </button>
                
+                  <!-- Show Reactivate button if form is inactive -->
+                  <button
+                    *ngIf="form.isActive === false"
+                    class="action-btn action-reactivate"
+                    [title]="'forms.reactivateForm' | translate"
+                    (click)="reactivateForm(form.id)"
+                  >
+                    <i class="pi pi-refresh"></i>
+                  </button>
+               
                   <button
                     class="action-btn action-delete"
-                    [title]="'common.delete' | translate"
+                    [title]="form.isActive === false ? ('forms.permanentDelete' | translate) : ('common.delete' | translate)"
                     (click)="deleteForm(form.id)"
                   >
                     <i class="pi pi-trash"></i>

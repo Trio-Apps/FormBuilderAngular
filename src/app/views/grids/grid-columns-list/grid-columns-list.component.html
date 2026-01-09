@@ -140,7 +140,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let column of filteredColumns; let i = index">
+            <tr *ngFor="let column of filteredColumns; let i = index; trackBy: trackByColumnId">
               <td class="col-order">
                 <span class="order-number">{{ column.columnOrder || i + 1 }}</span>
               </td>
@@ -159,7 +159,7 @@
               </td>
               <td class="col-type">
                 <span class="type-badge">
-                  {{ getFieldTypeName(column.fieldTypeId) }}
+                  {{ getFieldTypeName(column.fieldTypeId, column) }}
                 </span>
               </td>
               <td class="col-type">
@@ -377,8 +377,8 @@
         </div>
       </div>
 
-      <!-- Data Source Section (for Select type) -->
-      <div class="mb-3" *ngIf="columnForm.get('dataType')?.value === 'select'">
+      <!-- Data Source Section (for field types with options) -->
+      <div class="mb-3" *ngIf="getSelectedFieldType()?.hasOptions">
         <div class="form-section-header">
           <h5 class="section-title">
             <i class="pi pi-database"></i>
@@ -434,8 +434,8 @@
         </div>
       </div>
 
-      <!-- Column Options Section (for Select type) -->
-      <div class="mb-3" *ngIf="showOptionsSection">
+      <!-- Column Options Section (Only for Static) -->
+      <div class="mb-3" *ngIf="getSelectedFieldType()?.hasOptions && getDataSourceType() === 'Static'">
         <div class="form-section-header">
           <h5 class="section-title">
             <i class="pi pi-list"></i>

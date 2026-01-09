@@ -78,6 +78,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   dataSourceForm!: FormGroup;
   dropdownOptions: DropdownOptionDto[] = [];
   loadingOptions = false;
+  dataSourceType: 'Static' | 'Api' | 'LookupTable' = 'Static';
 
   // Data Types
   dataTypes = [
@@ -129,16 +130,36 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       isActive: [true]
     });
 
-    // Watch dataType changes to show/hide options section
-    this.columnForm.get('dataType')?.valueChanges.subscribe(dataType => {
-      this.showOptionsSection = dataType === 'select';
-      if (dataType === 'select') {
+    // Watch fieldTypeId changes to show/hide options section (based on fieldType.hasOptions)
+    this.columnForm.get('fieldTypeId')?.valueChanges.subscribe(fieldTypeId => {
+      const selectedFieldType = this.getSelectedFieldType();
+      const dataSourceType = this.getDataSourceType();
+      this.showOptionsSection = selectedFieldType?.hasOptions === true && dataSourceType === 'Static';
+      if (selectedFieldType?.hasOptions === true && dataSourceType === 'Static') {
         // If no options exist, add one empty option
         if (this.columnOptionsFormArray.length === 0) {
           this.addColumnOption();
         }
       } else {
-        // Clear options if not select type
+        // Clear options if field type doesn't have options or dataSourceType is not Static
+        while (this.columnOptionsFormArray.length !== 0) {
+          this.columnOptionsFormArray.removeAt(0);
+        }
+      }
+    });
+
+    // Watch dataSourceId changes to show/hide options section
+    this.columnForm.get('dataSourceId')?.valueChanges.subscribe(dataSourceId => {
+      const selectedFieldType = this.getSelectedFieldType();
+      const dataSourceType = this.getDataSourceType();
+      this.showOptionsSection = selectedFieldType?.hasOptions === true && dataSourceType === 'Static';
+      if (selectedFieldType?.hasOptions === true && dataSourceType === 'Static') {
+        // If no options exist, add one empty option
+        if (this.columnOptionsFormArray.length === 0) {
+          this.addColumnOption();
+        }
+      } else {
+        // Clear options if dataSourceType is not Static
         while (this.columnOptionsFormArray.length !== 0) {
           this.columnOptionsFormArray.removeAt(0);
         }
@@ -153,12 +174,17 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       const newTabId = +params['tabId'];
       const newGridId = +params['gridId'];
 
+      console.log('[GridColumnsList] Route params:', { tabId: newTabId, gridId: newGridId });
+
       if (newTabId && newGridId) {
         this.tabId = newTabId;
         this.gridId = newGridId;
+        console.log('[GridColumnsList] Initializing with tabId:', this.tabId, 'gridId:', this.gridId);
         this.loadTabAndFormId();
         this.loadGrid();
         this.loadColumns();
+      } else {
+        console.warn('[GridColumnsList] Missing tabId or gridId:', { tabId: newTabId, gridId: newGridId });
       }
     });
   }
@@ -170,8 +196,11 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   }
 
   loadFieldTypes(): void {
+    console.log('[GridColumnsList] Loading field types...');
     this.fieldsService.getFieldTypes().subscribe({
       next: (types: FieldTypeDto[]) => {
+        console.log('[GridColumnsList] Raw field types from API:', types);
+        
         // Service now returns properly formatted FieldTypeDto[]
         // Filter only active field types and ensure they have valid id and typeName
         this.fieldTypes = types.filter(type => 
@@ -184,7 +213,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         // Sort by typeName for better UX
         this.fieldTypes.sort((a, b) => (a.typeName || '').localeCompare(b.typeName || ''));
         
-        console.log(`[GridColumnsList] Loaded ${this.fieldTypes.length} active field types`);
+        console.log(`[GridColumnsList] Loaded ${this.fieldTypes.length} active field types:`, this.fieldTypes.map(t => ({ id: t.id, name: t.typeName, isActive: t.isActive })));
       },
       error: (error) => {
         console.error('[GridColumnsList] Error loading field types:', error);
@@ -265,23 +294,71 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     }
 
     this.loading = true;
+    console.log('[GridColumnsList] Loading columns for gridId:', this.gridId);
     this.gridService.getColumnsByGrid(this.gridId).subscribe({
       next: (response) => {
-        if (response && response.data) {
-          const columnsData = response.data || [];
-          this.columns = Array.isArray(columnsData) ? columnsData : [];
-          this.columns.sort((a, b) => (a.columnOrder || 0) - (b.columnOrder || 0));
+        console.log('[GridColumnsList] Raw API response:', response);
+        
+        let columnsData: FormGridColumnDto[] = [];
+        
+        // Handle different response structures
+        if (response) {
+          if (response.data) {
+            // Standard ApiResponse structure
+            columnsData = Array.isArray(response.data) ? response.data : [];
         } else if (Array.isArray(response)) {
-          // Handle case where API returns array directly
-          this.columns = response;
-          this.columns.sort((a, b) => (a.columnOrder || 0) - (b.columnOrder || 0));
+            // Direct array response
+            columnsData = response;
         } else {
-          this.columns = [];
+            // Try to access alternative properties (using type assertion for flexibility)
+            const responseAny = response as any;
+            if (responseAny.result && Array.isArray(responseAny.result)) {
+              // Alternative response structure with 'result' property
+              columnsData = responseAny.result;
+            } else if (responseAny.items && Array.isArray(responseAny.items)) {
+              // Alternative response structure with 'items' property
+              columnsData = responseAny.items;
+            }
+          }
         }
+        
+        this.columns = columnsData;
+        
+        // Sort by columnOrder, but if order is same, sort by id to maintain consistency
+        this.columns.sort((a, b) => {
+          const orderA = a.columnOrder || 0;
+          const orderB = b.columnOrder || 0;
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
+          // If same order, sort by id
+          return (a.id || 0) - (b.id || 0);
+        });
+        
+        console.log('[GridColumnsList] Total columns loaded:', this.columns.length);
+        console.log('[GridColumnsList] Columns array:', this.columns);
+        console.log('[GridColumnsList] Columns details:', this.columns.map(c => ({ 
+          id: c.id, 
+          name: c.columnName, 
+          code: c.columnCode, 
+          order: c.columnOrder,
+          isActive: c.isActive,
+          isVisible: c.isVisible
+        })));
+        console.log('[GridColumnsList] Filtered columns count:', this.filteredColumns.length);
+        console.log('[GridColumnsList] Filtered columns:', this.filteredColumns);
+        
         this.loading = false;
       },
       error: (error) => {
         console.error('[GridColumnsList] Error loading columns:', error);
+        console.error('[GridColumnsList] Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          message: error?.message,
+          error: error?.error,
+          url: error?.url
+        });
         this.loading = false;
         this.columns = [];
         
@@ -291,8 +368,12 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         } else if (error?.status === 400) {
           errorMessage = `Bad request: ${error?.error?.message || 'Invalid grid ID or parameters'}`;
         } else if (error?.status === 404) {
-          errorMessage = 'Grid not found';
+          errorMessage = `Grid not found (gridId: ${this.gridId})`;
+        } else if (error?.status === 500) {
+          errorMessage = `Server error: ${error?.error?.message || 'Internal server error'}`;
         }
+        
+        console.error('[GridColumnsList] Error message to display:', errorMessage);
         
         this.messageService.add({
           severity: 'error',
@@ -484,14 +565,24 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   }
 
   get filteredColumns(): FormGridColumnDto[] {
-    if (!this.searchTerm.trim()) {
-      return this.columns;
-    }
+    // Return all columns regardless of isActive or isVisible status
+    // The table should show all columns, and status is displayed in the Status column
+    let result = this.columns;
+    
+    // Only filter by search term if provided
+    if (this.searchTerm.trim()) {
     const term = this.searchTerm.toLowerCase();
-    return this.columns.filter(column =>
+      result = this.columns.filter(column =>
       column.columnName.toLowerCase().includes(term) ||
       (column.columnCode && column.columnCode.toLowerCase().includes(term))
     );
+    }
+    
+    return result;
+  }
+
+  trackByColumnId(index: number, column: FormGridColumnDto): any {
+    return column.id || index;
   }
 
   openColumnModal(column?: FormGridColumnDto): void {
@@ -509,12 +600,26 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         isActive: column.isActive !== false,
         isReadOnly: column.isReadOnly || false,
         isVisible: column.isVisible !== false,
-        defaultValue: column.defaultValue || ''
+        defaultValue: column.defaultValue || '',
+        dataSourceId: column.dataSourceId || null
       }, { emitEvent: false });
       
-      // Load column options if select type
-      this.showOptionsSection = column.dataType === 'select';
-      if (column.dataType === 'select' && column.columnOptions) {
+      // Load column options if field type has options
+      const selectedFieldType = this.getSelectedFieldType();
+      // Determine dataSourceType from column's dataSourceId
+      if (column.dataSourceId) {
+        const dataSource = this.dataSources.find(ds => ds.id === column.dataSourceId);
+        if (dataSource) {
+          this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable';
+        } else {
+          this.dataSourceType = 'Static';
+        }
+      } else {
+        this.dataSourceType = 'Static';
+      }
+      
+      this.showOptionsSection = selectedFieldType?.hasOptions === true && this.dataSourceType === 'Static';
+      if (selectedFieldType?.hasOptions === true && this.dataSourceType === 'Static' && column.columnOptions) {
         this.loadColumnOptions(column.columnOptions);
       } else {
         // Clear options
@@ -528,6 +633,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         ? Math.max(...this.columns.map(c => c.columnOrder || 0)) + 1
         : 1;
       const defaultFieldTypeId = this.fieldTypes.length > 0 ? this.fieldTypes[0].id : '';
+      this.dataSourceType = 'Static'; // Reset to Static for new column
       this.columnForm.reset({
         fieldTypeId: defaultFieldTypeId,
         columnName: '',
@@ -539,7 +645,8 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         isActive: true,
         isReadOnly: false,
         isVisible: true,
-        defaultValue: ''
+        defaultValue: '',
+        dataSourceId: null
       }, { emitEvent: false });
       this.showOptionsSection = false;
       // Clear options
@@ -615,10 +722,53 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     });
   }
 
-  getFieldTypeName(fieldTypeId: number | undefined): string {
-    if (!fieldTypeId) return 'Unknown';
-    const type = this.fieldTypes.find(t => t.id === fieldTypeId);
-    return type ? type.typeName : `Type ${fieldTypeId}`;
+  getFieldTypeName(fieldTypeId: number | undefined, column?: FormGridColumnDto): string {
+    if (!fieldTypeId) {
+      return 'Unknown';
+    }
+    
+    // Convert to number if it's a string
+    const numericId = Number(fieldTypeId);
+    if (isNaN(numericId)) {
+      return `Invalid ID: ${fieldTypeId}`;
+    }
+    
+    // First, try to find in fieldTypes array (most reliable)
+    if (this.fieldTypes && this.fieldTypes.length > 0) {
+      const type = this.fieldTypes.find(t => t.id === numericId);
+      if (type && type.typeName) {
+        return type.typeName;
+      }
+    }
+    
+    // If not found and column has fieldType navigation property, use it
+    // Note: This assumes the API returns fieldType as a navigation property
+    const columnAny = column as any;
+    if (columnAny?.fieldType?.typeName) {
+      return columnAny.fieldType.typeName;
+    }
+    
+    // Last resort: return the ID
+    return `Type ${numericId}`;
+  }
+
+  getSelectedFieldType(): FieldTypeDto | undefined {
+    const rawFieldTypeId = this.columnForm.get('fieldTypeId')?.value;
+    const fieldTypeId = Number(rawFieldTypeId);
+    if (!fieldTypeId) return undefined;
+    return this.fieldTypes.find(t => t.id === fieldTypeId);
+  }
+
+  getDataSourceType(): 'Static' | 'Api' | 'LookupTable' {
+    const dataSourceId = this.columnForm.get('dataSourceId')?.value;
+    if (!dataSourceId) {
+      return 'Static';
+    }
+    const dataSource = this.dataSources.find(ds => ds.id === dataSourceId);
+    if (!dataSource) {
+      return 'Static';
+    }
+    return dataSource.sourceType as 'Static' | 'Api' | 'LookupTable';
   }
 
   saveColumn(): void {
@@ -660,9 +810,10 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
 
       this.gridService.updateColumn(this.editingColumn.id, updateDto).subscribe({
         next: (updatedColumn) => {
-          // Save column options if select type
-          if (columnData.dataType === 'select' && this.columnOptionsFormArray.length > 0 && this.editingColumn?.id) {
-            this.saveColumnOptions(this.editingColumn.id, columnData.dataType === 'select');
+          // Save column options if field type has options
+          const selectedFieldType = this.getSelectedFieldType();
+          if (selectedFieldType?.hasOptions === true && this.columnOptionsFormArray.length > 0 && this.editingColumn?.id) {
+            this.saveColumnOptions(this.editingColumn.id, true);
           } else {
             this.loading = false;
             this.loadColumns();
@@ -707,9 +858,10 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
           const createdColumn = response.data || response;
           const columnId = createdColumn?.id;
           
-          // Save column options if select type
-          if (columnData.dataType === 'select' && this.columnOptionsFormArray.length > 0 && columnId) {
-            this.saveColumnOptions(columnId, columnData.dataType === 'select');
+          // Save column options if field type has options
+          const selectedFieldType = this.getSelectedFieldType();
+          if (selectedFieldType?.hasOptions === true && this.columnOptionsFormArray.length > 0 && columnId) {
+            this.saveColumnOptions(columnId, true);
           } else {
             this.loading = false;
             this.loadColumns();
@@ -850,8 +1002,30 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     const dataSourceId = event.target.value;
     if (dataSourceId) {
       this.loadDropdownOptions(parseInt(dataSourceId));
+      // Update dataSourceType based on selected dataSource
+      const dataSource = this.dataSources.find(ds => ds.id === parseInt(dataSourceId));
+      if (dataSource) {
+        this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable';
+      }
     } else {
       this.dropdownOptions = [];
+      this.dataSourceType = 'Static';
+    }
+    
+    // Update options section visibility
+    const selectedFieldType = this.getSelectedFieldType();
+    const dataSourceType = this.getDataSourceType();
+    this.showOptionsSection = selectedFieldType?.hasOptions === true && dataSourceType === 'Static';
+    if (selectedFieldType?.hasOptions === true && dataSourceType === 'Static') {
+      // If no options exist, add one empty option
+      if (this.columnOptionsFormArray.length === 0) {
+        this.addColumnOption();
+      }
+    } else {
+      // Clear options if dataSourceType is not Static
+      while (this.columnOptionsFormArray.length !== 0) {
+        this.columnOptionsFormArray.removeAt(0);
+      }
     }
   }
 

@@ -73,17 +73,25 @@
             <ng-container [ngSwitch]="getFieldType(field)">
 
               <!-- Text Input -->
-              <input *ngSwitchCase="'text'" type="text" class="form-input" [placeholder]="getFieldPlaceholder(field)"
+              <input *ngSwitchCase="'text'" type="text" class="form-input" 
+                [id]="'field_' + field.id"
+                [name]="'field_' + field.id"
+                [placeholder]="getFieldPlaceholder(field)"
                 [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
                 (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- Email Input -->
-              <input *ngSwitchCase="'email'" type="email" class="form-input" [placeholder]="getFieldPlaceholder(field)"
+              <input *ngSwitchCase="'email'" type="email" class="form-input" 
+                [id]="'field_' + field.id"
+                [name]="'field_' + field.id"
+                [placeholder]="getFieldPlaceholder(field)"
                 [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
                 (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- Number Input -->
               <input *ngSwitchCase="'number'" type="number" class="form-input"
+                [id]="'field_' + field.id"
+                [name]="'field_' + field.id"
                 [placeholder]="getFieldPlaceholder(field)" [min]="field.minValue" [max]="field.maxValue"
                 [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
                 (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
@@ -96,11 +104,15 @@
 
               <!-- Textarea -->
               <textarea *ngSwitchCase="'textarea'" class="form-textarea" rows="4"
+                [id]="'field_' + field.id"
+                [name]="'field_' + field.id"
                 [placeholder]="getFieldPlaceholder(field)" [disabled]="!isFieldEditable(field)"
                 (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)">{{ getDefaultValue(field) }}</textarea>
 
               <!-- Select / Dropdown -->
               <select *ngSwitchCase="'select'" class="form-select"
+                [id]="'field_' + field.id"
+                [name]="'field_' + field.id"
                 [value]="getFieldValue(field)"
                 [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
                 (change)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)">
@@ -141,6 +153,7 @@
                 </div>
                 <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
                   <input type="checkbox" [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
+                    [name]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
                     [value]="opt.optionValue" [checked]="isCheckboxSelected(field, opt.optionValue)"
                     [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
                     (change)="onCheckboxChange(field, opt.optionValue, $event)" />
@@ -311,6 +324,8 @@
                   *ngIf="!field.gridId || field.gridId <= 0"
                   type="text" 
                   class="form-input" 
+                  [id]="'field_' + field.id"
+                  [name]="'field_' + field.id"
                   [placeholder]="getFieldPlaceholder(field)"
                   [value]="getDefaultValue(field)" />
               </ng-container>

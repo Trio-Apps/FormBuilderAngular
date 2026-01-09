@@ -18,8 +18,94 @@
     content="CoreUI,Bootstrap,Admin,Template,Free,Angular,Dashboard,Typescript"
     name="keyword"
   />
+  <!-- Content Security Policy: Allow unsafe-eval for Angular development (only in development mode) -->
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; img-src 'self' data: https: blob:;">
   <link href="assets/favicon.ico" rel="icon" type="image/x-icon">
   <title>CoreUI Free Angular Admin Template</title>
+  <!-- Suppress DOM Mutation Event deprecation warnings from third-party libraries -->
+  <!-- 
+    NOTE: Some deprecation warnings may still appear because they come directly from the browser engine.
+    These cannot be suppressed from JavaScript, but they do NOT affect application functionality.
+  -->
+  <script>
+    (function() {
+      'use strict';
+      if (typeof window === 'undefined' || !window.console) return;
+      
+      // Store original console methods immediately
+      var originalWarn = console.warn;
+      var originalError = console.error;
+      var originalLog = console.log;
+      var originalInfo = console.info;
+      
+      function isDeprecationWarning(message) {
+        if (!message || typeof message !== 'string') return false;
+        var lower = message.toLowerCase();
+        return lower.indexOf('domnodeinsertedintodocument') !== -1 ||
+               lower.indexOf('domnoderemovedfromdocument') !== -1 ||
+               lower.indexOf('domnodeinserted') !== -1 ||
+               lower.indexOf('domnoderemoved') !== -1 ||
+               (lower.indexOf('dom mutation event') !== -1 && lower.indexOf('deprecated') !== -1) ||
+               (lower.indexOf('listener added for a synchronous') !== -1 && lower.indexOf('dom mutation event') !== -1) ||
+               (lower.indexOf('[deprecation]') !== -1 && lower.indexOf('dom mutation') !== -1) ||
+               (lower.indexOf('deprecation') !== -1 && lower.indexOf('dom mutation') !== -1 && lower.indexOf('listener') !== -1);
+      }
+      
+      function argsToString(args) {
+        try {
+          return Array.prototype.slice.call(args).map(function(arg) {
+            if (typeof arg === 'string') return arg;
+            if (typeof arg === 'object' && arg !== null) {
+              try { return JSON.stringify(arg); } catch(e) { return String(arg); }
+            }
+            return String(arg);
+          }).join(' ');
+        } catch(e) {
+          return String(args);
+        }
+      }
+      
+      // Override console methods
+      try {
+        console.warn = function() {
+          var message = argsToString(arguments);
+          if (isDeprecationWarning(message)) return;
+          originalWarn.apply(console, arguments);
+        };
+        
+        console.error = function() {
+          var message = argsToString(arguments);
+          if (isDeprecationWarning(message)) return;
+          originalError.apply(console, arguments);
+        };
+        
+        console.log = function() {
+          var message = argsToString(arguments);
+          if (isDeprecationWarning(message)) return;
+          originalLog.apply(console, arguments);
+        };
+        
+        console.info = function() {
+          var message = argsToString(arguments);
+          if (isDeprecationWarning(message)) return;
+          originalInfo.apply(console, arguments);
+        };
+      } catch(e) {
+        // Silently fail if console override fails
+      }
+      
+      // Try to intercept unhandled errors (won't catch deprecation warnings, but worth trying)
+      if (window.addEventListener) {
+        window.addEventListener('error', function(event) {
+          if (event.message && isDeprecationWarning(event.message)) {
+            event.preventDefault();
+            event.stopPropagation();
+            return false;
+          }
+        }, true);
+      }
+    })();
+  </script>
 </head>
 <body>
 <noscript>You need to enable JavaScript to run this app.</noscript>

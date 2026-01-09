@@ -51,6 +51,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
   loading = false;
   private routeSubscription?: Subscription;
   searchTerm = '';
+  private deletedTabIds: Set<number> = new Set(); // Track deleted tab IDs to filter them out
   
   // Tab Modal updated
   showTabModal = false;
@@ -88,9 +89,13 @@ export class TabsListComponent implements OnInit, OnDestroy {
       const newFormId = +params['formId'];
       if (newFormId && newFormId !== this.formId) {
         this.formId = newFormId;
+        // Load deleted tab IDs from localStorage when formId is available
+        this.loadDeletedTabIds();
         this.loadTabs();
       } else if (newFormId && !this.formId) {
         this.formId = newFormId;
+        // Load deleted tab IDs from localStorage when formId is available
+        this.loadDeletedTabIds();
         this.loadTabs();
       }
     });
@@ -99,6 +104,36 @@ export class TabsListComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.routeSubscription) {
       this.routeSubscription.unsubscribe();
+    }
+  }
+
+  /**
+   * Load deleted tab IDs from localStorage (persists across sessions and logins)
+   */
+  private loadDeletedTabIds(): void {
+    try {
+      const savedIds = localStorage.getItem(`deletedTabIds_${this.formId}`);
+      if (savedIds) {
+        const idsArray = JSON.parse(savedIds) as number[];
+        this.deletedTabIds = new Set(idsArray);
+        console.log('[TabsList] Loaded deleted tab IDs from localStorage:', Array.from(this.deletedTabIds));
+      }
+    } catch (error) {
+      console.error('[TabsList] Error loading deleted tab IDs from localStorage:', error);
+      this.deletedTabIds = new Set();
+    }
+  }
+
+  /**
+   * Save deleted tab IDs to localStorage (persists across sessions and logins)
+   */
+  private saveDeletedTabIds(): void {
+    try {
+      const idsArray = Array.from(this.deletedTabIds);
+      localStorage.setItem(`deletedTabIds_${this.formId}`, JSON.stringify(idsArray));
+      console.log('[TabsList] Saved deleted tab IDs to localStorage:', idsArray);
+    } catch (error) {
+      console.error('[TabsList] Error saving deleted tab IDs to localStorage:', error);
     }
   }
 
@@ -128,9 +163,40 @@ export class TabsListComponent implements OnInit, OnDestroy {
     this.tabsService.getTabs(this.formId).subscribe({
       next: (tabs) => {
         // Filter tabs to ensure they belong to this form
-        this.tabs = Array.isArray(tabs) ? tabs.filter(tab => 
+        let allTabs = Array.isArray(tabs) ? tabs.filter(tab => 
           tab.formBuilderId === this.formId
         ) : [];
+
+        // Reload deleted tab IDs when formId changes
+        this.loadDeletedTabIds();
+
+        // Filter out deleted tabs before processing
+        const activeTabs = allTabs.filter(tab => !this.deletedTabIds.has(tab.id!));
+
+        // Clean up deletedTabIds - remove IDs that are no longer in the API response
+        const apiTabIds = new Set(allTabs.map(t => t.id));
+        const idsToRemove: number[] = [];
+        this.deletedTabIds.forEach(deletedId => {
+          const tabInApi = allTabs.find(t => t.id === deletedId);
+          if (!tabInApi) {
+            // Tab not in API response - it was hard deleted from server, remove from tracking
+            idsToRemove.push(deletedId);
+          } else if (tabInApi.isActive !== false) {
+            // Tab is back in API and active again (might have been reactivated)
+            idsToRemove.push(deletedId);
+            console.log('[TabsList] Tab was reactivated, removing from deleted tracking:', deletedId);
+          }
+        });
+        if (idsToRemove.length > 0) {
+          idsToRemove.forEach(id => this.deletedTabIds.delete(id));
+          this.saveDeletedTabIds();
+          console.log('[TabsList] Cleaned up deleted tab IDs:', idsToRemove);
+        }
+
+        // Filter out inactive tabs (soft deleted) from display
+        const visibleTabs = activeTabs.filter(tab => tab.isActive !== false);
+        
+        this.tabs = visibleTabs;
         
         // Load fields count for each tab
         this.tabs.forEach(tab => {
@@ -504,24 +570,50 @@ export class TabsListComponent implements OnInit, OnDestroy {
     if (!tabToDelete) return;
 
     this.confirmationService.confirm({
-      message: `Delete "${tabToDelete.tabName}"?`,
+      message: `Are you sure you want to delete "${tabToDelete.tabName}"?`,
       header: 'Confirm Delete',
       icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-secondary',
       accept: () => {
+        this.loading = true;
         this.tabsService.deleteTab(id).subscribe({
           next: () => {
-            this.loadTabs();
+            // Add to deleted tabs set to filter it out even after refresh/login
+            this.deletedTabIds.add(id);
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedTabIds();
+
+            // Remove tab from the list immediately
+            const tabIndex = this.tabs.findIndex(t => t.id === id);
+            if (tabIndex !== -1) {
+              this.tabs.splice(tabIndex, 1);
+            }
+
+            this.loading = false;
+            
             this.messageService.add({
               severity: 'success',
-              summary: 'Deleted',
-              detail: 'Tab deleted successfully'
+              summary: 'Success',
+              detail: 'Tab deleted successfully',
+              life: 5000
             });
           },
-          error: () => {
+          error: (error: any) => {
+            this.loading = false;
+            console.error('[TabsList] Error deleting tab:', error);
+            
+            let errorMessage = 'Failed to delete tab';
+            if (error?.error?.message) {
+              errorMessage = error.error.message;
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
-              detail: 'Failed to delete tab'
+              detail: errorMessage
             });
           }
         });

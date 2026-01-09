@@ -6,7 +6,8 @@ import {
   FormBuilderDto,
   CreateFormBuilderDto,
   UpdateFormBuilderDto,
-  FormRule
+  FormRule,
+  ApiResponse
 } from '../form-builder/models/form-builder-dto.model';
 import { environment } from '../../../environments/environment';
 
@@ -252,8 +253,176 @@ export class FormsService {
     );
   }
 
-  deleteForm(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/${id}`);
+  /**
+   * Delete form (applies Soft Delete or Hard Delete automatically)
+   * DELETE /api/FormBuilder/{id}
+   * 
+   * API Behavior:
+   * - Soft Delete: If form has submissions, it will be deactivated (isActive = false)
+   * - Hard Delete: If form has no submissions, it will be permanently deleted
+   * 
+   * The API response message will indicate which type of delete was performed:
+   * - "Form has been deactivated successfully" = Soft Delete
+   * - "Form deleted successfully" = Hard Delete
+   * 
+   * @param id Form ID
+   * @returns Observable with ApiResponse containing success message
+   */
+  deleteForm(id: number): Observable<ApiResponse<boolean>> {
+    return this.http.delete<ApiResponse<boolean>>(`${this.baseUrl}/${id}`).pipe(
+      map((response) => {
+        // If API returns void/empty, create a default success response
+        if (!response) {
+          return {
+            statusCode: 200,
+            message: 'Form deleted successfully',
+            data: true
+          } as ApiResponse<boolean>;
+        }
+        return response as ApiResponse<boolean>;
+      }),
+      catchError((error) => {
+        console.error(`[FormsService] Error deleting form ${id}:`, error);
+        console.error('[FormsService] Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          error: error?.error,
+          message: error?.message,
+          url: error?.url
+        });
+        throw error;
+      })
+    );
+  }
+
+  /**
+   * Toggle active status (for reactivating soft-deleted forms)
+   * PATCH /api/FormBuilder/{id}/toggle-active
+   * @param id Form ID
+   * @param isActive Active status (true to reactivate, false to deactivate)
+   * @returns Observable with updated form
+   */
+  /**
+   * Toggle active status (for reactivating soft-deleted forms)
+   * PATCH /api/FormBuilder/{id}/toggle-active
+   * 
+   * Tries multiple formats based on API variations:
+   * 1. Object in body: { isActive: true }
+   * 2. Boolean in body: true
+   * 3. Query parameter: ?isActive=true
+   * 4. Empty body: {}
+   * 
+   * @param id Form ID
+   * @param isActive Active status (true to reactivate, false to deactivate)
+   * @returns Observable with updated form
+   */
+  toggleActive(id: number, isActive: boolean): Observable<ApiResponse<FormBuilderDto>> {
+    // Try Format 1: Object in body (most common)
+    return this.http.patch<ApiResponse<FormBuilderDto>>(
+      `${this.baseUrl}/${id}/toggle-active`,
+      { isActive }
+    ).pipe(
+      catchError((error) => {
+        // If object format fails with 400/415, try boolean format
+        if (error?.status === 400 || error?.status === 415) {
+          console.log(`[FormsService] Object format failed (${error?.status}), trying boolean format for form ${id}`);
+          
+          // Try Format 2: Boolean directly in body
+          return this.http.patch<ApiResponse<FormBuilderDto>>(
+            `${this.baseUrl}/${id}/toggle-active`,
+            isActive
+          ).pipe(
+            catchError((error2) => {
+              // If boolean format fails, try query parameter
+              if (error2?.status === 400 || error2?.status === 415) {
+                console.log(`[FormsService] Boolean format failed (${error2?.status}), trying query parameter for form ${id}`);
+                
+                // Try Format 3: Query parameter with null body
+                return this.http.patch<ApiResponse<FormBuilderDto>>(
+                  `${this.baseUrl}/${id}/toggle-active`,
+                  null,
+                  {
+                    params: { isActive: isActive.toString() }
+                  }
+                ).pipe(
+                  catchError((error3) => {
+                    // If query parameter fails, try empty body
+                    if (error3?.status === 400 || error3?.status === 415) {
+                      console.log(`[FormsService] Query parameter format failed (${error3?.status}), trying empty body for form ${id}`);
+                      
+                      // Try Format 4: Empty body (some APIs use this)
+                      return this.http.patch<ApiResponse<FormBuilderDto>>(
+                        `${this.baseUrl}/${id}/toggle-active`,
+                        {}
+                      ).pipe(
+                        catchError((error4) => {
+                          // If all formats fail, try using updateForm as fallback
+                          console.log(`[FormsService] All toggle-active formats failed, trying updateForm endpoint for form ${id}`);
+                          
+                          const updateDto: UpdateFormBuilderDto = { isActive };
+                          return this.updateForm(id, updateDto).pipe(
+                            map(() => {
+                              // Return a mock ApiResponse since updateForm returns void
+                              return {
+                                statusCode: 200,
+                                message: `Form ${isActive ? 'activated' : 'deactivated'} successfully`,
+                                data: { id, isActive } as FormBuilderDto
+                              } as ApiResponse<FormBuilderDto>;
+                            }),
+                            catchError((updateError) => {
+                              console.error(`[FormsService] All methods failed for form ${id}`);
+                              console.error('[FormsService] Final error details:', {
+                                status: updateError?.status,
+                                statusText: updateError?.statusText,
+                                error: updateError?.error,
+                                message: updateError?.message,
+                                url: updateError?.url
+                              });
+                              throw updateError;
+                            })
+                          );
+                        })
+                      );
+                    }
+                    console.error(`[FormsService] Error toggling active status for form ${id}:`, error3);
+                    throw error3;
+                  })
+                );
+              }
+              console.error(`[FormsService] Error toggling active status for form ${id}:`, error2);
+              throw error2;
+            })
+          );
+        }
+        console.error(`[FormsService] Error toggling active status for form ${id}:`, error);
+        console.error('[FormsService] Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          error: error?.error,
+          message: error?.message,
+          url: error?.url
+        });
+        throw error;
+      })
+    );
+  }
+
+  /**
+   * Reactivate soft-deleted form
+   * @param id Form ID
+   * @returns Observable with reactivated form
+   */
+  reactivateForm(id: number): Observable<ApiResponse<FormBuilderDto>> {
+    return this.toggleActive(id, true);
+  }
+
+  /**
+   * Deactivate form (soft delete)
+   * @param id Form ID
+   * @returns Observable with deactivated form
+   */
+  deactivateForm(id: number): Observable<ApiResponse<FormBuilderDto>> {
+    return this.toggleActive(id, false);
   }
 
   /**
