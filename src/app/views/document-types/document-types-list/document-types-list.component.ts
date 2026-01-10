@@ -243,8 +243,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
           console.log('[DocumentTypesList] Cleaned up deleted document type IDs:', idsToRemove);
         }
 
-        // Filter out inactive document types (soft deleted) from display
-        const visibleTypes = activeTypes.filter(type => type.isActive !== false);
+        // Show all document types (including inactive ones) - don't filter by isActive
+        // User can see inactive types and reactivate them
+        const visibleTypes = activeTypes; // Keep all types, including inactive ones
         
         this.documentTypes = visibleTypes;
         this.filteredDocumentTypes = [...this.documentTypes];

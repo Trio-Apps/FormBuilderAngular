@@ -416,8 +416,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           console.log('[FieldsList] Cleaned up deleted field IDs:', idsToRemove);
         }
 
-        // Filter out inactive fields (soft deleted) from display
-        const visibleFields = activeFields.filter(field => field.isActive !== false);
+        // Show all fields (including inactive ones) - don't filter by isActive
+        // User can see inactive fields and reactivate them
+        const visibleFields = activeFields; // Keep all fields, including inactive ones
         
         // Check for calculated fields and their expressionText
         const calculatedFields = visibleFields.filter(f => 
@@ -850,17 +851,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         foreignFieldName: fieldData.foreignFieldName || undefined,
         fieldCode: fieldData.fieldCode,
         fieldOrder: Number(fieldData.fieldOrder || 1),
-        placeholder: fieldData.placeholder || '',
+        placeholder: fieldData.placeholder || undefined,
         foreignPlaceholder: fieldData.foreignPlaceholder || undefined,
         hintText: fieldData.hintText || '',
         foreignHintText: fieldData.foreignHintText || undefined,
-        defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || '',
-        regexPattern: fieldData.regexPattern || '',
-        validationMessage: fieldData.validationMessage || undefined,
-        foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
         isMandatory: fieldData.isMandatory ?? null,
         isEditable: fieldData.isEditable ?? null,
         isVisible: fieldData.isVisible ?? null,
+        isActive: this.editingField?.isActive !== false, // Preserve isActive from original field or default to true
+        defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || undefined,
+        regexPattern: fieldData.regexPattern || undefined,
+        validationMessage: fieldData.validationMessage || undefined,
+        foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
         gridId: this.isGridFieldType(fieldData.fieldTypeId) ? this.selectedGridId || undefined : undefined,
         minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== ''
           ? Number(fieldData.minValue)
@@ -1166,11 +1168,62 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       accept: () => {
         console.log('[toggleFieldStatus] User confirmed, updating field status to:', newStatus);
 
-        // Try using the dedicated status endpoint first
-        this.fieldsService.updateFieldStatus(field.id, newStatus).subscribe({
+        // Use full update with isActive - include ALL fields from original field to ensure all required fields are sent
+        // hintText is required in C# backend (non-nullable string), so we must ensure it's always a string
+        const hintTextValue = field.hintText !== null && field.hintText !== undefined ? field.hintText : '';
+        
+        const updateDto: UpdateFormFieldDto = {
+          tabId: field.tabId,
+          fieldTypeId: field.fieldTypeId,
+          fieldName: field.fieldName,
+          foreignFieldName: field.foreignFieldName || undefined,
+          fieldCode: field.fieldCode,
+          fieldOrder: field.fieldOrder !== null && field.fieldOrder !== undefined ? field.fieldOrder : 1,
+          placeholder: field.placeholder || undefined,
+          foreignPlaceholder: field.foreignPlaceholder || undefined,
+          hintText: hintTextValue, // Required field - must be a string
+          foreignHintText: field.foreignHintText || undefined,
+          isMandatory: field.isMandatory !== null && field.isMandatory !== undefined ? field.isMandatory : null,
+          isEditable: field.isEditable !== null && field.isEditable !== undefined ? field.isEditable : null,
+          isVisible: field.isVisible !== null && field.isVisible !== undefined ? field.isVisible : null,
+          isActive: newStatus,
+          defaultValueJson: field.defaultValueJson || undefined,
+          regexPattern: field.regexPattern || undefined,
+          validationMessage: field.validationMessage || undefined,
+          foreignValidationMessage: field.foreignValidationMessage || undefined,
+          minValue: field.minValue !== null && field.minValue !== undefined ? field.minValue : undefined,
+          maxValue: field.maxValue !== null && field.maxValue !== undefined ? field.maxValue : undefined,
+          gridId: field.gridId || undefined,
+          // Calculation properties (if field has them)
+          expressionText: field.expressionText || undefined,
+          calculationMode: field.calculationMode || undefined,
+          calculationOperation: field.calculationOperation || undefined,
+          recalculateOn: field.recalculateOn || undefined,
+          resultType: field.resultType || undefined
+        };
+
+        console.log('[toggleFieldStatus] Sending full update DTO:', JSON.stringify(updateDto, null, 2));
+        console.log('[toggleFieldStatus] Field details:', {
+          id: field.id,
+          fieldName: field.fieldName,
+          fieldTypeId: field.fieldTypeId,
+          tabId: field.tabId,
+          hintText: field.hintText,
+          hintTextType: typeof field.hintText
+        });
+
+        this.loading.save = true;
+        this.fieldsService.updateField(field.id, updateDto).subscribe({
           next: (updatedField) => {
-            console.log('[toggleFieldStatus] Status updated successfully:', updatedField);
-            // Update field in array without reloading
+            console.log('[toggleFieldStatus] Update successful:', updatedField);
+            
+            // If reactivating, remove from deleted fields set
+            if (newStatus && this.deletedFieldIds.has(field.id!)) {
+              this.deletedFieldIds.delete(field.id!);
+              this.saveDeletedFieldIds();
+            }
+            
+            // Update field in array without reloading - keep it in list even if inactive
             const index = this.fields.findIndex(f => f.id === field.id);
             if (index !== -1) {
               const existingField = this.fields[index];
@@ -1184,70 +1237,79 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               // Maintain sorted order
               this.fields = this.sortFieldsByOrder([...this.fields]);
             }
+            
+            // Don't add to deletedFieldIds when just toggling status - keep it visible but inactive
+            // Only add to deletedFieldIds when user explicitly deletes the field
 
-            this.messageService.add({ severity: 'success', summary: 'Success', detail: `Field ${action}d successfully` });
+            this.loading.save = false;
+            const currentLang = this.translationService.getCurrentLanguage();
+            const successMessage = currentLang === 'ar'
+              ? `تم ${newStatus ? 'تفعيل' : 'إلغاء تفعيل'} الحقل بنجاح`
+              : `Field ${action}d successfully`;
+            
+            this.messageService.add({ 
+              severity: 'success', 
+              summary: 'Success', 
+              detail: successMessage,
+              life: 5000
+            });
             this.cdr.detectChanges();
           },
           error: (error) => {
-            console.error('[toggleFieldStatus] Error using status endpoint, trying full update:', error);
-
-            // Fallback: use full update with isActive
-            const updateDto: UpdateFormFieldDto = {
-              tabId: field.tabId,
-              fieldTypeId: field.fieldTypeId,
+            console.error('[toggleFieldStatus] Error updating field:', error);
+            console.error('[toggleFieldStatus] Error details:', {
+              status: error?.status,
+              statusText: error?.statusText,
+              message: error?.message,
+              error: error?.error,
+              errorMessage: error?.error?.message,
+              errorTitle: error?.error?.title,
+              errors: error?.error?.errors,
+              fieldId: field.id,
               fieldName: field.fieldName,
-              fieldCode: field.fieldCode,
-              fieldOrder: field.fieldOrder,
-              placeholder: field.placeholder || '',
-              hintText: field.hintText || '',
-              isMandatory: field.isMandatory,
-              isEditable: field.isEditable,
-              isVisible: field.isVisible,
-              isActive: newStatus,
-              defaultValueJson: field.defaultValueJson || '',
-              regexPattern: field.regexPattern || '',
-              validationMessage: field.validationMessage || '',
-              minValue: field.minValue !== null && field.minValue !== undefined
-                ? field.minValue
-                : undefined,
-              maxValue: field.maxValue !== null && field.maxValue !== undefined
-                ? field.maxValue
-                : undefined
-            };
-
-            console.log('[toggleFieldStatus] Sending full update DTO:', updateDto);
-
-            this.fieldsService.updateField(field.id, updateDto).subscribe({
-              next: (updatedField) => {
-                console.log('[toggleFieldStatus] Full update successful:', updatedField);
-                // Update field in array without reloading
-                const index = this.fields.findIndex(f => f.id === field.id);
-                if (index !== -1) {
-                  const existingField = this.fields[index];
-                  this.fields[index] = {
-                    ...existingField,
-                    ...(updatedField || {}),
-                    isActive: newStatus,
-                    // Preserve fieldOptions - safely handle null updatedField
-                    fieldOptions: (updatedField?.fieldOptions ?? existingField.fieldOptions) || []
-                  };
-                  // Maintain sorted order
-                  this.fields = this.sortFieldsByOrder([...this.fields]);
-                }
-
-                this.messageService.add({ severity: 'success', summary: 'Success', detail: `Field ${action}d successfully` });
-                this.cdr.detectChanges();
-              },
-              error: (error2) => {
-                console.error('[toggleFieldStatus] Error updating field:', error2);
-                const errorMessage = error2?.error?.message || error2?.error?.errorMessage || error2?.message || `Failed to ${action} field`;
-                this.messageService.add({
-                  severity: 'error',
-                  summary: 'Error',
-                  detail: errorMessage
-                });
-              }
+              updateDto: updateDto
             });
+            this.loading.save = false;
+            
+            const currentLang = this.translationService.getCurrentLanguage();
+            let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.error?.title || error?.message;
+            
+            // Provide user-friendly error messages
+            if (!errorMessage || errorMessage === `Failed to ${action} field`) {
+              if (error?.status === 400) {
+                // Check if there are validation errors
+                if (error?.error?.errors && typeof error.error.errors === 'object') {
+                  const validationErrors = Object.values(error.error.errors).flat().join(', ');
+                  errorMessage = currentLang === 'ar'
+                    ? `خطأ في التحقق من البيانات: ${validationErrors}`
+                    : `Validation error: ${validationErrors}`;
+                } else {
+                  errorMessage = currentLang === 'ar'
+                    ? 'لا يمكن تحديث الحقل. يرجى التحقق من البيانات المرسلة. قد تكون بعض الحقول المطلوبة مفقودة أو غير صحيحة.'
+                    : 'Cannot update field. Please check the data being sent. Some required fields may be missing or invalid.';
+                }
+              } else if (error?.status === 404) {
+                errorMessage = currentLang === 'ar'
+                  ? 'الحقل غير موجود. قد يكون تم حذفه.'
+                  : 'Field not found. It may have been deleted.';
+              } else if (error?.status === 403) {
+                errorMessage = currentLang === 'ar'
+                  ? 'ليس لديك صلاحية لتحديث هذا الحقل.'
+                  : 'You do not have permission to update this field.';
+              } else {
+                errorMessage = currentLang === 'ar'
+                  ? `فشل في ${newStatus ? 'تفعيل' : 'إلغاء تفعيل'} الحقل`
+                  : `Failed to ${action} field`;
+              }
+            }
+            
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: errorMessage,
+              life: 8000
+            });
+            this.cdr.detectChanges();
           }
         });
       }
@@ -2099,18 +2161,30 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       tabId: field.tabId,
       fieldTypeId: field.fieldTypeId,
       fieldName: newName,
+      foreignFieldName: field.foreignFieldName || undefined,
       fieldCode: field.fieldCode,
       fieldOrder: field.fieldOrder,
-      placeholder: field.placeholder || '',
+      placeholder: field.placeholder || undefined,
+      foreignPlaceholder: field.foreignPlaceholder || undefined,
       hintText: field.hintText || '',
-      isMandatory: field.isMandatory,
-      isEditable: field.isEditable,
-      isVisible: field.isVisible,
-      defaultValueJson: field.defaultValueJson || '',
-      regexPattern: field.regexPattern || '',
-      validationMessage: field.validationMessage || '',
-      minValue: field.minValue,
-      maxValue: field.maxValue
+      foreignHintText: field.foreignHintText || undefined,
+      isMandatory: field.isMandatory ?? null,
+      isEditable: field.isEditable ?? null,
+      isVisible: field.isVisible ?? null,
+      isActive: field.isActive !== false, // Preserve isActive
+      defaultValueJson: field.defaultValueJson || undefined,
+      regexPattern: field.regexPattern || undefined,
+      validationMessage: field.validationMessage || undefined,
+      foreignValidationMessage: field.foreignValidationMessage || undefined,
+      gridId: field.gridId || undefined,
+      minValue: field.minValue !== null && field.minValue !== undefined ? field.minValue : undefined,
+      maxValue: field.maxValue !== null && field.maxValue !== undefined ? field.maxValue : undefined,
+      // Preserve calculation properties
+      expressionText: field.expressionText || undefined,
+      calculationMode: field.calculationMode || undefined,
+      calculationOperation: field.calculationOperation || undefined,
+      recalculateOn: field.recalculateOn || undefined,
+      resultType: field.resultType || undefined
     };
 
     this.fieldsService.updateField(fieldId, updateDto).subscribe({
@@ -2142,18 +2216,30 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       tabId: field.tabId,
       fieldTypeId: newTypeId,
       fieldName: field.fieldName,
+      foreignFieldName: field.foreignFieldName || undefined,
       fieldCode: field.fieldCode,
       fieldOrder: field.fieldOrder,
-      placeholder: field.placeholder || '',
+      placeholder: field.placeholder || undefined,
+      foreignPlaceholder: field.foreignPlaceholder || undefined,
       hintText: field.hintText || '',
-      isMandatory: field.isMandatory,
-      isEditable: field.isEditable,
-      isVisible: field.isVisible,
-      defaultValueJson: field.defaultValueJson || '',
-      regexPattern: field.regexPattern || '',
-      validationMessage: field.validationMessage || '',
-      minValue: field.minValue,
-      maxValue: field.maxValue
+      foreignHintText: field.foreignHintText || undefined,
+      isMandatory: field.isMandatory ?? null,
+      isEditable: field.isEditable ?? null,
+      isVisible: field.isVisible ?? null,
+      isActive: field.isActive !== false, // Preserve isActive
+      defaultValueJson: field.defaultValueJson || undefined,
+      regexPattern: field.regexPattern || undefined,
+      validationMessage: field.validationMessage || undefined,
+      foreignValidationMessage: field.foreignValidationMessage || undefined,
+      gridId: field.gridId || undefined,
+      minValue: field.minValue !== null && field.minValue !== undefined ? field.minValue : undefined,
+      maxValue: field.maxValue !== null && field.maxValue !== undefined ? field.maxValue : undefined,
+      // Preserve calculation properties
+      expressionText: field.expressionText || undefined,
+      calculationMode: field.calculationMode || undefined,
+      calculationOperation: field.calculationOperation || undefined,
+      recalculateOn: field.recalculateOn || undefined,
+      resultType: field.resultType || undefined
     };
 
     this.fieldsService.updateField(fieldId, updateDto).subscribe({
@@ -2322,18 +2408,30 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       tabId: field.tabId,
       fieldTypeId: field.fieldTypeId,
       fieldName: field.fieldName,
+      foreignFieldName: field.foreignFieldName || undefined,
       fieldCode: field.fieldCode,
       fieldOrder: field.fieldOrder,
-      placeholder: field.placeholder || '',
+      placeholder: field.placeholder || undefined,
+      foreignPlaceholder: field.foreignPlaceholder || undefined,
       hintText: field.hintText || '',
+      foreignHintText: field.foreignHintText || undefined,
       isMandatory: isRequired,
-      isEditable: field.isEditable,
-      isVisible: field.isVisible,
-      defaultValueJson: field.defaultValueJson || '',
-      regexPattern: field.regexPattern || '',
-      validationMessage: field.validationMessage || '',
-      minValue: field.minValue,
-      maxValue: field.maxValue
+      isEditable: field.isEditable ?? null,
+      isVisible: field.isVisible ?? null,
+      isActive: field.isActive !== false, // Preserve isActive
+      defaultValueJson: field.defaultValueJson || undefined,
+      regexPattern: field.regexPattern || undefined,
+      validationMessage: field.validationMessage || undefined,
+      foreignValidationMessage: field.foreignValidationMessage || undefined,
+      gridId: field.gridId || undefined,
+      minValue: field.minValue !== null && field.minValue !== undefined ? field.minValue : undefined,
+      maxValue: field.maxValue !== null && field.maxValue !== undefined ? field.maxValue : undefined,
+      // Preserve calculation properties
+      expressionText: field.expressionText || undefined,
+      calculationMode: field.calculationMode || undefined,
+      calculationOperation: field.calculationOperation || undefined,
+      recalculateOn: field.recalculateOn || undefined,
+      resultType: field.resultType || undefined
     };
 
     this.fieldsService.updateField(fieldId, updateDto).subscribe({
@@ -2412,23 +2510,31 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       foreignFieldName: fieldData.foreignFieldName || undefined,
       fieldCode: fieldData.fieldCode,
       fieldOrder: Number(fieldData.fieldOrder || 1),
-      placeholder: fieldData.placeholder || '',
+      placeholder: fieldData.placeholder || undefined,
       foreignPlaceholder: fieldData.foreignPlaceholder || undefined,
       hintText: fieldData.hintText || '',
       foreignHintText: fieldData.foreignHintText || undefined,
       isMandatory: fieldData.isMandatory ?? null,
       isEditable: fieldData.isEditable ?? null,
       isVisible: fieldData.isVisible ?? null,
-      defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || '',
-      regexPattern: fieldData.regexPattern || '',
+      isActive: this.editingField?.isActive !== false, // Preserve isActive from original field or default to true
+      defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || undefined,
+      regexPattern: fieldData.regexPattern || undefined,
       validationMessage: fieldData.validationMessage || undefined,
       foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
+      gridId: this.editingField?.gridId || undefined, // Preserve gridId if exists
       minValue: fieldData.minValue !== null && fieldData.minValue !== undefined && fieldData.minValue !== ''
         ? Number(fieldData.minValue)
         : undefined,
       maxValue: fieldData.maxValue !== null && fieldData.maxValue !== undefined && fieldData.maxValue !== ''
         ? Number(fieldData.maxValue)
-        : undefined
+        : undefined,
+      // Preserve calculation properties from original field if they exist
+      expressionText: this.editingField?.expressionText || undefined,
+      calculationMode: this.editingField?.calculationMode || undefined,
+      calculationOperation: this.editingField?.calculationOperation || undefined,
+      recalculateOn: this.editingField?.recalculateOn || undefined,
+      resultType: this.editingField?.resultType || undefined
     };
 
     if (!this.editingField) return;

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -70,7 +70,8 @@ export class TabsListComponent implements OnInit, OnDestroy {
     private fieldsService: FieldsService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -170,10 +171,19 @@ export class TabsListComponent implements OnInit, OnDestroy {
         // Reload deleted tab IDs when formId changes
         this.loadDeletedTabIds();
 
-        // Filter out deleted tabs before processing
-        const activeTabs = allTabs.filter(tab => !this.deletedTabIds.has(tab.id!));
+        // Filter out tabs that are in deletedTabIds (soft deleted - hide them completely)
+        const processedTabs = allTabs.filter(tab => {
+          if (this.deletedTabIds.has(tab.id!)) {
+            console.log('[TabsList] Hiding deleted tab (in deletedTabIds):', tab.id, tab.tabName);
+            return false; // Hide this tab completely
+          }
+          return true; // Show this tab
+        });
+        
+        console.log('[TabsList] After filtering - Total tabs:', processedTabs.length, 
+          'Deleted tabs hidden:', allTabs.length - processedTabs.length);
 
-        // Clean up deletedTabIds - remove IDs that are no longer in the API response
+        // Clean up deletedTabIds - remove IDs that are no longer in the API response (hard deleted)
         const apiTabIds = new Set(allTabs.map(t => t.id));
         const idsToRemove: number[] = [];
         this.deletedTabIds.forEach(deletedId => {
@@ -181,20 +191,19 @@ export class TabsListComponent implements OnInit, OnDestroy {
           if (!tabInApi) {
             // Tab not in API response - it was hard deleted from server, remove from tracking
             idsToRemove.push(deletedId);
-          } else if (tabInApi.isActive !== false) {
-            // Tab is back in API and active again (might have been reactivated)
-            idsToRemove.push(deletedId);
-            console.log('[TabsList] Tab was reactivated, removing from deleted tracking:', deletedId);
           }
+          // Keep tab in deletedTabIds if it exists in API, so it shows as inactive
+          // User can edit it to reactivate it, which will remove it from deletedTabIds
         });
         if (idsToRemove.length > 0) {
           idsToRemove.forEach(id => this.deletedTabIds.delete(id));
           this.saveDeletedTabIds();
-          console.log('[TabsList] Cleaned up deleted tab IDs:', idsToRemove);
+          console.log('[TabsList] Cleaned up hard-deleted tab IDs:', idsToRemove);
         }
 
-        // Filter out inactive tabs (soft deleted) from display
-        const visibleTabs = activeTabs.filter(tab => tab.isActive !== false);
+        // Show only non-deleted tabs (deleted tabs are filtered out)
+        const visibleTabs = processedTabs;
+        console.log('[TabsList] Visible tabs count:', visibleTabs.length, 'Deleted tabs hidden:', allTabs.length - visibleTabs.length);
         
         this.tabs = visibleTabs;
         
@@ -315,6 +324,13 @@ export class TabsListComponent implements OnInit, OnDestroy {
       
       this.tabsService.updateTab(this.editingTab.id, updateDto).subscribe({
         next: () => {
+          // If tab was reactivated (isActive changed to true), remove from deletedTabIds
+          if (updateDto.isActive === true && this.deletedTabIds.has(this.editingTab!.id!)) {
+            this.deletedTabIds.delete(this.editingTab!.id!);
+            this.saveDeletedTabIds();
+            console.log('[TabsList] Removed tab from deletedTabIds after reactivation:', this.editingTab!.id);
+          }
+          
           this.loading = false;
           this.loadTabs();
           this.closeTabModal();
@@ -566,8 +582,14 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
   deleteTab(id: number): void {
+    console.log('[TabsList] deleteTab called for id:', id);
     const tabToDelete = this.tabs.find(t => t.id === id);
-    if (!tabToDelete) return;
+    if (!tabToDelete) {
+      console.warn('[TabsList] Tab not found for deletion:', id);
+      return;
+    }
+
+    console.log('[TabsList] Tab to delete:', tabToDelete);
 
     this.confirmationService.confirm({
       message: `Are you sure you want to delete "${tabToDelete.tabName}"?`,
@@ -576,21 +598,35 @@ export class TabsListComponent implements OnInit, OnDestroy {
       acceptButtonStyleClass: 'p-button-danger',
       rejectButtonStyleClass: 'p-button-secondary',
       accept: () => {
+        console.log('[TabsList] User confirmed deletion for tab:', id);
         this.loading = true;
         this.tabsService.deleteTab(id).subscribe({
           next: () => {
-            // Add to deleted tabs set to filter it out even after refresh/login
+            console.log('[TabsList] Delete API response received');
+            
+            // Add to deleted tabs set to hide it completely
             this.deletedTabIds.add(id);
+            console.log('[TabsList] Added tab to deletedTabIds:', id);
+            
             // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
             this.saveDeletedTabIds();
+            console.log('[TabsList] Saved deletedTabIds to localStorage');
 
-            // Remove tab from the list immediately
+            // Remove tab from local arrays immediately (hide it completely)
             const tabIndex = this.tabs.findIndex(t => t.id === id);
             if (tabIndex !== -1) {
+              console.log('[TabsList] Removing tab from tabs array at index:', tabIndex);
               this.tabs.splice(tabIndex, 1);
+            } else {
+              console.warn('[TabsList] Tab not found in tabs array:', id);
             }
+            
+            console.log('[TabsList] After deletion - remaining tabs:', this.tabs.length);
 
             this.loading = false;
+            
+            // Force change detection to update UI immediately
+            this.cdr.detectChanges();
             
             this.messageService.add({
               severity: 'success',

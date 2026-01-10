@@ -171,8 +171,9 @@ export class FieldOptionsListComponent implements OnInit, OnDestroy {
           console.log('[FieldOptionsList] Cleaned up deleted field option IDs:', idsToRemove);
         }
 
-        // Filter out inactive field options (soft deleted) from display
-        const visibleOptions = activeOptions.filter(option => option.isActive !== false);
+        // Show all field options (including inactive ones) - don't filter by isActive
+        // User can see inactive options and reactivate them
+        const visibleOptions = activeOptions; // Keep all options, including inactive ones
         
         this.fieldOptions = visibleOptions.sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0));
         this.filteredFieldOptions = [...this.fieldOptions];
@@ -372,12 +373,27 @@ export class FieldOptionsListComponent implements OnInit, OnDestroy {
               this.saveDeletedFieldOptionIds();
             }
             
-            this.loadFieldOptions();
+            // Update field option in array without reloading - keep it in list even if inactive
+            const index = this.fieldOptions.findIndex(o => o.id === fieldOption.id);
+            if (index !== -1) {
+              this.fieldOptions[index] = {
+                ...this.fieldOptions[index],
+                isActive: newStatus
+              };
+              // Maintain sorted order
+              this.fieldOptions = this.fieldOptions.sort((a, b) => (a.optionOrder || 0) - (b.optionOrder || 0));
+              this.filteredFieldOptions = [...this.fieldOptions];
+            }
+            
+            // Don't add to deletedFieldOptionIds when just toggling status - keep it visible but inactive
+            // Only add to deletedFieldOptionIds when user explicitly deletes the option
+            
             this.messageService.add({ 
               severity: 'success', 
               summary: 'Success', 
               detail: `Field option ${action}d successfully` 
             });
+            this.cdr.detectChanges();
           },
           error: () => {
             this.messageService.add({ severity: 'error', summary: 'Error', detail: `Failed to ${action} field option` });

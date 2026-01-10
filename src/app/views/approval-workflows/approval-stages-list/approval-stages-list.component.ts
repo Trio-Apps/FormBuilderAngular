@@ -243,8 +243,9 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
           console.log('[ApprovalStagesList] Cleaned up deleted stage IDs:', idsToRemove);
         }
 
-        // Filter out inactive stages (soft deleted) from display
-        const visibleStages = activeStages.filter(stage => stage.isActive !== false);
+        // Show all stages (including inactive ones) - don't filter by isActive
+        // User can see inactive stages and reactivate them
+        const visibleStages = activeStages; // Keep all stages, including inactive ones
         
         // Sort by stageOrder
         this.approvalStages = visibleStages.sort((a, b) => a.stageOrder - b.stageOrder);
@@ -591,12 +592,38 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     this.approvalStageService.toggleActive(stage.id, newStatus).subscribe({
       next: () => {
         this.loading.toggle = false;
+        
+        // Update stage in array immediately without reloading - keep it in list even if inactive
+        const index = this.approvalStages.findIndex(s => s.id === stage.id);
+        if (index !== -1) {
+          this.approvalStages[index] = {
+            ...this.approvalStages[index],
+            isActive: newStatus
+          };
+          // Maintain sorted order
+          this.approvalStages = this.approvalStages.sort((a, b) => a.stageOrder - b.stageOrder);
+        }
+        
+        // Update filtered list too
+        const filteredIndex = this.filteredStages.findIndex(s => s.id === stage.id);
+        if (filteredIndex !== -1) {
+          this.filteredStages[filteredIndex] = {
+            ...this.filteredStages[filteredIndex],
+            isActive: newStatus
+          };
+          // Maintain sorted order
+          this.filteredStages = this.filteredStages.sort((a, b) => a.stageOrder - b.stageOrder);
+        }
+        
+        // Don't add to deletedStageIds when just toggling status - keep it visible but inactive
+        // Only add to deletedStageIds when user explicitly deletes the stage
+        
         this.messageService.add({ 
           severity: 'success', 
           summary: 'Success', 
           detail: `Approval stage ${newStatus ? 'activated' : 'deactivated'} successfully` 
         });
-        this.loadApprovalStages();
+        this.cdr.detectChanges();
       },
       error: (error: any) => {
         this.loading.toggle = false;

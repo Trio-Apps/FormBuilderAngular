@@ -365,8 +365,9 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
             console.log('[GridRowsList] Cleaned up deleted row IDs:', idsToRemove);
           }
 
-          // Filter out inactive rows (soft deleted) from display
-          const visibleRows = activeRows.filter(row => row.isActive !== false);
+          // Show all rows (including inactive ones) - don't filter by isActive
+          // User can see inactive rows and reactivate them
+          const visibleRows = activeRows; // Keep all rows, including inactive ones
           
           this.rows = visibleRows.sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0));
           

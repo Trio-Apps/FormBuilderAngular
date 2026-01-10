@@ -239,8 +239,9 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
           console.log('[StageAssigneesList] Cleaned up deleted assignee IDs:', idsToRemove);
         }
 
-        // Filter out inactive assignees (soft deleted) from display
-        const visibleAssignees = activeAssignees.filter(assignee => assignee.isActive !== false);
+        // Show all assignees (including inactive ones) - don't filter by isActive
+        // User can see inactive assignees and reactivate them
+        const visibleAssignees = activeAssignees; // Keep all assignees, including inactive ones
         
         this.assignees = visibleAssignees;
         this.filteredAssignees = [...this.assignees];

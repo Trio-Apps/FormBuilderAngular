@@ -228,8 +228,9 @@ export class ApprovalDelegationsListComponent implements OnInit {
           console.log('[ApprovalDelegationsList] Cleaned up deleted delegation IDs:', idsToRemove);
         }
 
-        // Filter out inactive delegations (soft deleted) from display
-        const visibleDelegations = activeDelegations.filter(delegation => delegation.isActive !== false);
+        // Show all delegations (including inactive ones) - don't filter by isActive
+        // User can see inactive delegations and reactivate them
+        const visibleDelegations = activeDelegations; // Keep all delegations, including inactive ones
         
         this.delegations = visibleDelegations;
         this.filteredDelegations = [...this.delegations];

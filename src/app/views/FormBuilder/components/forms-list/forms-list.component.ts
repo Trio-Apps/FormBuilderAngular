@@ -185,6 +185,9 @@ export class FormsListComponent implements OnInit, OnDestroy {
     this.forms = [];
     this.filteredForms = [];
     
+    // Reload deleted form IDs from localStorage to ensure they persist across refreshes
+    this.loadDeletedFormIds();
+    
     // Removed console.log to reduce console noise in production
     // console.log('[FormsList] Loading forms, page:', page);
     
@@ -194,12 +197,19 @@ export class FormsListComponent implements OnInit, OnDestroy {
         // Removed console.log to reduce console noise in production
         // console.log('[FormsList] Forms loaded from API:', forms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
         
-        // Filter out deleted forms before processing
-        const activeForms = forms.filter(form => !this.deletedFormIds.has(form.id!));
+        // Filter out forms that are in deletedFormIds (soft deleted - hide them completely)
+        const processedForms = forms.filter(form => {
+          if (this.deletedFormIds.has(form.id!)) {
+            console.log('[FormsList] Hiding deleted form (in deletedFormIds):', form.id, form.formName);
+            return false; // Hide this form completely
+          }
+          return true; // Show this form
+        });
         
-        // Clean up deletedFormIds:
-        // 1. Remove IDs that are no longer in the API response (hard deleted from server)
-        // 2. Keep IDs that are in API response but inactive (soft deleted - still in DB but isActive = false)
+        console.log('[FormsList] After filtering - Total forms:', processedForms.length, 
+          'Deleted forms hidden:', forms.length - processedForms.length);
+
+        // Clean up deletedFormIds - remove IDs that are no longer in the API response (hard deleted)
         const apiFormIds = new Set(forms.map(f => f.id));
         const idsToRemove: number[] = [];
         this.deletedFormIds.forEach(deletedId => {
@@ -207,37 +217,27 @@ export class FormsListComponent implements OnInit, OnDestroy {
           if (!formInApi) {
             // Form not in API response - it was hard deleted from server, remove from tracking
             idsToRemove.push(deletedId);
-          } else if (formInApi.isActive !== false) {
-            // Form is back in API and active again (might have been reactivated)
-            // Remove from deleted tracking so it can be displayed again
-            idsToRemove.push(deletedId);
-            console.log('[FormsList] Form was reactivated, removing from deleted tracking:', deletedId);
           }
-          // If form is in API but inactive (isActive === false), keep it in deletedFormIds to hide it
+          // Keep form in deletedFormIds if it exists in API, so it shows as inactive
+          // User can edit it to reactivate it, which will remove it from deletedFormIds
         });
         if (idsToRemove.length > 0) {
           idsToRemove.forEach(id => this.deletedFormIds.delete(id));
           this.saveDeletedFormIds(); // Update localStorage
-          console.log('[FormsList] Cleaned up deleted form IDs:', idsToRemove);
+          console.log('[FormsList] Cleaned up hard-deleted form IDs:', idsToRemove);
         }
         
-        // Filter out inactive forms (soft deleted) from display
-        // These forms were deactivated (isActive = false) but still exist in the database
-        // They should be hidden from the list even if they're in the API response
-        const visibleForms = activeForms.filter(form => form.isActive !== false);
-        
-        // Adjust totalItems to account for:
-        // - Forms in deletedFormIds (tracked as deleted)
-        // - Forms that are inactive (soft deleted with isActive = false)
-        const deletedCount = forms.length - activeForms.length;
-        const inactiveCount = activeForms.length - visibleForms.length;
-        // Only count forms that are actually visible (not deleted, not inactive)
-        this.totalItems = Math.max(0, (paged.totalCount || forms.length) - deletedCount - inactiveCount);
+        // Show only non-deleted forms (deleted forms are filtered out)
+        const visibleForms = processedForms;
+        console.log('[FormsList] Visible forms count:', visibleForms.length, 'Deleted forms hidden:', forms.length - visibleForms.length);
+
+        // Count only visible (non-deleted) forms
+        this.totalItems = visibleForms.length;
         this.totalPages = paged.totalPages || Math.max(1, Math.ceil(this.totalItems / this.itemsPerPage));
         this.itemsPerPage = paged.pageSize || this.itemsPerPage;
         this.currentPage = paged.page || page;
 
-        // Load tabs and fields count for each form (only visible active forms, excluding deleted and inactive)
+        // Load tabs and fields count for each form (all forms including inactive ones)
         this.loadFormsWithCounts(visibleForms);
       },
       error: () => {
@@ -329,31 +329,40 @@ export class FormsListComponent implements OnInit, OnDestroy {
     forms: FormBuilderDto[], 
     tabsMap: Map<number, any[]>
   ): void {
-    const updatedForms = forms.map(form => {
-      const tabs = tabsMap.get(form.id) || [];
-      
-      // Calculate tabs count
-      const tabsCount = form.tabsCount !== undefined && form.tabsCount !== null 
-        ? form.tabsCount 
-        : tabs.length;
+    const updatedForms = forms
+      .filter(form => !this.deletedFormIds.has(form.id!)) // Filter out deleted forms first
+      .map(form => {
+        const tabs = tabsMap.get(form.id) || [];
+        
+        // Calculate tabs count
+        const tabsCount = form.tabsCount !== undefined && form.tabsCount !== null 
+          ? form.tabsCount 
+          : tabs.length;
 
-      return {
-        ...form,
-        tabs,
-        tabsCount
-      };
-    });
+        return {
+          ...form,
+          tabs,
+          tabsCount
+        };
+      });
 
     // Removed console.log to reduce console noise in production
     // console.log('[FormsList] Updated forms with counts:', updatedForms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
 
     this.forms = updatedForms;
     this.filteredForms = [...updatedForms];
+    
+    // Update pagination which also updates paginatedForms
+    this.updatePagination();
+    
+    // Log to verify deleted forms are filtered out
+    console.log('[FormsList] After updateFormsWithCounts - visible forms:', updatedForms.length);
+    
     // totalItems already set from API response
     if (!this.totalItems) {
       this.totalItems = updatedForms.length;
     }
-    this.updatePagination();
+    
     this.loading = false;
   }
 
@@ -561,6 +570,13 @@ export class FormsListComponent implements OnInit, OnDestroy {
       this.formsService.updateForm(this.editingForm.id, updateDto).subscribe({
         next: () => {
           console.log('[FormsList] Form update successful, reloading forms...');
+          
+          // If form was reactivated (isActive changed to true), remove from deletedFormIds
+          if (updateDto.isActive === true && this.deletedFormIds.has(this.editingForm!.id)) {
+            this.deletedFormIds.delete(this.editingForm!.id);
+            this.saveDeletedFormIds();
+            console.log('[FormsList] Removed form from deletedFormIds after reactivation:', this.editingForm!.id);
+          }
           
           // Update local data immediately (optimistic update)
           const formId = this.editingForm!.id;
@@ -869,8 +885,14 @@ export class FormsListComponent implements OnInit, OnDestroy {
   }
 
   deleteForm(id: number): void {
+    console.log('[FormsList] deleteForm called for id:', id);
     const formToDelete = this.forms.find(f => f.id === id);
-    if (!formToDelete) return;
+    if (!formToDelete) {
+      console.warn('[FormsList] Form not found for deletion:', id);
+      return;
+    }
+
+    console.log('[FormsList] Form to delete:', formToDelete);
 
     // Determine warning message based on form status
     const isInactive = formToDelete.isActive === false;
@@ -885,9 +907,47 @@ export class FormsListComponent implements OnInit, OnDestroy {
       acceptButtonStyleClass: 'p-button-danger',
       rejectButtonStyleClass: 'p-button-secondary',
       accept: () => {
+        console.log('[FormsList] User confirmed deletion for form:', id);
         this.loading = true;
         this.formsService.deleteForm(id).subscribe({
           next: (response) => {
+            console.log('[FormsList] Delete API response received:', response);
+            
+            // Add to deleted forms set to hide it completely
+            this.deletedFormIds.add(id);
+            console.log('[FormsList] Added form to deletedFormIds:', id);
+            
+            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
+            this.saveDeletedFormIds();
+            console.log('[FormsList] Saved deletedFormIds to localStorage');
+
+            // Remove form from local arrays immediately (hide it completely)
+            const formIndex = this.forms.findIndex(f => f.id === id);
+            if (formIndex !== -1) {
+              console.log('[FormsList] Removing form from forms array at index:', formIndex);
+              this.forms.splice(formIndex, 1);
+            } else {
+              console.warn('[FormsList] Form not found in forms array:', id);
+            }
+            
+            const filteredIndex = this.filteredForms.findIndex(f => f.id === id);
+            if (filteredIndex !== -1) {
+              console.log('[FormsList] Removing form from filteredForms array at index:', filteredIndex);
+              this.filteredForms.splice(filteredIndex, 1);
+            } else {
+              console.warn('[FormsList] Form not found in filteredForms array:', id);
+            }
+            
+            // Also remove from paginatedForms if it exists
+            const paginatedIndex = this.paginatedForms.findIndex(f => f.id === id);
+            if (paginatedIndex !== -1) {
+              console.log('[FormsList] Removing form from paginatedForms array at index:', paginatedIndex);
+              this.paginatedForms.splice(paginatedIndex, 1);
+            }
+            
+            // Update total count
+            this.totalItems = Math.max(0, this.totalItems - 1);
+
             // Determine success message and delete type based on API response
             let successMessage = 'Form deleted successfully';
             let isSoftDelete = false;
@@ -918,31 +978,16 @@ export class FormsListComponent implements OnInit, OnDestroy {
               message: successMessage
             });
             
-            // For soft delete (deactivation), the form is still in the database but isActive = false
-            // For hard delete, the form is permanently removed from the database
-            // In both cases, we track the ID to hide it from the list
-            
-            // Add to deleted forms set to filter it out even after refresh/login
-            this.deletedFormIds.add(id);
-            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
-            this.saveDeletedFormIds();
-            
-            // Remove form from the list immediately (both soft and hard delete)
-            const formIndex = this.forms.findIndex(f => f.id === id);
-            if (formIndex !== -1) {
-              this.forms.splice(formIndex, 1);
-            }
-            
-            // Update filtered forms and pagination
-            // filterForms() will repopulate filteredForms from this.forms (without the deleted form)
-            // and will also update totalItems correctly
-            this.filterForms();
+            // Update pagination to reflect changes in paginatedForms
             this.updatePagination();
             
             // Force change detection to update UI immediately
             this.cdr.detectChanges();
             
             this.loading = false;
+            
+            console.log('[FormsList] After deletion - remaining forms:', this.forms.length);
+            console.log('[FormsList] After deletion - paginatedForms count:', this.paginatedForms.length);
             
             // Show success message
             this.messageService.add({

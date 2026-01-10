@@ -167,8 +167,9 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
           console.log('[ApprovalWorkflowsList] Cleaned up deleted workflow IDs:', idsToRemove);
         }
 
-        // Filter out inactive workflows (soft deleted) from display
-        const visibleWorkflows = activeWorkflows.filter(workflow => workflow.isActive !== false);
+        // Show all workflows (including inactive ones) - don't filter by isActive
+        // User can see inactive workflows and reactivate them
+        const visibleWorkflows = activeWorkflows; // Keep all workflows, including inactive ones
         
         this.approvalWorkflows = visibleWorkflows;
         this.filteredWorkflows = [...this.approvalWorkflows];
@@ -462,7 +463,7 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
         console.log(`[toggleWorkflowStatus] Successfully ${action}d workflow ${workflow.id}`);
         this.loading.toggle = false;
         
-        // Update workflow in array immediately for better UX
+        // Update workflow in array immediately for better UX - keep it in list even if inactive
         const index = this.approvalWorkflows.findIndex(w => w.id === workflow.id);
         if (index !== -1) {
           this.approvalWorkflows[index].isActive = newStatus;
@@ -473,14 +474,16 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
           }
         }
         
+        // Don't add to deletedWorkflowIds when just toggling status - keep it visible but inactive
+        // Only add to deletedWorkflowIds when user explicitly deletes the workflow
+        
         this.messageService.add({
           severity: 'success',
           summary: 'Success',
           detail: `Approval workflow ${action}d successfully`
         });
         
-        // Reload workflows to ensure data consistency
-        this.loadApprovalWorkflows();
+        // Don't reload - keep the updated status in the list
         this.cdr.detectChanges();
       },
       error: (error: any) => {

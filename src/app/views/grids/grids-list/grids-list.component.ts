@@ -200,8 +200,9 @@ export class GridsListComponent implements OnInit, OnDestroy {
           console.log('[GridsList] Cleaned up deleted grid IDs:', idsToRemove);
         }
 
-        // Filter out inactive grids (soft deleted) from display
-        const visibleGrids = activeGrids.filter(grid => grid.isActive !== false);
+        // Show all grids (including inactive ones) - don't filter by isActive
+        // User can see inactive grids and reactivate them
+        const visibleGrids = activeGrids; // Keep all grids, including inactive ones
         
         this.grids = visibleGrids;
         
