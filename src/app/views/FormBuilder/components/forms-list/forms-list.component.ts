@@ -910,8 +910,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
         console.log('[FormsList] User confirmed deletion for form:', id);
         this.loading = true;
         this.formsService.deleteForm(id).subscribe({
-          next: (response) => {
-            console.log('[FormsList] Delete API response received:', response);
+          next: () => {
+            console.log('[FormsList] Delete API response received (204 No Content)');
             
             // Add to deleted forms set to hide it completely
             this.deletedFormIds.add(id);
@@ -948,34 +948,12 @@ export class FormsListComponent implements OnInit, OnDestroy {
             // Update total count
             this.totalItems = Math.max(0, this.totalItems - 1);
 
-            // Determine success message and delete type based on API response
-            let successMessage = 'Form deleted successfully';
-            let isSoftDelete = false;
-            let wasActuallyDeleted = false;
-            
-            if (response?.message) {
-              successMessage = response.message;
-              
-              // Determine if it was soft delete (deactivated) or hard delete
-              // API returns: "Form has been deactivated successfully" for soft delete
-              // API returns: "Form deleted successfully" for hard delete
-              const messageLower = response.message.toLowerCase();
-              if (messageLower.includes('deactivated')) {
-                isSoftDelete = true;
-              } else if (messageLower.includes('deleted successfully') && !messageLower.includes('deactivated')) {
-                wasActuallyDeleted = true;
-              }
-            } else {
-              // If no message but response is successful, assume it was deleted
-              wasActuallyDeleted = true;
-            }
+            // DeleteForm uses soft delete (204 No Content response)
+            const successMessage = 'Form deleted successfully';
             
             // Log for debugging
-            console.log('[FormsList] Delete response:', {
-              response,
-              isSoftDelete,
-              wasActuallyDeleted,
-              message: successMessage
+            console.log('[FormsList] Delete response (soft delete):', {
+              successMessage
             });
             
             // Update pagination to reflect changes in paginatedForms

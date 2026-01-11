@@ -179,7 +179,14 @@ export class FieldDataSourceService {
 
   /**
    * DELETE - حذف Data Source (Hard Delete)
+   * DELETE /api/FieldDataSources/{id}
+   * 
+   * Description: Hard Delete (حذف نهائي)
    * Authorization: Required (Administration)
+   * Response: 200 OK (ApiResponse)
+   * 
+   * @param id Field Data Source ID
+   * @returns Observable<void>
    */
   deleteDataSource(id: number): Observable<void> {
     return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/${id}`).pipe(
@@ -195,7 +202,14 @@ export class FieldDataSourceService {
 
   /**
    * DELETE - حذف Data Source (Soft Delete)
+   * DELETE /api/FieldDataSources/soft-delete/{id}
+   * 
+   * Description: يحذف Field Data Source باستخدام Soft Delete (IsDeleted = true)
    * Authorization: Required (Administration)
+   * Response: 200 OK (ApiResponse)
+   * 
+   * @param id Field Data Source ID
+   * @returns Observable<void>
    */
   softDeleteDataSource(id: number): Observable<void> {
     return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/soft-delete/${id}`).pipe(

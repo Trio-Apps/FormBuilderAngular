@@ -6,7 +6,8 @@ export interface DocumentType {
   menuCaption: string;
   menuOrder: number;
   parentMenuId?: number;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
   formBuilderName?: string;
   parentMenuName?: string;
   approvalWorkflowId?: number | null;
@@ -21,6 +22,7 @@ export interface CreateDocumentTypeDto {
   menuOrder?: number;
   parentMenuId?: number;
   isActive?: boolean;
+  isDeleted?: boolean;
   approvalWorkflowId?: number | null; // Optional - null means no workflow (auto-approve)
 }
 
@@ -50,7 +52,8 @@ export interface DocumentSeries {
   seriesCode: string; // Prefix (e.g., LC-AND1-2025), max 50 chars
   nextNumber: number; // Next running value
   isDefault: boolean; // Default series selection
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
 }
 
 /**
@@ -63,7 +66,8 @@ export interface CreateDocumentSeriesDto {
   seriesCode: string; // Required - Prefix, max 50 chars
   nextNumber?: number; // Optional - default: 1
   isDefault?: boolean; // Optional - default: false
-  isActive?: boolean; // Optional - default: true
+  isActive?: boolean;
+  isDeleted?: boolean; // Optional - default: false
 }
 
 /**

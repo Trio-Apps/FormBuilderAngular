@@ -16,6 +16,7 @@ export interface FormGridDto {
   gridCode: string;
   gridOrder: number;
   isActive: boolean;
+  isDeleted?: boolean;
   minRows?: number; // Minimum number of rows required
   maxRows?: number; // Maximum number of rows allowed
   validationRules?: string; // JSON string for grid-level validation rules
@@ -32,7 +33,7 @@ export interface CreateFormGridDto {
   foreignGridName?: string;
   gridCode: string;
   gridOrder: number;
-  isActive: boolean;
+  isDeleted: boolean;
   minRows?: number; // Minimum number of rows required
   maxRows?: number; // Maximum number of rows allowed
   validationRules?: string; // JSON string for grid-level validation rules
@@ -45,7 +46,7 @@ export interface UpdateFormGridDto {
   foreignGridName?: string;
   gridCode?: string;
   gridOrder?: number;
-  isActive?: boolean;
+  isDeleted?: boolean;
   minRows?: number; // Minimum number of rows required
   maxRows?: number; // Maximum number of rows allowed
   validationRules?: string; // JSON string for grid-level validation rules
@@ -62,7 +63,8 @@ export interface FormGridColumnDto {
   columnOrder: number;
   dataType: string; // 'text', 'number', 'date', 'email', 'select', etc.
   isRequired: boolean;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
   isReadOnly?: boolean; // Column is read-only (cannot be edited)
   isVisible?: boolean; // Column visibility (default: true)
   dataSourceId?: number; // Links to data source for dropdown columns
@@ -86,7 +88,8 @@ export interface CreateFormGridColumnDto {
   columnOrder: number;
   dataType: string;
   isRequired: boolean;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
   isReadOnly?: boolean; // Column is read-only (cannot be edited)
   isVisible?: boolean; // Column visibility (default: true)
   dataSourceId?: number; // Links to data source for dropdown columns
@@ -104,6 +107,7 @@ export interface UpdateFormGridColumnDto {
   dataType?: string;
   isRequired?: boolean;
   isActive?: boolean;
+  isDeleted?: boolean;
   isReadOnly?: boolean; // Column is read-only (cannot be edited)
   isVisible?: boolean; // Column visibility
   dataSourceId?: number; // Links to data source for dropdown columns
@@ -120,6 +124,7 @@ export interface GridColumnOptionDto {
   foreignOptionText?: string; // Arabic option text
   optionOrder?: number;
   isActive?: boolean;
+  isDeleted?: boolean;
   createdByUserId?: string;
   createdDate?: string;
   updatedDate?: string | null;
@@ -131,7 +136,8 @@ export interface FormSubmissionGridRowDto {
   submissionId: number;
   gridId: number;
   rowIndex: number;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
   createdDate?: string;
   updatedDate?: string | null;
   cells?: FormSubmissionGridCellDto[];
@@ -141,12 +147,12 @@ export interface CreateFormSubmissionGridRowDto {
   submissionId: number;
   gridId: number;
   rowIndex: number;
-  isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface UpdateFormSubmissionGridRowDto {
   rowIndex?: number;
-  isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 // ===== Form Submission Grid Cell (Cell Data) =====
@@ -182,6 +188,7 @@ export interface BulkGridRowDto {
   rowIndex: number;
   cells: BulkGridCellDto[];
   isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface BulkGridCellDto {
@@ -255,7 +262,8 @@ export interface GridColumnDataSourceDto {
   valuePath?: string; // JSON path for option values
   textPath?: string; // JSON path for option text
   configurationJson?: string; // Additional configuration
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
   createdByUserId?: string;
   createdDate?: string;
   updatedDate?: string | null;
@@ -272,6 +280,7 @@ export interface CreateGridColumnDataSourceDto {
   textPath?: string;
   configurationJson?: string;
   isActive?: boolean;
+  isDeleted?: boolean;
   createdByUserId?: string;
 }
 
@@ -296,6 +305,7 @@ export interface CreateGridColumnOptionDto {
   foreignOptionText?: string;
   optionOrder?: number;
   isActive?: boolean;
+  isDeleted?: boolean;
   createdByUserId?: string;
 }
 
@@ -313,7 +323,7 @@ export interface DropdownOptionDto {
   text: string;
   foreignText?: string; // Arabic text
   order?: number;
-  isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 // ===== API Response Wrapper =====

@@ -651,6 +651,7 @@ export class GridViewComponent implements OnInit, OnChanges {
         gridId: this.grid?.id || 0,
         rowIndex: 0,
         isActive: true,
+        isDeleted: false,
         cells: []
       }];
     }
@@ -724,6 +725,7 @@ export class GridViewComponent implements OnInit, OnChanges {
       gridId: this.grid?.id || 0,
       rowIndex: newIndex,
       isActive: true,
+      isDeleted: false,
       cells: []
     };
 

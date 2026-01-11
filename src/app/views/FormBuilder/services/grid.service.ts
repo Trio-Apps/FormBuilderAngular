@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import {
@@ -137,7 +137,7 @@ export class GridService {
   }
 
   /**
-   * Delete grid
+   * Delete grid (uses soft delete automatically)
    */
   deleteGrid(id: number): Observable<ApiResponse<boolean>> {
     return this.http.delete<ApiResponse<boolean>>(`${this.baseUrl}/FormGrids/${id}`).pipe(
@@ -146,11 +146,69 @@ export class GridService {
   }
 
   /**
-   * Toggle grid active status
+   * Soft delete grid
+   * DELETE /api/FormGrids/{id} - DeleteAsync uses soft delete automatically
+   * Note: deleteGrid already uses soft delete, so we use it directly
    */
-  toggleGridActive(id: number): Observable<ApiResponse<FormGridDto>> {
-    return this.http.patch<ApiResponse<FormGridDto>>(`${this.baseUrl}/FormGrids/${id}/toggle-active`, {}).pipe(
-      catchError(() => of({ statusCode: 500, message: 'Error toggling grid status', data: {} as FormGridDto }))
+  softDelete(id: number, deletedByUserId?: string): Observable<void> {
+    const gridId = Number(id);
+    if (isNaN(gridId) || gridId <= 0) {
+      return throwError(() => new Error(`Invalid grid ID: ${id}`));
+    }
+
+    console.log('[GridService] Soft deleting grid:', { id: gridId, deletedByUserId });
+
+    const params: any = {};
+    if (deletedByUserId) {
+      params.deletedByUserId = deletedByUserId;
+    }
+
+    return this.deleteGrid(gridId).pipe(
+      map(() => {
+        console.log('[GridService] Grid soft deleted successfully');
+        return;
+      }),
+      catchError((error) => {
+        console.error('[GridService] Error soft deleting grid:', error);
+        const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to soft delete grid';
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Restore soft-deleted grid
+   * POST /api/FormGrids/{id}/restore
+   */
+  restore(id: number): Observable<FormGridDto> {
+    const gridId = Number(id);
+    if (isNaN(gridId) || gridId <= 0) {
+      return throwError(() => new Error(`Invalid grid ID: ${id}`));
+    }
+
+    console.log('[GridService] Restoring grid:', { id: gridId });
+
+    return this.http.post<any>(`${this.baseUrl}/FormGrids/${gridId}/restore`, {}).pipe(
+      map((response: any) => {
+        console.log('[GridService] Grid restored successfully');
+        if (response && typeof response === 'object') {
+          // Handle ApiResponse format
+          if (response.data) {
+            return response.data;
+          }
+          // Handle direct response
+          if (response.id) {
+            return response;
+          }
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        console.error('[GridService] Error restoring grid:', error);
+        const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to restore grid';
+        return throwError(() => new Error(errorMessage));
+      })
     );
   }
 

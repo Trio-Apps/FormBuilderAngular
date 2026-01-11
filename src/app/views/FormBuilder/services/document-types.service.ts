@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import {
   DocumentType,
@@ -406,11 +406,92 @@ export class DocumentTypesService {
   }
 
   /**
-   * Toggle document type active status
-   * Uses update method to toggle isActive
+   * Soft delete document type
+   * DELETE /api/DocumentTypes/{id}/soft-delete or PUT /api/DocumentTypes/{id}/soft-delete
    */
-  toggleDocumentTypeStatus(id: number, isActive: boolean): Observable<void> {
-    return this.updateDocumentType(id, { isActive });
+  softDelete(id: number, deletedByUserId?: string): Observable<void> {
+    const typeId = Number(id);
+    if (isNaN(typeId) || typeId <= 0) {
+      return throwError(() => new Error(`Invalid document type ID: ${id}`));
+    }
+
+    console.log('[DocumentTypesService] Soft deleting document type:', { id: typeId, deletedByUserId });
+
+    const params: any = {};
+    if (deletedByUserId) {
+      params.deletedByUserId = deletedByUserId;
+    }
+
+    return this.http.delete<any>(`${this.baseUrl}/${typeId}/soft-delete`, { params }).pipe(
+      map(() => {
+        console.log('[DocumentTypesService] Document type soft deleted successfully');
+        return;
+      }),
+      catchError((error) => {
+        // Try PUT method if DELETE fails
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.put<any>(`${this.baseUrl}/${typeId}/soft-delete`, {}, { params }).pipe(
+            map(() => {
+              console.log('[DocumentTypesService] Document type soft deleted successfully (via PUT)');
+              return;
+            }),
+            catchError((putError) => {
+              console.error('[DocumentTypesService] Error soft deleting document type:', putError);
+              const errorMessage = this.extractErrorMessage(putError);
+              return throwError(() => new Error(errorMessage));
+            })
+          );
+        }
+        console.error('[DocumentTypesService] Error soft deleting document type:', error);
+        const errorMessage = this.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Restore soft-deleted document type
+   * PUT /api/DocumentTypes/{id}/restore or PATCH /api/DocumentTypes/{id}/restore
+   */
+  restore(id: number): Observable<DocumentType> {
+    const typeId = Number(id);
+    if (isNaN(typeId) || typeId <= 0) {
+      return throwError(() => new Error(`Invalid document type ID: ${id}`));
+    }
+
+    console.log('[DocumentTypesService] Restoring document type:', { id: typeId });
+
+    return this.http.put<any>(`${this.baseUrl}/${typeId}/restore`, {}).pipe(
+      map((response: any) => {
+        console.log('[DocumentTypesService] Document type restored successfully');
+        if (response && typeof response === 'object' && !response.id) {
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        // Try PATCH method if PUT fails
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.patch<any>(`${this.baseUrl}/${typeId}/restore`, {}).pipe(
+            map((response: any) => {
+              console.log('[DocumentTypesService] Document type restored successfully (via PATCH)');
+              if (response && typeof response === 'object' && !response.id) {
+                return response.data || response.result || response;
+              }
+              return response;
+            }),
+            catchError((patchError) => {
+              console.error('[DocumentTypesService] Error restoring document type:', patchError);
+              const errorMessage = this.extractErrorMessage(patchError);
+              return throwError(() => new Error(errorMessage));
+            })
+          );
+        }
+        console.error('[DocumentTypesService] Error restoring document type:', error);
+        const errorMessage = this.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
   }
 
   // ================= DOCUMENT SERIES CRUD ================
@@ -782,30 +863,90 @@ export class DocumentTypesService {
   }
 
   /**
-   * Toggle document series active status
-   * PATCH /api/DocumentSeries/{id}/toggle-active
-   * Request Body: boolean (true/false)
-   * Response: ApiResponse
+   * Soft delete document series
+   * DELETE /api/DocumentSeries/{id}/soft-delete or PUT /api/DocumentSeries/{id}/soft-delete
    */
-  toggleDocumentSeriesStatus(id: number, isActive: boolean): Observable<void> {
+  softDeleteSeries(id: number, deletedByUserId?: string): Observable<void> {
     const seriesId = Number(id);
     if (isNaN(seriesId) || seriesId <= 0) {
-      return new Observable(observer => {
-        observer.error(new Error(`Invalid document series ID: ${id}`));
-      });
+      return throwError(() => new Error(`Invalid document series ID: ${id}`));
     }
 
-    console.log('[DocumentTypesService] Toggling document series status:', { id: seriesId, isActive });
+    console.log('[DocumentTypesService] Soft deleting document series:', { id: seriesId, deletedByUserId });
 
-    return this.http.patch<any>(`${this.documentSeriesUrl}/${seriesId}/toggle-active`, isActive).pipe(
+    const params: any = {};
+    if (deletedByUserId) {
+      params.deletedByUserId = deletedByUserId;
+    }
+
+    return this.http.delete<any>(`${this.documentSeriesUrl}/${seriesId}/soft-delete`, { params }).pipe(
       map(() => {
-        console.log('[DocumentTypesService] Document series status toggled successfully');
+        console.log('[DocumentTypesService] Document series soft deleted successfully');
         return;
       }),
       catchError((error) => {
-        console.error('[DocumentTypesService] Error toggling document series status:', error);
-        const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to toggle document series status';
-        throw new Error(errorMessage);
+        // Try PUT method if DELETE fails
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.put<any>(`${this.documentSeriesUrl}/${seriesId}/soft-delete`, {}, { params }).pipe(
+            map(() => {
+              console.log('[DocumentTypesService] Document series soft deleted successfully (via PUT)');
+              return;
+            }),
+            catchError((putError) => {
+              console.error('[DocumentTypesService] Error soft deleting document series:', putError);
+              const errorMessage = this.extractErrorMessage(putError);
+              return throwError(() => new Error(errorMessage));
+            })
+          );
+        }
+        console.error('[DocumentTypesService] Error soft deleting document series:', error);
+        const errorMessage = this.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Restore soft-deleted document series
+   * PUT /api/DocumentSeries/{id}/restore or PATCH /api/DocumentSeries/{id}/restore
+   */
+  restoreSeries(id: number): Observable<DocumentSeries> {
+    const seriesId = Number(id);
+    if (isNaN(seriesId) || seriesId <= 0) {
+      return throwError(() => new Error(`Invalid document series ID: ${id}`));
+    }
+
+    console.log('[DocumentTypesService] Restoring document series:', { id: seriesId });
+
+    return this.http.put<any>(`${this.documentSeriesUrl}/${seriesId}/restore`, {}).pipe(
+      map((response: any) => {
+        console.log('[DocumentTypesService] Document series restored successfully');
+        if (response && typeof response === 'object' && !response.id) {
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        // Try PATCH method if PUT fails
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.patch<any>(`${this.documentSeriesUrl}/${seriesId}/restore`, {}).pipe(
+            map((response: any) => {
+              console.log('[DocumentTypesService] Document series restored successfully (via PATCH)');
+              if (response && typeof response === 'object' && !response.id) {
+                return response.data || response.result || response;
+              }
+              return response;
+            }),
+            catchError((patchError) => {
+              console.error('[DocumentTypesService] Error restoring document series:', patchError);
+              const errorMessage = this.extractErrorMessage(patchError);
+              return throwError(() => new Error(errorMessage));
+            })
+          );
+        }
+        console.error('[DocumentTypesService] Error restoring document series:', error);
+        const errorMessage = this.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
       })
     );
   }
@@ -836,6 +977,93 @@ export class DocumentTypesService {
         throw new Error(errorMessage);
       })
     );
+  }
+
+  /**
+   * Toggle document series active status
+   * PATCH /api/DocumentSeries/{id}/toggle-active or PUT /api/DocumentSeries/{id}/toggle-active
+   */
+  toggleDocumentSeriesStatus(id: number, isActive: boolean): Observable<DocumentSeries> {
+    const seriesId = Number(id);
+    if (isNaN(seriesId) || seriesId <= 0) {
+      return throwError(() => new Error(`Invalid document series ID: ${id}`));
+    }
+
+    console.log('[DocumentTypesService] Toggling document series status:', { id: seriesId, isActive });
+
+    return this.http.patch<any>(`${this.documentSeriesUrl}/${seriesId}/toggle-active`, { isActive }).pipe(
+      map((response: any) => {
+        console.log('[DocumentTypesService] Document series status toggled successfully');
+        if (response && typeof response === 'object' && !response.id) {
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        // Try PUT method if PATCH fails
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.put<any>(`${this.documentSeriesUrl}/${seriesId}/toggle-active`, { isActive }).pipe(
+            map((response: any) => {
+              console.log('[DocumentTypesService] Document series status toggled successfully (via PUT)');
+              if (response && typeof response === 'object' && !response.id) {
+                return response.data || response.result || response;
+              }
+              return response;
+            }),
+            catchError((putError) => {
+              console.error('[DocumentTypesService] Error toggling document series status:', putError);
+              const errorMessage = this.extractErrorMessage(putError);
+              return throwError(() => new Error(errorMessage));
+            })
+          );
+        }
+        console.error('[DocumentTypesService] Error toggling document series status:', error);
+        const errorMessage = this.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  // ==================== Helper Methods ====================
+
+  /**
+   * Extract error message from HTTP error response
+   */
+  private extractErrorMessage(error: any): string {
+    const errorResponse = error?.error;
+    let errorMessage = 'Failed to process request';
+
+    if (errorResponse) {
+      if (typeof errorResponse === 'string') {
+        errorMessage = errorResponse;
+      } else if (errorResponse.message) {
+        errorMessage = errorResponse.message;
+      } else if (errorResponse.errorMessage) {
+        errorMessage = errorResponse.errorMessage;
+      } else if (errorResponse.title) {
+        errorMessage = errorResponse.title;
+      } else if (errorResponse.detail) {
+        errorMessage = errorResponse.detail;
+      } else if (errorResponse.errors && Array.isArray(errorResponse.errors)) {
+        errorMessage = errorResponse.errors.join(', ');
+      } else if (errorResponse.errors && typeof errorResponse.errors === 'object') {
+        const errorDetails: string[] = [];
+        for (const [field, messages] of Object.entries(errorResponse.errors)) {
+          if (Array.isArray(messages)) {
+            messages.forEach(msg => errorDetails.push(`${field}: ${msg}`));
+          } else {
+            errorDetails.push(`${field}: ${messages}`);
+          }
+        }
+        if (errorDetails.length > 0) {
+          errorMessage = errorDetails.join(', ');
+        }
+      }
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
+
+    return errorMessage;
   }
 }
 

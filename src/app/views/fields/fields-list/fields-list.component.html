@@ -190,10 +190,10 @@
                 </div>
               </td>
               <td class="col-status">
-                <span class="status-badge" [class.status-active]="field.isActive"
-                  [class.status-inactive]="!field.isActive">
-                  <i class="pi" [class.pi-check-circle]="field.isActive" [class.pi-times-circle]="!field.isActive"></i>
-                  {{ field.isActive ? 'Active' : 'Inactive' }}
+                <span class="status-badge" [class.status-active]="!field.isDeleted"
+                  [class.status-inactive]="field.isDeleted">
+                  <i class="pi" [class.pi-check-circle]="!field.isDeleted" [class.pi-times-circle]="field.isDeleted"></i>
+                  {{ !field.isDeleted ? 'Active' : 'Deleted' }}
                 </span>
               </td>
               <td class="col-actions">
@@ -208,10 +208,9 @@
                     [queryParams]="{ fieldCode: field.fieldCode }" title="Create Rule for this Field">
                     <i class="pi pi-shield"></i>
                   </button>
-                  <button class="action-btn" [class.action-activate]="!field.isActive"
-                    [class.action-deactivate]="field.isActive" (click)="toggleFieldStatus(field)"
-                    [title]="field.isActive ? 'Deactivate' : 'Activate'">
-                    <i class="pi" [class.pi-power-off]="field.isActive" [class.pi-check]="!field.isActive"></i>
+                  <button *ngIf="field.isDeleted" class="action-btn action-activate" (click)="restoreField(field)"
+                    title="Restore">
+                    <i class="pi pi-undo"></i>
                   </button>
                   <button class="action-btn action-delete" (click)="deleteField(field.id!)" title="Delete">
                     <i class="pi pi-trash"></i>
@@ -1156,13 +1155,8 @@
                 <span class="switch-text">{{ translateLabel('fields.visible') }}</span>
               </label>
             </div>
-            <div class="switch-item">
-              <label class="switch-label">
-                <input type="checkbox" class="switch-input" formControlName="isActive" id="isActive">
-                <span class="switch-slider"></span>
-                <span class="switch-text">{{ translateLabel('fields.active') }}</span>
-              </label>
-            </div>
+            <!-- Deleted Status (hidden in form - handled via delete/restore actions) -->
+            <!-- Note: isDeleted is managed via delete/restore actions, not via form checkbox -->
           </div>
           <div class="form-group mt-3">
             <label class="form-label">{{ translateLabel('fields.defaultValue') }}</label>

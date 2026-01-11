@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, mergeMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 
 // ==================== Approval Stage DTOs ====================
@@ -14,7 +14,7 @@ export interface ApprovalStageDto {
   minAmount?: number | null;
   maxAmount?: number | null;
   isFinalStage: boolean;
-  isActive: boolean;
+  isDeleted: boolean;
   workflowName?: string;
 }
 
@@ -25,7 +25,7 @@ export interface CreateApprovalStageDto {
   minAmount?: number | null;
   maxAmount?: number | null;
   isFinalStage: boolean;
-  isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface UpdateApprovalStageDto {
@@ -35,7 +35,7 @@ export interface UpdateApprovalStageDto {
   minAmount?: number | null;
   maxAmount?: number | null;
   isFinalStage?: boolean;
-  isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 @Injectable({
@@ -130,7 +130,7 @@ export class ApprovalStageService {
       minAmount: dto.minAmount !== undefined ? dto.minAmount : null,
       maxAmount: dto.maxAmount !== undefined ? dto.maxAmount : null,
       isFinalStage: dto.isFinalStage !== undefined ? dto.isFinalStage : false,
-      isActive: dto.isActive !== undefined ? dto.isActive : true
+      isDeleted: dto.isDeleted !== undefined ? dto.isDeleted : false
     };
 
     console.log('[ApprovalStageService] Creating approval stage:', createDto);
@@ -194,28 +194,82 @@ export class ApprovalStageService {
   }
 
   /**
-   * Toggle approval stage active status
-   * PATCH /api/ApprovalStage/{id}/toggle-active?isActive={isActive}
+   * Soft delete approval stage
+   * Uses PUT /api/ApprovalStage/{id} with isDeleted: true
    */
-  toggleActive(id: number, isActive: boolean): Observable<void> {
+  softDelete(id: number, deletedByUserId?: string): Observable<void> {
     const stageId = Number(id);
     if (isNaN(stageId) || stageId <= 0) {
       return throwError(() => new Error(`Invalid approval stage ID: ${id}`));
     }
 
-    console.log('[ApprovalStageService] Toggling approval stage status:', { id: stageId, isActive });
+    console.log('[ApprovalStageService] Soft deleting approval stage:', { id: stageId, deletedByUserId });
 
-    return this.http.patch<any>(`${this.baseUrl}/${stageId}/toggle-active`, null, {
-      params: { isActive: isActive.toString() }
-    }).pipe(
-      map(() => {
-        console.log('[ApprovalStageService] Approval stage status toggled successfully');
-        return;
+    // First get the stage to get all required fields for update
+    return this.getById(stageId).pipe(
+      mergeMap((stage: ApprovalStageDto) => {
+        // Use update method with all required fields from existing stage + isDeleted: true
+        const updateDto: UpdateApprovalStageDto = {
+          workflowId: stage.workflowId, // Required by API
+          stageName: stage.stageName, // Include to maintain existing value
+          stageOrder: stage.stageOrder, // Include to maintain existing value
+          minAmount: stage.minAmount, // Include to maintain existing value
+          maxAmount: stage.maxAmount, // Include to maintain existing value
+          isFinalStage: stage.isFinalStage, // Include to maintain existing value
+          isDeleted: true
+        };
+        return this.update(stageId, updateDto);
       }),
       catchError((error) => {
-        console.error('[ApprovalStageService] Error toggling approval stage status:', error);
+        console.error('[ApprovalStageService] Error soft deleting approval stage:', error);
         const errorMessage = this.extractErrorMessage(error);
-        throw new Error(errorMessage);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Restore soft-deleted approval stage
+   * PUT /api/ApprovalStage/{id}/restore or PATCH /api/ApprovalStage/{id}/restore
+   */
+  restore(id: number): Observable<ApprovalStageDto> {
+    const stageId = Number(id);
+    if (isNaN(stageId) || stageId <= 0) {
+      return throwError(() => new Error(`Invalid approval stage ID: ${id}`));
+    }
+
+    console.log('[ApprovalStageService] Restoring approval stage:', { id: stageId });
+
+    return this.http.put<any>(`${this.baseUrl}/${stageId}/restore`, {}).pipe(
+      map((response: any) => {
+        console.log('[ApprovalStageService] Approval stage restored successfully');
+        // Handle ServiceResult<T> or direct object response
+        if (response && typeof response === 'object' && !response.id) {
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        // Try PATCH method if PUT fails
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.patch<any>(`${this.baseUrl}/${stageId}/restore`, {}).pipe(
+            map((response: any) => {
+              console.log('[ApprovalStageService] Approval stage restored successfully (via PATCH)');
+              if (response && typeof response === 'object' && !response.id) {
+                return response.data || response.result || response;
+              }
+              return response;
+            }),
+            catchError((patchError) => {
+              console.error('[ApprovalStageService] Error restoring approval stage:', patchError);
+              const errorMessage = this.extractErrorMessage(patchError);
+              return throwError(() => new Error(errorMessage));
+            })
+          );
+        }
+        console.error('[ApprovalStageService] Error restoring approval stage:', error);
+        const errorMessage = this.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
       })
     );
   }

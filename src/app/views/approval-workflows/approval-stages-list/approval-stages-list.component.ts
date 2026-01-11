@@ -93,8 +93,8 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       stageOrder: [1, [Validators.required, Validators.min(1)]],
       minAmount: [null],
       maxAmount: [null],
-      isFinalStage: [false],
-      isActive: [true]
+      isFinalStage: [false]
+      // Note: isDeleted is not managed via form - it's handled via delete/restore actions
     });
   }
 
@@ -231,10 +231,10 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
           if (!stageInApi) {
             // Stage not in API response - it was hard deleted from server, remove from tracking
             idsToRemove.push(deletedId);
-          } else if (stageInApi.isActive !== false) {
-            // Stage is back in API and active again (might have been reactivated)
+          } else if (stageInApi.isDeleted === false) {
+            // Stage is back in API and not deleted (might have been restored)
             idsToRemove.push(deletedId);
-            console.log('[ApprovalStagesList] Stage was reactivated, removing from deleted tracking:', deletedId);
+            console.log('[ApprovalStagesList] Stage was restored, removing from deleted tracking:', deletedId);
           }
         });
         if (idsToRemove.length > 0) {
@@ -243,9 +243,8 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
           console.log('[ApprovalStagesList] Cleaned up deleted stage IDs:', idsToRemove);
         }
 
-        // Show all stages (including inactive ones) - don't filter by isActive
-        // User can see inactive stages and reactivate them
-        const visibleStages = activeStages; // Keep all stages, including inactive ones
+        // Filter out soft-deleted stages (isDeleted = true) - show only non-deleted stages
+        const visibleStages = activeStages.filter(stage => stage.isDeleted !== true);
         
         // Sort by stageOrder
         this.approvalStages = visibleStages.sort((a, b) => a.stageOrder - b.stageOrder);
@@ -322,8 +321,8 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       stageOrder: maxOrder + 1,
       minAmount: null,
       maxAmount: null,
-      isFinalStage: false,
-      isActive: true
+      isFinalStage: false
+      // Note: isDeleted defaults to false for new stages (handled by backend)
     });
     // Enable workflowId field when creating new stage
     this.stageForm.get('workflowId')?.enable();
@@ -340,8 +339,8 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       stageOrder: stage.stageOrder,
       minAmount: stage.minAmount,
       maxAmount: stage.maxAmount,
-      isFinalStage: stage.isFinalStage,
-      isActive: stage.isActive !== false
+      isFinalStage: stage.isFinalStage
+      // Note: isDeleted is not managed via form
     });
     // Disable workflowId field when editing (cannot change after creation)
     this.stageForm.get('workflowId')?.disable();
@@ -451,8 +450,8 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
         maxAmount: (formData.maxAmount !== null && formData.maxAmount !== undefined && formData.maxAmount !== '') 
           ? Number(formData.maxAmount) 
           : null,
-        isFinalStage: formData.isFinalStage !== undefined ? formData.isFinalStage : false,
-        isActive: formData.isActive !== undefined ? formData.isActive : true
+        isFinalStage: formData.isFinalStage !== undefined ? formData.isFinalStage : false
+        // Note: isDeleted is not updated via form - it's managed via delete/restore actions
       };
 
       this.approvalStageService.update(this.editingStage.id, updateDto).subscribe({
@@ -490,8 +489,8 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
         maxAmount: (formData.maxAmount !== null && formData.maxAmount !== undefined && formData.maxAmount !== '') 
           ? Number(formData.maxAmount) 
           : null,
-        isFinalStage: formData.isFinalStage || false,
-        isActive: formData.isActive !== false
+        isFinalStage: formData.isFinalStage || false
+        // Note: isDeleted defaults to false for new stages (handled by backend)
       };
 
       this.approvalStageService.create(createDto).subscribe({
@@ -530,23 +529,28 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       acceptButtonStyleClass: 'p-button-danger',
       accept: () => {
         this.loading.delete = true;
-        this.approvalStageService.delete(stage.id).subscribe({
+        this.approvalStageService.softDelete(stage.id).subscribe({
           next: () => {
             // Add to deleted stages set to filter it out even after refresh/login
             this.deletedStageIds.add(stage.id!);
             // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
             this.saveDeletedStageIds();
 
-            // Remove stage from the list immediately
+            // Update stage in array - mark as deleted
             const stageIndex = this.approvalStages.findIndex(s => s.id === stage.id);
             if (stageIndex !== -1) {
-              this.approvalStages.splice(stageIndex, 1);
+              this.approvalStages[stageIndex] = {
+                ...this.approvalStages[stageIndex],
+                isDeleted: true
+              };
+              // Remove from visible list (filter out deleted)
+              this.approvalStages = this.approvalStages.filter(s => s.isDeleted !== true);
             }
             
             // Update filtered list
             const filteredIndex = this.filteredStages.findIndex(s => s.id === stage.id);
             if (filteredIndex !== -1) {
-              this.filteredStages.splice(filteredIndex, 1);
+              this.filteredStages = this.filteredStages.filter(s => s.id !== stage.id);
             }
             
             this.totalRecords = this.filteredStages.length;
@@ -576,65 +580,48 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     });
   }
 
-  toggleStageStatus(stage: ApprovalStageDto): void {
+  restoreStage(stage: ApprovalStageDto): void {
     if (!stage || !stage.id) return;
 
-    const newStatus = !stage.isActive;
-    
-    // If reactivating, remove from deletedStageIds if it was tracked as deleted
-    if (newStatus && this.deletedStageIds.has(stage.id)) {
-      this.deletedStageIds.delete(stage.id);
-      this.saveDeletedStageIds();
-      console.log('[ApprovalStagesList] Removed reactivated stage from deletedStageIds:', stage.id);
-    }
-
-    this.loading.toggle = true;
-    this.approvalStageService.toggleActive(stage.id, newStatus).subscribe({
-      next: () => {
-        this.loading.toggle = false;
-        
-        // Update stage in array immediately without reloading - keep it in list even if inactive
-        const index = this.approvalStages.findIndex(s => s.id === stage.id);
-        if (index !== -1) {
-          this.approvalStages[index] = {
-            ...this.approvalStages[index],
-            isActive: newStatus
-          };
-          // Maintain sorted order
-          this.approvalStages = this.approvalStages.sort((a, b) => a.stageOrder - b.stageOrder);
-        }
-        
-        // Update filtered list too
-        const filteredIndex = this.filteredStages.findIndex(s => s.id === stage.id);
-        if (filteredIndex !== -1) {
-          this.filteredStages[filteredIndex] = {
-            ...this.filteredStages[filteredIndex],
-            isActive: newStatus
-          };
-          // Maintain sorted order
-          this.filteredStages = this.filteredStages.sort((a, b) => a.stageOrder - b.stageOrder);
-        }
-        
-        // Don't add to deletedStageIds when just toggling status - keep it visible but inactive
-        // Only add to deletedStageIds when user explicitly deletes the stage
-        
-        this.messageService.add({ 
-          severity: 'success', 
-          summary: 'Success', 
-          detail: `Approval stage ${newStatus ? 'activated' : 'deactivated'} successfully` 
+    this.confirmationService.confirm({
+      message: `Are you sure you want to restore the approval stage "${stage.stageName}"?`,
+      header: 'Confirm Restore',
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        this.loading.toggle = true;
+        this.approvalStageService.restore(stage.id).subscribe({
+          next: (restoredStage) => {
+            this.loading.toggle = false;
+            
+            // Remove from deletedStageIds if it was tracked
+            if (this.deletedStageIds.has(stage.id)) {
+              this.deletedStageIds.delete(stage.id);
+              this.saveDeletedStageIds();
+              console.log('[ApprovalStagesList] Removed restored stage from deletedStageIds:', stage.id);
+            }
+            
+            // Reload stages to get the restored stage
+            this.loadApprovalStages();
+            
+            this.messageService.add({ 
+              severity: 'success', 
+              summary: 'Success', 
+              detail: 'Approval stage restored successfully' 
+            });
+            this.cdr.detectChanges();
+          },
+          error: (error: any) => {
+            this.loading.toggle = false;
+            console.error('Error restoring approval stage:', error);
+            let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to restore approval stage';
+            this.messageService.add({ 
+              severity: 'error', 
+              summary: 'Error', 
+              detail: errorMessage 
+            });
+            this.cdr.detectChanges();
+          }
         });
-        this.cdr.detectChanges();
-      },
-      error: (error: any) => {
-        this.loading.toggle = false;
-        console.error('Error toggling approval stage status:', error);
-        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to toggle approval stage status';
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: 'Error', 
-          detail: errorMessage 
-        });
-        this.cdr.detectChanges();
       }
     });
   }
@@ -668,6 +655,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     this.stageForm.get('workflowId')?.enable();
     // Ensure isFinalStage is enabled when closing modal
     this.stageForm.get('isFinalStage')?.enable();
+    // isDeleted is not managed via form - it's handled via delete/restore actions
   }
 }
 

@@ -53,7 +53,6 @@ export class GridsListComponent implements OnInit, OnDestroy {
   foreignGridName = ''; // Arabic grid name
   gridCode = '';
   gridOrder = 1;
-  isActive = true;
   minRows?: number;
   maxRows?: number;
   editingGrid: FormGridDto | null = null;
@@ -188,10 +187,10 @@ export class GridsListComponent implements OnInit, OnDestroy {
           if (!gridInApi) {
             // Grid not in API response - it was hard deleted from server, remove from tracking
             idsToRemove.push(deletedId);
-          } else if (gridInApi.isActive !== false) {
-            // Grid is back in API and active again (might have been reactivated)
+          } else if (gridInApi.isDeleted === false) {
+            // Grid is back in API and not deleted (might have been restored)
             idsToRemove.push(deletedId);
-            console.log('[GridsList] Grid was reactivated, removing from deleted tracking:', deletedId);
+            console.log('[GridsList] Grid was restored, removing from deleted tracking:', deletedId);
           }
         });
         if (idsToRemove.length > 0) {
@@ -200,9 +199,8 @@ export class GridsListComponent implements OnInit, OnDestroy {
           console.log('[GridsList] Cleaned up deleted grid IDs:', idsToRemove);
         }
 
-        // Show all grids (including inactive ones) - don't filter by isActive
-        // User can see inactive grids and reactivate them
-        const visibleGrids = activeGrids; // Keep all grids, including inactive ones
+        // Filter out soft-deleted grids (isDeleted = true) - show only non-deleted grids
+        const visibleGrids = activeGrids.filter(grid => grid.isDeleted !== true);
         
         this.grids = visibleGrids;
         
@@ -231,7 +229,7 @@ export class GridsListComponent implements OnInit, OnDestroy {
   }
 
   getActiveGridsCount(): number {
-    return this.grids.filter(g => g.isActive).length;
+    return this.grids.filter(g => !g.isDeleted).length;
   }
 
   getTotalColumnsCount(): number {
@@ -246,7 +244,6 @@ export class GridsListComponent implements OnInit, OnDestroy {
       this.foreignGridName = grid.foreignGridName || '';
       this.gridCode = grid.gridCode || '';
       this.gridOrder = grid.gridOrder || 1;
-      this.isActive = grid.isActive !== false;
       this.minRows = grid.minRows;
       this.maxRows = grid.maxRows;
     } else {
@@ -255,7 +252,6 @@ export class GridsListComponent implements OnInit, OnDestroy {
       this.foreignGridName = '';
       this.gridCode = '';
       this.gridOrder = this.grids.length + 1;
-      this.isActive = true;
       this.minRows = undefined;
       this.maxRows = undefined;
     }
@@ -280,7 +276,6 @@ export class GridsListComponent implements OnInit, OnDestroy {
     this.foreignGridName = '';
     this.gridCode = '';
     this.gridOrder = 1;
-    this.isActive = true;
     this.minRows = undefined;
     this.maxRows = undefined;
   }
@@ -321,7 +316,7 @@ export class GridsListComponent implements OnInit, OnDestroy {
         foreignGridName: this.foreignGridName || undefined,
         gridCode: this.gridCode,
         gridOrder: this.gridOrder,
-        isActive: this.isActive,
+        isDeleted: false, // Note: isDeleted defaults to false for updated grids (handled by backend)
         minRows: this.minRows,
         maxRows: this.maxRows
       };
@@ -355,7 +350,7 @@ export class GridsListComponent implements OnInit, OnDestroy {
         foreignGridName: this.foreignGridName || undefined,
         gridCode: this.gridCode.toUpperCase(),
         gridOrder: this.gridOrder,
-        isActive: this.isActive,
+        isDeleted: false, // Note: isDeleted defaults to false for new grids (handled by backend)
         minRows: this.minRows,
         maxRows: this.maxRows,
         createdByUserId: 'f776321b-3476-494d-aaef-18439f35a1b4'
@@ -401,17 +396,22 @@ export class GridsListComponent implements OnInit, OnDestroy {
       rejectButtonStyleClass: 'p-button-secondary',
       accept: () => {
         this.loading = true;
-        this.gridService.deleteGrid(id).subscribe({
+        this.gridService.softDelete(id).subscribe({
           next: () => {
             // Add to deleted grids set to filter it out even after refresh/login
             this.deletedGridIds.add(id);
             // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
             this.saveDeletedGridIds();
 
-            // Remove grid from the list immediately
+            // Update grid in array - mark as deleted
             const gridIndex = this.grids.findIndex(g => g.id === id);
             if (gridIndex !== -1) {
-              this.grids.splice(gridIndex, 1);
+              this.grids[gridIndex] = {
+                ...this.grids[gridIndex],
+                isDeleted: true
+              };
+              // Remove from visible list (filter out deleted)
+              this.grids = this.grids.filter(g => g.id !== id);
             }
 
             this.loading = false;
@@ -433,6 +433,51 @@ export class GridsListComponent implements OnInit, OnDestroy {
               errorMessage = error.message;
             }
 
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: errorMessage
+            });
+          }
+        });
+      }
+    });
+  }
+
+  restoreGrid(grid: FormGridDto): void {
+    if (!grid || !grid.id) return;
+
+    this.confirmationService.confirm({
+      message: `Are you sure you want to restore the grid "${grid.gridName}"?`,
+      header: 'Confirm Restoration',
+      icon: 'pi pi-undo',
+      acceptButtonStyleClass: 'p-button-success',
+      accept: () => {
+        this.loading = true;
+        this.gridService.restore(grid.id!).subscribe({
+          next: (restoredGrid) => {
+            // Remove from deletedGridIds if it was tracked
+            if (this.deletedGridIds.has(grid.id!)) {
+              this.deletedGridIds.delete(grid.id!);
+              this.saveDeletedGridIds();
+              console.log('[GridsList] Removed restored grid from deletedGridIds:', grid.id);
+            }
+            
+            // Reload grids to get the restored grid
+            this.loadGrids();
+            
+            this.loading = false;
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: 'Grid restored successfully',
+              life: 5000
+            });
+          },
+          error: (error: any) => {
+            this.loading = false;
+            console.error('[GridsList] Error restoring grid:', error);
+            const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to restore grid';
             this.messageService.add({
               severity: 'error',
               summary: 'Error',

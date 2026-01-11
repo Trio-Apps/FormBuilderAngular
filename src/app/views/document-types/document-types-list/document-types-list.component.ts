@@ -958,7 +958,31 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
           error: (error: any) => {
             this.loading.series = false;
             console.error('Error deleting document series:', error);
-            let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to delete document series';
+            
+            // Extract error message from various response formats
+            let errorMessage = 'Failed to delete document series';
+            const errorResponse = error?.error;
+            
+            if (errorResponse) {
+              if (typeof errorResponse === 'string') {
+                errorMessage = errorResponse;
+              } else if (errorResponse.message) {
+                errorMessage = errorResponse.message;
+              } else if (errorResponse.errorMessage) {
+                errorMessage = errorResponse.errorMessage;
+              } else if (errorResponse.title) {
+                errorMessage = errorResponse.title;
+              } else if (errorResponse.detail) {
+                errorMessage = errorResponse.detail;
+              } else if (errorResponse.errors && Array.isArray(errorResponse.errors)) {
+                errorMessage = errorResponse.errors.join(', ');
+              } else if (errorResponse.errors && typeof errorResponse.errors === 'object') {
+                errorMessage = Object.values(errorResponse.errors).flat().join(', ');
+              }
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+            
             this.messageService.add({ 
               severity: 'error', 
               summary: 'Error', 

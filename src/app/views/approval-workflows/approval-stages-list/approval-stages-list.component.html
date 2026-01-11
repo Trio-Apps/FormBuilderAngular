@@ -147,13 +147,13 @@
               <span *ngIf="!stage.isFinalStage" class="badge badge-secondary">No</span>
             </td>
             <td>
-              <span *ngIf="stage.isActive" class="badge badge-success">
+              <span *ngIf="!stage.isDeleted" class="badge badge-success">
                 <i class="pi pi-check"></i>
                 Active
               </span>
-              <span *ngIf="!stage.isActive" class="badge badge-danger">
+              <span *ngIf="stage.isDeleted" class="badge badge-danger">
                 <i class="pi pi-times"></i>
-                Inactive
+                Deleted
               </span>
             </td>
             <td>
@@ -165,11 +165,12 @@
                   pTooltip="Manage Assignees"
                   tooltipPosition="top"></button>
                 <button pButton 
-                  [icon]="stage.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'" 
+                  *ngIf="stage.isDeleted"
+                  icon="pi pi-undo" 
                   class="p-button-text p-button-sm action-btn" 
-                  (click)="toggleStageStatus(stage)"
+                  (click)="restoreStage(stage)"
                   [disabled]="loading.toggle"
-                  [pTooltip]="stage.isActive ? 'Deactivate' : 'Activate'"
+                  pTooltip="Restore"
                   tooltipPosition="top"></button>
                 <button pButton 
                   icon="pi pi-pencil" 
@@ -324,23 +325,8 @@
         </div>
       </div>
 
-      <!-- Active Status -->
-      <div class="form-field-wrapper">
-        <div class="checkbox-group">
-          <div class="checkbox-option">
-            <p-checkbox 
-              formControlName="isActive"
-              [binary]="true"
-              inputId="stageIsActive">
-            </p-checkbox>
-            <label class="checkbox-label" for="stageIsActive">Active</label>
-          </div>
-        </div>
-        <div class="field-hint">
-          <i class="pi pi-info-circle"></i>
-          Inactive stages will not be used in the approval process
-        </div>
-      </div>
+      <!-- Deleted Status (hidden in form - handled via delete/restore actions) -->
+      <!-- Note: isDeleted is managed via delete/restore actions, not via form checkbox -->
     </div>
 
     <div class="dialog-footer">

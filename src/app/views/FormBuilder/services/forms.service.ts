@@ -254,35 +254,46 @@ export class FormsService {
   }
 
   /**
-   * Delete form (applies Soft Delete or Hard Delete automatically)
+   * Delete form (applies Soft Delete automatically)
    * DELETE /api/FormBuilder/{id}
    * 
    * API Behavior:
-   * - Soft Delete: If form has submissions, it will be deactivated (isActive = false)
-   * - Hard Delete: If form has no submissions, it will be permanently deleted
-   * 
-   * The API response message will indicate which type of delete was performed:
-   * - "Form has been deactivated successfully" = Soft Delete
-   * - "Form deleted successfully" = Hard Delete
+   * - Soft Delete: Uses soft delete (IsDeleted = true)
+   * - Response: 204 No Content
    * 
    * @param id Form ID
-   * @returns Observable with ApiResponse containing success message
+   * @returns Observable<void>
    */
-  deleteForm(id: number): Observable<ApiResponse<boolean>> {
-    return this.http.delete<ApiResponse<boolean>>(`${this.baseUrl}/${id}`).pipe(
-      map((response) => {
-        // If API returns void/empty, create a default success response
-        if (!response) {
-          return {
-            statusCode: 200,
-            message: 'Form deleted successfully',
-            data: true
-          } as ApiResponse<boolean>;
-        }
-        return response as ApiResponse<boolean>;
-      }),
+  deleteForm(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${id}`).pipe(
       catchError((error) => {
         console.error(`[FormsService] Error deleting form ${id}:`, error);
+        console.error('[FormsService] Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          error: error?.error,
+          message: error?.message,
+          url: error?.url
+        });
+        throw error;
+      })
+    );
+  }
+
+  /**
+   * Restore soft-deleted form
+   * POST /api/FormBuilder/{id}/restore
+   * 
+   * Description: يستعيد Form محذوف (IsDeleted = false)
+   * Response: 200 OK (FormBuilderDto)
+   * 
+   * @param id Form ID
+   * @returns Observable<FormBuilderDto>
+   */
+  restoreForm(id: number): Observable<FormBuilderDto> {
+    return this.http.post<FormBuilderDto>(`${this.baseUrl}/${id}/restore`, {}).pipe(
+      catchError((error) => {
+        console.error(`[FormsService] Error restoring form ${id}:`, error);
         console.error('[FormsService] Error details:', {
           status: error?.status,
           statusText: error?.statusText,

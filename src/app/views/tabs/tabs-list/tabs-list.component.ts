@@ -59,7 +59,6 @@ export class TabsListComponent implements OnInit, OnDestroy {
   foreignTabName = ''; // Arabic tab name
   tabCode = '';
   tabOrder = 1;
-  isActive = true;
   editingTab: FormTabDto | null = null;
   currentInputLanguage: 'en' | 'ar' = 'en'; // Language toggle for input fields
 
@@ -183,7 +182,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
         console.log('[TabsList] After filtering - Total tabs:', processedTabs.length, 
           'Deleted tabs hidden:', allTabs.length - processedTabs.length);
 
-        // Clean up deletedTabIds - remove IDs that are no longer in the API response (hard deleted)
+        // Clean up deletedTabIds - remove IDs that are no longer in the API response (hard deleted) or restored
         const apiTabIds = new Set(allTabs.map(t => t.id));
         const idsToRemove: number[] = [];
         this.deletedTabIds.forEach(deletedId => {
@@ -191,18 +190,20 @@ export class TabsListComponent implements OnInit, OnDestroy {
           if (!tabInApi) {
             // Tab not in API response - it was hard deleted from server, remove from tracking
             idsToRemove.push(deletedId);
+          } else if (tabInApi.isDeleted === false) {
+            // Tab is back in API and not deleted (might have been restored)
+            idsToRemove.push(deletedId);
+            console.log('[TabsList] Tab was restored, removing from deleted tracking:', deletedId);
           }
-          // Keep tab in deletedTabIds if it exists in API, so it shows as inactive
-          // User can edit it to reactivate it, which will remove it from deletedTabIds
         });
         if (idsToRemove.length > 0) {
           idsToRemove.forEach(id => this.deletedTabIds.delete(id));
           this.saveDeletedTabIds();
-          console.log('[TabsList] Cleaned up hard-deleted tab IDs:', idsToRemove);
+          console.log('[TabsList] Cleaned up deleted tab IDs:', idsToRemove);
         }
 
-        // Show only non-deleted tabs (deleted tabs are filtered out)
-        const visibleTabs = processedTabs;
+        // Filter out soft-deleted tabs (isDeleted = true) - show only non-deleted tabs
+        const visibleTabs = processedTabs.filter(tab => tab.isDeleted !== true);
         console.log('[TabsList] Visible tabs count:', visibleTabs.length, 'Deleted tabs hidden:', allTabs.length - visibleTabs.length);
         
         this.tabs = visibleTabs;
@@ -239,7 +240,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
   getActiveTabsCount(): number {
-    return this.tabs.filter(t => t.isActive).length;
+    return this.tabs.filter(t => !t.isDeleted).length;
   }
 
   getTotalFieldsCount(): number {
@@ -254,14 +255,12 @@ export class TabsListComponent implements OnInit, OnDestroy {
       this.foreignTabName = tab.foreignTabName || '';
       this.tabCode = tab.tabCode || '';
       this.tabOrder = tab.tabOrder || 1;
-      this.isActive = tab.isActive !== false;
     } else {
       this.editingTab = null;
       this.tabName = '';
       this.foreignTabName = '';
       this.tabCode = '';
       this.tabOrder = this.tabs.length + 1;
-      this.isActive = true;
     }
     this.showTabModal = true;
   }
@@ -289,7 +288,6 @@ export class TabsListComponent implements OnInit, OnDestroy {
     this.foreignTabName = '';
     this.tabCode = '';
     this.tabOrder = 1;
-    this.isActive = true;
   }
 
   saveTab(): void {
@@ -319,17 +317,12 @@ export class TabsListComponent implements OnInit, OnDestroy {
         foreignTabName: this.foreignTabName || undefined,
         tabCode: this.tabCode,
         tabOrder: this.tabOrder,
-        isActive: this.isActive
+        isDeleted: false // Note: isDeleted is not managed via form - it's handled via delete/restore actions
       };
       
       this.tabsService.updateTab(this.editingTab.id, updateDto).subscribe({
         next: () => {
-          // If tab was reactivated (isActive changed to true), remove from deletedTabIds
-          if (updateDto.isActive === true && this.deletedTabIds.has(this.editingTab!.id!)) {
-            this.deletedTabIds.delete(this.editingTab!.id!);
-            this.saveDeletedTabIds();
-            console.log('[TabsList] Removed tab from deletedTabIds after reactivation:', this.editingTab!.id);
-          }
+          // Note: isDeleted is managed via delete/restore actions, not via form
           
           this.loading = false;
           this.loadTabs();
@@ -447,7 +440,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
         foreignTabName: this.foreignTabName || undefined,
         tabCode: this.tabCode,
         tabOrder: this.tabOrder,
-        isActive: this.isActive
+        isDeleted: false // Note: isDeleted defaults to false for new tabs (handled by backend)
       };
       
       this.tabsService.createTab(createDto).subscribe({
@@ -600,9 +593,9 @@ export class TabsListComponent implements OnInit, OnDestroy {
       accept: () => {
         console.log('[TabsList] User confirmed deletion for tab:', id);
         this.loading = true;
-        this.tabsService.deleteTab(id).subscribe({
+        this.tabsService.softDelete(id).subscribe({
           next: () => {
-            console.log('[TabsList] Delete API response received');
+            console.log('[TabsList] Soft delete API response received');
             
             // Add to deleted tabs set to hide it completely
             this.deletedTabIds.add(id);
@@ -612,11 +605,15 @@ export class TabsListComponent implements OnInit, OnDestroy {
             this.saveDeletedTabIds();
             console.log('[TabsList] Saved deletedTabIds to localStorage');
 
-            // Remove tab from local arrays immediately (hide it completely)
+            // Update tab in array - mark as deleted
             const tabIndex = this.tabs.findIndex(t => t.id === id);
             if (tabIndex !== -1) {
-              console.log('[TabsList] Removing tab from tabs array at index:', tabIndex);
-              this.tabs.splice(tabIndex, 1);
+              this.tabs[tabIndex] = {
+                ...this.tabs[tabIndex],
+                isDeleted: true
+              };
+              // Remove from visible list (filter out deleted)
+              this.tabs = this.tabs.filter(t => t.isDeleted !== true);
             } else {
               console.warn('[TabsList] Tab not found in tabs array:', id);
             }

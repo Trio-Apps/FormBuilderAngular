@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import {
   FormFieldDto,
@@ -200,16 +200,101 @@ export class FieldsService {
     );
   }
 
-  // حذف حقل - تحديث ليطابق الكود السابق
+  /**
+   * Delete field (Hard Delete)
+   * DELETE /api/FormFields/{id}
+   * 
+   * Description: Hard Delete (حذف نهائي)
+   * Response: 204 No Content
+   * 
+   * @param fieldId Field ID
+   * @returns Observable<void>
+   */
   deleteField(fieldId: number): Observable<void> {
-    // الكود السابق يحتاج tabId لكن API تحتاج fieldId فقط
     return this.http.delete<void>(`${this.fieldsUrl}/${fieldId}`);
   }
 
-  // بديل إذا كان API يحتاج tabId و fieldId
+  /**
+   * Delete field with tab ID (alternative endpoint if needed)
+   * DELETE /api/FormFields/{id}?tabId={tabId}
+   * 
+   * @param tabId Tab ID
+   * @param fieldId Field ID
+   * @returns Observable<void>
+   */
   deleteFieldWithTab(tabId: number, fieldId: number): Observable<void> {
-    // إذا كان API يحتاج tabId
     return this.http.delete<void>(`${this.fieldsUrl}/${fieldId}?tabId=${tabId}`);
+  }
+
+  /**
+   * Soft delete field
+   * DELETE /api/FormFields/{id}/soft
+   * 
+   * Description: يحذف Field باستخدام Soft Delete (IsDeleted = true)
+   * Response: 204 No Content
+   * 
+   * @param id Field ID
+   * @param deletedByUserId Optional user ID who deleted the field
+   * @returns Observable<void>
+   */
+  softDelete(id: number, deletedByUserId?: string): Observable<void> {
+    const fieldId = Number(id);
+    if (isNaN(fieldId) || fieldId <= 0) {
+      return throwError(() => new Error(`Invalid field ID: ${id}`));
+    }
+
+    console.log('[FieldsService] Soft deleting field:', { id: fieldId, deletedByUserId });
+
+    const params: any = {};
+    if (deletedByUserId) {
+      params.deletedByUserId = deletedByUserId;
+    }
+
+    return this.http.delete<any>(`${this.fieldsUrl}/${fieldId}/soft`, { params }).pipe(
+      map(() => {
+        console.log('[FieldsService] Field soft deleted successfully');
+        return;
+      }),
+      catchError((error) => {
+        console.error('[FieldsService] Error soft deleting field:', error);
+        const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to soft delete field';
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Restore soft-deleted field
+   * POST /api/FormFields/{id}/restore
+   * 
+   * Description: يستعيد Field محذوف (IsDeleted = false)
+   * Response: 200 OK (FormFieldDto)
+   * 
+   * @param id Field ID
+   * @returns Observable<FormFieldDto>
+   */
+  restore(id: number): Observable<FormFieldDto> {
+    const fieldId = Number(id);
+    if (isNaN(fieldId) || fieldId <= 0) {
+      return throwError(() => new Error(`Invalid field ID: ${id}`));
+    }
+
+    console.log('[FieldsService] Restoring field:', { id: fieldId });
+
+    return this.http.post<any>(`${this.fieldsUrl}/${fieldId}/restore`, {}).pipe(
+      map((response: any) => {
+        console.log('[FieldsService] Field restored successfully');
+        if (response && typeof response === 'object' && !response.id) {
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        console.error('[FieldsService] Error restoring field:', error);
+        const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to restore field';
+        return throwError(() => new Error(errorMessage));
+      })
+    );
   }
 
   // ================= FIELD TYPES ================

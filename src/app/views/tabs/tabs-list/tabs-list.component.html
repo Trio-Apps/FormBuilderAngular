@@ -177,9 +177,9 @@
                 </span>
               </td>
               <td class="col-status">
-                <span class="status-badge" [class.status-active]="tab.isActive" [class.status-inactive]="!tab.isActive">
-                  <i class="pi" [class.pi-check-circle]="tab.isActive" [class.pi-times-circle]="!tab.isActive"></i>
-                  {{ tab.isActive ? ('common.active' | translate) : ('common.inactive' | translate) }}
+                <span class="status-badge" [class.status-active]="!tab.isDeleted" [class.status-inactive]="tab.isDeleted">
+                  <i class="pi" [class.pi-check-circle]="!tab.isDeleted" [class.pi-times-circle]="tab.isDeleted"></i>
+                  {{ !tab.isDeleted ? ('common.active' | translate) : ('common.deleted' | translate) }}
                 </span>
               </td>
               <td class="col-actions">
@@ -284,23 +284,8 @@
         />
       </div>
 
-      <div class="row mb-3 g-3">
-        <div class="col-12">
-          <label class="form-label text-muted small fw-bold d-block">{{ translateLabel('common.status') }}</label>
-          <div class="form-check form-switch">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              id="isActive"
-              [(ngModel)]="isActive"
-              name="isActive"
-            />
-            <label class="form-check-label" for="isActive">
-              {{ isActive ? translateLabel('common.active') : translateLabel('common.inactive') }}
-            </label>
-          </div>
-        </div>
-      </div>
+      <!-- Deleted Status (hidden in form - handled via delete/restore actions) -->
+      <!-- Note: isDeleted is managed via delete/restore actions, not via form checkbox -->
 
       <div class="d-flex justify-content-end gap-2 pt-3">
         <button

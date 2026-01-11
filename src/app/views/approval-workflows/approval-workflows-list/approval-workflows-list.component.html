@@ -110,13 +110,13 @@
             </td>
             <td>{{ workflow.documentTypeName || getDocumentTypeName(workflow.documentTypeId) }}</td>
             <td>
-              <span *ngIf="workflow.isActive" class="badge badge-success">
+              <span *ngIf="!workflow.isDeleted" class="badge badge-success">
                 <i class="pi pi-check"></i>
                 Active
               </span>
-              <span *ngIf="!workflow.isActive" class="badge badge-danger">
-                <i class="pi pi-times"></i>
-                Inactive
+              <span *ngIf="workflow.isDeleted" class="badge badge-danger">
+                <i class="pi pi-trash"></i>
+                Deleted
               </span>
             </td>
             <td>{{ workflow.createdDate ? formatDate(workflow.createdDate) : '-' }}</td>
@@ -128,12 +128,12 @@
                   [routerLink]="['/approval-workflows', workflow.id, 'stages']"
                   pTooltip="Manage Stages"
                   tooltipPosition="top"></button>
-                <button pButton 
-                  [icon]="workflow.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'" 
+                <button *ngIf="workflow.isDeleted" pButton 
+                  icon="pi pi-undo" 
                   class="p-button-text p-button-sm action-btn" 
-                  (click)="toggleWorkflowStatus(workflow)"
+                  (click)="restoreWorkflow(workflow)"
                   [disabled]="loading.toggle"
-                  [pTooltip]="workflow.isActive ? 'Deactivate' : 'Activate'"
+                  pTooltip="Restore"
                   tooltipPosition="top"></button>
                 <button pButton 
                   icon="pi pi-pencil" 
@@ -231,24 +231,8 @@
         </div>
       </div>
 
-      <!-- Active Status -->
-      <div class="form-field-wrapper">
-        <div class="checkbox-group">
-          <div class="checkbox-option">
-            <p-checkbox 
-              formControlName="isActive"
-              [binary]="true"
-              inputId="workflow-is-active"
-              name="workflow-is-active">
-            </p-checkbox>
-            <label class="checkbox-label" for="workflow-is-active">Active</label>
-          </div>
-        </div>
-        <div class="field-hint">
-          <i class="pi pi-info-circle"></i>
-          Inactive workflows will not be used for new submissions
-        </div>
-      </div>
+      <!-- Deleted Status (hidden in form - handled via delete/restore actions) -->
+      <!-- Note: isDeleted is managed via delete/restore actions, not via form checkbox -->
     </div>
 
     <div class="dialog-footer">

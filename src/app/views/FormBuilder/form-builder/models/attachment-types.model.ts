@@ -4,7 +4,8 @@ export interface AttachmentType {
   code: string;
   description?: string;
   maxSizeMB: number;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
 }
 
 export interface CreateAttachmentTypeDto {
@@ -13,6 +14,7 @@ export interface CreateAttachmentTypeDto {
   description?: string;
   maxSizeMB?: number;
   isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface UpdateAttachmentTypeDto {
@@ -21,9 +23,8 @@ export interface UpdateAttachmentTypeDto {
   description?: string;
   maxSizeMB?: number;
   isActive?: boolean;
+  isDeleted?: boolean;
 }
 
-export interface ToggleActiveDto {
-  isActive: boolean;
-}
+// ToggleActiveDto removed - use softDelete/restore instead
 

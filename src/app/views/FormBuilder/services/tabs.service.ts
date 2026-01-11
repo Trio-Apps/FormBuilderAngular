@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import {
   FormTabDto,
@@ -103,7 +103,66 @@ export class TabsService {
     );
   }
 
+  /**
+   * Delete tab (uses Soft Delete automatically)
+   * DELETE /api/FormTabs/{id}
+   * 
+   * Description: يحذف Tab باستخدام Soft Delete (IsDeleted = true)
+   * API Behavior: DeleteAsync uses soft delete automatically
+   * Response: 204 No Content
+   * 
+   * @param tabId Tab ID
+   * @returns Observable<void>
+   */
   deleteTab(tabId: number): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/${tabId}`);
+  }
+
+  /**
+   * Soft delete tab
+   * DELETE /api/FormTabs/{id} - DeleteAsync uses soft delete automatically
+   * Note: deleteTab already uses soft delete, so we use it directly
+   * 
+   * @param id Tab ID
+   * @param deletedByUserId Optional user ID who deleted the tab
+   * @returns Observable<void>
+   */
+  softDelete(id: number, deletedByUserId?: string): Observable<void> {
+    // FormTabs DeleteAsync uses soft delete automatically, so we use deleteTab
+    return this.deleteTab(id);
+  }
+
+  /**
+   * Restore soft-deleted tab
+   * POST /api/FormTabs/{id}/restore
+   * 
+   * Description: يستعيد Tab محذوف (IsDeleted = false)
+   * Response: 200 OK (FormTabDto)
+   * 
+   * @param id Tab ID
+   * @returns Observable<FormTabDto>
+   */
+  restore(id: number): Observable<FormTabDto> {
+    const tabId = Number(id);
+    if (isNaN(tabId) || tabId <= 0) {
+      return throwError(() => new Error(`Invalid tab ID: ${id}`));
+    }
+
+    console.log('[TabsService] Restoring tab:', { id: tabId });
+
+    return this.http.post<any>(`${this.baseUrl}/${tabId}/restore`, {}).pipe(
+      map((response: any) => {
+        console.log('[TabsService] Tab restored successfully');
+        if (response && typeof response === 'object' && !response.id) {
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        console.error('[TabsService] Error restoring tab:', error);
+        const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to restore tab';
+        return throwError(() => new Error(errorMessage));
+      })
+    );
   }
 }

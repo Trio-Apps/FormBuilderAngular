@@ -846,6 +846,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         dataType: columnData.dataType,
         isRequired: columnData.isRequired || false,
         isActive: columnData.isActive !== false,
+        isDeleted: false,
         isReadOnly: columnData.isReadOnly || false,
         isVisible: columnData.isVisible !== false,
         defaultValue: columnData.defaultValue || undefined,

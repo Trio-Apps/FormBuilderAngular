@@ -152,7 +152,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     requestBodyJson: null,
     valuePath: null,
     textPath: null,
-    isActive: true
+    isDeleted: false
   };
   // LookupTable JSON Configuration (stored separately, then serialized to JSON in apiUrl)
   lookupTableConfig: {
@@ -215,7 +215,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       isMandatory: [true],
       isEditable: [true],
       isVisible: [true],
-      isActive: [true],
       defaultValue: [''],
       defaultValueJson: [''],
       regexPattern: [''],
@@ -404,10 +403,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           if (!fieldInApi) {
             // Field not in API response - it was hard deleted from server, remove from tracking
             idsToRemove.push(deletedId);
-          } else if (fieldInApi.isActive !== false) {
-            // Field is back in API and active again (might have been reactivated)
+          } else if (fieldInApi.isDeleted === false) {
+            // Field is back in API and not deleted (might have been restored)
             idsToRemove.push(deletedId);
-            console.log('[FieldsList] Field was reactivated, removing from deleted tracking:', deletedId);
+            console.log('[FieldsList] Field was restored, removing from deleted tracking:', deletedId);
           }
         });
         if (idsToRemove.length > 0) {
@@ -416,9 +415,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           console.log('[FieldsList] Cleaned up deleted field IDs:', idsToRemove);
         }
 
-        // Show all fields (including inactive ones) - don't filter by isActive
-        // User can see inactive fields and reactivate them
-        const visibleFields = activeFields; // Keep all fields, including inactive ones
+        // Filter out soft-deleted fields (isDeleted = true) - show only non-deleted fields
+        const visibleFields = activeFields.filter(field => field.isDeleted !== true);
         
         // Check for calculated fields and their expressionText
         const calculatedFields = visibleFields.filter(f => 
@@ -541,7 +539,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       isMandatory: true,
       isEditable: true,
       isVisible: true,
-      isActive: true,
       defaultValue: '',
       defaultValueJson: '',
       regexPattern: '',
@@ -746,8 +743,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       isMandatory: false,
       isEditable: true,
       isVisible: true,
-      fieldOrder: 1,
-      isActive: true
+      fieldOrder: 1
+      // Note: isDeleted defaults to false for new fields (handled by backend)
     });
   }
 
@@ -858,7 +855,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         isMandatory: fieldData.isMandatory ?? null,
         isEditable: fieldData.isEditable ?? null,
         isVisible: fieldData.isVisible ?? null,
-        isActive: this.editingField?.isActive !== false, // Preserve isActive from original field or default to true
         defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || undefined,
         regexPattern: fieldData.regexPattern || undefined,
         validationMessage: fieldData.validationMessage || undefined,
@@ -1032,15 +1028,23 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
         this.loading.delete = true;
-        this.fieldsService.deleteField(fieldId).subscribe({
+        this.fieldsService.softDelete(fieldId).subscribe({
           next: () => {
             // Add to deleted fields set to filter it out even after refresh/login
             this.deletedFieldIds.add(fieldId);
             // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
             this.saveDeletedFieldIds();
 
-            // Remove field from array immediately
-            this.fields = this.fields.filter(f => f.id !== fieldId);
+            // Update field in array - mark as deleted
+            const fieldIndex = this.fields.findIndex(f => f.id === fieldId);
+            if (fieldIndex !== -1) {
+              this.fields[fieldIndex] = {
+                ...this.fields[fieldIndex],
+                isDeleted: true
+              };
+              // Remove from visible list (filter out deleted)
+              this.fields = this.fields.filter(f => f.id !== fieldId);
+            }
 
             this.loading.delete = false;
             const currentLang = this.translationService.getCurrentLanguage();
@@ -1153,6 +1157,84 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       validationMessage: field.validationMessage || '',
       minValue: field.minValue || null,
       maxValue: field.maxValue || null
+    });
+  }
+
+  /**
+   * Restore soft-deleted field
+   */
+  restoreField(field: FormFieldDto): void {
+    if (!field.id) {
+      console.error('[restoreField] Field ID is missing');
+      return;
+    }
+
+    this.confirmationService.confirm({
+      message: `Are you sure you want to restore the field "${field.fieldName}"?`,
+      header: 'Confirm Restore',
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        console.log('[restoreField] User confirmed, restoring field:', field.id);
+        this.loading.save = true;
+
+        this.fieldsService.restore(field.id).subscribe({
+          next: (restoredField) => {
+            console.log('[restoreField] Field restored successfully:', restoredField);
+            this.loading.save = false;
+
+            // Remove from deleted fields set
+            if (this.deletedFieldIds.has(field.id!)) {
+              this.deletedFieldIds.delete(field.id!);
+              this.saveDeletedFieldIds();
+            }
+
+            // Update field in array
+            const index = this.fields.findIndex(f => f.id === field.id);
+            if (index !== -1) {
+              this.fields[index] = {
+                ...this.fields[index],
+                ...restoredField,
+                isDeleted: false
+              };
+              // Maintain sorted order
+              this.fields = this.sortFieldsByOrder([...this.fields]);
+            } else {
+              // If not found, reload all fields
+              this.loadAllFormFields();
+            }
+
+            const currentLang = this.translationService.getCurrentLanguage();
+            const successMessage = currentLang === 'ar'
+              ? 'تم استعادة الحقل بنجاح'
+              : 'Field restored successfully';
+
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: successMessage,
+              life: 5000
+            });
+            this.cdr.detectChanges();
+          },
+          error: (error) => {
+            console.error('[restoreField] Error restoring field:', error);
+            this.loading.save = false;
+
+            const currentLang = this.translationService.getCurrentLanguage();
+            const errorMessage = currentLang === 'ar'
+              ? 'فشل استعادة الحقل'
+              : 'Failed to restore field';
+
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: errorMessage,
+              life: 5000
+            });
+            this.cdr.detectChanges();
+          }
+        });
+      }
     });
   }
 
@@ -1337,13 +1419,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   getFieldStatusClass(field: FormFieldDto): string {
-    if (!field.isActive) return 'status-inactive';
+    if (field.isDeleted) return 'status-inactive';
     if (field.isMandatory) return 'status-mandatory';
     return 'status-normal';
   }
 
   getActiveFieldsCount(): number {
-    return this.fields.filter(f => f.isActive).length;
+    return this.fields.filter(f => !f.isDeleted).length;
   }
 
   private markFormGroupTouched(formGroup: FormGroup): void {
@@ -1935,8 +2017,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       optionValue: ['', Validators.required],
       optionText: ['', Validators.required],
       foreignOptionText: ['', Validators.maxLength(200)], // Arabic option text
-      optionOrder: [optionsArray.length + 1],
-      isActive: [true]
+      optionOrder: [optionsArray.length + 1]
+      // Note: isDeleted defaults to false for new options (handled by backend)
     });
     optionsArray.push(newOption);
   }
@@ -1984,8 +2066,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             optionValue: [option.optionValue, Validators.required],
             optionText: [option.optionText, Validators.required],
             foreignOptionText: [option.foreignOptionText || '', Validators.maxLength(200)],
-            optionOrder: [option.optionOrder || optionsArray.length + 1],
-            isActive: [option.isActive !== false]
+            optionOrder: [option.optionOrder || optionsArray.length + 1]
+            // Note: isDeleted is not managed via form
           });
           optionsArray.push(optionGroup);
         });
@@ -4029,7 +4111,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           requestBodyJson: dataSourceDto.requestBodyJson,
           valuePath: dataSourceDto.valuePath,
           textPath: dataSourceDto.textPath,
-          isActive: dataSourceDto.isActive!
+          isActive: dataSourceDto.isActive!,
+          isDeleted: this.existingDataSource.isDeleted !== undefined ? this.existingDataSource.isDeleted : false
         }).subscribe({
           next: () => {
             resolve();

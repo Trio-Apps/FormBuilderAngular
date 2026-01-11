@@ -144,11 +144,37 @@ export class GridColumnDataSourcesService {
   }
 
   /**
-   * Delete option
+   * Delete option (Hard Delete)
+   * DELETE /api/GridColumnOptions/{id}
+   * 
+   * Description: Hard Delete (حذف نهائي)
+   * Response: 200 OK (ApiResponse)
+   * 
+   * @param id Grid Column Option ID
+   * @returns Observable<ApiResponse<boolean>>
    */
   deleteOption(id: number): Observable<ApiResponse<boolean>> {
     return this.http.delete<ApiResponse<boolean>>(`${this.baseUrl}/GridColumnOptions/${id}`).pipe(
       catchError(() => of({ statusCode: 500, message: 'Error deleting option', data: false }))
+    );
+  }
+
+  /**
+   * Soft delete grid column option
+   * DELETE /api/GridColumnOptions/{id}/soft
+   * 
+   * Description: يحذف Grid Column Option باستخدام Soft Delete (IsDeleted = true)
+   * Response: 200 OK (ApiResponse)
+   * 
+   * @param id Grid Column Option ID
+   * @returns Observable<ApiResponse<void>>
+   */
+  softDeleteGridColumnOption(id: number): Observable<ApiResponse<void>> {
+    return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/GridColumnOptions/${id}/soft`).pipe(
+      catchError((error) => {
+        console.error(`[GridColumnDataSourcesService] Error soft deleting grid column option ${id}:`, error);
+        return of({ statusCode: 500, message: 'Error soft deleting grid column option', data: undefined } as ApiResponse<void>);
+      })
     );
   }
 

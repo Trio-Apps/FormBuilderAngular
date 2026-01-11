@@ -124,7 +124,16 @@ export class FieldOptionsService {
     );
   }
 
-  // Delete field option (hard delete)
+  /**
+   * Delete field option (Hard Delete)
+   * DELETE /api/FieldOptions/{id}
+   * 
+   * Description: Hard Delete (حذف نهائي)
+   * Response: 204 No Content
+   * 
+   * @param id Field Option ID
+   * @returns Observable<void>
+   */
   deleteFieldOption(id: number): Observable<void> {
     return this.http.delete<void>(`${this.fieldOptionsUrl}/${id}`).pipe(
       catchError((error) => {
@@ -134,7 +143,16 @@ export class FieldOptionsService {
     );
   }
 
-  // Soft delete field option
+  /**
+   * Soft delete field option
+   * DELETE /api/FieldOptions/{id}/soft
+   * 
+   * Description: يحذف Field Option باستخدام Soft Delete (IsDeleted = true)
+   * Response: 204 No Content
+   * 
+   * @param id Field Option ID
+   * @returns Observable<void>
+   */
   softDeleteFieldOption(id: number): Observable<void> {
     return this.http.delete<void>(`${this.fieldOptionsUrl}/${id}/soft`).pipe(
       catchError((error) => {

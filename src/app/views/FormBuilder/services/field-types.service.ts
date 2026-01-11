@@ -22,7 +22,8 @@ export class FieldTypesService {
       maxLength: 255,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 2,
@@ -33,7 +34,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 3,
@@ -44,7 +46,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 4,
@@ -55,7 +58,8 @@ export class FieldTypesService {
       maxLength: 255,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 5,
@@ -66,7 +70,8 @@ export class FieldTypesService {
       maxLength: 4000,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 6,
@@ -77,7 +82,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: true,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 7,
@@ -88,7 +94,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: true,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 8,
@@ -99,7 +106,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 9,
@@ -110,7 +118,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: true,
       allowMultiple: true,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 10,
@@ -121,7 +130,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 11,
@@ -132,7 +142,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: false,
       allowMultiple: true,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 12,
@@ -143,7 +154,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 13,
@@ -154,7 +166,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     },
     {
       id: 14,
@@ -165,7 +178,8 @@ export class FieldTypesService {
       maxLength: undefined,
       hasOptions: false,
       allowMultiple: false,
-      isActive: true
+      isActive: true,
+      isDeleted: false
     }
   ];
 
@@ -209,7 +223,8 @@ export class FieldTypesService {
       maxLength: dto.maxLength,
       hasOptions: dto.hasOptions,
       allowMultiple: dto.allowMultiple,
-      isActive: dto.isActive
+      isActive: dto.isActive,
+      isDeleted: false
     };
 
     this.staticFieldTypes.push(newFieldType);

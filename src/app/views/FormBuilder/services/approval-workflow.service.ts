@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, mergeMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 
 // ==================== Approval Workflow DTOs ====================
@@ -11,7 +11,8 @@ export interface ApprovalWorkflowDto {
   name: string;
   documentTypeId: number;
   documentTypeName?: string;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
   createdDate?: string;
   updatedDate?: string | null;
 }
@@ -19,13 +20,13 @@ export interface ApprovalWorkflowDto {
 export interface CreateApprovalWorkflowDto {
   name: string;
   documentTypeId: number;
-  isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface UpdateApprovalWorkflowDto {
   name?: string;
   documentTypeId?: number; // Include to maintain relationship, even if not changed
-  isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 @Injectable({
@@ -158,7 +159,7 @@ export class ApprovalWorkflowService {
     const createDto: CreateApprovalWorkflowDto = {
       name: dto.name.trim(),
       documentTypeId: dto.documentTypeId,
-      isActive: dto.isActive !== undefined ? dto.isActive : true
+      isDeleted: dto.isDeleted !== undefined ? dto.isDeleted : false
     };
 
     console.log('[ApprovalWorkflowService] Creating approval workflow:', createDto);
@@ -205,43 +206,75 @@ export class ApprovalWorkflowService {
   }
 
   /**
-   * Toggle approval workflow active status
-   * PATCH /api/ApprovalWorkflow/{id}/toggle-active?isActive={isActive}
+   * Soft delete approval workflow
+   * Uses PUT /api/ApprovalWorkflow/{id} with isDeleted: true
    */
-  toggleApprovalWorkflowStatus(id: number, isActive: boolean): Observable<void> {
+  softDelete(id: number, deletedByUserId?: string): Observable<void> {
     const workflowId = Number(id);
     if (isNaN(workflowId) || workflowId <= 0) {
       return throwError(() => new Error(`Invalid approval workflow ID: ${id}`));
     }
 
-    console.log('[ApprovalWorkflowService] Toggling approval workflow status:', { id: workflowId, isActive });
+    console.log('[ApprovalWorkflowService] Soft deleting approval workflow:', { id: workflowId, deletedByUserId });
 
-    // Try toggle-active endpoint first (same pattern as ApprovalStage)
-    return this.http.patch<any>(`${this.baseUrl}/${workflowId}/toggle-active`, null, {
-      params: { isActive: isActive.toString() }
-    }).pipe(
-      map(() => {
-        console.log('[ApprovalWorkflowService] Approval workflow status toggled successfully');
-        return;
+    // First get the workflow to get documentTypeId (required for update)
+    return this.getApprovalWorkflowById(workflowId).pipe(
+      mergeMap((workflow: ApprovalWorkflowDto) => {
+        // Use update method with isDeleted: true and documentTypeId for soft delete
+        const updateDto: UpdateApprovalWorkflowDto = {
+          documentTypeId: workflow.documentTypeId, // Required by API
+          isDeleted: true
+        };
+        return this.updateApprovalWorkflow(workflowId, updateDto);
       }),
       catchError((error) => {
-        // If toggle-active fails, try using update endpoint as fallback
+        console.error('[ApprovalWorkflowService] Error soft deleting approval workflow:', error);
+        const errorMessage = this.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Restore soft-deleted approval workflow
+   * PUT /api/ApprovalWorkflow/{id}/restore or PATCH /api/ApprovalWorkflow/{id}/restore
+   */
+  restore(id: number): Observable<ApprovalWorkflowDto> {
+    const workflowId = Number(id);
+    if (isNaN(workflowId) || workflowId <= 0) {
+      return throwError(() => new Error(`Invalid approval workflow ID: ${id}`));
+    }
+
+    console.log('[ApprovalWorkflowService] Restoring approval workflow:', { id: workflowId });
+
+    return this.http.put<any>(`${this.baseUrl}/${workflowId}/restore`, {}).pipe(
+      map((response: any) => {
+        console.log('[ApprovalWorkflowService] Approval workflow restored successfully');
+        // Handle ServiceResult<T> or direct object response
+        if (response && typeof response === 'object' && !response.id) {
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        // Try PATCH method if PUT fails
         if (error?.status === 404 || error?.status === 405) {
-          console.warn('[ApprovalWorkflowService] toggle-active endpoint not found, trying update endpoint');
-          const updateDto: UpdateApprovalWorkflowDto = { isActive };
-          return this.updateApprovalWorkflow(workflowId, updateDto).pipe(
-            map(() => {
-              console.log('[ApprovalWorkflowService] Approval workflow status updated via update endpoint');
-              return;
+          return this.http.patch<any>(`${this.baseUrl}/${workflowId}/restore`, {}).pipe(
+            map((response: any) => {
+              console.log('[ApprovalWorkflowService] Approval workflow restored successfully (via PATCH)');
+              if (response && typeof response === 'object' && !response.id) {
+                return response.data || response.result || response;
+              }
+              return response;
             }),
-            catchError((updateError) => {
-              console.error('[ApprovalWorkflowService] Error updating approval workflow status:', updateError);
-              const errorMessage = this.extractErrorMessage(updateError);
+            catchError((patchError) => {
+              console.error('[ApprovalWorkflowService] Error restoring approval workflow:', patchError);
+              const errorMessage = this.extractErrorMessage(patchError);
               return throwError(() => new Error(errorMessage));
             })
           );
         }
-        console.error('[ApprovalWorkflowService] Error toggling approval workflow status:', error);
+        console.error('[ApprovalWorkflowService] Error restoring approval workflow:', error);
         const errorMessage = this.extractErrorMessage(error);
         return throwError(() => new Error(errorMessage));
       })

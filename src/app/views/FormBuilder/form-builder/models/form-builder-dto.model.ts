@@ -9,6 +9,7 @@ export interface FormBuilderDto {
   foreignDescription?: string; // Arabic description
   isPublished?: boolean;
   isActive?: boolean;
+  isDeleted?: boolean;
   version?: number;
   createdByUserId?: string;
   createdDate?: string;
@@ -27,6 +28,7 @@ export interface CreateFormBuilderDto {
   foreignDescription?: string; // Arabic description
   isPublished?: boolean;
   isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface UpdateFormBuilderDto {
@@ -37,6 +39,7 @@ export interface UpdateFormBuilderDto {
   foreignDescription?: string; // Arabic description
   isPublished?: boolean;
   isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface FormTabDto {
@@ -46,7 +49,8 @@ export interface FormTabDto {
   foreignTabName?: string; // Arabic tab name
   tabCode: string;
   tabOrder: number;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
   createdByUserId?: string;
   createdDate?: string;
   // Extra client-side/navigation data (قد لا تكون موجودة حرفيًا في الـ DTO في الباك إند)
@@ -56,7 +60,7 @@ export interface FormTabDto {
   name_en?: string; // English name (from API)
   name_ar?: string; // Arabic name (from API)
   order?: number; // Display order (from API)
-  is_active?: boolean; // Status (from API)
+  is_active?: boolean; // Status (from API) - legacy property for compatibility
 }
 
 export interface CreateFormTabDto {
@@ -65,7 +69,7 @@ export interface CreateFormTabDto {
   foreignTabName?: string; // Arabic tab name
   tabCode: string;
   tabOrder: number;
-  isActive: boolean;
+  isDeleted: boolean;
   createdByUserId?: string;
 }
 
@@ -74,7 +78,7 @@ export interface UpdateFormTabDto {
   foreignTabName?: string; // Arabic tab name
   tabCode: string;
   tabOrder: number;
-  isActive: boolean;
+  isDeleted: boolean;
 }
 
 export interface FormFieldDto {
@@ -93,6 +97,7 @@ export interface FormFieldDto {
   isMandatory: boolean | null; // Required in C# but nullable bool
   isEditable: boolean | null; // Required in C# but nullable bool
   isVisible: boolean | null; // Required in C# but nullable bool
+  isActive?: boolean;
   defaultValueJson?: string;
   minValue?: number;
   maxValue?: number;
@@ -103,7 +108,7 @@ export interface FormFieldDto {
   createdDate: string; // Required in C# (DateTime)
   createdByUserId?: string;
   createdByUserName?: string;
-  isActive: boolean; // Required in C#
+  isDeleted: boolean; // Required in C#
   // Navigation properties
   tab?: FormTabDto; // JsonIgnore in C#
   fieldType?: FieldTypeDto;
@@ -138,7 +143,8 @@ export interface UpdateFormFieldDto {
   isMandatory?: boolean | null; // Optional nullable bool
   isEditable?: boolean | null; // Optional nullable bool
   isVisible?: boolean | null; // Optional nullable bool
-  isActive?: boolean; // Optional bool for activating/deactivating field
+  isActive?: boolean;
+  isDeleted?: boolean; // Optional bool for soft deleting field
   defaultValueJson?: string;
   maxLength?: number; // Optional int? in C#
   minValue?: number;
@@ -164,7 +170,8 @@ export interface FieldTypeDto {
   maxLength?: number;
   hasOptions: boolean;
   allowMultiple: boolean;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
   // Computed properties from API (for compatibility)
   type_name_en?: string; // English type name (from API)
   type_name_ar?: string; // Arabic type name (from API)
@@ -178,7 +185,8 @@ export interface CreateFieldTypeDto {
   maxLength?: number;
   hasOptions: boolean;
   allowMultiple: boolean;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
 }
 
 export interface UpdateFieldTypeDto {
@@ -190,6 +198,7 @@ export interface UpdateFieldTypeDto {
   hasOptions?: boolean;
   allowMultiple?: boolean;
   isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface FieldOptionDto {
@@ -200,6 +209,7 @@ export interface FieldOptionDto {
   foreignOptionText?: string; // Arabic option text
   optionOrder?: number;
   isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface CreateFieldOptionDto {
@@ -209,6 +219,7 @@ export interface CreateFieldOptionDto {
   foreignOptionText?: string; // Arabic option text
   optionOrder?: number;
   isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface UpdateFieldOptionDto {
@@ -217,6 +228,7 @@ export interface UpdateFieldOptionDto {
   foreignOptionText?: string; // Arabic option text
   optionOrder?: number;
   isActive?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface CreateFormFieldDto {
@@ -260,7 +272,8 @@ export interface FieldDataSource {
   requestBodyJson?: string | null;
   valuePath?: string | null;
   textPath?: string | null;
-  isActive: boolean;
+  isActive?: boolean;
+  isDeleted: boolean;
 }
 
 export interface CreateFieldDataSourceDto {
@@ -271,7 +284,8 @@ export interface CreateFieldDataSourceDto {
   requestBodyJson?: string | null; // Optional
   valuePath?: string | null; // Optional, max 200 chars
   textPath?: string | null; // Optional, max 200 chars
-  isActive?: boolean; // Default: true
+  isActive?: boolean;
+  isDeleted?: boolean; // Default: false
 }
 
 export interface UpdateFieldDataSourceDto {
@@ -281,7 +295,8 @@ export interface UpdateFieldDataSourceDto {
   requestBodyJson?: string | null;
   valuePath?: string | null;
   textPath?: string | null;
-  isActive: boolean; // Required
+  isActive?: boolean;
+  isDeleted: boolean; // Required
 }
 
 export interface FieldOptionResponse {
