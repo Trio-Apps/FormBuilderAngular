@@ -174,9 +174,9 @@
                 </span>
               </td>
               <td class="col-status">
-                <span class="status-badge" [class.status-active]="column.isActive" [class.status-inactive]="!column.isActive">
-                  <i class="pi" [class.pi-check-circle]="column.isActive" [class.pi-times-circle]="!column.isActive"></i>
-                  {{ column.isActive ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
+                <span class="status-badge" [class.status-active]="column.isActive === true" [class.status-inactive]="column.isActive !== true">
+                  <i class="pi" [class.pi-check-circle]="column.isActive === true" [class.pi-times-circle]="column.isActive === false"></i>
+                  {{ column.isActive === true ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
                 </span>
               </td>
               <td class="col-actions">
@@ -201,31 +201,25 @@
     [(visible)]="showColumnModal"
     [modal]="true"
     [header]="editingColumn ? (translateLabel('grids.columns.editColumn') || 'Edit Column') : (translateLabel('grids.columns.addColumn') || 'Add Column')"
-    [style]="{ width: '500px' }"
+    [style]="{ width: '750px', maxWidth: '90vw' }"
     [draggable]="false"
     [resizable]="false"
+    [closable]="true"
     (onHide)="closeColumnModal()"
-  >
+    [styleClass]="'column-modal'">
     <form [formGroup]="columnForm" (ngSubmit)="saveColumn()">
-      <!-- Language Toggle Buttons -->
-      <div class="mb-3 d-flex gap-2">
-        <button
-          type="button"
-          class="btn"
-          [class.btn-primary]="currentInputLanguage === 'en'"
-          [class.btn-outline-secondary]="currentInputLanguage !== 'en'"
-          (click)="setInputLanguage('en')">
-          English
-        </button>
-        <button
-          type="button"
-          class="btn"
-          [class.btn-primary]="currentInputLanguage === 'ar'"
-          [class.btn-outline-secondary]="currentInputLanguage !== 'ar'"
-          (click)="setInputLanguage('ar')">
-          العربية
-        </button>
-      </div>
+      <div class="modal-form-content">
+        <!-- Language Toggle Tabs -->
+        <div class="language-tabs-container">
+          <button type="button" class="language-tab" [class.language-tab-active]="currentInputLanguage === 'en'"
+            (click)="setInputLanguage('en')">
+            English
+          </button>
+          <button type="button" class="language-tab" [class.language-tab-active]="currentInputLanguage === 'ar'"
+            (click)="setInputLanguage('ar')">
+            العربية
+          </button>
+        </div>
 
       <!-- Field Type -->
       <div class="mb-3">
@@ -239,8 +233,8 @@
             {{ fieldType.typeName }}
           </option>
         </select>
-        <div class="invalid-feedback" *ngIf="columnForm.get('fieldTypeId')?.invalid && columnForm.get('fieldTypeId')?.touched">
-          {{ translateLabel('grids.columns.fieldTypeRequired') || 'Field Type is required' }}
+        <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldTypeId')">
+          {{ getFieldErrorMessage('fieldTypeId') }}
         </div>
       </div>
 
@@ -251,11 +245,11 @@
           type="text"
           class="form-control"
           formControlName="columnName"
-          [class.is-invalid]="columnForm.get('columnName')?.invalid && columnForm.get('columnName')?.touched"
+          [class.is-invalid]="isFieldInvalid('columnName')"
           [placeholder]="translateLabel('grids.columns.enterColumnName') || 'Enter column name'"
         />
-        <div class="invalid-feedback" *ngIf="columnForm.get('columnName')?.invalid && columnForm.get('columnName')?.touched">
-          {{ translateLabel('fields.fieldNameRequired') || 'Column name is required' }}
+        <div class="invalid-feedback" *ngIf="isFieldInvalid('columnName')">
+          {{ getFieldErrorMessage('columnName') }}
         </div>
       </div>
 
@@ -266,8 +260,12 @@
           type="text"
           class="form-control"
           formControlName="foreignColumnName"
+          [class.is-invalid]="isFieldInvalid('foreignColumnName')"
           [placeholder]="translateLabel('grids.columns.enterColumnName') || 'Enter column name'"
         />
+        <div class="invalid-feedback" *ngIf="isFieldInvalid('foreignColumnName')">
+          {{ getFieldErrorMessage('foreignColumnName') }}
+        </div>
       </div>
 
       <div class="mb-3">
@@ -276,11 +274,11 @@
           type="text"
           class="form-control"
           formControlName="columnCode"
-          [class.is-invalid]="columnForm.get('columnCode')?.invalid && columnForm.get('columnCode')?.touched"
+          [class.is-invalid]="isFieldInvalid('columnCode')"
           [placeholder]="translateLabel('grids.columns.enterColumnCode') || 'Enter column code'"
         />
-        <div class="invalid-feedback" *ngIf="columnForm.get('columnCode')?.invalid && columnForm.get('columnCode')?.touched">
-          {{ translateLabel('fields.fieldCodeInvalid') || 'Invalid format. Use only letters, numbers and underscores' }}
+        <div class="invalid-feedback" *ngIf="isFieldInvalid('columnCode')">
+          {{ getFieldErrorMessage('columnCode') }}
         </div>
       </div>
 
@@ -299,8 +297,12 @@
           class="form-control"
           formControlName="columnOrder"
           min="1"
+          [class.is-invalid]="isFieldInvalid('columnOrder')"
           [placeholder]="translateLabel('grids.columns.columnOrder') || 'Column Order'"
         />
+        <div class="invalid-feedback" *ngIf="isFieldInvalid('columnOrder')">
+          {{ getFieldErrorMessage('columnOrder') }}
+        </div>
       </div>
 
       <div class="mb-3">
@@ -309,8 +311,12 @@
           type="text"
           class="form-control"
           formControlName="defaultValue"
+          [class.is-invalid]="isFieldInvalid('defaultValue')"
           [placeholder]="translateLabel('grids.columns.enterDefaultValue') || 'Enter default value'"
         />
+        <div class="invalid-feedback" *ngIf="isFieldInvalid('defaultValue')">
+          {{ getFieldErrorMessage('defaultValue') }}
+        </div>
       </div>
 
       <div class="mb-3">
@@ -378,129 +384,429 @@
       </div>
 
       <!-- Data Source Section (for field types with options) -->
-      <div class="mb-3" *ngIf="getSelectedFieldType()?.hasOptions">
-        <div class="form-section-header">
-          <h5 class="section-title">
-            <i class="pi pi-database"></i>
-            {{ translateLabel('grids.columns.dataSource') || 'Data Source' }}
-          </h5>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-secondary"
-            (click)="openDataSourceModal()"
-            title="{{ translateLabel('grids.columns.manageDataSources') || 'Manage Data Sources' }}">
-            <i class="pi pi-cog"></i>
-          </button>
-        </div>
+      <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions || isOptionsFieldType()">
+        <h4 class="section-title">
+          <i class="pi pi-database"></i>
+          {{ translateLabel('grids.columns.dataSource') || 'Data Source' }}
+        </h4>
 
-        <div class="mb-2">
-          <label class="form-label">{{ translateLabel('grids.columns.selectDataSource') || 'Select Data Source' }}</label>
-          <select
-            class="form-control"
-            formControlName="dataSourceId"
-            (change)="onDataSourceChange($event)">
-            <option [value]="null">{{ translateLabel('grids.columns.noDataSource') || 'No Data Source (Manual Options)' }}</option>
-            <option *ngFor="let dataSource of dataSources" [value]="dataSource.id">
-              {{ dataSource.sourceType }} - ID: {{ dataSource.id }}
-            </option>
-          </select>
-        </div>
+        <div class="form-grid">
+          <!-- Data Source Type Selection (3 Options) -->
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label class="form-label">{{ translateLabel('fields.dataSourceType') || 'Data Source Type' }} <span
+                class="required">*</span></label>
 
-        <div class="mb-2" *ngIf="columnForm.get('dataSourceId')?.value">
-          <button
-            type="button"
-            class="btn btn-sm btn-info"
-            (click)="testDropdownOptions(editingColumn?.id)"
-            [disabled]="loadingOptions"
-            title="{{ translateLabel('grids.columns.testDataSource') || 'Test Data Source' }}">
-            <i class="pi pi-search" *ngIf="!loadingOptions"></i>
-            <i class="pi pi-spin pi-spinner" *ngIf="loadingOptions"></i>
-            {{ loadingOptions ? (translateLabel('common.loading') || 'Loading...') : (translateLabel('grids.columns.test') || 'Test') }}
-          </button>
-
-          <div class="mt-2" *ngIf="dropdownOptions.length > 0">
-            <small class="text-success">
-              {{ translateLabel('grids.columns.optionsLoaded') || 'Options loaded' }}: {{ dropdownOptions.length }}
-            </small>
-            <div class="options-preview mt-1">
-              <small *ngFor="let option of dropdownOptions.slice(0, 3)" class="d-block text-muted">
-                {{ option.value }} - {{ option.text }}
-              </small>
-              <small *ngIf="dropdownOptions.length > 3" class="text-muted">
-                ... {{ translateLabel('grids.columns.andMore') || 'and' }} {{ dropdownOptions.length - 3 }} {{ translateLabel('grids.columns.moreOptions') || 'more options' }}
-              </small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Column Options Section (Only for Static) -->
-      <div class="mb-3" *ngIf="getSelectedFieldType()?.hasOptions && getDataSourceType() === 'Static'">
-        <div class="form-section-header">
-          <h5 class="section-title">
-            <i class="pi pi-list"></i>
-            {{ translateLabel('grids.columns.columnOptions') || 'Column Options' }}
-          </h5>
-          <button
-            type="button"
-            class="btn btn-sm btn-primary"
-            (click)="addColumnOption()">
-            <i class="pi pi-plus"></i>
-            {{ translateLabel('grids.columns.addOption') || 'Add Option' }}
-          </button>
-        </div>
-
-        <div class="options-list" *ngIf="columnOptionsFormArray.length > 0">
-          <div
-            *ngFor="let option of columnOptionsFormArray.controls; let i = index"
-            class="option-item"
-            [formGroup]="$any(option)">
-            <div class="option-row">
-              <div class="option-order">{{ i + 1 }}</div>
-              <div class="option-inputs">
-                <div class="row">
-                  <div class="col-md-4" *ngIf="currentInputLanguage === 'en'">
-                    <input
-                      type="text"
-                      class="form-control form-control-sm"
-                      formControlName="optionValue"
-                      [placeholder]="translateLabel('grids.columns.optionValue') || 'Option Value'"
-                    />
-                  </div>
-                  <div class="col-md-4" *ngIf="currentInputLanguage === 'en'">
-                    <input
-                      type="text"
-                      class="form-control form-control-sm"
-                      formControlName="optionText"
-                      [placeholder]="translateLabel('grids.columns.optionText') || 'Option Text'"
-                    />
-                  </div>
-                  <div class="col-md-4" *ngIf="currentInputLanguage === 'ar'">
-                    <input
-                      type="text"
-                      class="form-control form-control-sm"
-                      formControlName="foreignOptionText"
-                      [placeholder]="translateLabel('grids.columns.optionText') || 'Option Text (Arabic)'"
-                    />
+            <!-- Radio Buttons for 3 Options -->
+            <div class="data-source-options"
+              style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
+              <!-- Option 1: Static -->
+              <label class="data-source-option" [class.selected]="dataSourceType === 'Static'"
+                style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                [style.border-color]="dataSourceType === 'Static' ? '#667eea' : '#e5e7eb'"
+                [style.background]="dataSourceType === 'Static' ? '#f0ebf8' : '#f9fafb'">
+                <input type="radio" name="dataSourceType" value="Static" [(ngModel)]="dataSourceType"
+                  [ngModelOptions]="{standalone: true}" (change)="onColumnDataSourceTypeChange()"
+                  style="width: 20px; height: 20px; cursor: pointer;" />
+                <i class="pi pi-list" style="font-size: 20px; color: #667eea;"></i>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
+                    translateLabel('fields.dataSourceStatic') || 'Static Options' }}</div>
+                  <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceStaticDesc') || 'Enter options manually in Column Options section above.' }}
                   </div>
                 </div>
+              </label>
+
+              <!-- Option 2: Database Tables -->
+              <label class="data-source-option" [class.selected]="dataSourceType === 'LookupTable'"
+                style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                [style.border-color]="dataSourceType === 'LookupTable' ? '#667eea' : '#e5e7eb'"
+                [style.background]="dataSourceType === 'LookupTable' ? '#f0ebf8' : '#f9fafb'">
+                <input type="radio" name="dataSourceType" value="LookupTable" [(ngModel)]="dataSourceType"
+                  [ngModelOptions]="{standalone: true}" (change)="onColumnDataSourceTypeChange()"
+                  style="width: 20px; height: 20px; cursor: pointer;" />
+                <i class="pi pi-table" style="font-size: 20px; color: #667eea;"></i>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
+                    translateLabel('fields.dataSourceTable') || 'Database Table' }}</div>
+                  <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceTableDesc') || 'Load options from database table (id, name).' }}
+                  </div>
+                </div>
+              </label>
+
+              <!-- Option 3: API Link -->
+              <label class="data-source-option" [class.selected]="dataSourceType === 'API'"
+                style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                [style.border-color]="dataSourceType === 'API' ? '#667eea' : '#e5e7eb'"
+                [style.background]="dataSourceType === 'API' ? '#f0ebf8' : '#f9fafb'">
+                <input type="radio" name="dataSourceType" value="API" [(ngModel)]="dataSourceType"
+                  [ngModelOptions]="{standalone: true}" (change)="onColumnDataSourceTypeChange()"
+                  style="width: 20px; height: 20px; cursor: pointer;" />
+                <i class="pi pi-link" style="font-size: 20px; color: #667eea;"></i>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
+                    translateLabel('fields.dataSourceApi') || 'API Link' }}</div>
+                  <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceApiDesc') || 'Load options from API endpoint (id, name).' }}</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Database Table Selection (for LookupTable) -->
+          <div class="form-group" *ngIf="dataSourceType === 'LookupTable'" style="grid-column: 1 / -1; margin-top: 16px;">
+            <label class="form-label">
+              <i class="pi pi-table" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('fields.selectTable') || 'Select Table' }} <span class="required">*</span>
+            </label>
+            <select class="form-control" [(ngModel)]="columnLookupTableConfig.table" [ngModelOptions]="{standalone: true}"
+              (change)="onColumnTableSelected()">
+              <option value="">{{ translateLabel('fields.selectLookupTable') || '-- Select Table --' }}</option>
+              <option *ngFor="let table of availableLookupTables" [value]="table">{{ table }}</option>
+            </select>
+            <small class="form-text text-muted" *ngIf="availableLookupTables.length === 0"
+              style="color: #f59e0b; margin-top: 6px; display: block;">
+              <i class="pi pi-exclamation-triangle"></i> No tables available. Loading...
+            </small>
+
+            <!-- Available Columns Display -->
+            <div *ngIf="availableColumns.length > 0"
+              style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <i class="pi pi-info-circle" style="color: #10b981; font-size: 16px;"></i>
+                <span style="font-weight: 600; color: #166534; font-size: 13px;">Available Properties:</span>
               </div>
-              <button
-                type="button"
-                class="btn btn-sm btn-danger"
-                (click)="removeColumnOption(i)"
-                [disabled]="columnOptionsFormArray.length === 1">
-                <i class="pi pi-trash"></i>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <span *ngFor="let col of availableColumns"
+                  style="display: inline-block; padding: 4px 10px; background: white; border: 1px solid #86efac; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; color: #166534; cursor: pointer;"
+                  [title]="'Click to use as ' + (col.toLowerCase().includes('id') || col.toLowerCase() === 'value' ? 'Value Path' : 'Text Path')"
+                  (click)="applyColumnColumnAsPath(col)">
+                  {{ col }}
+                </span>
+              </div>
+              <small style="display: block; margin-top: 8px; color: #166534; font-size: 11px;">
+                <i class="pi pi-lightbulb" style="margin-right: 4px;"></i>
+                Click on a property to use it as Value Path or Text Path
+              </small>
+            </div>
+
+            <!-- Value Path & Text Path Configuration for Database Table -->
+            <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="form-group">
+                <label class="form-label">
+                  <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
+                  Value Path
+                </label>
+                <select class="form-control" [(ngModel)]="columnLookupTableConfig.valueColumn"
+                  [ngModelOptions]="{standalone: true}"
+                  (change)="debouncedPreviewColumnDataSource()"
+                  [disabled]="availableColumns.length === 0"
+                  style="font-family: 'Courier New', monospace; font-size: 13px;">
+                  <option value="">-- Select Value Path --</option>
+                  <option *ngFor="let col of availableColumns" [value]="col">{{ col }}</option>
+                  <option
+                    *ngIf="columnLookupTableConfig.valueColumn && !availableColumns.includes(columnLookupTableConfig.valueColumn)"
+                    [value]="columnLookupTableConfig.valueColumn">
+                    {{ columnLookupTableConfig.valueColumn }} (current)
+                  </option>
+                </select>
+                <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+                  *ngIf="availableColumns.length > 0">
+                  Select value column from available columns
+                </small>
+                <small class="form-text text-warning"
+                  style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+                  *ngIf="availableColumns.length === 0">
+                  <i class="pi pi-info-circle"></i> Select a table above to load available columns automatically
+                </small>
+              </div>
+              <div class="form-group">
+                <label class="form-label">
+                  <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
+                  Text Path
+                </label>
+                <select class="form-control" [(ngModel)]="columnLookupTableConfig.textColumn"
+                  [ngModelOptions]="{standalone: true}"
+                  (change)="debouncedPreviewColumnDataSource()"
+                  [disabled]="availableColumns.length === 0"
+                  style="font-family: 'Courier New', monospace; font-size: 13px;">
+                  <option value="">-- Select Text Path --</option>
+                  <option *ngFor="let col of availableColumns" [value]="col">{{ col }}</option>
+                  <option
+                    *ngIf="columnLookupTableConfig.textColumn && !availableColumns.includes(columnLookupTableConfig.textColumn)"
+                    [value]="columnLookupTableConfig.textColumn">
+                    {{ columnLookupTableConfig.textColumn }} (current)
+                  </option>
+                </select>
+                <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+                  *ngIf="availableColumns.length > 0">
+                  Select text column from available columns
+                </small>
+                <small class="form-text text-warning"
+                  style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+                  *ngIf="availableColumns.length === 0">
+                  <i class="pi pi-info-circle"></i> Select a table above to load available columns automatically
+                </small>
+              </div>
+            </div>
+
+            <!-- Preview Options Display (for LookupTable) -->
+            <div class="preview-options-list" *ngIf="previewOptions.length > 0 && dataSourceType === 'LookupTable'" style="margin-top: 16px;">
+              <div class="preview-header" style="margin-bottom: 12px;">
+                <span class="preview-count"
+                  style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; font-weight: 500;">
+                  <i class="pi pi-check-circle"></i>
+                  {{ previewOptions.length }} {{ previewOptions.length === 1 ? 'option' : 'options' }} found
+                </span>
+              </div>
+            </div>
+
+            <div *ngIf="previewOptions.length === 0 && !loadingPreview && dataSourceType === 'LookupTable' && columnLookupTableConfig.valueColumn && columnLookupTableConfig.textColumn"
+              style="padding: 16px; text-align: center; color: #6b7280; font-style: italic; margin-top: 16px;">
+              {{ translateLabel('grids.columns.noPreviewOptions') || 'No preview options found. Select Value Path and Text Path to load options.' }}
+            </div>
+          </div>
+
+          <!-- API URL Configuration (for Api) -->
+          <div class="form-group" *ngIf="dataSourceType === 'API'" style="grid-column: 1 / -1; margin-top: 16px;">
+            <!-- HTTP Method Selection -->
+            <label class="form-label" style="margin-bottom: 8px;">
+              <i class="pi pi-cog" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('fields.httpMethod') || 'HTTP Method' }} <span class="required">*</span>
+            </label>
+            <div class="http-method-tabs" style="display: flex; gap: 10px; margin-bottom: 12px; width: 100%;">
+              <button type="button" class="method-tab" [class.active]="columnDataSourceConfig.httpMethod === 'GET'"
+                (click)="columnDataSourceConfig.httpMethod = 'GET'"
+                style="flex: 1; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; cursor: pointer;"
+                [style.background]="columnDataSourceConfig.httpMethod === 'GET' ? '#f0fdf4' : '#f9fafb'"
+                [style.border-color]="columnDataSourceConfig.httpMethod === 'GET' ? '#10b981' : '#e5e7eb'"
+                [style.color]="columnDataSourceConfig.httpMethod === 'GET' ? '#166534' : '#6b7280'">
+                <i class="pi pi-download" style="font-size: 16px;"></i>
+                <span style="font-size: 15px;">GET</span>
+              </button>
+              <button type="button" class="method-tab" [class.active]="columnDataSourceConfig.httpMethod === 'POST'"
+                (click)="columnDataSourceConfig.httpMethod = 'POST'"
+                style="flex: 1; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; cursor: pointer;"
+                [style.background]="columnDataSourceConfig.httpMethod === 'POST' ? '#f0fdf4' : '#f9fafb'"
+                [style.border-color]="columnDataSourceConfig.httpMethod === 'POST' ? '#10b981' : '#e5e7eb'"
+                [style.color]="columnDataSourceConfig.httpMethod === 'POST' ? '#166534' : '#6b7280'">
+                <i class="pi pi-upload" style="font-size: 16px;"></i>
+                <span style="font-size: 15px;">POST</span>
+              </button>
+            </div>
+
+            <!-- API URL Input -->
+            <label class="form-label" style="margin-top: 16px;">
+              <i class="pi pi-link" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('fields.apiUrl') || 'API URL' }} <span class="required">*</span>
+            </label>
+            <input type="text" class="form-control" [(ngModel)]="columnDataSourceConfig.apiUrl"
+              [ngModelOptions]="{standalone: true}"
+              [placeholder]="translateLabel('grids.columns.enterApiUrl') || 'https://api.example.com/data'">
+
+            <!-- Test API Button -->
+            <button
+              type="button"
+              class="btn btn-sm btn-success"
+              (click)="testColumnApiResponse()"
+              [disabled]="loadingPreview || !columnDataSourceConfig.apiUrl"
+              style="margin-top: 12px;">
+              <i class="pi" [class.pi-spin]="loadingPreview" [class.pi-spinner]="loadingPreview" [class.pi-send]="!loadingPreview"></i>
+              {{ loadingPreview ? (translateLabel('common.loading') || 'Loading...') : (translateLabel('grids.columns.testApi') || 'Test API') }}
+            </button>
+
+            <!-- Request Body (for POST only) -->
+            <div *ngIf="columnDataSourceConfig.httpMethod === 'POST'" style="margin-top: 16px;">
+              <label class="form-label">
+                <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
+                {{ translateLabel('fields.requestBody') || 'Request Body (JSON)' }}
+              </label>
+              <textarea class="form-control" rows="4" [(ngModel)]="columnDataSourceConfig.requestBodyJson"
+                [ngModelOptions]="{standalone: true}"
+                placeholder='Enter JSON body, e.g. {"filter": "active"}'
+                style="font-family: 'Courier New', monospace; font-size: 13px;">
+              </textarea>
+              <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                Optional: Enter JSON body for POST requests. Example:
+                <code>{{ '{' }}"filter": "active"{{ '}' }}</code>
+              </small>
+            </div>
+
+            <!-- Available Properties Display -->
+            <div *ngIf="availableProperties.length > 0"
+              style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <i class="pi pi-info-circle" style="color: #10b981; font-size: 16px;"></i>
+                <span style="font-weight: 600; color: #166534; font-size: 13px;">Available Properties:</span>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <span *ngFor="let prop of availableProperties"
+                  style="display: inline-block; padding: 4px 10px; background: white; border: 1px solid #86efac; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; color: #166534; cursor: pointer;"
+                  [title]="'Click to use as ' + (prop.toLowerCase().includes('id') || prop.toLowerCase() === 'value' ? 'Value Path' : 'Text Path')"
+                  (click)="applyColumnPropertyAsPath(prop)">
+                  {{ prop }}
+                </span>
+              </div>
+              <small style="display: block; margin-top: 8px; color: #166534; font-size: 11px;">
+                <i class="pi pi-lightbulb" style="margin-right: 4px;"></i>
+                Click on a property to use it as Value Path or Text Path
+              </small>
+            </div>
+
+            <!-- Value Path & Text Path Configuration -->
+            <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="form-group">
+                <label class="form-label">
+                  <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
+                  Value Path
+                </label>
+                <select class="form-control" [(ngModel)]="columnDataSourceConfig.valuePath"
+                  [ngModelOptions]="{standalone: true}"
+                  [disabled]="availableProperties.length === 0"
+                  style="font-family: 'Courier New', monospace; font-size: 13px;">
+                  <option value="">-- Select Value Path --</option>
+                  <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
+                  <option
+                    *ngIf="columnDataSourceConfig.valuePath && !availableProperties.includes(columnDataSourceConfig.valuePath)"
+                    [value]="columnDataSourceConfig.valuePath">
+                    {{ columnDataSourceConfig.valuePath }} (current)
+                  </option>
+                </select>
+                <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+                  *ngIf="availableProperties.length > 0">
+                  Select value field from available properties
+                </small>
+                <small class="form-text text-warning"
+                  style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+                  *ngIf="availableProperties.length === 0">
+                  <i class="pi pi-info-circle"></i> Click "Test API" first to load available properties
+                </small>
+              </div>
+              <div class="form-group">
+                <label class="form-label">
+                  <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
+                  Text Path
+                </label>
+                <select class="form-control" [(ngModel)]="columnDataSourceConfig.textPath"
+                  [ngModelOptions]="{standalone: true}"
+                  [disabled]="availableProperties.length === 0"
+                  style="font-family: 'Courier New', monospace; font-size: 13px;">
+                  <option value="">-- Select Text Path --</option>
+                  <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
+                  <option
+                    *ngIf="columnDataSourceConfig.textPath && !availableProperties.includes(columnDataSourceConfig.textPath)"
+                    [value]="columnDataSourceConfig.textPath">
+                    {{ columnDataSourceConfig.textPath }} (current)
+                  </option>
+                </select>
+                <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+                  *ngIf="availableProperties.length > 0">
+                  Select text field from available properties
+                </small>
+                <small class="form-text text-warning"
+                  style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+                  *ngIf="availableProperties.length === 0">
+                  <i class="pi pi-info-circle"></i> Click "Test API" first to load available properties
+                </small>
+              </div>
+            </div>
+
+            <!-- Preview Options Display (for API) -->
+            <div class="preview-options-list" *ngIf="previewOptions.length > 0" style="margin-top: 16px;">
+              <div class="preview-header" style="margin-bottom: 12px;">
+                <span class="preview-count"
+                  style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; font-weight: 500;">
+                  <i class="pi pi-check-circle"></i>
+                  {{ previewOptions.length }} {{ previewOptions.length === 1 ? 'option' : 'options' }} found
+                </span>
+              </div>
+            </div>
+
+            <div *ngIf="previewOptions.length === 0 && !loadingPreview && columnDataSourceConfig.valuePath && columnDataSourceConfig.textPath"
+              style="padding: 16px; text-align: center; color: #6b7280; font-style: italic; margin-top: 16px;">
+              {{ translateLabel('grids.columns.noPreviewOptions') || 'No preview options found. Select Value Path and Text Path to load options.' }}
+            </div>
+          </div>
+
+          <!-- Preview Loaded Options -->
+          <div class="mb-2" *ngIf="columnForm.get('dataSourceId')?.value">
+            <button
+              type="button"
+              class="btn btn-sm btn-info"
+              (click)="testDropdownOptions(editingColumn?.id)"
+              [disabled]="loadingOptions"
+              title="{{ translateLabel('grids.columns.testDataSource') || 'Test Data Source' }}">
+              <i class="pi pi-search" *ngIf="!loadingOptions"></i>
+              <i class="pi pi-spin pi-spinner" *ngIf="loadingOptions"></i>
+              {{ loadingOptions ? (translateLabel('common.loading') || 'Loading...') : (translateLabel('grids.columns.test') || 'Test') }}
+            </button>
+
+            <div class="mt-2" *ngIf="dropdownOptions.length > 0">
+              <small class="text-success">
+                {{ translateLabel('grids.columns.optionsLoaded') || 'Options loaded' }}: {{ dropdownOptions.length }}
+              </small>
+              <div class="options-preview mt-1">
+                <small *ngFor="let option of dropdownOptions.slice(0, 3)" class="d-block text-muted">
+                  {{ option.value }} - {{ option.text }}
+                </small>
+                <small *ngIf="dropdownOptions.length > 3" class="text-muted">
+                  ... {{ translateLabel('grids.columns.andMore') || 'and' }} {{ dropdownOptions.length - 3 }} {{ translateLabel('grids.columns.moreOptions') || 'more options' }}
+                </small>
+              </div>
+            </div>
+          </div>
+        </div> <!-- end form-grid -->
+      </div>   <!-- end data source form-section -->
+
+      <!-- Column Options Section (Only for Static) -->
+      <div class="form-section" *ngIf="(getSelectedFieldType()?.hasOptions || isOptionsFieldType()) && getDataSourceType() === 'Static'">
+        <h4 class="section-title">
+          <i class="pi pi-list"></i>
+          {{ translateLabel('grids.columns.columnOptions') || 'Column Options' }}
+        </h4>
+        <div class="field-options-list" formArrayName="columnOptions">
+          <div *ngFor="let option of columnOptionsFormArray.controls; let i = index" [formGroupName]="i"
+            class="option-item">
+            <div class="option-row">
+              <div class="option-order">
+                <span class="order-label">{{ i + 1 }}</span>
+              </div>
+              <div class="option-inputs">
+                <div class="option-input-wrapper">
+                  <label class="option-label">{{ translateLabel('grids.columns.optionValue') || 'Option Value' }} <span
+                      class="text-danger">*</span></label>
+                  <input type="text" class="form-control" formControlName="optionValue"
+                    [placeholder]="translateLabel('grids.columns.optionValue') || 'Option Value'"
+                    [class.is-invalid]="option.get('optionValue')?.invalid && (option.get('optionValue')?.dirty || option.get('optionValue')?.touched)">
+                </div>
+                <!-- English Option Text - Always visible -->
+                <div class="option-input-wrapper" *ngIf="currentInputLanguage === 'en'">
+                  <label class="option-label">{{ translateLabel('grids.columns.optionText') || 'Option Text' }} <span
+                      class="text-danger">*</span></label>
+                  <input type="text" class="form-control" formControlName="optionText"
+                    [placeholder]="translateLabel('grids.columns.optionText') || 'Option Text'"
+                    [class.is-invalid]="option.get('optionText')?.invalid && (option.get('optionText')?.dirty || option.get('optionText')?.touched)">
+                </div>
+                <!-- Arabic Option Text - Show when Arabic tab is selected -->
+                <div class="option-input-wrapper" *ngIf="currentInputLanguage === 'ar'">
+                  <label class="option-label">{{ translateLabel('grids.columns.optionText') || 'Option Text (Arabic)' }}</label>
+                  <input type="text" class="form-control" formControlName="foreignOptionText"
+                    [placeholder]="translateLabel('grids.columns.optionText') || 'Option Text (Arabic)'">
+                </div>
+              </div>
+              <button type="button" class="btn-remove-option" (click)="removeColumnOption(i)"
+                [disabled]="columnOptionsFormArray.length === 1" [title]="translateLabel('common.delete')">
+                <i class="pi pi-times"></i>
               </button>
             </div>
           </div>
         </div>
-        <div class="alert alert-info" *ngIf="columnOptionsFormArray.length === 0">
-          {{ translateLabel('grids.columns.noOptions') || 'No options added. Click "Add Option" to add options.' }}
-        </div>
+        <button type="button" class="btn-add-option" (click)="addColumnOption()">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.columns.addOption') || 'Add Option' }}</span>
+        </button>
+      </div>
       </div>
 
-      <div class="d-flex justify-content-end gap-2 mt-4">
+      <div class="modal-footer">
         <button
           pButton
           type="button"
@@ -536,111 +842,291 @@
     <form [formGroup]="dataSourceForm" (ngSubmit)="saveDataSource()">
       <div class="mb-3">
         <label class="form-label">{{ translateLabel('grids.columns.sourceType') || 'Source Type' }} <span class="text-danger">*</span></label>
-        <select
-          class="form-control"
-          formControlName="sourceType"
-          [class.is-invalid]="dataSourceForm.get('sourceType')?.invalid && dataSourceForm.get('sourceType')?.touched">
-          <option value="Static">{{ translateLabel('grids.columns.staticOptions') || 'Static Options' }}</option>
-          <option value="LookupTable">{{ translateLabel('grids.columns.lookupTable') || 'Lookup Table' }}</option>
-          <option value="API">{{ translateLabel('grids.columns.apiEndpoint') || 'API Endpoint' }}</option>
-        </select>
+        
+        <!-- Radio Buttons for 3 Options (same design as Field) -->
+        <div class="data-source-options"
+          style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
+          <!-- Option 1: Static -->
+          <label class="data-source-option" [class.selected]="dataSourceForm.get('sourceType')?.value === 'Static'"
+            style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+            [style.border-color]="dataSourceForm.get('sourceType')?.value === 'Static' ? '#667eea' : '#e5e7eb'"
+            [style.background]="dataSourceForm.get('sourceType')?.value === 'Static' ? '#f0ebf8' : '#f9fafb'">
+            <input type="radio" value="Static" formControlName="sourceType"
+              (change)="onDataSourceTypeChange()"
+              style="width: 20px; height: 20px; cursor: pointer;" />
+            <i class="pi pi-list" style="font-size: 20px; color: #667eea;"></i>
+            <div style="flex: 1;">
+              <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
+                translateLabel('grids.columns.staticOptions') || 'Static Options' }}</div>
+              <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('grids.columns.staticOptionsDesc') || 'Enter options manually in Column Options section above.' }}
+              </div>
+            </div>
+          </label>
+
+          <!-- Option 2: Database Tables -->
+          <label class="data-source-option" [class.selected]="dataSourceForm.get('sourceType')?.value === 'LookupTable'"
+            style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+            [style.border-color]="dataSourceForm.get('sourceType')?.value === 'LookupTable' ? '#667eea' : '#e5e7eb'"
+            [style.background]="dataSourceForm.get('sourceType')?.value === 'LookupTable' ? '#f0ebf8' : '#f9fafb'">
+            <input type="radio" value="LookupTable" formControlName="sourceType"
+              (change)="onDataSourceTypeChange()"
+              style="width: 20px; height: 20px; cursor: pointer;" />
+            <i class="pi pi-table" style="font-size: 20px; color: #667eea;"></i>
+            <div style="flex: 1;">
+              <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
+                translateLabel('grids.columns.lookupTable') || 'Database Table' }}</div>
+              <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('grids.columns.lookupTableDesc') || 'Load options from database table (id, name).' }}
+              </div>
+            </div>
+          </label>
+
+          <!-- Option 3: API Link -->
+          <label class="data-source-option" [class.selected]="dataSourceForm.get('sourceType')?.value === 'API'"
+            style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+            [style.border-color]="dataSourceForm.get('sourceType')?.value === 'API' ? '#667eea' : '#e5e7eb'"
+            [style.background]="dataSourceForm.get('sourceType')?.value === 'API' ? '#f0ebf8' : '#f9fafb'">
+            <input type="radio" value="API" formControlName="sourceType"
+              (change)="onDataSourceTypeChange()"
+              style="width: 20px; height: 20px; cursor: pointer;" />
+            <i class="pi pi-link" style="font-size: 20px; color: #667eea;"></i>
+            <div style="flex: 1;">
+              <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
+                translateLabel('grids.columns.apiEndpoint') || 'API Link' }}</div>
+              <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('grids.columns.apiEndpointDesc') || 'Load options from API endpoint (id, name).' }}</div>
+            </div>
+          </label>
+        </div>
       </div>
 
       <!-- API Source Fields -->
-      <div *ngIf="dataSourceForm.get('sourceType')?.value === 'API'">
-        <div class="mb-3">
-          <label class="form-label">{{ translateLabel('grids.columns.apiUrl') || 'API URL' }}</label>
-          <input
-            type="url"
-            class="form-control"
-            formControlName="apiUrl"
-            [placeholder]="translateLabel('grids.columns.enterApiUrl') || 'https://api.example.com/data'"
-          />
+      <div *ngIf="dataSourceForm.get('sourceType')?.value === 'API'" style="margin-top: 16px;">
+        <!-- HTTP Method Selection -->
+        <label class="form-label" style="margin-bottom: 8px;">
+          <i class="pi pi-cog" style="margin-right: 6px; color: #667eea;"></i>
+          {{ translateLabel('grids.columns.httpMethod') || 'HTTP Method' }} <span class="text-danger">*</span>
+        </label>
+        <div class="http-method-tabs" style="display: flex; gap: 10px; margin-bottom: 12px; width: 100%;">
+          <button type="button" class="method-tab" [class.active]="dataSourceForm.get('httpMethod')?.value === 'GET'"
+            (click)="dataSourceForm.patchValue({ httpMethod: 'GET' })"
+            style="flex: 1; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; cursor: pointer; background: #f0fdf4; border-color: #10b981; color: #166534;"
+            [style.background]="dataSourceForm.get('httpMethod')?.value === 'GET' ? '#f0fdf4' : '#f9fafb'"
+            [style.border-color]="dataSourceForm.get('httpMethod')?.value === 'GET' ? '#10b981' : '#e5e7eb'"
+            [style.color]="dataSourceForm.get('httpMethod')?.value === 'GET' ? '#166534' : '#6b7280'">
+            <i class="pi pi-download" style="font-size: 16px;"></i>
+            <span style="font-size: 15px;">GET</span>
+          </button>
+          <button type="button" class="method-tab" [class.active]="dataSourceForm.get('httpMethod')?.value === 'POST'"
+            (click)="dataSourceForm.patchValue({ httpMethod: 'POST' })"
+            style="flex: 1; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; cursor: pointer;"
+            [style.background]="dataSourceForm.get('httpMethod')?.value === 'POST' ? '#f0fdf4' : '#f9fafb'"
+            [style.border-color]="dataSourceForm.get('httpMethod')?.value === 'POST' ? '#10b981' : '#e5e7eb'"
+            [style.color]="dataSourceForm.get('httpMethod')?.value === 'POST' ? '#166534' : '#6b7280'">
+            <i class="pi pi-upload" style="font-size: 16px;"></i>
+            <span style="font-size: 15px;">POST</span>
+          </button>
         </div>
 
-        <div class="mb-3">
-          <label class="form-label">{{ translateLabel('grids.columns.apiPath') || 'JSON Path' }}</label>
-          <input
-            type="text"
-            class="form-control"
-            formControlName="apiPath"
-            [placeholder]="translateLabel('grids.columns.apiPathHelp') || '$.data or $.result.items'"
-          />
-          <small class="form-text text-muted">{{ translateLabel('grids.columns.apiPathExample') || 'JSON path to extract data array' }}</small>
+        <!-- API URL Input -->
+        <label class="form-label" style="margin-top: 16px;">
+          <i class="pi pi-link" style="margin-right: 6px; color: #667eea;"></i>
+          {{ translateLabel('grids.columns.apiUrl') || 'API URL' }} <span class="text-danger">*</span>
+        </label>
+        <input type="text" class="form-control" formControlName="apiUrl"
+          [placeholder]="translateLabel('grids.columns.enterApiUrl') || 'https://api.example.com/data'">
+
+        <!-- Test API Button -->
+        <button
+          type="button"
+          class="btn btn-sm btn-success"
+          (click)="testApiResponse()"
+          [disabled]="loadingPreview || !dataSourceForm.get('apiUrl')?.value"
+          style="margin-top: 12px;">
+          <i class="pi" [class.pi-spin]="loadingPreview" [class.pi-spinner]="loadingPreview" [class.pi-send]="!loadingPreview"></i>
+          {{ loadingPreview ? (translateLabel('common.loading') || 'Loading...') : (translateLabel('grids.columns.testApi') || 'Test API') }}
+        </button>
+
+        <!-- Request Body (for POST only) -->
+        <div *ngIf="dataSourceForm.get('httpMethod')?.value === 'POST'" style="margin-top: 16px;">
+          <label class="form-label">
+            <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
+            {{ translateLabel('grids.columns.requestBody') || 'Request Body (JSON)' }}
+          </label>
+          <textarea class="form-control" rows="4" formControlName="requestBodyJson"
+            placeholder='Enter JSON body, e.g. {"filter": "active"}'
+            style="font-family: 'Courier New', monospace; font-size: 13px;">
+          </textarea>
+          <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+            Optional: Enter JSON body for POST requests. Example:
+            <code>{{ '{' }}"filter": "active"{{ '}' }}</code>
+          </small>
         </div>
 
-        <div class="mb-3">
-          <label class="form-label">{{ translateLabel('grids.columns.httpMethod') || 'HTTP Method' }}</label>
-          <select class="form-control" formControlName="httpMethod">
-            <option value="GET">GET</option>
-            <option value="POST">POST</option>
-          </select>
+        <!-- Available Properties Display -->
+        <div *ngIf="availableProperties.length > 0"
+          style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <i class="pi pi-info-circle" style="color: #10b981; font-size: 16px;"></i>
+            <span style="font-weight: 600; color: #166534; font-size: 13px;">Available Properties:</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span *ngFor="let prop of availableProperties"
+              class="property-tag"
+              style="display: inline-block; padding: 4px 10px; background: white; border: 1px solid #86efac; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; color: #166534; cursor: pointer; transition: all 0.2s ease;"
+              [title]="'Click to use as ' + (prop.toLowerCase().includes('id') || prop.toLowerCase() === 'value' ? 'Value Path' : 'Text Path')"
+              (click)="applyPropertyAsPath(prop)">
+              {{ prop }}
+            </span>
+          </div>
+          <small style="display: block; margin-top: 8px; color: #166534; font-size: 11px;">
+            <i class="pi pi-lightbulb" style="margin-right: 4px;"></i>
+            Click on a property to use it as Value Path or Text Path
+          </small>
         </div>
 
-        <div class="mb-3" *ngIf="dataSourceForm.get('httpMethod')?.value === 'POST'">
-          <label class="form-label">{{ translateLabel('grids.columns.requestBody') || 'Request Body (JSON)' }}</label>
-          <textarea
-            class="form-control"
-            formControlName="requestBodyJson"
-            rows="3"
-            placeholder="{{ translateLabel('grids.columns.requestBodyExample') || '{ &quot;status&quot;: &quot;active&quot; }' }}"
-          ></textarea>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label">{{ translateLabel('grids.columns.valuePath') || 'Value Path' }}</label>
-          <input
-            type="text"
-            class="form-control"
-            formControlName="valuePath"
-            [placeholder]="translateLabel('grids.columns.valuePathExample') || 'id or $.id'"
-          />
-          <small class="form-text text-muted">{{ translateLabel('grids.columns.valuePathHelp') || 'Path to extract option value' }}</small>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label">{{ translateLabel('grids.columns.textPath') || 'Text Path' }}</label>
-          <input
-            type="text"
-            class="form-control"
-            formControlName="textPath"
-            [placeholder]="translateLabel('grids.columns.textPathExample') || 'name or $.name'"
-          />
-          <small class="form-text text-muted">{{ translateLabel('grids.columns.textPathHelp') || 'Path to extract option text' }}</small>
+        <!-- Value Path & Text Path Configuration -->
+        <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">
+              <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('grids.columns.valuePath') || 'Value Path' }}
+            </label>
+            <select class="form-control" formControlName="valuePath"
+              style="font-family: 'Courier New', monospace; font-size: 13px;">
+              <option value="">-- Select Value Path --</option>
+              <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
+              <option
+                *ngIf="dataSourceForm.get('valuePath')?.value && !availableProperties.includes(dataSourceForm.get('valuePath')?.value)"
+                [value]="dataSourceForm.get('valuePath')?.value">
+                {{ dataSourceForm.get('valuePath')?.value }} (current)
+              </option>
+            </select>
+            <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+              *ngIf="availableProperties.length > 0">
+              Select value field from available properties
+            </small>
+            <small class="form-text text-warning" style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+              *ngIf="availableProperties.length === 0">
+              <i class="pi pi-info-circle"></i> Click "Test API" first to load available properties
+            </small>
+          </div>
+          <div class="form-group">
+            <label class="form-label">
+              <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('grids.columns.textPath') || 'Text Path' }}
+            </label>
+            <select class="form-control" formControlName="textPath"
+              style="font-family: 'Courier New', monospace; font-size: 13px;">
+              <option value="">-- Select Text Path --</option>
+              <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
+              <option
+                *ngIf="dataSourceForm.get('textPath')?.value && !availableProperties.includes(dataSourceForm.get('textPath')?.value)"
+                [value]="dataSourceForm.get('textPath')?.value">
+                {{ dataSourceForm.get('textPath')?.value }} (current)
+              </option>
+            </select>
+            <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+              *ngIf="availableProperties.length > 0">
+              Select text field from available properties
+            </small>
+            <small class="form-text text-warning" style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+              *ngIf="availableProperties.length === 0">
+              <i class="pi pi-info-circle"></i> Click "Test API" first to load available properties
+            </small>
+          </div>
         </div>
       </div>
 
       <!-- Lookup Table Source Fields -->
-      <div *ngIf="dataSourceForm.get('sourceType')?.value === 'LookupTable'">
-        <div class="mb-3">
-          <label class="form-label">{{ translateLabel('grids.columns.tableName') || 'Table Name' }}</label>
-          <input
-            type="text"
-            class="form-control"
-            formControlName="apiUrl"
-            [placeholder]="translateLabel('grids.columns.tableNameExample') || 'Items, Categories, etc.'"
-          />
-          <small class="form-text text-muted">{{ translateLabel('grids.columns.tableNameHelp') || 'Database table name to lookup data from' }}</small>
+      <div *ngIf="dataSourceForm.get('sourceType')?.value === 'LookupTable'" style="margin-top: 16px;">
+        <label class="form-label">
+          <i class="pi pi-table" style="margin-right: 6px; color: #667eea;"></i>
+          {{ translateLabel('grids.columns.tableName') || 'Table Name' }} <span class="text-danger">*</span>
+        </label>
+        <select class="form-control" formControlName="apiUrl" (change)="onTableSelected()">
+          <option value="">{{ translateLabel('grids.columns.selectTable') || '-- Select Table --' }}</option>
+          <option *ngFor="let table of availableLookupTables" [value]="table">{{ table }}</option>
+        </select>
+        <small class="form-text text-muted" style="margin-top: 6px; display: block;"
+          *ngIf="availableLookupTables.length > 0">
+          {{ translateLabel('grids.columns.tableNameHelp') || 'Database table name to lookup data from' }}
+        </small>
+        <small class="form-text text-warning" style="margin-top: 6px; display: block; color: #f59e0b;"
+          *ngIf="availableLookupTables.length === 0">
+          <i class="pi pi-exclamation-triangle"></i> {{ translateLabel('grids.columns.noTablesAvailable') || 'No tables available. Loading...' }}
+        </small>
+
+        <!-- Available Columns Display -->
+        <div *ngIf="availableColumns.length > 0"
+          style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <i class="pi pi-info-circle" style="color: #10b981; font-size: 16px;"></i>
+            <span style="font-weight: 600; color: #166534; font-size: 13px;">Available Properties:</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span *ngFor="let col of availableColumns"
+              class="property-tag"
+              style="display: inline-block; padding: 4px 10px; background: white; border: 1px solid #86efac; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; color: #166534; cursor: pointer; transition: all 0.2s ease;"
+              [title]="'Click to use as ' + (col.toLowerCase().includes('id') || col.toLowerCase() === 'value' ? 'Value Path' : 'Text Path')"
+              (click)="applyColumnAsPath(col)">
+              {{ col }}
+            </span>
+          </div>
+          <small style="display: block; margin-top: 8px; color: #166534; font-size: 11px;">
+            <i class="pi pi-lightbulb" style="margin-right: 4px;"></i>
+            Click on a property to use it as Value Path or Text Path
+          </small>
         </div>
 
-        <div class="mb-3">
-          <label class="form-label">{{ translateLabel('grids.columns.valueColumn') || 'Value Column' }}</label>
-          <input
-            type="text"
-            class="form-control"
-            formControlName="valuePath"
-            [placeholder]="translateLabel('grids.columns.valueColumnExample') || 'Id, Code, etc.'"
-          />
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label">{{ translateLabel('grids.columns.textColumn') || 'Text Column' }}</label>
-          <input
-            type="text"
-            class="form-control"
-            formControlName="textPath"
-            [placeholder]="translateLabel('grids.columns.textColumnExample') || 'Name, Title, etc.'"
-          />
+        <!-- Value Path & Text Path Configuration for Database Table -->
+        <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">
+              <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('grids.columns.valueColumn') || 'Value Path' }}
+            </label>
+            <select class="form-control" formControlName="valuePath"
+              style="font-family: 'Courier New', monospace; font-size: 13px;">
+              <option value="">-- Select Value Path --</option>
+              <option *ngFor="let col of availableColumns" [value]="col">{{ col }}</option>
+              <option
+                *ngIf="dataSourceForm.get('valuePath')?.value && !availableColumns.includes(dataSourceForm.get('valuePath')?.value)"
+                [value]="dataSourceForm.get('valuePath')?.value">
+                {{ dataSourceForm.get('valuePath')?.value }} (current)
+              </option>
+            </select>
+            <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+              *ngIf="availableColumns.length > 0">
+              Select value column from available columns
+            </small>
+            <small class="form-text text-warning" style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+              *ngIf="availableColumns.length === 0">
+              <i class="pi pi-info-circle"></i> Select a table above to load available columns automatically
+            </small>
+          </div>
+          <div class="form-group">
+            <label class="form-label">
+              <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('grids.columns.textColumn') || 'Text Path' }}
+            </label>
+            <select class="form-control" formControlName="textPath"
+              style="font-family: 'Courier New', monospace; font-size: 13px;">
+              <option value="">-- Select Text Path --</option>
+              <option *ngFor="let col of availableColumns" [value]="col">{{ col }}</option>
+              <option
+                *ngIf="dataSourceForm.get('textPath')?.value && !availableColumns.includes(dataSourceForm.get('textPath')?.value)"
+                [value]="dataSourceForm.get('textPath')?.value">
+                {{ dataSourceForm.get('textPath')?.value }} (current)
+              </option>
+            </select>
+            <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
+              *ngIf="availableColumns.length > 0">
+              Select text column from available columns
+            </small>
+            <small class="form-text text-warning" style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
+              *ngIf="availableColumns.length === 0">
+              <i class="pi pi-info-circle"></i> Select a table above to load available columns automatically
+            </small>
+          </div>
         </div>
       </div>
 
@@ -648,6 +1134,37 @@
       <div *ngIf="dataSourceForm.get('sourceType')?.value === 'Static'" class="alert alert-info">
         <i class="pi pi-info-circle"></i>
         {{ translateLabel('grids.columns.staticOptionsNote') || 'Static options will be managed through the Column Options section above.' }}
+      </div>
+
+      <!-- Preview Options Display (for API and LookupTable) -->
+      <div class="form-group" *ngIf="(dataSourceForm.get('sourceType')?.value === 'LookupTable' && dataSourceForm.get('apiUrl')?.value) || (dataSourceForm.get('sourceType')?.value === 'API' && dataSourceForm.get('apiUrl')?.value)"
+        style="margin-top: 16px; grid-column: 1 / -1;">
+        <label class="form-label">
+          <i class="pi pi-eye" style="margin-right: 6px; color: #667eea;"></i>
+          {{ translateLabel('grids.columns.previewOptions') || 'Preview Options' }}
+        </label>
+
+        <!-- Preview Results -->
+        <div class="preview-options-list" *ngIf="previewOptions.length > 0" style="margin-top: 12px;">
+          <div class="preview-header" style="margin-bottom: 12px;">
+            <span class="preview-count"
+              style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; font-weight: 500;">
+              <i class="pi pi-check-circle"></i>
+              {{ previewOptions.length }} {{ previewOptions.length === 1 ? (translateLabel('common.option') || 'option') : (translateLabel('common.options') || 'options') }} {{ translateLabel('common.found') || 'found' }}
+            </span>
+          </div>
+        </div>
+
+        <div *ngIf="previewOptions.length === 0 && !loadingPreview && dataSourceForm.get('valuePath')?.value && dataSourceForm.get('textPath')?.value"
+          style="padding: 16px; text-align: center; color: #6b7280; font-style: italic; background: #f9fafb; border-radius: 8px; margin-top: 12px;">
+          {{ translateLabel('grids.columns.noPreviewOptions') || 'No preview options found. Select Value Path and Text Path to load options.' }}
+        </div>
+
+        <div *ngIf="loadingPreview"
+          style="padding: 16px; text-align: center; color: #667eea; margin-top: 12px;">
+          <i class="pi pi-spin pi-spinner" style="margin-right: 8px;"></i>
+          {{ translateLabel('common.loading') || 'Loading...' }}
+        </div>
       </div>
 
       <div class="mb-3">

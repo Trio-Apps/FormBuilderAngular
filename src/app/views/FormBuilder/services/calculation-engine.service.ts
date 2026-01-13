@@ -421,6 +421,7 @@ export class CalculationEngineService {
     
     Object.keys(fieldValues).forEach(fieldCode => {
       const value = fieldValues[fieldCode];
+      const raw: any = value; // treat as any for runtime type checks (avoids TS narrowing issues)
       
       // Skip null, undefined, or empty string
       if (value === null || value === undefined || value === '') {
@@ -429,33 +430,63 @@ export class CalculationEngineService {
       }
       
       // Convert to number if possible
-      if (typeof value === 'number') {
-        result[fieldCode] = isNaN(value) || !isFinite(value) ? 0 : value;
-      } else if (typeof value === 'string') {
+      if (typeof raw === 'number') {
+        result[fieldCode] = isNaN(raw) || !isFinite(raw) ? 0 : raw;
+      } else if (typeof raw === 'string') {
+        // If the string looks like JSON (object/array), skip it entirely
+        const trimmedValue = raw.trim();
+        if ((trimmedValue.startsWith('{') && trimmedValue.endsWith('}')) ||
+            (trimmedValue.startsWith('[') && trimmedValue.endsWith(']'))) {
+          try {
+            const parsed = JSON.parse(trimmedValue);
+            // Likely a configuration object (e.g. file defaultValueJson) — skip from calculations
+            console.log(`[CalculationEngine] Skipping JSON-like non-numeric value for field ${fieldCode}`);
+            return;
+          } catch {
+            // If parse fails, fall through to numeric test
+          }
+        }
+
         // Try to convert string to number if it's a valid number
-        const trimmedValue = value.trim();
         const numValue = Number(trimmedValue);
-        
         if (!isNaN(numValue) && isFinite(numValue) && trimmedValue !== '') {
-          // Valid number string
           result[fieldCode] = numValue;
         } else {
-          // Non-numeric string - for calculated fields, convert to 0
-          // This prevents API errors like "Cannot find column [a].."
-          console.warn(`[CalculationEngine] Non-numeric value "${trimmedValue}" for field ${fieldCode} - converting to 0 for calculation`);
-          result[fieldCode] = 0;
+          // Non-numeric string — skip instead of converting to 0 to reduce noisy warnings.
+          // Missing fields will be set to 0 later when required by the expression.
+          console.log(`[CalculationEngine] Non-numeric string for field ${fieldCode} — skipping for calculation`);
+          return;
         }
-      } else if (typeof value === 'boolean') {
+      } else if (typeof raw === 'boolean') {
         // Convert boolean to number (true = 1, false = 0)
-        result[fieldCode] = value ? 1 : 0;
-      } else {
-        // For other types, try to convert to number, otherwise use 0
-        const numValue = Number(value);
+        result[fieldCode] = raw ? 1 : 0;
+      } else if (typeof raw === 'object') {
+        // If it's an object (e.g. parsed defaultValueJson for file config), try to detect file-config-like shape
+        try {
+          if (raw && (raw.allowedExtensions || raw.customExtensions)) {
+            console.log(`[CalculationEngine] Skipping object value (likely file config) for field ${fieldCode}`);
+            return; // skip inclusion
+          }
+        } catch {
+          // ignore
+        }
+
+        // Try to coerce object to number, otherwise skip
+        const numValue = Number(raw);
         if (!isNaN(numValue) && isFinite(numValue)) {
           result[fieldCode] = numValue;
         } else {
-          console.warn(`[CalculationEngine] Cannot convert value "${value}" for field ${fieldCode} to number - using 0`);
-          result[fieldCode] = 0;
+          console.log(`[CalculationEngine] Non-numeric object for field ${fieldCode} — skipping for calculation`);
+          return;
+        }
+      } else {
+        // For other types, try to convert to number, otherwise skip
+        const numValue = Number(raw);
+        if (!isNaN(numValue) && isFinite(numValue)) {
+          result[fieldCode] = numValue;
+        } else {
+          console.log(`[CalculationEngine] Unknown non-numeric value for field ${fieldCode} — skipping for calculation`);
+          return;
         }
       }
     });
@@ -468,7 +499,8 @@ export class CalculationEngineService {
    */
   async calculateAllFields(
     fields: FormFieldDto[],
-    fieldValues: { [fieldCode: string]: any }
+    fieldValues: { [fieldCode: string]: any },
+    calculatedFieldsToCalculate?: FormFieldDto[]
   ): Promise<{ [fieldCode: string]: number | string }> {
     const results: { [fieldCode: string]: number | string } = {};
     
@@ -479,7 +511,8 @@ export class CalculationEngineService {
       }
     });
     
-    const calculatedFields = fields.filter(f => 
+    // Use provided calculatedFields if available, otherwise filter from fields
+    const calculatedFields = calculatedFieldsToCalculate || fields.filter(f => 
       this.isCalculatedField(f)
     );
 
@@ -499,18 +532,20 @@ export class CalculationEngineService {
     for (const field of calculatedFields) {
       if (!field.fieldCode) continue;
       
-      if (!field.expressionText || field.expressionText.trim() === '') {
-        console.warn(`[CalculationEngine] Field ${field.fieldCode} has no expressionText, skipping calculation`);
+      // Check if expressionText is missing, empty, or the string "null"
+      const expressionText = field.expressionText?.trim() || '';
+      if (!expressionText || expressionText === 'null' || expressionText === 'undefined') {
+        console.warn(`[CalculationEngine] Field ${field.fieldCode} has no expressionText (value: "${field.expressionText}"), skipping calculation`);
         continue;
       }
 
       try {
-        console.log(`[CalculationEngine] Calculating field ${field.fieldCode} with expression: ${field.expressionText}`);
+        console.log(`[CalculationEngine] Calculating field ${field.fieldCode} with expression: ${expressionText}`);
         // Use calculationOperation if available, otherwise use default
         const operationId = field.calculationOperation;
         const result = operationId 
-          ? await this.calculateExpressionWithOperation(field.expressionText, fieldValuesMap, operationId)
-          : await this.calculateExpressionSafe(field.expressionText, fieldValuesMap);
+          ? await this.calculateExpressionWithOperation(expressionText, fieldValuesMap, operationId)
+          : await this.calculateExpressionSafe(expressionText, fieldValuesMap);
         if (result.success) {
           results[field.fieldCode] = result.value;
           // Update fieldValuesMap with calculated value for dependent calculations
@@ -544,6 +579,20 @@ export class CalculationEngineService {
     // 2. Type name is 'Calculated' (even if expressionText is not loaded yet from API)
     // 3. OR has expressionText (for backward compatibility)
     const isCalculated = isCalculatedById || (typeNameMatch || typeMatch) || hasExpression;
+    
+    // Debug logging for fields that might be calculated
+    if (field.fieldCode && (field.fieldCode.toLowerCase().includes('sum') || field.fieldCode.toLowerCase().includes('calc'))) {
+      console.log(`[CalculationEngine] Checking if field ${field.fieldCode} is calculated:`, {
+        fieldTypeId: field.fieldTypeId,
+        fieldTypeName: field.fieldTypeName,
+        fieldTypeTypeName: field.fieldType?.typeName,
+        isCalculatedById,
+        typeNameMatch,
+        typeMatch,
+        hasExpression,
+        isCalculated
+      });
+    }
     
     // Only log if it's a calculated field and expressionText is missing (for debugging)
     if (isCalculated && !hasExpression) {

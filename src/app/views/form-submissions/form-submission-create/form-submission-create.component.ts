@@ -2,7 +2,8 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto } from '../services/form-submissions.service';
+import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto, FormSubmissionDetailDto } from '../services/form-submissions.service';
+import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../models/approve-reject-submission.model';
 import { FormSubmissionValuesService, BulkFormSubmissionValuesDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto } from '../services/form-submission-values.service';
 import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
@@ -16,7 +17,7 @@ import { RuleEvaluationService, FieldState } from '../../FormBuilder/services/ru
 import { FormRulesService } from '../../FormBuilder/services/form-rules.service';
 import { buildContext, getContextFieldCodes, requiresContext } from '../../FormBuilder/utils/field-data-source-helpers';
 import { CalculationEngineService } from '../../FormBuilder/services/calculation-engine.service';
-import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse, FieldTypeDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { InputTextModule } from 'primeng/inputtext';
@@ -55,6 +56,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   documentType: DocumentType | null = null;
   submissionId: number | null = null; // For edit mode
   isEditMode = false; // Flag to determine if we're editing
+  
+  // Submission approval/reject state
+  currentSubmission: FormSubmissionDto | null = null;
+  isApproving = false;
+  isRejecting = false;
+  approveRejectComments: string = '';
+  showApproveRejectModal = false;
 
   // Forms, Tabs, Fields
   forms: FormBuilderDto[] = [];
@@ -95,6 +103,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   // Track which fields depend on context for reloading options
   private contextDependencies: { [fieldId: number]: string[] } = {}; // fieldId -> array of context field codes
+
+  // Field Types cache - loaded from API
+  fieldTypes: FieldTypeDto[] = []; // Active field types loaded from API
+  fieldTypesMap: { [id: number]: FieldTypeDto } = {}; // Map for quick lookup by ID
+  private _fieldTypeCache: { [fieldId: number]: string } = {}; // Cache field types to avoid recalculation
 
   // Document Series
   documentSeries: DocumentSeries[] = [];
@@ -148,6 +161,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Load field types first (they will be used as fallback in getFieldType)
+    this.loadFieldTypes();
+    
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
       this.translationService.setLanguage(adminLanguagePreference as 'en' | 'ar');
@@ -372,6 +388,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.fieldFiles = {};
     this.fieldsForm = this.fb.group({});
     this.loadTabs(formId);
+    
+    // If in edit mode, load submission data after form is selected
+    // This will load field values, and attachments will be loaded after fields are loaded in processFields
+    if (this.isEditMode && this.submissionId) {
+      this.loadSubmissionForEdit();
+    }
   }
 
   loadTabs(formId: number): void {
@@ -457,13 +479,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
     
-    // If edit mode, load submission data after fields are loaded
-    if (this.isEditMode && this.submissionId) {
-      // Load submission data will be called after fields are loaded
-      setTimeout(() => {
-        this.loadSubmissionForEdit();
-      }, 100);
-    }
+    // If edit mode, load submission data will be called after fields are loaded in processFields
+    // This ensures fields are available before loading attachments
 
     console.log('[FormSubmissionCreate] Loading form with fields (including fieldDataSource) for form:', this.selectedFormId, 'tab:', tabId);
     this.loading.fields = true;
@@ -682,13 +699,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.fields.forEach(field => {
       if (field.id) {
         const fieldType = this.getFieldType(field);
-        const isOptionsField = ['select', 'radio', 'checkbox'].includes(fieldType);
+        // Check if field type requires options (select, radio, checkbox)
+        // Also check if fieldType has hasOptions = true (even if getFieldType didn't detect it as options field)
+        const ft = this.getFieldTypeFromCache(field) || field.fieldType;
+        const hasOptionsFromFieldType = ft?.hasOptions === true;
+        const isOptionsField = ['select', 'radio', 'checkbox'].includes(fieldType) || hasOptionsFromFieldType;
         
         // Log field DataSource info
         if (field.fieldDataSource) {
           console.log(`[FormSubmissionCreate] ✅ Field ${field.id} (${field.fieldCode || 'no-code'}) has DataSource:`, {
             fieldType: fieldType,
             isOptionsField: isOptionsField,
+            hasOptionsFromFieldType: hasOptionsFromFieldType,
             sourceType: field.fieldDataSource.sourceType,
             isActive: field.fieldDataSource.isActive,
             apiUrl: field.fieldDataSource.apiUrl,
@@ -700,13 +722,15 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           console.log(`[FormSubmissionCreate] ❌ Field ${field.id} (${field.fieldCode || 'no-code'}) has NO DataSource`, {
             fieldType: fieldType,
             isOptionsField: isOptionsField,
+            hasOptionsFromFieldType: hasOptionsFromFieldType,
             hasOptions: !!(field.fieldOptions && field.fieldOptions.length > 0),
             optionsCount: field.fieldOptions?.length || 0
           });
         }
         
         // Only load DataSource options for fields that need options
-        if (isOptionsField) {
+        // Also check if field has static options (field.fieldOptions) - these should be displayed even without DataSource
+        if (isOptionsField || (field.fieldOptions && field.fieldOptions.length > 0)) {
           this.loadFieldOptionsFromDataSource(field);
         }
       }
@@ -728,14 +752,62 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           if (isRequired) {
                 validators.push(Validators.required);
               }
-              
+
+              // Additional validators based on field type & code (password, phone, email, etc.)
+              const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+              const fieldTypeForValidation = this.getFieldType(field);
+              const fieldTypeNameLower = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
+
+              // Email validation
+              if (
+                fieldTypeForValidation === 'email' ||
+                fieldTypeNameLower.includes('email') ||
+                fieldCodeLower === 'email'
+              ) {
+                validators.push(Validators.email);
+              }
+
+              // Phone validation – allow digits with optional + and 7–20 chars
+              if (
+                fieldTypeNameLower.includes('phone') ||
+                fieldTypeNameLower.includes('mobile') ||
+                fieldCodeLower === 'phone' ||
+                fieldCodeLower === 'mobile' ||
+                fieldCodeLower === 'phone_number'
+              ) {
+                validators.push(Validators.pattern(/^\+?[0-9]{7,20}$/));
+              }
+
+              // Password validation – minimum length 6
+              if (
+                fieldTypeNameLower.includes('password') ||
+                fieldCodeLower === 'password' ||
+                fieldCodeLower === 'pwd'
+              ) {
+                validators.push(Validators.minLength(6));
+              }
+
               const fieldType = this.getFieldType(field);
-              let defaultValue: any = field.defaultValueJson || null;
+              let defaultValue: any = null;
               
+              // Get default value based on field type
               if (fieldType === 'checkbox') {
                 defaultValue = [];
-              } else if (fieldType === 'boolean') {
+              } else if (fieldType === 'boolean' || fieldType === 'switch') {
                 defaultValue = (field.defaultValueJson === 'true' || field.defaultValueJson === 'True') ? true : false;
+              } else if (fieldType === 'select') {
+                if (field.fieldType?.allowMultiple) {
+                  // Multiple select should be an array
+                  defaultValue = [];
+                } else {
+                  // Single select - use empty string instead of null for better compatibility
+                  const defaultVal = this.getDefaultValue(field);
+                  defaultValue = defaultVal !== '' ? defaultVal : '';
+                }
+              } else {
+                // For other types, try to get default value
+                const defaultVal = this.getDefaultValue(field);
+                defaultValue = defaultVal !== '' ? defaultVal : null;
               }
               
               formControls[fieldKey] = [defaultValue, validators];
@@ -808,6 +880,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
     
     console.log('[FormSubmissionCreate] Fields loading completed. Fields count:', this.fields.length);
+    
+    // If in edit mode, load attachments after fields are loaded
+    if (this.isEditMode && this.submissionId && this.fields.length > 0) {
+      // Load attachments for file fields
+      this.loadAttachmentsForEdit();
+      
+      // Also populate form with field values if they were loaded earlier
+      const pendingFieldValues = (this as any)._pendingFieldValues;
+      if (pendingFieldValues && pendingFieldValues.length > 0) {
+        this.populateFormWithFieldValues(pendingFieldValues);
+      }
+    }
+    
     // Always set loading to false, even if there were errors
     this.loading.fields = false;
     // Use setTimeout to defer change detection and avoid infinite loops
@@ -824,24 +909,265 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   }
 
   isFileField(field: FormFieldDto): boolean {
-    const typeName = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
-    return typeName.includes('file') || typeName.includes('attachment') || typeName.includes('image');
+    // Check getFieldType result first (most reliable)
+    const detectedType = this.getFieldType(field);
+    if (detectedType === 'file') {
+      return true;
+    }
+    
+    // Check fieldTypeName
+    const fieldTypeName = (field.fieldTypeName || '').toLowerCase();
+    // Check fieldType.typeName
+    const fieldTypeTypeName = (field.fieldType?.typeName || '').toLowerCase();
+    // Check fieldCode and fieldName for common file field patterns
+    const fieldCode = (field.fieldCode || '').toLowerCase();
+    const fieldName = (field.fieldName || '').toLowerCase();
+    
+    const isFile = fieldTypeName.includes('file') || 
+                   fieldTypeName.includes('attachment') || 
+                   fieldTypeName.includes('image') ||
+                   fieldTypeTypeName.includes('file') || 
+                   fieldTypeTypeName.includes('attachment') || 
+                   fieldTypeTypeName.includes('image') ||
+                   fieldCode.includes('file') ||
+                   fieldCode.includes('image') ||
+                   fieldCode === 'img' ||
+                   fieldName.includes('file') ||
+                   fieldName.includes('image');
+    
+    return isFile;
+  }
+
+  // ===== Field Type Helpers =====
+
+  /**
+   * Load active field types from API
+   * This will be used as fallback when field.fieldType is missing
+   */
+  private loadFieldTypes(): void {
+    this.fieldsService.getActiveFieldTypes().subscribe({
+      next: (types: FieldTypeDto[]) => {
+        this.fieldTypes = types.filter(type => type.isActive && type.id && type.typeName);
+        // Create a map for quick lookup by ID
+        this.fieldTypesMap = {};
+        this.fieldTypes.forEach(type => {
+          if (type.id) {
+            this.fieldTypesMap[type.id] = type;
+          }
+        });
+        console.log(`[FormSubmissionCreate] Loaded ${this.fieldTypes.length} active field types from API`);
+      },
+      error: (error) => {
+        console.warn('[FormSubmissionCreate] Failed to load field types from API:', error);
+        this.fieldTypes = [];
+        this.fieldTypesMap = {};
+      }
+    });
+  }
+
+  /**
+   * Get field type from field.fieldType or fallback to loaded fieldTypes by fieldTypeId
+   */
+  private getFieldTypeFromCache(field: FormFieldDto): FieldTypeDto | null {
+    // First, try to use field.fieldType if available
+    if (field.fieldType && field.fieldType.id) {
+      return field.fieldType;
+    }
+    
+    // If fieldTypeId is available, try to find it in loaded fieldTypes
+    if (field.fieldTypeId && this.fieldTypesMap[field.fieldTypeId]) {
+      return this.fieldTypesMap[field.fieldTypeId];
+    }
+    
+    return null;
   }
 
   getFieldType(field: FormFieldDto): string {
-    // Prefer explicit FieldType configuration if available
-    const ft = field.fieldType;
+    // Try to get FieldType from field.fieldType or from loaded fieldTypes cache
+    let ft = this.getFieldTypeFromCache(field);
+    
+    // If still not found, use field.fieldType directly (may be null)
+    if (!ft) {
+      ft = field.fieldType || null;
+    }
+    
     const typeName = (field.fieldTypeName || ft?.typeName || '').toLowerCase().trim();
     const dataType = (ft?.dataType || '').toLowerCase().trim();
+    
+    // Declare fieldCodeLower and fieldNameLower once at the beginning
+    const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+    const fieldNameLower = (field.fieldName || '').toLowerCase();
+    
+    // Removed verbose logging for performance
 
-    // Check for Calculated type first
+    // PRIORITY ORDER: Check specific types BEFORE checking options/grid
+    const combined = `${typeName} ${dataType}`.toLowerCase();
+
+    // Additional heuristic: if defaultValueJson contains file configuration
+    // (allowedExtensions / customExtensions), prefer treating it as a file field.
+    try {
+      if (field.defaultValueJson && field.defaultValueJson.trim()) {
+        const parsedCfg = JSON.parse(field.defaultValueJson);
+        if (parsedCfg && (parsedCfg.allowedExtensions || parsedCfg.customExtensions)) {
+          return 'file';
+        }
+      }
+    } catch {
+      // ignore parse errors and continue
+    }
+    
+    // 0) Check if fieldType explicitly indicates options type (BEFORE email/file checks)
+    // This ensures RadioButton, MultiSelect, ComboBox, CheckBox are detected correctly even if hasOptions = false
+    // IMPORTANT: Check typeName FIRST to catch checkbox even if hasOptions = false in database
+    const ftTypeNameLower = (ft?.typeName || '').toLowerCase();
+    const isExplicitOptionsType = ftTypeNameLower.includes('radio') || 
+                                   ftTypeNameLower.includes('select') || 
+                                   ftTypeNameLower.includes('combobox') ||
+                                   ftTypeNameLower.includes('multiselect') ||
+                                   ftTypeNameLower.includes('checkbox') ||
+                                   typeName.includes('checkbox') ||
+                                   fieldCodeLower.includes('checkbox') ||
+                                   fieldNameLower.includes('checkbox');
+    
+    // If fieldType has hasOptions = true OR typeName indicates options type, check options FIRST
+    const hasOptionsFromFieldType = ft?.hasOptions === true;
+    if (hasOptionsFromFieldType || isExplicitOptionsType) {
+      // Skip to options detection (will be handled below)
+    } else {
+      // 1) Email - Check BEFORE options (email should not be treated as radio/select)
+      if (combined.includes('email') || typeName.includes('email') || 
+          fieldCodeLower.includes('email') || fieldNameLower.includes('email')) {
+        return 'email';
+      }
+
+      // 2) File / Image / Attachment - Check BEFORE calculated (file should not be treated as calculated)
+      // BUT: Only if it's NOT an options type (RadioButton, Select, etc.)
+      const isFileByTypeName = typeName === 'file' || typeName.includes('file') || 
+          combined.includes('file') || combined.includes('image') || combined.includes('attachment') || 
+          dataType === 'file';
+      const isFileByCode = fieldCodeLower === 'image' || fieldCodeLower.includes('image') || 
+          fieldCodeLower.includes('file') || fieldCodeLower.includes('attachment');
+      const isFileByName = fieldNameLower.includes('image') || fieldNameLower.includes('file') || 
+          fieldNameLower.includes('attachment');
+      
+      if (isFileByTypeName || isFileByCode || isFileByName) {
+        return 'file';
+      }
+    }
+
+    // 3) Calculated - Check BEFORE number/date/text (calculated fields should be detected even without expressionText)
+    // A field is calculated if:
+    // 1. fieldTypeId is 14 (Calculated type)
+    // 2. Type name is 'Calculated'
+    // 3. OR has expressionText (for backward compatibility)
     if (typeName === 'calculated' || this.calculationEngine.isCalculatedField(field)) {
       return 'calculated';
     }
 
-    // Check for Grid type
-    if (typeName === 'grid') {
+    // 4) Grid - Only if gridId exists OR typeName is explicitly 'grid' (don't treat MultiSelect as grid)
+    // Priority 1: If field has gridId, it's definitely a Grid
+    if (field.gridId && field.gridId > 0) {
       return 'grid';
+    }
+
+    // Priority 2: By type name (explicit 'grid' type, not MultiSelect)
+    if (typeName === 'grid' || typeName === 'line items' || typeName === 'lineitems') {
+      return 'grid';
+    }
+
+    // Priority 3: By field code (if fieldCode is exactly 'grid')
+    if (fieldCodeLower === 'grid') {
+      return 'grid';
+    }
+
+    // 5) Types with options (select / radio / checkbox) - Check AFTER email/file/grid
+    // PRIORITY: If fieldType has hasOptions = true, treat it as a field with options
+    // This ensures that even if field.fieldOptions is not loaded yet, we still detect it correctly
+    const hasOptionsFromField = field.fieldOptions && field.fieldOptions.length > 0;
+    
+    // IMPORTANT: If fieldType.hasOptions = true OR isExplicitOptionsType, we MUST treat it as a field with options
+    // even if field.fieldOptions is empty (options might be loaded from DataSource later)
+    const hasOptions = hasOptionsFromFieldType || isExplicitOptionsType || hasOptionsFromField;
+    
+    // If field has options (from fieldType.hasOptions OR field.fieldOptions), treat it as select/radio/checkbox
+    if (hasOptions) {
+      // Get fieldTypeName in lowercase for better matching
+      const fieldTypeNameLower = (field.fieldTypeName || '').toLowerCase();
+      const ftTypeNameLower = (ft?.typeName || '').toLowerCase();
+
+      // لو النوع اسمه يحتوي "checkbox" أو "check box" خليه مربعات اختيار
+      if (typeName.includes('checkbox') || typeName.includes('check box') || 
+          fieldTypeNameLower.includes('checkbox') || ftTypeNameLower.includes('checkbox') ||
+          fieldCodeLower.includes('checkbox') || fieldNameLower.includes('checkbox')) {
+        return 'checkbox';
+      }
+
+      // Check for ComboBox / Dropdown FIRST (before radio) - ComboBox is a select type, not radio
+      const isComboBox = typeName.includes('combobox') || 
+                         fieldTypeNameLower.includes('combobox') || 
+                         ftTypeNameLower.includes('combobox') ||
+                         fieldCodeLower.includes('combobox') || 
+                         fieldNameLower.includes('combobox');
+      
+      if (isComboBox) {
+        return 'select';
+      }
+
+      // Check for MultiSelect / Select - BEFORE radio
+      const isSelectType = typeName.includes('select') || 
+                          fieldTypeNameLower.includes('select') || 
+                          ftTypeNameLower.includes('select') ||
+                          fieldTypeNameLower.includes('multiselect') ||
+                          ftTypeNameLower.includes('multiselect') ||
+                          fieldCodeLower.includes('select') || 
+                          fieldNameLower.includes('select');
+      
+      if (isSelectType) {
+        return 'select';
+      }
+
+      // لو النوع اسمه يحتوي "radio" خليه radio buttons (التحقق بعد ComboBox/Select)
+      // Check multiple sources: typeName, fieldTypeName, ft.typeName
+      if (typeName.includes('radio') || 
+          fieldTypeNameLower.includes('radio') || 
+          ftTypeNameLower.includes('radio') ||
+          fieldCodeLower.includes('radio') || 
+          fieldNameLower.includes('radio')) {
+        return 'radio';
+      }
+
+      // إذا كان allowMultiple = false و hasOptions = true وليس select/combobox صراحة
+      // (Radio buttons تسمح باختيار واحد فقط، بينما Select قد يكون single أو multiple)
+      // Check allowMultiple - use ft?.allowMultiple if available, otherwise default to false (single selection = radio)
+      const allowMultiple = ft?.allowMultiple ?? false;
+      
+      // Default to select if allowMultiple is true, otherwise radio
+      if (allowMultiple === true) {
+        return 'select';
+      }
+      
+      // If allowMultiple = false and not explicitly select/combobox, default to radio
+      // BUT: Only if we're sure it's not a dropdown (ComboBox/Select should be detected above)
+      return 'radio';
+
+    }
+
+    // 6) Non-options fields based on dataType / name (Email already checked above)
+
+    // Number
+    if (combined.includes('number') || combined.includes('numeric') || dataType === 'int' || dataType === 'decimal' ||
+        typeName.includes('number') || fieldCodeLower.includes('number') || fieldNameLower.includes('number')) {
+      return 'number';
+    }
+
+    // Date - Check typeName, dataType, fieldCode, and fieldName
+    const isDateByType = combined.includes('date') || dataType === 'date' || dataType === 'datetime' ||
+        typeName === 'date' || typeName.includes('date');
+    const isDateByCode = fieldCodeLower === 'date' || fieldCodeLower.includes('date');
+    const isDateByName = fieldNameLower === 'date' || fieldNameLower.includes('date');
+    
+    if (isDateByType || isDateByCode || isDateByName) {
+      return 'date';
     }
 
     // Explicit mapping: Textbox => text input
@@ -849,62 +1175,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return 'text';
     }
 
-    // 1) Types with options (select / radio / checkbox)
-    if (ft?.hasOptions) {
-      // لو النوع اسمه يحتوي "checkbox" أو "check box" خليه مربعات اختيار
-      if (typeName.includes('checkbox') || typeName.includes('check box')) {
-        return 'checkbox';
-      }
-
-      // لو النوع اسمه يحتوي "radio" خليه radio buttons (التحقق أولاً)
-      if (typeName.includes('radio')) {
-        return 'radio';
-      }
-
-      // التحقق من fieldTypeName مباشرة (قد يكون "Radio" بحروف كبيرة)
-      const fieldTypeNameLower = (field.fieldTypeName || '').toLowerCase();
-      if (fieldTypeNameLower.includes('radio')) {
-        return 'radio';
-      }
-
-      // إذا كان allowMultiple = false و hasOptions = true وليس select صراحة
-      // (Radio buttons تسمح باختيار واحد فقط، بينما Select قد يكون single أو multiple)
-      if (ft.allowMultiple === false && !typeName.includes('select') && !fieldTypeNameLower.includes('select')) {
-        return 'radio';
-      }
-
-      // أي نوع آخر فيه اختيارات (hasOptions = true) يكون Dropdown
-      return 'select';
-    }
-
-    // 2) Non-options fields based on dataType / name
-    const combined = `${typeName} ${dataType}`.toLowerCase();
-
-    // Email first
-    if (combined.includes('email')) return 'email';
-
-    // Number
-    if (combined.includes('number') || combined.includes('numeric') || dataType === 'int' || dataType === 'decimal') {
-      return 'number';
-    }
-
-    // Date
-    if (combined.includes('date') || dataType === 'date' || dataType === 'datetime') {
-      return 'date';
-    }
-
-    // File
-    if (combined.includes('file') || dataType === 'file') {
-      return 'file';
-    }
-
-    // Grid / Line Items Grid
-    if (combined.includes('grid') || typeName.includes('grid') || typeName.includes('line items') || typeName.includes('lineitems')) {
-      return 'grid';
-    }
-
     // Switch / boolean
-    if (combined.includes('switch') || combined.includes('toggle') || dataType === 'bool' || dataType === 'boolean') {
+    if (combined.includes('switch') || combined.includes('toggle') || dataType === 'bool' || dataType === 'boolean' ||
+        typeName.includes('switch') || typeName.includes('toggle') || typeName.includes('boolean') ||
+        fieldCodeLower.includes('switch') || fieldNameLower.includes('switch')) {
       return 'switch';
     }
 
@@ -914,6 +1188,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
 
     // Default to short text input
+    // Note: No console.log for default text fields to reduce console noise
     return 'text';
   }
 
@@ -1332,6 +1607,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     return field.isMandatory === true;
   }
 
+  isFieldEditable(field: FormFieldDto): boolean {
+    // Calculated fields are always read-only
+    if (this.calculationEngine.isCalculatedField(field)) {
+      return false;
+    }
+
+    const dynamicState = this.dynamicFieldStates[field.fieldCode || ''];
+    if (dynamicState && dynamicState.isReadOnly !== undefined) {
+      return !dynamicState.isReadOnly;
+    }
+    return field.isEditable !== false;
+  }
+
   isFieldVisible(field: FormFieldDto): boolean {
     const dynamicState = this.dynamicFieldStates[field.fieldCode || ''];
     if (dynamicState?.isVisible !== undefined) {
@@ -1341,11 +1629,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   }
 
   onFileSelected(event: any, field: FormFieldDto): void {
-    if (!field.id) return;
+    if (!field.id) {
+      console.warn('[FormSubmissionCreate] onFileSelected - Field ID is missing');
+      return;
+    }
     const files = Array.from(event.target.files) as File[];
+    console.log(`[FormSubmissionCreate] 📁 onFileSelected - Field ${field.id} (${field.fieldCode || field.fieldName}), files selected:`, files.map(f => ({ name: f.name, size: f.size, type: f.type })));
+    
     if (files.length > 0) {
       this.fieldFiles[field.id] = files;
+      console.log(`[FormSubmissionCreate] ✅ Files stored in fieldFiles[${field.id}]:`, this.fieldFiles[field.id].map(f => f.name));
       this.cdr.detectChanges();
+    } else {
+      console.warn('[FormSubmissionCreate] ⚠️ onFileSelected - No files selected');
     }
   }
 
@@ -1374,19 +1670,22 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    * Handle select dropdown change
    */
   onSelectChange(field: FormFieldDto, event: any): void {
+    // Note: This method is no longer needed with reactive forms
+    // Reactive forms handle value changes automatically through formControlName
+    // But we keep it for backward compatibility and to trigger calculations
     const fieldKey = `field_${field.id}`;
-    const selectedValue = event.target.value;
     const control = this.fieldsForm.get(fieldKey);
     
-    console.log(`[FormSubmissionCreate] Select changed for field ${field.id} (${field.fieldCode || 'no-code'})`, {
-      selectedValue,
-      controlValue: control?.value,
-      controlExists: !!control
-    });
-    
     if (control) {
-      // Ensure the control value is updated
-      control.setValue(selectedValue, { emitEvent: true });
+      // Get the current value from the control (reactive forms already updated it)
+      const selectedValue = control.value;
+      
+      console.log(`[FormSubmissionCreate] Select changed for field ${field.id} (${field.fieldCode || 'no-code'})`, {
+        selectedValue,
+        controlValue: control?.value,
+        controlExists: !!control
+      });
+      
       // Update fieldValues for rule evaluation
       this.updateFieldValues();
       // Calculate dependent calculated fields (like FormViewComponent)
@@ -1532,10 +1831,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       textPath: dataSource.textPath
     });
 
-    // Only load from API/LookupTable, not Static
+    // For Static DataSource, use static options from field.fieldOptions
     if (dataSource.sourceType === 'Static') {
-      console.log(`[FormSubmissionCreate] Field ${field.id} has Static DataSource, using static options`);
+      console.log(`[FormSubmissionCreate] Field ${field.id} has Static DataSource, using static options from field.fieldOptions`);
+      // Static options are already in field.fieldOptions, so we don't need to load them
+      // Just mark as loaded (empty array means use static options)
       this.fieldDataSourceOptions[field.id] = [];
+      this.loadingFieldOptions[field.id] = false;
       return;
     }
 
@@ -2473,8 +2775,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     
     // Load submission to get current status
     this.formSubmissionsService.getSubmissionById(submissionId).subscribe({
-      next: (submission) => {
+      next: (submission: FormSubmissionDetailDto) => {
         console.log('[FormSubmissionCreate] Loaded submission for edit:', submission);
+        // Store current submission for approve/reject
+        this.currentSubmission = submission;
         // Store current status
         (this as any)._currentSubmissionStatus = submission.status;
         // Update form with current status
@@ -2558,41 +2862,75 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       }
     });
 
-    // Load attachments for all file fields
-    this.loadAttachmentsForEdit();
+    // Note: Attachments will be loaded from processFields after fields are loaded
+    // This ensures fields are available before loading attachments
   }
 
   loadAttachmentsForEdit(): void {
-    if (!this.submissionId) return;
+    if (!this.submissionId) {
+      console.warn('[FormSubmissionCreate] loadAttachmentsForEdit: No submissionId');
+      return;
+    }
+    
+    console.log(`[FormSubmissionCreate] loadAttachmentsForEdit called for submissionId: ${this.submissionId}`);
     
     // Reset deleted attachments when loading new submission
     this.deletedAttachments = [];
 
     // Wait for fields to be loaded
     if (this.fields.length === 0) {
+      console.log('[FormSubmissionCreate] Fields not loaded yet, retrying in 200ms...');
       setTimeout(() => this.loadAttachmentsForEdit(), 200);
       return;
     }
 
+    console.log(`[FormSubmissionCreate] Checking ${this.fields.length} fields for file/image fields...`);
+
     // Find all file/image fields
-    const fileFields = this.fields.filter(field => this.isFileField(field));
+    const fileFields = this.fields.filter(field => {
+      const isFile = this.isFileField(field);
+      if (isFile) {
+        console.log(`[FormSubmissionCreate] Found file field: ${field.id} (${field.fieldCode || field.fieldName || 'no-name'})`);
+      }
+      return isFile;
+    });
     
-    if (fileFields.length === 0) return;
+    console.log(`[FormSubmissionCreate] Found ${fileFields.length} file field(s)`);
+    
+    if (fileFields.length === 0) {
+      console.warn('[FormSubmissionCreate] No file fields found. All fields:', this.fields.map(f => ({
+        id: f.id,
+        fieldCode: f.fieldCode,
+        fieldName: f.fieldName,
+        fieldTypeName: f.fieldTypeName,
+        fieldType: f.fieldType?.typeName
+      })));
+      return;
+    }
 
     // Load attachments for each file field
     fileFields.forEach(field => {
-      if (!field.id) return;
+      if (!field.id) {
+        console.warn('[FormSubmissionCreate] File field has no ID:', field);
+        return;
+      }
+      
+      console.log(`[FormSubmissionCreate] Loading attachments for field ${field.id} (${field.fieldCode || field.fieldName || 'no-name'})...`);
       
       this.formSubmissionAttachmentsService.getBySubmissionAndField(this.submissionId!, field.id).subscribe({
         next: (attachments) => {
           const attachmentsArray = Array.isArray(attachments) ? attachments : (attachments ? [attachments] : []);
-          console.log(`[FormSubmissionCreate] Loaded ${attachmentsArray.length} attachment(s) for field ${field.id}`);
+          console.log(`[FormSubmissionCreate] ✅ Loaded ${attachmentsArray.length} attachment(s) for field ${field.id} (${field.fieldCode || field.fieldName || 'no-name'})`);
+          if (attachmentsArray.length > 0) {
+            console.log(`[FormSubmissionCreate] First attachment:`, attachmentsArray[0]);
+          }
           this.existingAttachments[field.id] = attachmentsArray;
           this.cdr.detectChanges();
         },
         error: (error) => {
-          console.error(`[FormSubmissionCreate] Error loading attachments for field ${field.id}:`, error);
+          console.error(`[FormSubmissionCreate] ❌ Error loading attachments for field ${field.id} (${field.fieldCode || field.fieldName || 'no-name'}):`, error);
           this.existingAttachments[field.id] = [];
+          this.cdr.detectChanges();
         }
       });
     });
@@ -3035,7 +3373,16 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     const updateObservablesList: any[] = [];
 
     console.log('[FormSubmissionCreate] ===== Processing fields with existing values =====');
+    console.log('[FormSubmissionCreate] Submission ID:', submissionId);
     console.log('[FormSubmissionCreate] Existing values count:', existingValues.length);
+    console.log('[FormSubmissionCreate] fieldFiles status:', {
+      fieldFilesKeys: Object.keys(this.fieldFiles),
+      fieldFilesCount: Object.keys(this.fieldFiles).length,
+      fieldFiles: Object.keys(this.fieldFiles).reduce((acc: any, key) => {
+        acc[key] = this.fieldFiles[Number(key)]?.map(f => ({ name: f.name, size: f.size, type: f.type }));
+        return acc;
+      }, {})
+    });
 
     // Process field values
     this.fields.forEach(field => {
@@ -3173,7 +3520,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
         // Safety check: Ensure valueJson is always set (API requirement)
         if (!valueDto.valueJson) {
-          valueDto.valueJson = valueDto.valueString ? JSON.stringify(valueDto.valueString) : JSON.stringify(null);
+          // Try to generate valueJson from existing values
+          if (valueDto.valueNumber !== null && valueDto.valueNumber !== undefined) {
+            valueDto.valueJson = JSON.stringify(valueDto.valueNumber);
+          } else if (valueDto.valueDate) {
+            valueDto.valueJson = JSON.stringify(valueDto.valueDate.toISOString());
+          } else if (valueDto.valueBool !== null && valueDto.valueBool !== undefined) {
+            valueDto.valueJson = JSON.stringify(valueDto.valueBool);
+          } else if (valueDto.valueString !== null && valueDto.valueString !== undefined) {
+            valueDto.valueJson = JSON.stringify(valueDto.valueString);
+          } else {
+            valueDto.valueJson = JSON.stringify(null);
+          }
         }
         // Ensure valueString is set if valueJson exists but valueString doesn't
         if (valueDto.valueJson && !valueDto.valueString) {
@@ -3190,25 +3548,35 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         
         if (existingValue) {
           // Update existing value
-          console.log(`[FormSubmissionCreate] 🔄 Updating existing value for field ${field.id}`);
-          const updateDto: UpdateFormSubmissionValueDto = {};
+          console.log(`[FormSubmissionCreate] 🔄 Updating existing value for field ${field.id} (${field.fieldCode || 'no-code'})`, {
+            existingValue: existingValue,
+            newValue: valueDto,
+            fieldType: fieldType
+          });
+          
+          const updateDto: UpdateFormSubmissionValueDto = {
+            // Always include valueJson (required by API)
+            valueJson: valueDto.valueJson
+          };
           
           // Set appropriate value based on type
           if (valueDto.valueString !== null && valueDto.valueString !== undefined) {
             updateDto.valueString = valueDto.valueString;
           }
+          
           if (valueDto.valueNumber !== null && valueDto.valueNumber !== undefined) {
             updateDto.valueNumber = valueDto.valueNumber;
           }
+          
           if (valueDto.valueDate) {
             updateDto.valueDate = valueDto.valueDate;
           }
+          
           if (valueDto.valueBool !== null && valueDto.valueBool !== undefined) {
             updateDto.valueBool = valueDto.valueBool;
           }
-          if (valueDto.valueJson) {
-            updateDto.valueJson = valueDto.valueJson;
-          }
+          
+          console.log(`[FormSubmissionCreate] Update DTO for field ${field.id}:`, updateDto);
           
           // Add to update list
           updateObservablesList.push({
@@ -3218,7 +3586,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           });
         } else {
           // Create new value
-          console.log(`[FormSubmissionCreate] ✅ Adding new value DTO for field ${field.id}:`, valueDto);
+          console.log(`[FormSubmissionCreate] ✅ Adding new value DTO for field ${field.id} (${field.fieldCode || 'no-code'}):`, valueDto);
           fieldValues.push(valueDto);
         }
       } else {
@@ -3284,19 +3652,69 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
 
     // Upload new files
+    console.log('[FormSubmissionCreate] ===== Starting file upload process =====');
+    console.log('[FormSubmissionCreate] fieldFiles keys:', Object.keys(this.fieldFiles));
+    console.log('[FormSubmissionCreate] fieldFiles:', this.fieldFiles);
+    console.log('[FormSubmissionCreate] existingAttachments:', this.existingAttachments);
+    console.log('[FormSubmissionCreate] deletedAttachments:', this.deletedAttachments);
+    
+    // Note: Deletion of attachments is handled below in the existing code (line 3586-3597)
+    // We don't need to duplicate it here
+    
+    // Then, upload only NEW files (files in fieldFiles are new files to upload)
     Object.keys(this.fieldFiles).forEach(fieldIdStr => {
       const fieldId = Number(fieldIdStr);
       const files = this.fieldFiles[fieldId];
       const field = this.fields.find(f => f.id === fieldId);
+      const existingFiles = this.getExistingAttachments(fieldId);
+
+      console.log(`[FormSubmissionCreate] Processing files for field ${fieldId}:`, {
+        fieldId,
+        newFilesCount: files?.length || 0,
+        existingFilesCount: existingFiles.length,
+        newFiles: files?.map(f => ({ name: f.name, size: f.size, type: f.type })) || [],
+        existingFiles: existingFiles.map(f => ({ id: f.id, fileName: f.fileName })),
+        fieldFound: !!field,
+        fieldCode: field?.fieldCode,
+        fieldName: field?.fieldName
+      });
 
       if (field && files && files.length > 0) {
-        files.forEach(file => {
-          saveObservables.push(
-            this.formSubmissionAttachmentsService.uploadFile(file, submissionId, fieldId, field.fieldCode)
+        const fieldCode = field.fieldCode || field.fieldName || `FIELD_${field.id}`;
+        console.log(`[FormSubmissionCreate] ✅ Uploading ${files.length} NEW file(s) for field ${fieldId} (${fieldCode})`);
+        files.forEach((file, index) => {
+          // Check if file with same name already exists (to avoid duplicate upload)
+          const existingFileWithSameName = existingFiles.find(existing => 
+            existing.fileName.toLowerCase() === file.name.toLowerCase()
           );
+          
+          if (existingFileWithSameName) {
+            console.warn(`[FormSubmissionCreate] ⚠️ Skipping file "${file.name}" - file with same name already exists (ID: ${existingFileWithSameName.id})`);
+            return; // Skip this file - it already exists
+          }
+          
+          console.log(`[FormSubmissionCreate] 📤 Adding upload observable for NEW file ${index + 1}/${files.length}:`, {
+            fileName: file.name,
+            fileSize: file.size,
+            contentType: file.type,
+            submissionId,
+            fieldId,
+            fieldCode
+          });
+          saveObservables.push(
+            this.formSubmissionAttachmentsService.uploadFile(file, submissionId, fieldId, fieldCode)
+          );
+        });
+      } else {
+        console.log(`[FormSubmissionCreate] ℹ️ Field ${fieldId} - no new files to upload`, {
+          fieldFound: !!field,
+          newFilesCount: files?.length || 0,
+          existingFilesCount: existingFiles.length
         });
       }
     });
+    
+    console.log('[FormSubmissionCreate] Total upload observables added:', saveObservables.length);
 
     if (saveObservables.length === 0) {
       this.loading.create = false;
@@ -3331,5 +3749,483 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  /**
+   * Check if submission can be approved/rejected
+   */
+  canApproveReject(): boolean {
+    return this.currentSubmission !== null && 
+           this.currentSubmission.status === 'Submitted' &&
+           this.submissionId !== null &&
+           this.submissionId > 0;
+  }
+
+  /**
+   * Approve submission
+   */
+  approveSubmission(): void {
+    if (!this.currentSubmission || !this.submissionId) {
+      return;
+    }
+
+    this.isApproving = true;
+    
+    // Get current user ID
+    const currentUserId = this.authService.userName() || 'public-user';
+    
+    // Note: stageId is required - using 1 as default (adjust based on your workflow)
+    const approveDto: ApproveSubmissionDto = {
+      submissionId: this.submissionId,
+      stageId: 1, // TODO: Get actual stageId from submission or workflow
+      actionByUserId: currentUserId,
+      comments: this.approveRejectComments || null
+    };
+
+    this.formSubmissionsService.approveSubmissionDto(approveDto).subscribe({
+      next: (response: ApiResponse<FormSubmissionDto>) => {
+        this.isApproving = false;
+        this.showApproveRejectModal = false;
+        this.approveRejectComments = '';
+        
+        if (response.statusCode === 200 || response.success) {
+          // Reload submission to update status
+          this.loadSubmissionForEdit();
+          
+          const currentLang = this.translationService.getCurrentLanguage();
+          this.messageService.add({
+            severity: 'success',
+            summary: currentLang === 'ar' ? 'نجح' : 'Success',
+            detail: currentLang === 'ar' ? 'تمت الموافقة على الطلب بنجاح' : 'Submission approved successfully'
+          });
+        }
+      },
+      error: (error) => {
+        this.isApproving = false;
+        const currentLang = this.translationService.getCurrentLanguage();
+        this.messageService.add({
+          severity: 'error',
+          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+          detail: currentLang === 'ar' ? 'حدث خطأ أثناء الموافقة على الطلب' : 'An error occurred while approving the submission'
+        });
+      }
+    });
+  }
+
+  /**
+   * Reject submission
+   */
+  rejectSubmission(): void {
+    if (!this.currentSubmission || !this.submissionId) {
+      return;
+    }
+
+    this.isRejecting = true;
+    
+    // Get current user ID
+    const currentUserId = this.authService.userName() || 'public-user';
+    
+    // Note: stageId is required - using 1 as default (adjust based on your workflow)
+    const rejectDto: RejectSubmissionDto = {
+      submissionId: this.submissionId,
+      stageId: 1, // TODO: Get actual stageId from submission or workflow
+      actionByUserId: currentUserId,
+      comments: this.approveRejectComments || null
+    };
+
+    this.formSubmissionsService.rejectSubmissionDto(rejectDto).subscribe({
+      next: (response: ApiResponse<FormSubmissionDto>) => {
+        this.isRejecting = false;
+        this.showApproveRejectModal = false;
+        this.approveRejectComments = '';
+        
+        if (response.statusCode === 200 || response.success) {
+          // Reload submission to update status
+          this.loadSubmissionForEdit();
+          
+          const currentLang = this.translationService.getCurrentLanguage();
+          this.messageService.add({
+            severity: 'success',
+            summary: currentLang === 'ar' ? 'نجح' : 'Success',
+            detail: currentLang === 'ar' ? 'تم رفض الطلب بنجاح' : 'Submission rejected successfully'
+          });
+        }
+      },
+      error: (error) => {
+        this.isRejecting = false;
+        const currentLang = this.translationService.getCurrentLanguage();
+        this.messageService.add({
+          severity: 'error',
+          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+          detail: currentLang === 'ar' ? 'حدث خطأ أثناء رفض الطلب' : 'An error occurred while rejecting the submission'
+        });
+      }
+    });
+  }
+
+  /**
+   * Close approve/reject modal
+   */
+  closeApproveRejectModal(): void {
+    this.showApproveRejectModal = false;
+    this.approveRejectComments = '';
+  }
+
+  /**
+   * Get option text (like FormViewComponent)
+   * Supports both FieldOptionDto and FieldOptionResponse
+   * Handles JSON strings in text field
+   */
+  getOptionText(option: any): string {
+    if (!option) return '';
+
+    // Helper function to parse JSON string and extract readable text
+    const parseJsonText = (text: string): string => {
+      if (!text || typeof text !== 'string') return text;
+
+      const trimmed = text.trim();
+      // Check if it's a JSON string (starts with { or [)
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(trimmed);
+
+          // If it's an object, try to extract readable text
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            // Try common name patterns: first + last, name, title + first + last, etc.
+            if (parsed.first && parsed.last) {
+              const parts: string[] = [];
+              if (parsed.title) parts.push(String(parsed.title));
+              if (parsed.first) parts.push(String(parsed.first));
+              if (parsed.last) parts.push(String(parsed.last));
+              return parts.join(' ');
+            }
+
+            // Try name property
+            if (parsed.name) {
+              return String(parsed.name);
+            }
+
+            // Try text or label properties
+            if (parsed.text) {
+              return String(parsed.text);
+            }
+            if (parsed.label) {
+              return String(parsed.label);
+            }
+
+            // Try title property
+            if (parsed.title) {
+              return String(parsed.title);
+            }
+
+            // Try to find first string property
+            const keys = Object.keys(parsed);
+            for (const key of keys) {
+              const value = parsed[key];
+              if (typeof value === 'string' && value.trim() !== '') {
+                return value.trim();
+              }
+            }
+
+            // If nothing found, return stringified version (but formatted)
+            return JSON.stringify(parsed);
+          }
+
+          // If it's an array, return first element or stringified
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return String(parsed[0]);
+          }
+
+          return trimmed;
+        } catch {
+          // If parsing fails, return original text
+          return trimmed;
+        }
+      }
+
+      return trimmed;
+    };
+
+    // Handle FieldOptionResponse (from DataSource) - check for text property first
+    if ('text' in option) {
+      let text = option.text !== undefined && option.text !== null ? String(option.text).trim() : '';
+
+      // Parse JSON strings if present
+      if (text) {
+        text = parseJsonText(text);
+      }
+
+      // If text is empty, try to use value as fallback
+      if (!text && 'value' in option && option.value !== undefined && option.value !== null) {
+        const valueText = String(option.value).trim();
+        return parseJsonText(valueText);
+      }
+
+      return text || '';
+    }
+
+    // Handle FieldOptionDto (static options)
+    const lang = this.translationService.getCurrentLanguage();
+    if (lang === 'ar' && option.foreignOptionText && String(option.foreignOptionText).trim()) {
+      return parseJsonText(String(option.foreignOptionText).trim());
+    }
+
+    let optionText = option.optionText !== undefined && option.optionText !== null
+      ? String(option.optionText).trim()
+      : '';
+
+    // Parse JSON strings if present
+    if (optionText) {
+      optionText = parseJsonText(optionText);
+    }
+
+    // If optionText is empty, try to use optionValue as fallback
+    if (!optionText && option.optionValue !== undefined && option.optionValue !== null) {
+      const valueText = String(option.optionValue).trim();
+      return parseJsonText(valueText);
+    }
+
+    // Final fallback - return empty string instead of undefined
+    return optionText || '';
+  }
+
+  /**
+   * Check if option is selected (like FormViewComponent)
+   */
+  isOptionSelected(field: FormFieldDto, optionValue: any): boolean {
+    if (!field || !field.id) return false;
+    
+    const idKey = String(field.id);
+    const optStr = String(optionValue).trim();
+
+    // Get value from form control
+    if (field.id && this.fieldsForm) {
+      const fieldKey = `field_${field.id}`;
+      const control = this.fieldsForm.get(fieldKey);
+      if (control) {
+        const selectedValue = control.value;
+        if (selectedValue === undefined || selectedValue === null || selectedValue === '') {
+          return false;
+        }
+
+        // Check if field supports multiple selection
+        const isMultiple = field.fieldType?.allowMultiple || false;
+        
+        if (isMultiple) {
+          // Multiple selection: check if option is in the array
+          try {
+            let selectedArray: string[] = [];
+            const valueStr = String(selectedValue).trim();
+            
+            if (Array.isArray(selectedValue)) {
+              selectedArray = selectedValue.map(v => String(v).trim()).filter(v => v !== '');
+            } else if (valueStr.startsWith('[') && valueStr.endsWith(']')) {
+              // JSON array
+              try {
+                const parsed = JSON.parse(valueStr);
+                selectedArray = Array.isArray(parsed) 
+                  ? parsed.map(v => String(v).trim()).filter(v => v !== '')
+                  : [String(parsed).trim()].filter(v => v !== '');
+              } catch {
+                selectedArray = valueStr ? [valueStr] : [];
+              }
+            } else if (valueStr.includes(',')) {
+              selectedArray = valueStr.split(',').map(s => s.trim()).filter(s => s !== '');
+            } else {
+              selectedArray = [valueStr];
+            }
+            
+            return selectedArray.includes(optStr);
+          } catch {
+            return false;
+          }
+        } else {
+          // Single selection: direct comparison
+          const valStr = String(selectedValue).trim();
+          return valStr === optStr;
+        }
+      }
+    }
+
+    // Fallback to fieldValues
+    let selectedValue = this.fieldValues[idKey];
+    if (selectedValue === undefined && field.fieldCode) {
+      selectedValue = this.fieldValues[field.fieldCode];
+    }
+    if (selectedValue === undefined) {
+      selectedValue = this.getFieldValue(field);
+    }
+    
+    if (selectedValue === undefined || selectedValue === null || selectedValue === '') {
+      return false;
+    }
+
+    const isMultiple = field.fieldType?.allowMultiple || false;
+    if (isMultiple) {
+      try {
+        let selectedArray: string[] = [];
+        const valueStr = String(selectedValue).trim();
+        
+        if (Array.isArray(selectedValue)) {
+          selectedArray = selectedValue.map(v => String(v).trim()).filter(v => v !== '');
+        } else if (valueStr.startsWith('[') && valueStr.endsWith(']')) {
+          try {
+            const parsed = JSON.parse(valueStr);
+            selectedArray = Array.isArray(parsed) 
+              ? parsed.map(v => String(v).trim()).filter(v => v !== '')
+              : [String(parsed).trim()].filter(v => v !== '');
+          } catch {
+            selectedArray = valueStr ? [valueStr] : [];
+          }
+        } else if (valueStr.includes(',')) {
+          selectedArray = valueStr.split(',').map(s => s.trim()).filter(s => s !== '');
+        } else {
+          selectedArray = [valueStr];
+        }
+        
+        return selectedArray.includes(optStr);
+      } catch {
+        return false;
+      }
+    } else {
+      const valStr = String(selectedValue).trim();
+      return valStr === optStr;
+    }
+  }
+
+  /**
+   * Check if checkbox option is selected (like FormViewComponent)
+   */
+  isCheckboxSelected(field: FormFieldDto, optionValue: any): boolean {
+    if (!field || !field.id) return false;
+    
+    const idKey = String(field.id);
+    const targetValue = String(optionValue).trim();
+
+    // Get value from form control
+    if (field.id && this.fieldsForm) {
+      const fieldKey = `field_${field.id}`;
+      const control = this.fieldsForm.get(fieldKey);
+      if (control) {
+        const value = control.value;
+        if (value === undefined || value === null || value === '') {
+          return false;
+        }
+
+        const valueStr = String(value).trim();
+        if (valueStr === '') {
+          return false;
+        }
+
+        try {
+          let selectedArray: string[] = [];
+
+          if (Array.isArray(value)) {
+            selectedArray = value.map(v => String(v).trim()).filter(v => v !== '');
+          } else if (valueStr.startsWith('[') && valueStr.endsWith(']')) {
+            try {
+              const parsed = JSON.parse(valueStr);
+              selectedArray = Array.isArray(parsed) 
+                ? parsed.map(v => String(v).trim()).filter(v => v !== '')
+                : [String(parsed).trim()].filter(v => v !== '');
+            } catch {
+              selectedArray = valueStr ? [valueStr] : [];
+            }
+          } else if (valueStr.includes(',')) {
+            selectedArray = valueStr.split(',').map(s => s.trim()).filter(s => s !== '');
+          } else {
+            selectedArray = [valueStr];
+          }
+
+          return selectedArray.includes(targetValue);
+        } catch {
+          return false;
+        }
+      }
+    }
+
+    // Fallback to fieldValues
+    let value = this.fieldValues[idKey];
+    if (value === undefined && field.fieldCode) {
+      value = this.fieldValues[field.fieldCode];
+    }
+    if (value === undefined) {
+      value = this.getFieldValue(field);
+    }
+
+    if (value === undefined || value === null || value === '') {
+      return false;
+    }
+
+    const valueStr = String(value).trim();
+    if (valueStr === '') {
+      return false;
+    }
+
+    try {
+      let selectedArray: string[] = [];
+
+      if (Array.isArray(value)) {
+        selectedArray = value.map(v => String(v).trim()).filter(v => v !== '');
+      } else if (valueStr.startsWith('[') && valueStr.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(valueStr);
+          selectedArray = Array.isArray(parsed) 
+            ? parsed.map(v => String(v).trim()).filter(v => v !== '')
+            : [String(parsed).trim()].filter(v => v !== '');
+        } catch {
+          selectedArray = valueStr ? [valueStr] : [];
+        }
+      } else if (valueStr.includes(',')) {
+        selectedArray = valueStr.split(',').map(s => s.trim()).filter(s => s !== '');
+      } else {
+        selectedArray = [valueStr];
+      }
+
+      return selectedArray.includes(targetValue);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if switch is on (like FormViewComponent)
+   */
+  isSwitchOn(field: FormFieldDto): boolean {
+    const value = this.getFieldValue(field);
+    if (!value) {
+      return false;
+    }
+
+    // Check for common truthy values
+    if (typeof value === 'boolean') return value;
+    const lowerValue = String(value).toLowerCase();
+    return lowerValue === 'true' || lowerValue === '1' || lowerValue === 'on' || lowerValue === 'yes';
+  }
+
+  /**
+   * Handle field value change (for switch and other fields that don't use formControlName)
+   */
+  onFieldValueChange(fieldId: number | undefined, value: any, fieldCode?: string): void {
+    if (!fieldId) return;
+
+    const fieldKey = `field_${fieldId}`;
+    
+    // Update form control value
+    if (this.fieldsForm && this.fieldsForm.get(fieldKey)) {
+      this.fieldsForm.get(fieldKey)?.setValue(value, { emitEvent: true });
+    }
+
+    // Update fieldValues for rule evaluation
+    if (fieldId !== undefined && fieldId !== null) {
+      this.fieldValues[String(fieldId)] = value;
+    }
+    if (fieldCode) {
+      this.fieldValues[fieldCode] = value;
+    }
+
+    // Trigger change detection
+    this.cdr.detectChanges();
   }
 }

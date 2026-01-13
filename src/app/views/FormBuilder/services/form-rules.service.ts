@@ -114,16 +114,56 @@ export class FormRulesService {
         }
         
         console.log(`[FormRulesService] Extracted ${dtos.length} DTOs:`, dtos);
-        const rules = dtos.map(dto => {
-          try {
-            return convertFormRuleDtoToFormRule(dto);
-          } catch (error) {
-            console.error(`[FormRulesService] Error converting DTO to FormRule:`, dto, error);
-            return null;
-          }
-        }).filter((rule): rule is FormRule => rule !== null);
         
-        console.log(`[FormRulesService] Converted to ${rules.length} FormRules:`, rules);
+        // ✅ Check if isDeleted field exists in DTOs
+        const dtosWithIsDeleted = dtos.filter(dto => 'isDeleted' in dto || dto.isDeleted !== undefined);
+        const dtosWithoutIsDeleted = dtos.filter(dto => !('isDeleted' in dto) && dto.isDeleted === undefined);
+        
+        if (dtosWithoutIsDeleted.length > 0) {
+          console.warn(`[FormRulesService] ⚠️ ${dtosWithoutIsDeleted.length} DTO(s) missing 'isDeleted' field - Backend may not be sending it`);
+          console.warn(`[FormRulesService] DTOs without isDeleted:`, dtosWithoutIsDeleted.map(d => ({ id: d.id, ruleName: d.ruleName })));
+        }
+        
+        if (dtosWithIsDeleted.length > 0) {
+          console.log(`[FormRulesService] DTOs with isDeleted field:`, dtosWithIsDeleted.map(d => ({ 
+            id: d.id, 
+            ruleName: d.ruleName, 
+            isDeleted: d.isDeleted 
+          })));
+        }
+        
+        const rules = dtos
+          .map(dto => {
+            try {
+              const rule = convertFormRuleDtoToFormRule(dto);
+              // Log isDeleted status for debugging
+              if (dto.isDeleted !== undefined) {
+                console.log(`[FormRulesService] Rule ${dto.id} (${dto.ruleName}): isDeleted = ${dto.isDeleted}`);
+              }
+              return rule;
+            } catch (error) {
+              console.error(`[FormRulesService] Error converting DTO to FormRule:`, dto, error);
+              return null;
+            }
+          })
+          .filter((rule): rule is FormRule => rule !== null)
+          // ✅ Filter out soft-deleted rules (Frontend filter as backup - Backend should also filter)
+          .filter(rule => {
+            const isDeleted = rule.isDeleted === true;
+            if (isDeleted) {
+              console.log(`[FormRulesService] Filtering out deleted rule: ${rule.id} (${rule.ruleName})`);
+            }
+            return !isDeleted;
+          });
+        
+        const deletedCount = dtos.filter(dto => dto.isDeleted === true).length;
+        if (deletedCount > 0) {
+          console.log(`[FormRulesService] ✅ Filtered out ${deletedCount} soft-deleted rule(s) in Frontend`);
+        } else {
+          console.log(`[FormRulesService] No soft-deleted rules found (all ${dtos.length} rules are active or isDeleted field missing)`);
+        }
+        
+        console.log(`[FormRulesService] Converted to ${rules.length} FormRules (after filtering deleted):`, rules);
         return rules;
       }),
       catchError((error) => {
@@ -389,33 +429,71 @@ export class FormRulesService {
   }
 
   /**
-   * DELETE - حذف Rule (Hard Delete)
+   * DELETE - حذف Rule (Soft Delete)
+   * DELETE /api/FormRules/{id}
+   * 
+   * API Behavior:
+   * - Soft Delete: Uses soft delete (IsDeleted = true, DeletedDate = DateTime.UtcNow)
+   * - Response: 204 No Content
+   * - The rule will not appear in any normal queries
+   * 
+   * @param id Rule ID
+   * @returns Observable<void>
    */
   deleteRule(id: number): Observable<void> {
-    return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/${id}`).pipe(
-      map(() => {
-        // Success
+    const url = `${this.baseUrl}/${id}`;
+    console.log(`[FormRulesService] deleteRule - Calling DELETE ${url} (Soft Delete)`);
+    console.log(`[FormRulesService] deleteRule - Expected behavior: IsDeleted = true, DeletedDate = DateTime.UtcNow`);
+    
+    return this.http.delete<ApiResponse<void>>(url).pipe(
+      map((response) => {
+        console.log(`[FormRulesService] deleteRule - Success response:`, response);
+        console.log(`[FormRulesService] deleteRule - Rule ${id} should be soft deleted (IsDeleted = true)`);
+        // Success - rule is soft deleted
       }),
       catchError((error) => {
-        console.error(`[FormRulesService] Error deleting rule ${id}:`, error);
+        console.error(`[FormRulesService] deleteRule - Error deleting rule ${id}:`, error);
+        console.error(`[FormRulesService] deleteRule - Error details:`, {
+          status: error?.status,
+          statusText: error?.statusText,
+          error: error?.error,
+          url: error?.url
+        });
         throw error;
       })
     );
   }
 
   /**
-   * DELETE - حذف Rule (Soft Delete)
+   * POST - استعادة Rule محذوف (Restore Soft Deleted Rule)
+   * POST /api/FormRules/{id}/restore
+   * 
+   * API Behavior:
+   * - Restores a soft-deleted rule (IsDeleted = false, DeletedDate = null)
+   * - Response: 204 No Content
+   * - The rule will appear in normal queries again
+   * 
+   * @param id Rule ID
+   * @returns Observable<void>
    */
-  softDeleteRule(id: number): Observable<void> {
-    return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/soft-delete/${id}`).pipe(
+  restoreRule(id: number): Observable<void> {
+    return this.http.post<ApiResponse<void>>(`${this.baseUrl}/${id}/restore`, {}).pipe(
       map(() => {
-        // Success
+        // Success - rule is restored
       }),
       catchError((error) => {
-        console.error(`[FormRulesService] Error soft deleting rule ${id}:`, error);
+        console.error(`[FormRulesService] Error restoring rule ${id}:`, error);
         throw error;
       })
     );
+  }
+
+  /**
+   * DELETE - حذف Rule (Soft Delete) - Legacy method
+   * @deprecated Use deleteRule() instead - it now performs soft delete
+   */
+  softDeleteRule(id: number): Observable<void> {
+    return this.deleteRule(id);
   }
 
   /**

@@ -172,24 +172,32 @@
                 </div>
 
                 <!-- Select Dropdown -->
-                <select
-                  *ngSwitchDefault
-                  class="grid-select"
-                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
-                  [value]="getCellValue(row.rowIndex, column.id)"
-                  (change)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
-                  [required]="isColumnRequired(column)"
-                  [disabled]="isColumnReadOnly(column) || isReadOnly">
-                  <option value="">{{ translationService.translate('formView.selectOption') || 'Select...' }}</option>
-                  <option
-                    *ngFor="let option of getColumnOptions(column)"
-                    [value]="option.optionValue">
-                    {{ getOptionText(option) }}
-                  </option>
-                </select>
-                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
-                  {{ getError(row.rowIndex, column.id) }}
-                </div>
+                <ng-container *ngSwitchCase="'select'">
+                  <div *ngIf="isLoadingColumnOptions(column)" class="loading-options">
+                    {{ translationService.translate('formView.loading') || 'Loading options...' }}
+                  </div>
+                  <select
+                    *ngIf="!isLoadingColumnOptions(column)"
+                    class="grid-select"
+                    [class.is-invalid]="hasError(row.rowIndex, column.id) || hasColumnOptionsError(column)"
+                    [value]="getCellValue(row.rowIndex, column.id)"
+                    (change)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                    [required]="isColumnRequired(column)"
+                    [disabled]="isColumnReadOnly(column) || isReadOnly || hasColumnOptionsError(column)">
+                    <option value="">{{ translationService.translate('formView.selectOption') || 'Select...' }}</option>
+                    <option
+                      *ngFor="let option of getColumnOptions(column)"
+                      [value]="option.optionValue">
+                      {{ getOptionText(option) }}
+                    </option>
+                  </select>
+                  <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                    {{ getError(row.rowIndex, column.id) }}
+                  </div>
+                  <div class="error-message" *ngIf="hasColumnOptionsError(column) && !hasError(row.rowIndex, column.id)">
+                    {{ getColumnOptionsError(column) }}
+                  </div>
+                </ng-container>
               </ng-container>
             </td>
 

@@ -1,0 +1,530 @@
+<div class="fields-page-container">
+  <!-- Language Toggle Buttons -->
+  <div class="admin-language-toggle">
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'en'"
+      (click)="translationService.setLanguage('en'); localStorage.setItem('adminLanguagePreference', 'en')">
+      English
+    </button>
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'ar'"
+      (click)="translationService.setLanguage('ar'); localStorage.setItem('adminLanguagePreference', 'ar')">
+      العربية
+    </button>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/dashboard" [title]="translateLabel('common.back') || 'Back to Dashboard'">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">{{ translateLabel('grids.dataSources.title') || 'Grid Column Data Sources' }}</h1>
+          <p class="page-subtitle">{{ translateLabel('grids.dataSources.subtitle') || 'Manage data sources for grid columns' }}</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadDataSources()" [disabled]="loading" [title]="translateLabel('common.refresh') || 'Refresh'">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openDataSourceModal()" [disabled]="loading">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.dataSources.newDataSource') || 'New Data Source' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>{{ translateLabel('common.dashboard') || 'Dashboard' }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-database"></i>
+        <span>{{ translateLabel('grids.dataSources.title') || 'Data Sources' }}</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-database"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ totalItems || dataSources.length }}</div>
+          <div class="stat-label">{{ translateLabel('grids.dataSources.totalDataSources') || 'Total Data Sources' }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ dataSources.filter(ds => ds.isActive === true).length }}</div>
+          <div class="stat-label">{{ translateLabel('grids.dataSources.activeDataSources') || 'Active Data Sources' }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-info">
+          <i class="pi pi-link"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ dataSources.filter(ds => ds.sourceType === 'API').length }}</div>
+          <div class="stat-label">{{ translateLabel('grids.dataSources.apiDataSources') || 'API Data Sources' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Sources Table Card -->
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-table"></i>
+          {{ translateLabel('grids.dataSources.dataSourcesList') || 'Data Sources List' }}
+        </h3>
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input
+              type="text"
+              [placeholder]="translateLabel('grids.dataSources.searchDataSources') || 'Search data sources...'"
+              class="search-input"
+              [(ngModel)]="searchTerm"
+              (input)="filterDataSources()"
+            />
+          </div>
+          <div class="results-count">
+            {{ filteredDataSources.length }} {{ translateLabel('grids.dataSources.dataSourcesFound') || 'data sources found' }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>{{ translateLabel('grids.dataSources.loadingDataSources') || 'Loading data sources...' }}</p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!loading && filteredDataSources.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-database"></i>
+        </div>
+        <h3>{{ translateLabel('grids.dataSources.noDataSourcesFound') || 'No data sources found' }}</h3>
+        <p>{{ translateLabel('grids.dataSources.getStarted') || 'Get started by creating your first data source' }}</p>
+        <button class="btn-primary" (click)="openDataSourceModal()">
+          <i class="pi pi-plus"></i>
+          <span>{{ translateLabel('grids.dataSources.createDataSource') || 'Create Data Source' }}</span>
+        </button>
+      </div>
+
+      <!-- Data Sources Table -->
+      <div *ngIf="!loading && filteredDataSources.length > 0" class="table-wrapper">
+        <p-table [value]="paginatedDataSources" styleClass="p-datatable-sm forms-table">
+          <ng-template pTemplate="header">
+            <tr>
+              <th style="width: 50px"></th>
+              <th pSortableColumn="sourceType">{{ translateLabel('grids.dataSources.sourceType') || 'Source Type' }} <p-sortIcon field="sourceType"></p-sortIcon></th>
+              <th pSortableColumn="columnId">{{ translateLabel('grids.dataSources.columnId') || 'Column ID' }} <p-sortIcon field="columnId"></p-sortIcon></th>
+              <th>{{ translateLabel('grids.dataSources.apiUrl') || 'API URL / Table' }}</th>
+              <th>{{ translateLabel('grids.dataSources.paths') || 'Paths' }}</th>
+              <th>{{ translateLabel('common.status') || 'Status' }}</th>
+              <th class="text-end">{{ translateLabel('common.actions') || 'Actions' }}</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-dataSource>
+            <tr class="align-middle">
+              <td class="icon-cell">
+                <i class="pi pi-database"></i>
+              </td>
+              <td class="name-cell">
+                <span class="badge" [ngClass]="getSourceTypeClass(dataSource.sourceType)">
+                  {{ getSourceTypeLabel(dataSource.sourceType) }}
+                </span>
+              </td>
+              <td class="code-cell">
+                <span class="badge-code">{{ dataSource.columnId || '-' }}</span>
+              </td>
+              <td class="tabs-cell">
+                <code class="code-badge" *ngIf="dataSource.apiUrl" [title]="dataSource.apiUrl">
+                  {{ dataSource.apiUrl.length > 30 ? (dataSource.apiUrl.substring(0, 30) + '...') : dataSource.apiUrl }}
+                </code>
+                <span *ngIf="!dataSource.apiUrl" class="text-muted">-</span>
+              </td>
+              <td class="tabs-cell">
+                <div *ngIf="dataSource.valuePath || dataSource.textPath" class="paths-info">
+                  <small *ngIf="dataSource.valuePath" class="path-badge">
+                    <i class="pi pi-key"></i> {{ dataSource.valuePath }}
+                  </small>
+                  <small *ngIf="dataSource.textPath" class="path-badge">
+                    <i class="pi pi-tag"></i> {{ dataSource.textPath }}
+                  </small>
+                </div>
+                <span *ngIf="!dataSource.valuePath && !dataSource.textPath" class="text-muted">-</span>
+              </td>
+              <td class="status-cell">
+                <span class="status-badge" [ngClass]="dataSource.isActive === true ? 'status-active' : 'status-inactive'">
+                  <i class="pi" [class.pi-check-circle]="dataSource.isActive === true" [class.pi-times-circle]="dataSource.isActive === false"></i>
+                  {{ dataSource.isActive === true ? (translateLabel('common.active') || 'Active') : (translateLabel('common.inactive') || 'Inactive') }}
+                </span>
+              </td>
+              <td class="actions-cell text-end">
+                <div class="actions-menu">
+                  <button
+                    class="action-btn action-edit"
+                    [title]="translateLabel('common.edit') || 'Edit'"
+                    (click)="openDataSourceModal(dataSource)"
+                  >
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button
+                    class="action-btn action-delete"
+                    [title]="translateLabel('common.delete') || 'Delete'"
+                    (click)="deleteDataSource(dataSource.id!)"
+                  >
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+
+        <!-- Pagination -->
+        <div class="pagination-wrapper" *ngIf="totalPages > 1">
+          <p-paginator
+            [rows]="itemsPerPage"
+            [totalRecords]="totalItems"
+            [first]="(currentPage - 1) * itemsPerPage"
+            (onPageChange)="onPageChange($event)"
+            [rowsPerPageOptions]="[10, 20, 50]">
+          </p-paginator>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit DataSource Modal -->
+  <p-dialog
+    [(visible)]="showDataSourceModal"
+    [modal]="true"
+    [header]="editingDataSource ? (translateLabel('grids.dataSources.editDataSource') || 'Edit Data Source') : (translateLabel('grids.dataSources.addDataSource') || 'Add Data Source')"
+    [style]="{ width: '700px', maxHeight: '90vh' }"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="closeDataSourceModal()"
+    [styleClass]="'data-source-modal'"
+  >
+    <form [formGroup]="dataSourceForm" (ngSubmit)="saveDataSource()">
+      <!-- Language Toggle -->
+      <div class="mb-3 d-flex gap-2">
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'en'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'en'"
+          (click)="setInputLanguage('en')">
+          English
+        </button>
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="currentInputLanguage === 'ar'"
+          [class.btn-outline-secondary]="currentInputLanguage !== 'ar'"
+          (click)="setInputLanguage('ar')">
+          العربية
+        </button>
+      </div>
+
+      <!-- Column ID -->
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.dataSources.columnId') || 'Column ID' }} <span class="text-danger">*</span></label>
+        <input
+          type="number"
+          class="form-control"
+          formControlName="columnId"
+          [placeholder]="translateLabel('grids.dataSources.enterColumnId') || 'Enter column ID'"
+        />
+        <div *ngIf="dataSourceForm.get('columnId')?.invalid && dataSourceForm.get('columnId')?.touched" class="text-danger small">
+          {{ translateLabel('grids.dataSources.columnIdRequired') || 'Column ID is required' }}
+        </div>
+      </div>
+
+      <!-- Source Type -->
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('grids.dataSources.sourceType') || 'Source Type' }} <span class="text-danger">*</span></label>
+        <div class="data-source-options" style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
+          <label class="data-source-option" [class.selected]="dataSourceType === 'Static'"
+            style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+            [style.border-color]="dataSourceType === 'Static' ? '#667eea' : '#e5e7eb'"
+            [style.background]="dataSourceType === 'Static' ? '#f0ebf8' : '#f9fafb'">
+            <input type="radio" value="Static" formControlName="sourceType" (change)="onDataSourceTypeChange()"
+              style="width: 20px; height: 20px; cursor: pointer;" />
+            <i class="pi pi-list" style="font-size: 20px; color: #667eea;"></i>
+            <div style="flex: 1;">
+              <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{ translateLabel('grids.dataSources.staticOptions') || 'Static Options' }}</div>
+              <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('grids.dataSources.staticOptionsDesc') || 'Use static options defined in column options.' }}</div>
+            </div>
+          </label>
+
+          <label class="data-source-option" [class.selected]="dataSourceType === 'LookupTable'"
+            style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+            [style.border-color]="dataSourceType === 'LookupTable' ? '#667eea' : '#e5e7eb'"
+            [style.background]="dataSourceType === 'LookupTable' ? '#f0ebf8' : '#f9fafb'">
+            <input type="radio" value="LookupTable" formControlName="sourceType" (change)="onDataSourceTypeChange()"
+              style="width: 20px; height: 20px; cursor: pointer;" />
+            <i class="pi pi-table" style="font-size: 20px; color: #667eea;"></i>
+            <div style="flex: 1;">
+              <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{ translateLabel('grids.dataSources.lookupTable') || 'Database Table' }}</div>
+              <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('grids.dataSources.lookupTableDesc') || 'Load options from database table.' }}</div>
+            </div>
+          </label>
+
+          <label class="data-source-option" [class.selected]="dataSourceType === 'API'"
+            style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+            [style.border-color]="dataSourceType === 'API' ? '#667eea' : '#e5e7eb'"
+            [style.background]="dataSourceType === 'API' ? '#f0ebf8' : '#f9fafb'">
+            <input type="radio" value="API" formControlName="sourceType" (change)="onDataSourceTypeChange()"
+              style="width: 20px; height: 20px; cursor: pointer;" />
+            <i class="pi pi-link" style="font-size: 20px; color: #667eea;"></i>
+            <div style="flex: 1;">
+              <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{ translateLabel('grids.dataSources.apiLink') || 'API Link' }}</div>
+              <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('grids.dataSources.apiLinkDesc') || 'Load options from API endpoint.' }}</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Database Table Configuration -->
+      <div *ngIf="dataSourceType === 'LookupTable'" class="mb-3">
+        <label class="form-label">
+          <i class="pi pi-table" style="margin-right: 6px; color: #667eea;"></i>
+          {{ translateLabel('grids.dataSources.selectTable') || 'Select Table' }} <span class="text-danger">*</span>
+        </label>
+        <select class="form-control" [(ngModel)]="lookupTableConfig.table" [ngModelOptions]="{standalone: true}"
+          (change)="onTableSelected()">
+          <option value="">{{ translateLabel('grids.dataSources.selectLookupTable') || '-- Select Table --' }}</option>
+          <option *ngFor="let table of availableLookupTables" [value]="table">{{ table }}</option>
+        </select>
+
+        <div *ngIf="availableColumns.length > 0" style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <i class="pi pi-info-circle" style="color: #10b981; font-size: 16px;"></i>
+            <span style="font-weight: 600; color: #166534; font-size: 13px;">{{ translateLabel('grids.dataSources.availableColumns') || 'Available Columns' }}:</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span *ngFor="let col of availableColumns"
+              style="display: inline-block; padding: 4px 10px; background: white; border: 1px solid #86efac; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; color: #166534; cursor: pointer;"
+              [title]="'Click to use as ' + (col.toLowerCase().includes('id') || col.toLowerCase() === 'value' ? 'Value Path' : 'Text Path')"
+              (click)="applyColumnAsPath(col)">
+              {{ col }}
+            </span>
+          </div>
+        </div>
+
+        <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">
+              <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('grids.dataSources.valuePath') || 'Value Path' }}
+            </label>
+            <select class="form-control" [(ngModel)]="lookupTableConfig.valueColumn" [ngModelOptions]="{standalone: true}"
+              [disabled]="availableColumns.length === 0"
+              style="font-family: 'Courier New', monospace; font-size: 13px;">
+              <option value="">-- Select Value Path --</option>
+              <option *ngFor="let col of availableColumns" [value]="col">{{ col }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">
+              <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('grids.dataSources.textPath') || 'Text Path' }}
+            </label>
+            <select class="form-control" [(ngModel)]="lookupTableConfig.textColumn" [ngModelOptions]="{standalone: true}"
+              [disabled]="availableColumns.length === 0"
+              style="font-family: 'Courier New', monospace; font-size: 13px;">
+              <option value="">-- Select Text Path --</option>
+              <option *ngFor="let col of availableColumns" [value]="col">{{ col }}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Configuration -->
+      <div *ngIf="dataSourceType === 'API'" class="mb-3">
+        <label class="form-label" style="margin-bottom: 8px;">
+          <i class="pi pi-cog" style="margin-right: 6px; color: #667eea;"></i>
+          {{ translateLabel('grids.dataSources.httpMethod') || 'HTTP Method' }} <span class="text-danger">*</span>
+        </label>
+        <div class="http-method-tabs" style="display: flex; gap: 10px; margin-bottom: 12px; width: 100%;">
+          <button type="button" class="method-tab" [class.active]="dataSourceConfig.httpMethod === 'GET'"
+            (click)="dataSourceConfig.httpMethod = 'GET'"
+            style="flex: 1; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; cursor: pointer;"
+            [style.background]="dataSourceConfig.httpMethod === 'GET' ? '#f0fdf4' : '#f9fafb'"
+            [style.border-color]="dataSourceConfig.httpMethod === 'GET' ? '#10b981' : '#e5e7eb'"
+            [style.color]="dataSourceConfig.httpMethod === 'GET' ? '#166534' : '#6b7280'">
+            <i class="pi pi-download" style="font-size: 16px;"></i>
+            <span style="font-size: 15px;">GET</span>
+          </button>
+          <button type="button" class="method-tab" [class.active]="dataSourceConfig.httpMethod === 'POST'"
+            (click)="dataSourceConfig.httpMethod = 'POST'"
+            style="flex: 1; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; cursor: pointer;"
+            [style.background]="dataSourceConfig.httpMethod === 'POST' ? '#f0fdf4' : '#f9fafb'"
+            [style.border-color]="dataSourceConfig.httpMethod === 'POST' ? '#10b981' : '#e5e7eb'"
+            [style.color]="dataSourceConfig.httpMethod === 'POST' ? '#166534' : '#6b7280'">
+            <i class="pi pi-upload" style="font-size: 16px;"></i>
+            <span style="font-size: 15px;">POST</span>
+          </button>
+        </div>
+
+        <label class="form-label" style="margin-top: 16px;">
+          <i class="pi pi-link" style="margin-right: 6px; color: #667eea;"></i>
+          {{ translateLabel('grids.dataSources.apiUrl') || 'API URL' }} <span class="text-danger">*</span>
+        </label>
+        <input type="text" class="form-control" [(ngModel)]="dataSourceConfig.apiUrl" [ngModelOptions]="{standalone: true}"
+          [placeholder]="translateLabel('grids.dataSources.enterApiUrl') || 'https://api.example.com'">
+
+        <label class="form-label" style="margin-top: 12px;">
+          <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
+          {{ translateLabel('grids.dataSources.apiPath') || 'API Path (Optional)' }}
+        </label>
+        <input type="text" class="form-control" [(ngModel)]="dataSourceConfig.apiPath" [ngModelOptions]="{standalone: true}"
+          [placeholder]="translateLabel('grids.dataSources.enterApiPath') || 'products, users, etc.'">
+        <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;">
+          {{ translateLabel('grids.dataSources.apiPathHelp') || 'Optional endpoint path (e.g., "products", "users"). If empty, uses the base URL.' }}
+        </small>
+
+        <button
+          type="button"
+          class="btn btn-sm btn-success"
+          (click)="testApiResponse()"
+          [disabled]="loadingPreview || !dataSourceConfig.apiUrl"
+          style="margin-top: 12px;">
+          <i class="pi" [class.pi-spin]="loadingPreview" [class.pi-spinner]="loadingPreview" [class.pi-send]="!loadingPreview"></i>
+          {{ loadingPreview ? (translateLabel('common.loading') || 'Loading...') : (translateLabel('grids.dataSources.testApi') || 'Test API') }}
+        </button>
+
+        <div *ngIf="dataSourceConfig.httpMethod === 'POST'" style="margin-top: 16px;">
+          <label class="form-label">
+            <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
+            {{ translateLabel('grids.dataSources.requestBody') || 'Request Body (JSON)' }}
+          </label>
+          <textarea class="form-control" rows="4" [(ngModel)]="dataSourceConfig.requestBodyJson" [ngModelOptions]="{standalone: true}"
+            placeholder='Enter JSON body, e.g. {"filter": "active"}'
+            style="font-family: 'Courier New', monospace; font-size: 13px;">
+          </textarea>
+        </div>
+
+        <div *ngIf="availableProperties.length > 0"
+          style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <i class="pi pi-info-circle" style="color: #10b981; font-size: 16px;"></i>
+            <span style="font-weight: 600; color: #166534; font-size: 13px;">{{ translateLabel('grids.dataSources.availableProperties') || 'Available Properties' }}:</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span *ngFor="let prop of availableProperties"
+              style="display: inline-block; padding: 4px 10px; background: white; border: 1px solid #86efac; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; color: #166534; cursor: pointer;"
+              [title]="'Click to use as ' + (prop.toLowerCase().includes('id') || prop.toLowerCase() === 'value' ? 'Value Path' : 'Text Path')"
+              (click)="applyPropertyAsPath(prop)">
+              {{ prop }}
+            </span>
+          </div>
+        </div>
+
+        <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">
+              <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('grids.dataSources.valuePath') || 'Value Path' }}
+            </label>
+            <select class="form-control" [(ngModel)]="dataSourceConfig.valuePath" [ngModelOptions]="{standalone: true}"
+              [disabled]="availableProperties.length === 0"
+              style="font-family: 'Courier New', monospace; font-size: 13px;">
+              <option value="">-- Select Value Path --</option>
+              <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">
+              <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
+              {{ translateLabel('grids.dataSources.textPath') || 'Text Path' }}
+            </label>
+            <select class="form-control" [(ngModel)]="dataSourceConfig.textPath" [ngModelOptions]="{standalone: true}"
+              [disabled]="availableProperties.length === 0"
+              style="font-family: 'Courier New', monospace; font-size: 13px;">
+              <option value="">-- Select Text Path --</option>
+              <option *ngFor="let prop of availableProperties" [value]="prop">{{ prop }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Array Property Names (Optional) -->
+        <div style="margin-top: 16px;">
+          <label class="form-label">
+            <i class="pi pi-list" style="margin-right: 6px; color: #667eea;"></i>
+            {{ translateLabel('grids.dataSources.arrayPropertyNames') || 'Array Property Names (Optional)' }}
+          </label>
+          <input type="text" class="form-control" 
+            [value]="dataSourceConfig.arrayPropertyNames.join(', ')"
+            (input)="dataSourceConfig.arrayPropertyNames = $any($event.target).value.split(',').map((p: string) => p.trim()).filter((p: string) => p.length > 0)"
+            [placeholder]="translateLabel('grids.dataSources.enterArrayProperties') || 'data, results, items (comma-separated)'"
+            style="font-family: 'Courier New', monospace; font-size: 13px;">
+          <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;">
+            {{ translateLabel('grids.dataSources.arrayPropertyNamesHelp') || 'Comma-separated property names to navigate nested JSON structures (e.g., "data, results"). Leave empty if data is at root level.' }}
+          </small>
+        </div>
+      </div>
+
+      <!-- Is Active -->
+      <div class="mb-3">
+        <label class="form-label">{{ translateLabel('common.status') || 'Status' }}</label>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" formControlName="isActive" id="isActive">
+          <label class="form-check-label" for="isActive">
+            {{ translateLabel('common.active') || 'Active' }}
+          </label>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button
+          pButton
+          type="button"
+          [label]="translateLabel('common.cancel') || 'Cancel'"
+          (click)="closeDataSourceModal()"
+          class="p-button-text"
+        >
+        </button>
+        <button
+          pButton
+          type="submit"
+          [disabled]="dataSourceForm.invalid || loading"
+          class="p-button-primary"
+        >
+          <i *ngIf="loading" class="pi pi-spin pi-spinner mr-2"></i>
+          {{ translateLabel('common.save') || 'Save' }}
+        </button>
+      </div>
+    </form>
+  </p-dialog>
+</div>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

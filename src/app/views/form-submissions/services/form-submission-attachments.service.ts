@@ -228,25 +228,35 @@ export class FormSubmissionAttachmentsService {
   uploadFile(file: File, submissionId: number, fieldId: number, fieldCode: string): Observable<FormSubmissionAttachmentDto> {
     const formData = new FormData();
     // Backend expects properties matching UploadAttachmentRequest DTO
-    // ASP.NET Core model binding accepts both camelCase and PascalCase
-    formData.append('file', file); // Try camelCase first (most common)
-    formData.append('submissionId', submissionId.toString());
-    formData.append('fieldId', fieldId.toString());
-    formData.append('fieldCode', fieldCode);
+    // Using PascalCase to match backend API exactly (as shown in curl: File, SubmissionId, FieldId, FieldCode)
+    formData.append('File', file);
+    formData.append('SubmissionId', submissionId.toString());
+    formData.append('FieldId', fieldId.toString());
+    formData.append('FieldCode', fieldCode);
 
-    console.log('[FormSubmissionAttachmentsService] uploadFile - Uploading file:', {
-      fileName: file.name,
-      fileSize: file.size,
-      contentType: file.type,
-      submissionId,
-      fieldId,
-      fieldCode
-    });
+    // Log FormData contents for debugging
+    console.log('[FormSubmissionAttachmentsService] uploadFile - FormData contents:');
+    console.log('  - File:', file.name, `(${file.size} bytes, ${file.type})`);
+    console.log('  - SubmissionId:', submissionId);
+    console.log('  - FieldId:', fieldId);
+    console.log('  - FieldCode:', fieldCode);
+    console.log('[FormSubmissionAttachmentsService] uploadFile - Uploading to:', `${this.baseUrl}/upload`);
 
     return this.http.post<any>(`${this.baseUrl}/upload`, formData).pipe(
       map(response => {
-        console.log('[FormSubmissionAttachmentsService] uploadFile - Response:', response);
-        return response.data || response;
+        console.log('[FormSubmissionAttachmentsService] uploadFile - Full Response:', JSON.stringify(response, null, 2));
+        console.log('[FormSubmissionAttachmentsService] uploadFile - Response statusCode:', response?.statusCode);
+        console.log('[FormSubmissionAttachmentsService] uploadFile - Response message:', response?.message);
+        console.log('[FormSubmissionAttachmentsService] uploadFile - Response data:', response?.data);
+        
+        // Ensure we return the data object, not the wrapper
+        const attachmentData = response?.data || response;
+        if (attachmentData?.id) {
+          console.log('[FormSubmissionAttachmentsService] uploadFile - ✅ Attachment saved successfully with ID:', attachmentData.id);
+        } else {
+          console.warn('[FormSubmissionAttachmentsService] uploadFile - ⚠️ Response missing attachment ID:', attachmentData);
+        }
+        return attachmentData;
       }),
       catchError((error) => {
         console.error('[FormSubmissionAttachmentsService] uploadFile - Error:', error);
@@ -267,13 +277,13 @@ export class FormSubmissionAttachmentsService {
   uploadMultipleFiles(files: File[], submissionId: number, fieldId: number, fieldCode: string): Observable<AttachmentUploadResultDto[]> {
     const formData = new FormData();
     // Backend expects properties matching UploadMultipleAttachmentsRequest DTO
-    // ASP.NET Core model binding accepts both camelCase and PascalCase
+    // Using PascalCase to match backend API exactly
     files.forEach(file => {
-      formData.append('files', file); // Try camelCase first (most common)
+      formData.append('Files', file);
     });
-    formData.append('submissionId', submissionId.toString());
-    formData.append('fieldId', fieldId.toString());
-    formData.append('fieldCode', fieldCode);
+    formData.append('SubmissionId', submissionId.toString());
+    formData.append('FieldId', fieldId.toString());
+    formData.append('FieldCode', fieldCode);
 
     console.log('[FormSubmissionAttachmentsService] uploadMultipleFiles - Uploading files:', {
       fileCount: files.length,

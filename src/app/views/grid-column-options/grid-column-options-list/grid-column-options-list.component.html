@@ -1,0 +1,263 @@
+<!-- grid-column-options-list.component.html -->
+<div class="grid-column-options-management-container">
+  <!-- Breadcrumb Navigation -->
+  <nav class="breadcrumb-nav">
+    <a routerLink="/form-builder/forms" class="breadcrumb-item">
+      <i class="fas fa-home"></i> Forms
+    </a>
+    <span class="breadcrumb-separator">/</span>
+    <span class="breadcrumb-item active">
+      <i class="fas fa-list"></i> Grid Column Options
+    </span>
+  </nav>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <button class="btn-back" routerLink="/form-builder/forms" title="Back to Forms">
+        <i class="fas fa-arrow-left"></i>
+      </button>
+      <div class="header-title">
+        <h1>
+          <i class="fas fa-list"></i>
+          Grid Column Options Management
+          <span class="badge">{{gridColumnOptions.length}}</span>
+        </h1>
+        <p class="header-subtitle">
+          Manage options for grid columns that support multiple choices (dropdown, radio, checkbox)
+        </p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="column-selector">
+        <label>Select Column ID:</label>
+        <input type="number" [(ngModel)]="selectedColumnId" (change)="onColumnChange()" 
+               placeholder="Enter Column ID" class="column-id-input" min="1">
+      </div>
+      <div class="search-box">
+        <input type="text" [(ngModel)]="searchTerm" (input)="filterGridColumnOptions()" 
+               placeholder="Search options..." class="search-input" [disabled]="!selectedColumnId">
+        <i class="fas fa-search search-icon"></i>
+      </div>
+      <button class="btn btn-primary" (click)="openAddGridColumnOptionModal()" 
+              [disabled]="loading.gridColumnOptions || !selectedColumnId">
+        <i class="fas fa-plus"></i> Add New Option
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading.gridColumnOptions" class="loading-overlay">
+    <div class="spinner"></div>
+    <p>Loading grid column options...</p>
+  </div>
+
+  <!-- Grid Column Options Table -->
+  <div class="table-responsive" *ngIf="!loading.gridColumnOptions">
+    <div *ngIf="!selectedColumnId" class="no-column-selected">
+      <i class="fas fa-info-circle"></i>
+      <h3>Please Select a Column</h3>
+      <p>Enter a Column ID above to view and manage its options.</p>
+    </div>
+
+    <table class="grid-column-options-table" *ngIf="selectedColumnId">
+      <thead>
+        <tr>
+          <th>Order</th>
+          <th>Option Value</th>
+          <th>Option Text</th>
+          <th>Foreign Option Text</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- No Grid Column Options Message -->
+        <tr *ngIf="filteredGridColumnOptions.length === 0" class="no-data">
+          <td colspan="6">
+            <div class="empty-state">
+              <i class="fas fa-inbox"></i>
+              <h3>No Grid Column Options Found</h3>
+              <p>Get started by adding your first option for this column.</p>
+              <button class="btn btn-primary" (click)="openAddGridColumnOptionModal()">
+                <i class="fas fa-plus"></i> Add Option
+              </button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Grid Column Options List -->
+        <tr *ngFor="let option of filteredGridColumnOptions">
+          <td class="order-cell">
+            <span class="order-badge">{{option.optionOrder || '-'}}</span>
+          </td>
+
+          <td>
+            <code class="option-value">{{option.optionValue || '-'}}</code>
+          </td>
+
+          <td class="option-text-cell">
+            <div class="option-text">{{option.optionText || '-'}}</div>
+          </td>
+
+          <td class="option-text-cell">
+            <div class="option-text">{{option.foreignOptionText || '-'}}</div>
+          </td>
+
+          <td>
+            <span class="status-badge" [ngClass]="getGridColumnOptionStatusClass(option)">
+              {{option.isActive ? 'Active' : 'Inactive'}}
+            </span>
+          </td>
+
+          <td>
+            <div class="actions-cell">
+              <i
+                class="pi pi-pencil action-icon text-success"
+                pTooltip="Edit"
+                (click)="openEditGridColumnOptionModal(option)"
+              ></i>
+              <i
+                class="pi pi-power-off action-icon"
+                [class.text-warning]="option.isActive"
+                [class.text-secondary]="!option.isActive"
+                [pTooltip]="option.isActive ? 'Deactivate' : 'Activate'"
+                (click)="toggleGridColumnOptionStatus(option)"
+              ></i>
+              <i
+                class="pi pi-trash action-icon text-danger"
+                pTooltip="Delete"
+                (click)="deleteGridColumnOption(option.id!)"
+                *ngIf="option.id"
+              ></i>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Grid Column Option Modal -->
+  <div *ngIf="showGridColumnOptionModal" class="modal-overlay" (click)="closeGridColumnOptionModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>
+          <i class="fas" [class.fa-plus]="!editingGridColumnOption" [class.fa-edit]="!!editingGridColumnOption"></i>
+          {{editingGridColumnOption ? 'Edit Grid Column Option' : 'Add New Grid Column Option'}}
+        </h2>
+        <button class="btn-close" (click)="closeGridColumnOptionModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <form [formGroup]="gridColumnOptionForm" (ngSubmit)="saveGridColumnOption()">
+        <div class="modal-body">
+          <!-- Basic Information -->
+          <div class="form-section">
+            <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
+
+            <div class="form-row">
+              <div class="form-group" [class.invalid]="isFieldInvalid('columnId')">
+                <label for="columnId">
+                  Column ID <span class="text-danger">*</span>
+                  <span *ngIf="isFieldInvalid('columnId')" class="error-text">
+                    {{getFieldErrorMessage('columnId')}}
+                  </span>
+                </label>
+                <input type="number" id="columnId" formControlName="columnId" 
+                       [readonly]="!!selectedColumnId" min="1" placeholder="Column ID">
+              </div>
+
+              <div class="form-group" [class.invalid]="isFieldInvalid('optionOrder')">
+                <label for="optionOrder">
+                  Order <span class="text-danger">*</span>
+                  <span *ngIf="isFieldInvalid('optionOrder')" class="error-text">
+                    {{getFieldErrorMessage('optionOrder')}}
+                  </span>
+                </label>
+                <input type="number" id="optionOrder" formControlName="optionOrder" min="1" placeholder="Order">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" [class.invalid]="isFieldInvalid('optionValue')">
+                <label for="optionValue">
+                  Option Value <span class="text-danger">*</span>
+                  <span *ngIf="isFieldInvalid('optionValue')" class="error-text">
+                    {{getFieldErrorMessage('optionValue')}}
+                  </span>
+                </label>
+                <input type="text" id="optionValue" formControlName="optionValue" 
+                       placeholder="option_value" maxlength="100">
+                <small class="hint">The value stored in the database</small>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" [class.invalid]="isFieldInvalid('optionText')">
+                <label for="optionText">
+                  Option Text <span class="text-danger">*</span>
+                  <span *ngIf="isFieldInvalid('optionText')" class="error-text">
+                    {{getFieldErrorMessage('optionText')}}
+                  </span>
+                </label>
+                <input type="text" id="optionText" formControlName="optionText" 
+                       placeholder="Display Text" maxlength="200">
+                <small class="hint">The text displayed to users</small>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" [class.invalid]="isFieldInvalid('foreignOptionText')">
+                <label for="foreignOptionText">
+                  Foreign Option Text (Arabic)
+                  <span *ngIf="isFieldInvalid('foreignOptionText')" class="error-text">
+                    {{getFieldErrorMessage('foreignOptionText')}}
+                  </span>
+                </label>
+                <input type="text" id="foreignOptionText" formControlName="foreignOptionText" 
+                       placeholder="النص العربي" maxlength="200">
+                <small class="hint">Arabic text displayed to users</small>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group active-status-group">
+                <label class="active-status-label">ACTIVE STATUS</label>
+                <div class="checkbox-wrapper">
+                  <label class="checkbox-label">
+                    <input
+                      type="checkbox"
+                      formControlName="isActive"
+                      id="isActive"
+                      class="status-checkbox"
+                      [checked]="gridColumnOptionForm.get('isActive')?.value"
+                    />
+                    <span class="checkbox-custom"></span>
+                    <span class="status-text">{{ gridColumnOptionForm.get('isActive')?.value === true ? 'Active' : 'Inactive' }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeGridColumnOptionModal()" [disabled]="loading.save">
+            Cancel
+          </button>
+
+          <button type="submit" class="btn btn-primary" [disabled]="gridColumnOptionForm.invalid || loading.save">
+            <i class="fas" [class.fa-save]="editingGridColumnOption" [class.fa-plus]="!editingGridColumnOption"></i>
+            {{editingGridColumnOption ? 'Update Option' : 'Create Option'}}
+            <span *ngIf="loading.save" class="spinner-small"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

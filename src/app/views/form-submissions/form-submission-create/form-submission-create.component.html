@@ -88,123 +88,164 @@
 
                 <!-- Field Input -->
                 <div class="field-input-wrapper">
-                  <!-- Text Input -->
-                  <input
-                    *ngIf="getFieldType(field) === 'text' && !isFileField(field) && getFieldId(field)"
-                    type="text"
-                    [id]="getFieldId(field)!"
-                    [formControlName]="getFieldId(field)!"
-                    class="form-input"
-                    [placeholder]="getFieldPlaceholder(field)">
+                  <ng-container *ngIf="getFieldId(field) || (isFileField(field) && getFileFieldId(field))">
+                    <ng-container [ngSwitch]="getFieldType(field)">
+                    
+                    <!-- Text Input -->
+                    <input
+                      *ngSwitchCase="'text'"
+                      type="text"
+                      [id]="getFieldId(field)!"
+                      [formControlName]="getFieldId(field)!"
+                      class="form-input"
+                      [placeholder]="getFieldPlaceholder(field)">
 
-                  <!-- Number Input -->
-                  <p-inputNumber
-                    *ngIf="getFieldType(field) === 'number' && getFieldId(field)"
-                    [inputId]="getFieldId(field)!"
-                    [formControlName]="getFieldId(field)!"
-                    [showButtons]="false"
-                    [useGrouping]="false"
-                    [placeholder]="getFieldPlaceholder(field)"
-                    styleClass="form-input-number">
-                  </p-inputNumber>
+                    <!-- Email Input -->
+                    <input
+                      *ngSwitchCase="'email'"
+                      type="email"
+                      [id]="getFieldId(field)!"
+                      [formControlName]="getFieldId(field)!"
+                      class="form-input"
+                      [placeholder]="getFieldPlaceholder(field)">
 
-                  <!-- Calculated Field (like FormViewComponent) -->
-                  <app-calculated-field 
-                    *ngIf="getFieldType(field) === 'calculated'" 
-                    [field]="field" 
-                    [value]="getFieldValue(field)">
-                  </app-calculated-field>
-
-                  <!-- Date Input -->
-                  <input
-                    *ngIf="getFieldType(field) === 'date' && getFieldId(field)"
-                    type="date"
-                    [id]="getFieldId(field)!"
-                    [formControlName]="getFieldId(field)!"
-                    class="form-input">
-
-                  <!-- Textarea -->
-                  <textarea
-                    *ngIf="getFieldType(field) === 'textarea' && getFieldId(field)"
-                    [id]="getFieldId(field)!"
-                    [formControlName]="getFieldId(field)!"
-                    class="form-textarea"
-                    [rows]="4"
-                    [placeholder]="getFieldPlaceholder(field)">
-                  </textarea>
-
-                  <!-- Select / Dropdown -->
-                  <select
-                    *ngIf="getFieldType(field) === 'select' && getFieldId(field)"
-                    [id]="getFieldId(field)!"
-                    [formControlName]="getFieldId(field)!"
-                    (change)="onSelectChange(field, $event)"
-                    class="form-select">
-                    <option [value]="''" [disabled]="isRequired(field)">
-                      {{ isLoadingFieldOptions(field) ? 'Loading...' : getFieldPlaceholder(field) }}
-                    </option>
-                    <option *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue" [value]="opt.optionValue">
-                      {{ opt.optionText || opt.optionValue }}
-                    </option>
-                  </select>
-
-                  <!-- Radio Buttons -->
-                  <div *ngIf="getFieldType(field) === 'radio' && getFieldId(field)" class="radio-group">
-                    <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
-                      Loading options...
-                    </div>
-                    <div class="radio-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
-                      <input
-                        type="radio"
-                        [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
-                        [name]="getFieldId(field)!"
-                        [value]="opt.optionValue"
-                        [formControlName]="getFieldId(field)!"
-                        (change)="onRadioChange(field, opt.optionValue, $event)">
-                      <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
-                        {{ opt.optionText || opt.optionValue }}
-                      </label>
-                    </div>
-                    <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)" class="no-options">
-                      No options available
-                    </p>
-                  </div>
-
-                  <!-- Checkbox (Multiple Selection) -->
-                  <div *ngIf="getFieldType(field) === 'checkbox' && getFieldId(field)" class="checkbox-group">
-                    <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
-                      Loading options...
-                    </div>
-                    <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
-                      <input
-                        type="checkbox"
-                        [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
-                        [value]="opt.optionValue"
-                        (change)="onCheckboxChange(field, opt.optionValue, $event)">
-                      <label [for]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)" class="checkbox-label">
-                        {{ opt.optionText || opt.optionValue }}
-                      </label>
-                    </div>
-                    <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)" class="no-options">
-                      No options available
-                    </p>
-                  </div>
-
-                  <!-- Boolean/Switch Field -->
-                  <div *ngIf="getFieldType(field) === 'boolean' && getFieldId(field)" class="checkbox-wrapper">
-                    <p-checkbox
+                    <!-- Number Input -->
+                    <p-inputNumber
+                      *ngSwitchCase="'number'"
                       [inputId]="getFieldId(field)!"
                       [formControlName]="getFieldId(field)!"
-                      [binary]="true">
-                    </p-checkbox>
-                    <label [for]="getFieldId(field)!" class="checkbox-label">
-                      {{ getFieldDisplayName(field) }}
-                    </label>
-                  </div>
+                      [showButtons]="false"
+                      [useGrouping]="false"
+                      [placeholder]="getFieldPlaceholder(field)"
+                      styleClass="form-input-number">
+                    </p-inputNumber>
 
-                  <!-- File Upload Field -->
-                  <div *ngIf="isFileField(field) && getFileFieldId(field)" class="file-upload-wrapper">
-                    <!-- Allowed Extensions Info -->
+                    <!-- Calculated Field -->
+                    <app-calculated-field 
+                      *ngSwitchCase="'calculated'" 
+                      [field]="field" 
+                      [value]="getFieldValue(field)">
+                    </app-calculated-field>
+
+                    <!-- Date Input -->
+                    <input
+                      *ngSwitchCase="'date'"
+                      type="date"
+                      [id]="getFieldId(field)!"
+                      [formControlName]="getFieldId(field)!"
+                      class="form-input">
+
+                    <!-- Textarea -->
+                    <textarea
+                      *ngSwitchCase="'textarea'"
+                      [id]="getFieldId(field)!"
+                      [formControlName]="getFieldId(field)!"
+                      class="form-textarea"
+                      [rows]="4"
+                      [placeholder]="getFieldPlaceholder(field)">
+                    </textarea>
+
+                    <!-- Select / Dropdown (Single or Multiple) -->
+                    <div *ngSwitchCase="'select'" class="select-wrapper" 
+                      [class.multiple-select]="field.fieldType?.allowMultiple">
+                      <select
+                        [id]="getFieldId(field)!"
+                        [formControlName]="getFieldId(field)!"
+                        [multiple]="field.fieldType?.allowMultiple || false"
+                        [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
+                        class="form-select">
+                        <option [ngValue]="''" [disabled]="isRequired(field) && !(field.fieldType?.allowMultiple)"
+                          *ngIf="!(field.fieldType?.allowMultiple)">
+                          {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') : getFieldPlaceholder(field) }}
+                        </option>
+                        <option *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue" 
+                          [ngValue]="opt.optionValue">
+                          {{ getOptionText(opt) }}
+                        </option>
+                      </select>
+                      <div class="multiple-select-hint" *ngIf="field.fieldType?.allowMultiple">
+                        <small>
+                          <i class="pi pi-info-circle"></i>
+                          {{ translationService.getCurrentLanguage() === 'ar' 
+                            ? 'يمكنك اختيار عدة خيارات (اضغط Ctrl أو Cmd للاختيار المتعدد)' 
+                            : 'You can select multiple options (hold Ctrl or Cmd for multiple selection)' }}
+                        </small>
+                      </div>
+                    </div>
+
+                    <!-- Radio Buttons -->
+                    <div *ngSwitchCase="'radio'" class="radio-group">
+                      <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
+                        {{ translationService.translate('formView.loading') || 'Loading options...' }}
+                      </div>
+                      <div class="radio-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
+                        <input
+                          type="radio"
+                          [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
+                          [name]="getFieldId(field)!"
+                          [value]="opt.optionValue"
+                          [formControlName]="getFieldId(field)!"
+                          [checked]="isOptionSelected(field, opt.optionValue)"
+                          (change)="onRadioChange(field, opt.optionValue, $event)">
+                        <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
+                          {{ getOptionText(opt) }}
+                        </label>
+                      </div>
+                      <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)" class="no-options">
+                        {{ translationService.translate('formView.noOptionsAvailable') || 'No options available' }}
+                      </p>
+                    </div>
+
+                    <!-- Checkbox (Multiple Selection) -->
+                    <div *ngSwitchCase="'checkbox'" class="checkbox-group">
+                      <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
+                        {{ translationService.translate('formView.loading') || 'Loading options...' }}
+                      </div>
+                      <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
+                        <input
+                          type="checkbox"
+                          [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
+                          [name]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
+                          [value]="opt.optionValue"
+                          [checked]="isCheckboxSelected(field, opt.optionValue)"
+                          (change)="onCheckboxChange(field, opt.optionValue, $event)">
+                        <label [for]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)" class="checkbox-label">
+                          {{ getOptionText(opt) }}
+                        </label>
+                      </div>
+                      <p *ngIf="!isLoadingFieldOptions(field) && (!getFieldOptions(field) || getFieldOptions(field).length === 0)" class="no-options">
+                        {{ translationService.translate('formView.noOptionsAvailable') || 'No options available' }}
+                      </p>
+                    </div>
+
+                    <!-- Boolean/Switch Field -->
+                    <div *ngSwitchCase="'boolean'" class="checkbox-wrapper">
+                      <p-checkbox
+                        [inputId]="getFieldId(field)!"
+                        [formControlName]="getFieldId(field)!"
+                        [binary]="true">
+                      </p-checkbox>
+                      <label [for]="getFieldId(field)!" class="checkbox-label">
+                        {{ getFieldDisplayName(field) }}
+                      </label>
+                    </div>
+
+                    <!-- Switch / Toggle -->
+                    <div *ngSwitchCase="'switch'" class="switch-wrapper">
+                      <label class="switch-label">
+                        <input type="checkbox" class="switch-input"
+                          [id]="getFieldId(field)!"
+                          [name]="getFieldId(field)!"
+                          [checked]="isSwitchOn(field)"
+                          (change)="onFieldValueChange(field.id, $event.target.checked, field.fieldCode)" />
+                        <span class="switch-slider"></span>
+                      </label>
+                    </div>
+
+                    <!-- File Upload Field -->
+                    <ng-container *ngSwitchCase="'file'">
+                      <div class="file-upload-wrapper" *ngIf="getFileFieldId(field)">
+                      <!-- Allowed Extensions Info -->
                     <div class="allowed-extensions-info" *ngIf="getAllowedExtensions(field).length > 0">
                       <i class="pi pi-info-circle"></i>
                       <span>
@@ -277,12 +318,32 @@
                         </button>
                       </div>
                     </div>
-                  </div>
+                      </div>
+                    </ng-container>
+                    </ng-container>
+                  </ng-container>
                 </div>
 
                 <!-- Validation Messages -->
-                <div *ngIf="getFieldId(field) && fieldsForm.get(getFieldId(field)!)?.invalid && fieldsForm.get(getFieldId(field)!)?.touched" class="field-error">
-                  This field is required
+                <div *ngIf="getFieldId(field) && fieldsForm.get(getFieldId(field)!)?.touched && fieldsForm.get(getFieldId(field)!)?.errors" class="field-error">
+                  <ng-container [ngSwitch]="true">
+                    <!-- Required -->
+                    <span *ngSwitchCase="fieldsForm.get(getFieldId(field)!)?.errors?.['required']">
+                      This field is required
+                    </span>
+                    <!-- Email -->
+                    <span *ngSwitchCase="fieldsForm.get(getFieldId(field)!)?.errors?.['email']">
+                      Please enter a valid email address
+                    </span>
+                    <!-- MinLength (e.g. password) -->
+                    <span *ngSwitchCase="fieldsForm.get(getFieldId(field)!)?.errors?.['minlength']">
+                      Password must be at least {{ fieldsForm.get(getFieldId(field)!)?.errors?.['minlength']?.requiredLength }} characters
+                    </span>
+                    <!-- Pattern (e.g. phone) -->
+                    <span *ngSwitchCase="fieldsForm.get(getFieldId(field)!)?.errors?.['pattern']">
+                      Please enter a valid value
+                    </span>
+                  </ng-container>
                 </div>
                 </div>
               </ng-container>
@@ -298,6 +359,25 @@
 
         <!-- Form Actions -->
         <div class="form-actions">
+          <!-- Approve/Reject Buttons (if submission exists and status is Submitted) -->
+          <button type="button" class="btn-approve" *ngIf="canApproveReject()" (click)="approveSubmission()" [disabled]="isApproving">
+            <i class="pi pi-check" *ngIf="!isApproving"></i>
+            <i class="pi pi-spin pi-spinner" *ngIf="isApproving"></i>
+            <span>{{ isApproving 
+              ? (translationService.getCurrentLanguage() === 'ar' ? 'جاري الموافقة...' : 'Approving...')
+              : (translationService.getCurrentLanguage() === 'ar' ? 'موافقة' : 'Approve')
+            }}</span>
+          </button>
+          <button type="button" class="btn-reject" *ngIf="canApproveReject()" (click)="rejectSubmission()" [disabled]="isRejecting">
+            <i class="pi pi-times" *ngIf="!isRejecting"></i>
+            <i class="pi pi-spin pi-spinner" *ngIf="isRejecting"></i>
+            <span>{{ isRejecting 
+              ? (translationService.getCurrentLanguage() === 'ar' ? 'جاري الرفض...' : 'Rejecting...')
+              : (translationService.getCurrentLanguage() === 'ar' ? 'رفض' : 'Reject')
+            }}</span>
+          </button>
+          
+          <!-- Cancel, Draft, and Submit Buttons (always visible) -->
           <button type="button" class="btn-cancel" (click)="goBack()">
             Cancel
           </button>

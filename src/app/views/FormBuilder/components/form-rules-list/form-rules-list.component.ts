@@ -21,6 +21,7 @@ import {
 import { Subscription, forkJoin } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { TranslationService } from '../../../../core/services/translation.service';
+import { DuplicateValidationHelper } from '../../../../core/utils/duplicate-validation.helper';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -612,24 +613,42 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
           console.error('[FormRulesList] Error updating rule:', error);
           
           let errorMessage = 'Failed to update rule';
+          let errorDetails: string[] = [];
           
           // Extract error message from various error formats
-          if (error?.message) {
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            }
+            
+            // Extract validation errors if available
+            if (error.error.errors) {
+              if (typeof error.error.errors === 'object') {
+                errorDetails = Object.values(error.error.errors).flat() as string[];
+              } else if (Array.isArray(error.error.errors)) {
+                errorDetails = error.error.errors;
+              }
+            }
+          } else if (error?.message) {
             errorMessage = error.message;
-          } else if (error?.error?.message) {
-            errorMessage = error.error.message;
-          } else if (error?.error?.title) {
-            errorMessage = error.error.title;
-          } else if (error?.error && typeof error.error === 'string') {
-            errorMessage = error.error;
           }
           
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: errorMessage,
-            life: 7000
-          });
+          // Use DuplicateValidationHelper for unified error handling
+          DuplicateValidationHelper.handleDuplicateError(
+            error,
+            this.messageService,
+            this.translationService,
+            {
+              entityType: 'Rule Name',
+              fieldName: 'Rule Name',
+              fallbackValue: updateDto.ruleName || this.editingRule?.ruleName,
+              fieldNameVariations: ['rulename', 'rule name', 'rulename']
+            }
+          );
         }
       });
     } else {
@@ -658,39 +677,69 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
           });
           
           let errorMessage = 'Failed to create rule';
+          let errorDetails: string[] = [];
           
           // Try to extract error message from different possible locations
-          if (error?.error?.message) {
-            errorMessage = error.error.message;
-          } else if (error?.error?.title) {
-            errorMessage = error.error.title;
-          } else if (error?.error?.errors && typeof error.error.errors === 'object') {
-            // Handle validation errors object
-            const errors = Object.values(error.error.errors).flat();
-            errorMessage = errors.length > 0 ? errors.join(', ') : 'Validation failed';
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            }
+            
+            // Extract validation errors if available
+            if (error.error.errors) {
+              if (typeof error.error.errors === 'object') {
+                errorDetails = Object.values(error.error.errors).flat() as string[];
+              } else if (Array.isArray(error.error.errors)) {
+                errorDetails = error.error.errors;
+              }
+            }
           } else if (error?.message) {
             errorMessage = error.message;
-          } else if (typeof error?.error === 'string') {
-            errorMessage = error.error;
           }
           
-          // Check for specific error patterns
-          if (errorMessage.toLowerCase().includes('no data returned')) {
-            errorMessage = 'Server did not return the created rule. The rule may have been created but failed to retrieve it.';
-          } else if (errorMessage.toLowerCase().includes('invalid') || errorMessage.toLowerCase().includes('validation')) {
-            errorMessage = 'Invalid rule data format. Please check all fields are filled correctly.';
-          } else if (error?.status === 400) {
-            errorMessage = 'Bad request. Please check all required fields are filled correctly.';
-          } else if (error?.status === 500) {
-            errorMessage = 'Server error. Please try again or contact support.';
-          }
+          // Use DuplicateValidationHelper for unified error handling
+          const isDuplicate = DuplicateValidationHelper.isDuplicateError(
+            errorMessage,
+            errorDetails,
+            'Rule Name'
+          );
           
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: errorMessage,
-            life: 7000
-          });
+          if (isDuplicate) {
+            DuplicateValidationHelper.handleDuplicateError(
+              error,
+              this.messageService,
+              this.translationService,
+              {
+                entityType: 'Rule Name',
+                fieldName: 'Rule Name',
+                fallbackValue: ruleDto.ruleName || formRule.ruleName,
+                fieldNameVariations: ['rulename', 'rule name', 'rulename']
+              }
+            );
+          } else {
+            // Check for specific error patterns for other errors
+            if (errorMessage.toLowerCase().includes('no data returned')) {
+              errorMessage = 'Server did not return the created rule. The rule may have been created but failed to retrieve it.';
+            } else if (errorMessage.toLowerCase().includes('invalid') || errorMessage.toLowerCase().includes('validation')) {
+              errorMessage = 'Invalid rule data format. Please check all fields are filled correctly.';
+            } else if (error?.status === 400) {
+              errorMessage = 'Bad request. Please check all required fields are filled correctly.';
+            } else if (error?.status === 500) {
+              errorMessage = 'Server error. Please try again or contact support.';
+            }
+            
+            // Show error for other types of errors
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: errorMessage,
+              life: 7000
+            });
+          }
         }
       });
     }
@@ -724,23 +773,51 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
   }
 
   deleteRule(ruleId: number | undefined): void {
-    if (!ruleId) return;
+    if (!ruleId) {
+      console.warn('[FormRulesList] deleteRule called with invalid ruleId:', ruleId);
+      return;
+    }
+
+    console.log(`[FormRulesList] ===== DELETE RULE REQUEST =====`);
+    console.log(`[FormRulesList] Rule ID to delete: ${ruleId}`);
+    console.log(`[FormRulesList] Current rules before delete:`, this.rules.map(r => ({ id: r.id, name: r.ruleName })));
 
     this.confirmationService.confirm({
       message: `Are you sure you want to delete this rule?`,
       header: 'Confirm Delete',
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
+        console.log(`[FormRulesList] User confirmed deletion for rule ${ruleId}`);
+        console.log(`[FormRulesList] Calling formRulesService.deleteRule(${ruleId})`);
+        
         this.formRulesService.deleteRule(ruleId).subscribe({
-          next: () => {
+          next: (response) => {
+            console.log(`[FormRulesList] ===== DELETE RULE SUCCESS =====`);
+            console.log(`[FormRulesList] Rule ${ruleId} deleted successfully (Soft Delete)`);
+            console.log(`[FormRulesList] Response:`, response);
+            console.log(`[FormRulesList] Reloading rules list...`);
+            
             this.messageService.add({
               severity: 'success',
               summary: 'Success',
               detail: 'Rule deleted successfully'
             });
+            
+            // Reload rules to reflect the deletion (soft-deleted rules won't appear)
+            // Note: Backend should filter out rules where IsDeleted = true
             this.loadRules();
           },
-          error: () => {
+          error: (error) => {
+            console.error(`[FormRulesList] ===== DELETE RULE ERROR =====`);
+            console.error(`[FormRulesList] Error deleting rule ${ruleId}:`, error);
+            console.error(`[FormRulesList] Error details:`, {
+              status: error?.status,
+              statusText: error?.statusText,
+              error: error?.error,
+              message: error?.message,
+              url: error?.url
+            });
+            
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
@@ -748,6 +825,9 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
             });
           }
         });
+      },
+      reject: () => {
+        console.log(`[FormRulesList] User cancelled deletion for rule ${ruleId}`);
       }
     });
   }

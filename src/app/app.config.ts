@@ -10,9 +10,11 @@ import { provideHttpClient, withInterceptors, withFetch } from '@angular/common/
 
 import { DropdownModule, SidebarModule } from '@coreui/angular';
 import { IconSetService } from '@coreui/icons-angular';
+import { MessageService } from 'primeng/api';
 import { routes } from './app.routes';
 import { authInterceptor } from './auth/auth.interceptor';
 import { languageInterceptor } from './core/interceptors/language.interceptor';
+import { errorInterceptor } from './core/interceptors/error.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -30,10 +32,13 @@ export const appConfig: ApplicationConfig = {
     ),
     provideHttpClient(
       withFetch(),
-      withInterceptors([languageInterceptor, authInterceptor])
+      // Important: errorInterceptor must be FIRST to catch all errors
+      // Order: errorInterceptor → authInterceptor → languageInterceptor
+      withInterceptors([errorInterceptor, authInterceptor, languageInterceptor])
     ),
     importProvidersFrom(SidebarModule, DropdownModule),
     IconSetService,
+    MessageService, // Required for error interceptor to show toast messages
     provideAnimationsAsync()
   ]
 };

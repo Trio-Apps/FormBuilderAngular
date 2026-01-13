@@ -820,7 +820,9 @@
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
 
   .btn-cancel,
-  .btn-submit {
+  .btn-submit,
+  .btn-approve,
+  .btn-reject {
     padding: 16px 40px;
     border-radius: 14px;
     font-size: 16px;
@@ -1720,7 +1722,9 @@
     padding-top: 24px;
 
     .btn-cancel,
-    .btn-submit {
+    .btn-submit,
+    .btn-approve,
+    .btn-reject {
       width: 100%;
       padding: 14px 24px;
     }

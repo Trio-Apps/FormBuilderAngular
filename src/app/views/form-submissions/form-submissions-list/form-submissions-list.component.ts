@@ -2686,7 +2686,17 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     }
 
     forkJoin(saveObservables).subscribe({
-      next: () => {
+      next: (results) => {
+        console.log('[saveSubmissionData] ✅ All operations completed successfully');
+        console.log('[saveSubmissionData] Results:', results);
+        
+        // Log attachment upload results
+        results.forEach((result, index) => {
+          if (result && typeof result === 'object' && 'id' in result) {
+            console.log(`[saveSubmissionData] Attachment ${index + 1} uploaded with ID:`, result.id);
+          }
+        });
+        
         this.loading.create = false;
         this.messageService.add({
           severity: 'success',
@@ -2814,8 +2824,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       return 'boolean';
     }
 
-    // File/Attachment
-    if (combined.includes('file') || combined.includes('attachment')) {
+    // File/Attachment - Check fieldTypeName directly first, then combined and dataType
+    if (fieldTypeName === 'file' || fieldTypeName.includes('file') || 
+        combined.includes('file') || combined.includes('image') || combined.includes('attachment') || 
+        dataType === 'file') {
       return 'file';
     }
 

@@ -299,14 +299,146 @@ export class FieldsService {
 
   // ================= FIELD TYPES ================
   
+  private fieldTypesUrl = `${environment.apiUrl}/FieldTypes`;
+  
+  /**
+   * Get all field types from API
+   * GET /api/FieldTypes
+   * 
+   * @returns Observable<FieldTypeDto[]>
+   */
   getFieldTypes(): Observable<FieldTypeDto[]> {
-    // Use FieldTypesService to get static field types
-    return this.fieldTypesService.getAllFieldTypes();
+    return this.http.get<any>(this.fieldTypesUrl).pipe(
+      map((response: any) => {
+        // Handle different response formats
+        let types: any[] = [];
+        if (Array.isArray(response)) {
+          types = response;
+        } else if (response && typeof response === 'object') {
+          const data = response.data || response.items || response.result || [];
+          types = Array.isArray(data) ? data : [];
+        }
+        
+        // Normalize field type properties - handle both camelCase and PascalCase
+        return types.map((type: any) => {
+          const normalized: any = {
+            id: type.id || type.Id,
+            typeName: type.typeName || type.TypeName || '',
+            dataType: type.dataType || type.DataType || '',
+            maxLength: type.maxLength || type.MaxLength || null,
+            hasOptions: type.hasOptions !== undefined ? type.hasOptions : (type.HasOptions !== undefined ? type.HasOptions : false),
+            allowMultiple: type.allowMultiple !== undefined ? type.allowMultiple : (type.AllowMultiple !== undefined ? type.AllowMultiple : false),
+            isActive: type.isActive !== undefined ? type.isActive : (type.IsActive !== undefined ? type.IsActive : true),
+            isDeleted: type.isDeleted !== undefined ? type.isDeleted : (type.IsDeleted !== undefined ? type.IsDeleted : false),
+            createdByUserId: type.createdByUserId || type.CreatedByUserId || null,
+            createdDate: type.createdDate || type.CreatedDate || null,
+            updatedDate: type.updatedDate || type.UpdatedDate || null,
+            deletedDate: type.deletedDate || type.DeletedDate || null,
+            deletedByUserId: type.deletedByUserId || type.DeletedByUserId || null
+          };
+          return normalized as FieldTypeDto;
+        });
+      }),
+      catchError((error) => {
+        console.warn('[FieldsService] Failed to load field types from API, falling back to static types:', error);
+        // Fallback to static field types if API fails
+        return this.fieldTypesService.getAllFieldTypes();
+      })
+    );
   }
 
+  /**
+   * Get active field types only from API
+   * GET /api/FieldTypes/active
+   * 
+   * @returns Observable<FieldTypeDto[]>
+   */
+  getActiveFieldTypes(): Observable<FieldTypeDto[]> {
+    return this.http.get<any>(`${this.fieldTypesUrl}/active`).pipe(
+      map((response: any) => {
+        // Handle different response formats
+        let types: any[] = [];
+        if (Array.isArray(response)) {
+          types = response;
+        } else if (response && typeof response === 'object') {
+          const data = response.data || response.items || response.result || [];
+          types = Array.isArray(data) ? data : [];
+        }
+        
+        // Normalize field type properties - handle both camelCase and PascalCase
+        return types.map((type: any) => {
+          const normalized: any = {
+            id: type.id || type.Id,
+            typeName: type.typeName || type.TypeName || '',
+            dataType: type.dataType || type.DataType || '',
+            maxLength: type.maxLength || type.MaxLength || null,
+            hasOptions: type.hasOptions !== undefined ? type.hasOptions : (type.HasOptions !== undefined ? type.HasOptions : false),
+            allowMultiple: type.allowMultiple !== undefined ? type.allowMultiple : (type.AllowMultiple !== undefined ? type.AllowMultiple : false),
+            isActive: type.isActive !== undefined ? type.isActive : (type.IsActive !== undefined ? type.IsActive : true),
+            isDeleted: type.isDeleted !== undefined ? type.isDeleted : (type.IsDeleted !== undefined ? type.IsDeleted : false),
+            createdByUserId: type.createdByUserId || type.CreatedByUserId || null,
+            createdDate: type.createdDate || type.CreatedDate || null,
+            updatedDate: type.updatedDate || type.UpdatedDate || null,
+            deletedDate: type.deletedDate || type.DeletedDate || null,
+            deletedByUserId: type.deletedByUserId || type.DeletedByUserId || null
+          };
+          return normalized as FieldTypeDto;
+        });
+      }),
+      catchError((error) => {
+        console.warn('[FieldsService] Failed to load active field types from API, falling back to static types:', error);
+        // Fallback to static active field types if API fails
+        return this.fieldTypesService.getActiveFieldTypes();
+      })
+    );
+  }
+
+  /**
+   * Get field type by ID from API
+   * GET /api/FieldTypes/{id}
+   * 
+   * @param id Field Type ID
+   * @returns Observable<FieldTypeDto | null>
+   */
   getFieldTypeById(id: number): Observable<FieldTypeDto | null> {
-    // Use FieldTypesService to get static field type by ID
-    return this.fieldTypesService.getFieldTypeById(id);
+    return this.http.get<any>(`${this.fieldTypesUrl}/${id}`).pipe(
+      map((response: any) => {
+        // Handle different response formats
+        let type: any = null;
+        if (response && typeof response === 'object' && !response.id) {
+          type = response.data || response.result || response;
+        } else {
+          type = response;
+        }
+        
+        if (!type) {
+          return null;
+        }
+        
+        // Normalize field type properties - handle both camelCase and PascalCase
+        const normalized: any = {
+          id: type.id || type.Id,
+          typeName: type.typeName || type.TypeName || '',
+          dataType: type.dataType || type.DataType || '',
+          maxLength: type.maxLength || type.MaxLength || null,
+          hasOptions: type.hasOptions !== undefined ? type.hasOptions : (type.HasOptions !== undefined ? type.HasOptions : false),
+          allowMultiple: type.allowMultiple !== undefined ? type.allowMultiple : (type.AllowMultiple !== undefined ? type.AllowMultiple : false),
+          isActive: type.isActive !== undefined ? type.isActive : (type.IsActive !== undefined ? type.IsActive : true),
+          isDeleted: type.isDeleted !== undefined ? type.isDeleted : (type.IsDeleted !== undefined ? type.IsDeleted : false),
+          createdByUserId: type.createdByUserId || type.CreatedByUserId || null,
+          createdDate: type.createdDate || type.CreatedDate || null,
+          updatedDate: type.updatedDate || type.UpdatedDate || null,
+          deletedDate: type.deletedDate || type.DeletedDate || null,
+          deletedByUserId: type.deletedByUserId || type.DeletedByUserId || null
+        };
+        return normalized as FieldTypeDto;
+      }),
+      catchError((error) => {
+        console.warn(`[FieldsService] Failed to load field type ${id} from API, falling back to static type:`, error);
+        // Fallback to static field type if API fails
+        return this.fieldTypesService.getFieldTypeById(id);
+      })
+    );
   }
 
   // ================= HELPER METHODS ================

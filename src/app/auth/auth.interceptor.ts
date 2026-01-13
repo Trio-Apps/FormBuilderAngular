@@ -54,6 +54,17 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
           });
         }
         
+        // Check for CORS errors (status 0 usually indicates CORS or network error)
+        if (error.status === 0) {
+          console.error('[AuthInterceptor] ⚠️ CORS or Network Error detected!', {
+            url: req.url,
+            method: req.method,
+            message: 'This is likely a CORS issue. Please check Backend CORS configuration.',
+            solution: 'Backend must allow origin: ' + window.location.origin,
+            backendUrl: environment.apiUrl
+          });
+        }
+        
         // Handle 401 Unauthorized - token expired or invalid
         if (error.status === 401) {
           // Don't redirect if already on login page or if it's a login request
@@ -113,12 +124,22 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
                                req.url.includes('/FormTabs/') ||
                                isPublicFormViewRoute;
   
-  if (isDebugMode && !req.url.includes('/account/login') && !req.url.includes('/account/register')) {
-    console.warn('[AuthInterceptor] Request without token:', {
+  // Only warn about missing token for non-public endpoints (public forms don't need tokens)
+  if (isDebugMode && !req.url.includes('/account/login') && !req.url.includes('/account/register') && !isPublicFormEndpoint) {
+    console.warn('[AuthInterceptor] Request without token (non-public endpoint):', {
       url: req.url,
       method: req.method,
       isPublicFormViewRoute: isPublicFormViewRoute,
       isPublicFormEndpoint: isPublicFormEndpoint,
+      currentRoute: router.url
+    });
+  }
+  
+  // Log public form requests without token (info level, not warning)
+  if (isDebugMode && isPublicFormEndpoint && !req.url.includes('/account/login') && !req.url.includes('/account/register')) {
+    console.log('[AuthInterceptor] Public form request (no token required):', {
+      url: req.url,
+      method: req.method,
       currentRoute: router.url
     });
   }

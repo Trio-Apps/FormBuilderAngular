@@ -123,6 +123,7 @@ export interface GridColumnOptionDto {
   optionText: string;
   foreignOptionText?: string; // Arabic option text
   optionOrder?: number;
+  isDefault?: boolean; // Indicates if this is the default option
   isActive?: boolean;
   isDeleted?: boolean;
   createdByUserId?: string;
@@ -254,14 +255,19 @@ export interface ValidationWarningDto {
 export interface GridColumnDataSourceDto {
   id: number;
   columnId: number;
+  columnName?: string; // Navigation property - Column name
+  columnCode?: string; // Navigation property - Column code
+  gridName?: string; // Navigation property - Grid name
+  formBuilderName?: string; // Navigation property - Form Builder name
   sourceType: 'Static' | 'LookupTable' | 'API'; // Type of data source
   apiUrl?: string; // For API sources
   apiPath?: string; // JSON path to extract data
-  httpMethod?: string; // HTTP method for API calls
+  httpMethod?: string; // HTTP method for API calls (GET, POST, PUT, DELETE, PATCH)
   requestBodyJson?: string; // Request body for API calls
   valuePath?: string; // JSON path for option values
   textPath?: string; // JSON path for option text
-  configurationJson?: string; // Additional configuration
+  arrayPropertyNames?: string[]; // Array of property names to navigate through nested JSON structures
+  configurationJson?: string; // Additional configuration (for LookupTable sources)
   isActive?: boolean;
   isDeleted: boolean;
   createdByUserId?: string;
@@ -274,10 +280,11 @@ export interface CreateGridColumnDataSourceDto {
   sourceType: 'Static' | 'LookupTable' | 'API';
   apiUrl?: string;
   apiPath?: string;
-  httpMethod?: string;
+  httpMethod?: string; // GET, POST, PUT, DELETE, PATCH
   requestBodyJson?: string;
   valuePath?: string;
   textPath?: string;
+  arrayPropertyNames?: string[]; // Array of property names to navigate through nested JSON structures
   configurationJson?: string;
   isActive?: boolean;
   isDeleted?: boolean;
@@ -288,10 +295,11 @@ export interface UpdateGridColumnDataSourceDto {
   sourceType?: 'Static' | 'LookupTable' | 'API';
   apiUrl?: string;
   apiPath?: string;
-  httpMethod?: string;
+  httpMethod?: string; // GET, POST, PUT, DELETE, PATCH
   requestBodyJson?: string;
   valuePath?: string;
   textPath?: string;
+  arrayPropertyNames?: string[]; // Array of property names to navigate through nested JSON structures
   configurationJson?: string;
   isActive?: boolean;
 }
@@ -304,6 +312,7 @@ export interface CreateGridColumnOptionDto {
   optionText: string;
   foreignOptionText?: string;
   optionOrder?: number;
+  isDefault?: boolean; // Indicates if this is the default option
   isActive?: boolean;
   isDeleted?: boolean;
   createdByUserId?: string;
@@ -314,6 +323,7 @@ export interface UpdateGridColumnOptionDto {
   optionText?: string;
   foreignOptionText?: string;
   optionOrder?: number;
+  isDefault?: boolean; // Indicates if this is the default option
   isActive?: boolean;
 }
 

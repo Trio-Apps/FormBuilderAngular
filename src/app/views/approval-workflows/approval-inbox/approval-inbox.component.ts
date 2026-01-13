@@ -5,6 +5,7 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
 import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto, ProcessApprovalActionDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
 import { ApprovalStageAssigneesService } from '../../FormBuilder/services/approval-stage-assignees.service';
 import { FormSubmissionsService, FormSubmissionDto } from '../../form-submissions/services/form-submissions.service';
+import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../../form-submissions/models/approve-reject-submission.model';
 import { StorageService } from '../../../auth/storage.service';
 import { AuthService } from '../../../auth/auth.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
@@ -57,7 +58,9 @@ export class ApprovalInboxComponent implements OnInit {
   showActionModal = false;
   actionForm!: FormGroup;
   selectedItem: ApprovalInboxItemDto | null = null;
+  selectedSubmission: FormSubmissionDto | null = null; // For submissions table
   actionType: 'Approved' | 'Rejected' | 'Returned' = 'Approved';
+  isSubmissionAction = false; // Flag to distinguish between inbox item and submission
 
   searchTerm = '';
   first = 0;
@@ -135,8 +138,10 @@ export class ApprovalInboxComponent implements OnInit {
     console.log('========================================');
     
     if (this.currentUserId) {
-      // Only load inbox - this will show only items where user is assigned as Stage Assignee
+      // Load inbox - this will show only items where user is assigned as Stage Assignee
       this.loadInbox();
+      // Also load all submissions with Submitted status to show when inbox is empty
+      this.loadAllSubmittedSubmissions();
     } else {
       console.error('[ApprovalInbox] No user ID or username found');
       this.messageService.add({
@@ -341,6 +346,27 @@ export class ApprovalInboxComponent implements OnInit {
   }
 
   /**
+   * Load all submissions with Submitted status (for display when inbox is empty)
+   * تحميل جميع الـ Submissions بحالة Submitted (للعرض عندما لا توجد pending approvals)
+   */
+  loadAllSubmittedSubmissions(): void {
+    this.formSubmissionsService.getAllSubmissions().subscribe({
+      next: (submissions: FormSubmissionDto[]) => {
+        // Filter only Submitted status submissions
+        this.allSubmissions = (submissions || []).filter(sub => 
+          sub.status === 'Submitted'
+        );
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Error loading all submitted submissions:', error);
+        this.allSubmissions = [];
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /**
    * Load all submissions with Submitted status (for "Show All Submissions" toggle)
    * تحميل جميع الـ Submissions بحالة Submitted (للعرض فقط، لا للموافقة)
    * Note: This is only for viewing, not for approval. Only inbox items can be approved.
@@ -375,6 +401,8 @@ export class ApprovalInboxComponent implements OnInit {
    */
   refreshData(): void {
     this.loadInbox();
+    // Always load submitted submissions to show when inbox is empty
+    this.loadAllSubmittedSubmissions();
     // Only load all submissions if user is viewing "Show All Submissions"
     if (this.showAllSubmissions) {
       this.loadAllSubmissions();
@@ -429,6 +457,40 @@ export class ApprovalInboxComponent implements OnInit {
     this.totalRecords = this.filteredItems.length;
   }
 
+  /**
+   * Get filtered submitted submissions based on search term
+   */
+  getFilteredSubmittedSubmissions(): FormSubmissionDto[] {
+    if (!this.searchTerm.trim()) {
+      return this.allSubmissions;
+    }
+
+    const term = this.searchTerm.toLowerCase();
+    return this.allSubmissions.filter(sub =>
+      sub.documentNumber?.toLowerCase().includes(term) ||
+      sub.documentTypeName?.toLowerCase().includes(term) ||
+      sub.submittedByUserName?.toLowerCase().includes(term) ||
+      sub.formName?.toLowerCase().includes(term)
+    );
+  }
+
+  /**
+   * Get paginated submitted submissions
+   */
+  getPaginatedSubmittedSubmissions(): FormSubmissionDto[] {
+    const filtered = this.getFilteredSubmittedSubmissions();
+    const start = this.first;
+    const end = start + this.rows;
+    return filtered.slice(start, end);
+  }
+
+  /**
+   * Get total records for submitted submissions
+   */
+  getSubmittedSubmissionsTotalRecords(): number {
+    return this.getFilteredSubmittedSubmissions().length;
+  }
+
   onSearchChange(): void {
     this.filterItems();
     this.first = 0;
@@ -447,6 +509,20 @@ export class ApprovalInboxComponent implements OnInit {
 
   openActionModal(item: ApprovalInboxItemDto, actionType: 'Approved' | 'Rejected' | 'Returned'): void {
     this.selectedItem = item;
+    this.selectedSubmission = null;
+    this.isSubmissionAction = false;
+    this.actionType = actionType;
+    this.showActionModal = true;
+    this.actionForm.reset({ comments: '' });
+  }
+
+  /**
+   * Open action modal for submission (from all submissions table)
+   */
+  openActionModalForSubmission(submission: FormSubmissionDto, actionType: 'Approved' | 'Rejected' | 'Returned'): void {
+    this.selectedSubmission = submission;
+    this.selectedItem = null;
+    this.isSubmissionAction = true;
     this.actionType = actionType;
     this.showActionModal = true;
     this.actionForm.reset({ comments: '' });
@@ -455,10 +531,18 @@ export class ApprovalInboxComponent implements OnInit {
   processAction(): void {
     console.log('[ApprovalInbox] processAction called');
     console.log('[ApprovalInbox] selectedItem:', this.selectedItem);
+    console.log('[ApprovalInbox] selectedSubmission:', this.selectedSubmission);
+    console.log('[ApprovalInbox] isSubmissionAction:', this.isSubmissionAction);
     console.log('[ApprovalInbox] currentUserId:', this.currentUserId);
     console.log('[ApprovalInbox] actionType:', this.actionType);
     console.log('[ApprovalInbox] form valid:', this.actionForm.valid);
     console.log('[ApprovalInbox] form value:', this.actionForm.value);
+
+    // Check if this is a submission action (from all submissions table)
+    if (this.isSubmissionAction && this.selectedSubmission) {
+      this.processSubmissionAction();
+      return;
+    }
 
     if (!this.selectedItem) {
       console.error('[ApprovalInbox] No selected item');
@@ -787,6 +871,7 @@ export class ApprovalInboxComponent implements OnInit {
           });
           this.closeActionModal();
           this.loadInbox();
+          this.loadAllSubmittedSubmissions();
           this.loadAllSubmissions();
           this.cdr.detectChanges();
         },
@@ -824,6 +909,7 @@ export class ApprovalInboxComponent implements OnInit {
           });
           this.closeActionModal();
           this.loadInbox();
+          this.loadAllSubmittedSubmissions();
           this.loadAllSubmissions();
           this.cdr.detectChanges();
         },
@@ -871,6 +957,7 @@ export class ApprovalInboxComponent implements OnInit {
         });
         this.closeActionModal();
         this.loadInbox();
+        this.loadAllSubmittedSubmissions(); // Reload all submitted submissions
         this.loadAllSubmissions(); // Reload all submissions
         this.cdr.detectChanges();
       },
@@ -901,9 +988,114 @@ export class ApprovalInboxComponent implements OnInit {
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
   }
 
+  /**
+   * Process action for submission (from all submissions table)
+   */
+  private processSubmissionAction(): void {
+    if (!this.selectedSubmission || !this.currentUserId) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No submission selected or user ID not found'
+      });
+      return;
+    }
+
+    this.loading.action = true;
+    const formData = this.actionForm.value;
+
+    // Use approve/reject endpoints with default stageId = 1
+    if (this.actionType === 'Approved') {
+      const approveDto: ApproveSubmissionDto = {
+        submissionId: this.selectedSubmission.id,
+        stageId: 1, // Default stageId
+        actionByUserId: this.currentUserId,
+        comments: formData.comments || null
+      };
+
+      this.formSubmissionsService.approveSubmissionDto(approveDto).subscribe({
+        next: (response: ApiResponse<FormSubmissionDto>) => {
+          console.log('[ApprovalInbox] Submission approval successful:', response);
+          this.loading.action = false;
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: response.message || 'Document approved successfully',
+            life: 3000
+          });
+          this.closeActionModal();
+          this.loadInbox();
+          this.loadAllSubmittedSubmissions();
+          this.loadAllSubmissions();
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('[ApprovalInbox] Error approving submission:', error);
+          this.loading.action = false;
+          let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to approve document';
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage,
+            life: 5000
+          });
+          this.cdr.detectChanges();
+        }
+      });
+    } else if (this.actionType === 'Rejected') {
+      const rejectDto: RejectSubmissionDto = {
+        submissionId: this.selectedSubmission.id,
+        stageId: 1, // Default stageId
+        actionByUserId: this.currentUserId,
+        comments: formData.comments || null
+      };
+
+      this.formSubmissionsService.rejectSubmissionDto(rejectDto).subscribe({
+        next: (response: ApiResponse<FormSubmissionDto>) => {
+          console.log('[ApprovalInbox] Submission rejection successful:', response);
+          this.loading.action = false;
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: response.message || 'Document rejected successfully',
+            life: 3000
+          });
+          this.closeActionModal();
+          this.loadInbox();
+          this.loadAllSubmittedSubmissions();
+          this.loadAllSubmissions();
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('[ApprovalInbox] Error rejecting submission:', error);
+          this.loading.action = false;
+          let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to reject document';
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage,
+            life: 5000
+          });
+          this.cdr.detectChanges();
+        }
+      });
+    } else {
+      // Returned is not supported for direct submissions, show message
+      this.loading.action = false;
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Return action is not supported for submissions. Please use Approve or Reject.',
+        life: 5000
+      });
+    }
+  }
+
   closeActionModal(): void {
     this.showActionModal = false;
     this.selectedItem = null;
+    this.selectedSubmission = null;
+    this.isSubmissionAction = false;
     this.actionForm.reset();
   }
 }

@@ -41,7 +41,58 @@
         <p>Loading inbox...</p>
       </div>
 
-      <div *ngIf="!loading.inbox && inboxItems.length === 0" class="empty-state">
+      <!-- Show all Submitted submissions when inbox is empty -->
+      <div *ngIf="!loading.inbox && inboxItems.length === 0 && allSubmissions.length > 0">
+        <p-table 
+          [value]="getPaginatedSubmittedSubmissions()" 
+          [paginator]="false"
+          styleClass="p-datatable-sm document-types-table">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>#</th>
+              <th>Document Number</th>
+              <th>Form Name</th>
+              <th>Document Type</th>
+              <th>Submitted By</th>
+              <th>Submitted Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-submission let-rowIndex="rowIndex">
+            <tr>
+              <td>{{ first + rowIndex + 1 }}</td>
+              <td>{{ submission.documentNumber || '-' }}</td>
+              <td>{{ submission.formName || '-' }}</td>
+              <td>{{ submission.documentTypeName || '-' }}</td>
+              <td>{{ submission.submittedByUserName || submission.submittedByUserId || '-' }}</td>
+              <td>{{ formatDate(submission.submittedDate) }}</td>
+              <td>
+                <span class="badge badge-info">{{ submission.status }}</span>
+              </td>
+              <td>
+                <div class="action-buttons">
+                  <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" 
+                    (click)="openActionModalForSubmission(submission, 'Approved')" pTooltip="Approve"></button>
+                  <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" 
+                    (click)="openActionModalForSubmission(submission, 'Rejected')" pTooltip="Reject"></button>
+                </div>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+
+        <p-paginator 
+          [first]="first" 
+          [rows]="rows" 
+          [totalRecords]="getSubmittedSubmissionsTotalRecords()"
+          [rowsPerPageOptions]="[10, 20, 50]" 
+          (onPageChange)="onPageChange($event)">
+        </p-paginator>
+      </div>
+
+      <!-- Show empty state only when there are no submissions at all -->
+      <div *ngIf="!loading.inbox && inboxItems.length === 0 && allSubmissions.length === 0" class="empty-state">
         <div class="empty-icon">
           <i class="pi pi-inbox"></i>
         </div>
@@ -97,13 +148,13 @@
 
 <p-dialog [(visible)]="showActionModal" [header]="actionType + ' Document'" [modal]="true" [style]="{ width: '600px' }" (onHide)="closeActionModal()">
   <form [formGroup]="actionForm" (ngSubmit)="processAction()">
-    <div class="form-display-section">
-      <div class="form-field-wrapper" *ngIf="selectedItem">
-        <label class="field-label">Document Number</label>
-        <div class="field-input-wrapper">
-          <input type="text" class="form-input" [value]="selectedItem.documentNumber || '-'" readonly />
+      <div class="form-display-section">
+        <div class="form-field-wrapper" *ngIf="selectedItem || selectedSubmission">
+          <label class="field-label">Document Number</label>
+          <div class="field-input-wrapper">
+            <input type="text" class="form-input" [value]="(selectedItem?.documentNumber || selectedSubmission?.documentNumber) || '-'" readonly />
+          </div>
         </div>
-      </div>
       <div class="form-field-wrapper">
         <label class="field-label">Comments (Optional)</label>
         <div class="field-input-wrapper">

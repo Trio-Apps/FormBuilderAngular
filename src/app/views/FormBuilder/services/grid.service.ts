@@ -216,6 +216,7 @@ export class GridService {
 
   /**
    * Get columns by grid ID
+   * Backend automatically excludes soft-deleted columns (IsDeleted = true)
    */
   getColumnsByGrid(gridId: number): Observable<ApiResponse<FormGridColumnDto[]>> {
     return this.http.get<ApiResponse<FormGridColumnDto[]>>(
@@ -227,6 +228,8 @@ export class GridService {
 
   /**
    * Get active columns by grid ID
+   * Backend automatically excludes soft-deleted columns (IsDeleted = true)
+   * Returns only columns where IsActive = true and IsDeleted = false
    */
   getActiveColumnsByGrid(gridId: number): Observable<ApiResponse<FormGridColumnDto[]>> {
     return this.http.get<ApiResponse<FormGridColumnDto[]>>(
@@ -255,11 +258,24 @@ export class GridService {
   }
 
   /**
-   * Delete column
+   * Delete column (Soft Delete)
+   * Sets IsDeleted = true and DeletedDate = DateTime.UtcNow
+   * The column will be excluded from all queries automatically
    */
   deleteColumn(id: number): Observable<ApiResponse<boolean>> {
     return this.http.delete<ApiResponse<boolean>>(`${this.baseUrl}/FormGridColumns/${id}`).pipe(
       catchError(() => of({ statusCode: 500, message: 'Error deleting column', data: false }))
+    );
+  }
+
+  /**
+   * Soft Delete column (explicit)
+   * Alternative endpoint for soft delete: DELETE /api/FormGridColumns/{id}/soft
+   * Sets IsDeleted = true and DeletedDate = DateTime.UtcNow
+   */
+  softDeleteColumn(id: number): Observable<ApiResponse<boolean>> {
+    return this.http.delete<ApiResponse<boolean>>(`${this.baseUrl}/FormGridColumns/${id}/soft`).pipe(
+      catchError(() => of({ statusCode: 500, message: 'Error soft deleting column', data: false }))
     );
   }
 

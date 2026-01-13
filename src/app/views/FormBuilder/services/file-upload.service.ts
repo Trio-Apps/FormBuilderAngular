@@ -40,10 +40,11 @@ export class FileUploadService {
     fieldCode: string
   ): Observable<ApiResponse<FormSubmissionAttachmentDto>> {
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('submissionId', submissionId.toString());
-    formData.append('fieldId', fieldId.toString());
-    formData.append('fieldCode', fieldCode);
+    // Using PascalCase to match backend API exactly (as shown in curl: File, SubmissionId, FieldId, FieldCode)
+    formData.append('File', file);
+    formData.append('SubmissionId', submissionId.toString());
+    formData.append('FieldId', fieldId.toString());
+    formData.append('FieldCode', fieldCode);
 
     return this.http.post<ApiResponse<FormSubmissionAttachmentDto>>(
       `${this.baseUrl}/upload`,
@@ -61,12 +62,13 @@ export class FileUploadService {
     fieldCode: string
   ): Observable<ApiResponse<FormSubmissionAttachmentDto[]>> {
     const formData = new FormData();
+    // Using PascalCase to match backend API exactly
     files.forEach(file => {
-      formData.append('files', file);
+      formData.append('Files', file);
     });
-    formData.append('submissionId', submissionId.toString());
-    formData.append('fieldId', fieldId.toString());
-    formData.append('fieldCode', fieldCode);
+    formData.append('SubmissionId', submissionId.toString());
+    formData.append('FieldId', fieldId.toString());
+    formData.append('FieldCode', fieldCode);
 
     return this.http.post<ApiResponse<FormSubmissionAttachmentDto[]>>(
       `${this.baseUrl}/upload-multiple`,

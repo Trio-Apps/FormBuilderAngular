@@ -370,6 +370,7 @@ export interface FormRule {
   actions: Action[];
   elseActions?: Action[];
   isActive: boolean;
+  isDeleted?: boolean; // ✅ Soft delete flag
   executionOrder: number;
 }
 
@@ -422,6 +423,7 @@ export interface FormRuleDto {
   actions?: Action[]; // ✅ Array directly (not JSON string)
   elseActions?: Action[]; // ✅ Array directly (not JSON string)
   isActive: boolean;
+  isDeleted?: boolean; // ✅ Soft delete flag
   executionOrder?: number;
   formName?: string;
   formCode?: string;
@@ -644,6 +646,7 @@ export function convertFormRuleDtoToFormRule(dto: FormRuleDto): FormRule {
     actions: actions,
     elseActions: elseActions.length > 0 ? elseActions : undefined,
     isActive: dto.isActive,
+    isDeleted: dto.isDeleted, // ✅ Copy isDeleted flag
     executionOrder: dto.executionOrder || 1
   };
 }

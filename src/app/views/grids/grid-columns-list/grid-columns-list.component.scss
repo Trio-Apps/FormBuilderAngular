@@ -590,72 +590,449 @@
   }
 }
 
-// Column Options Section
-.form-section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
+// Form Section (for Column Options)
+.form-section {
+  margin-bottom: 0;
+  background: white;
+  padding: 20px 24px;
   border-bottom: 1px solid #e5e7eb;
 
+  &:last-child {
+    margin-bottom: 0;
+    border-bottom: none;
+  }
+
   .section-title {
-    margin: 0;
-    font-size: 1rem;
+    font-size: 16px;
     font-weight: 600;
-    color: #374151;
+    color: #111827;
+    margin-bottom: 16px;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #e5e7eb;
 
     i {
       color: #667eea;
+      font-size: 18px;
     }
   }
 }
 
-.options-list {
+// Column Options List (same as Fields component)
+.field-options-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin-top: 1rem;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-top: 8px;
 }
 
 .option-item {
-  background: #f9fafb;
+  background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
 
-  .option-row {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+.option-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 
-    .option-order {
+  .option-order {
+    flex-shrink: 0;
+
+    .order-label {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 32px;
-      height: 32px;
-      background: #667eea;
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
       color: white;
-      border-radius: 6px;
+      border-radius: 8px;
       font-weight: 600;
-      font-size: 14px;
-      flex-shrink: 0;
+      font-size: 16px;
+      box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+    }
+  }
+
+  .option-inputs {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr;
     }
 
-    .option-inputs {
-      flex: 1;
+    .option-input-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0; // Prevent grid overflow
 
-      .form-control-sm {
-        font-size: 0.875rem;
+      .option-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 0;
       }
     }
 
-    .btn-danger {
-      flex-shrink: 0;
+    .form-control {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: all 0.2s ease;
+
+      &:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      &.is-invalid {
+        border-color: #ef4444;
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+      }
+    }
+  }
+
+  .btn-remove-option {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: #fee2e2;
+    color: #dc2626;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    margin-top: 20px;
+
+    i {
+      font-size: 14px;
+    }
+
+    &:hover:not(:disabled) {
+      background: #dc2626;
+      color: white;
+      transform: scale(1.1);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.btn-add-option {
+  background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+
+  &:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #6a3d8f 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+  }
+
+  i {
+    font-size: 14px;
+  }
+}
+
+// Property tags for Available Properties/Columns
+.property-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: white;
+  border: 1px solid #86efac;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #166534;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #f0fdf4;
+    border-color: #4ade80;
+  }
+}
+
+// Modal Styles (same as Fields component)
+::ng-deep .column-modal {
+  .p-dialog {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  .p-dialog-header {
+    background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+    color: white;
+    border-radius: 0;
+    padding: 20px 24px;
+    border: none;
+
+    .p-dialog-title {
+      color: white;
+      font-weight: 600;
+      font-size: 18px;
+    }
+
+    .p-dialog-header-icon {
+      color: white;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: rotate(90deg);
+      }
+    }
+  }
+
+  .p-dialog-content {
+    padding: 0;
+    background: #f5f7fa;
+  }
+}
+
+.modal-form-content {
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #f5f7fa;
+}
+
+// Language Tabs (same as Fields component)
+.language-tabs-container {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  margin-bottom: 0;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+
+  .language-tab {
+    flex: 1;
+    padding: 12px 24px;
+    border: none;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+    position: relative;
+
+    &:first-child {
+      border-top-left-radius: 0;
+    }
+
+    &:last-child {
+      border-top-right-radius: 0;
+    }
+
+    &:hover {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    &.language-tab-active {
+      background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+      color: white;
+      border-bottom-color: #00EBB5;
+      font-weight: 600;
+    }
+  }
+}
+
+// Form Grid (same as Fields component)
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+// Form Group (same as Fields component)
+.form-group {
+  .form-label {
+    display: block;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+    font-size: 14px;
+
+    .required {
+      color: #ef4444;
+      margin-left: 2px;
+    }
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    background: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+    &:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    &.is-invalid {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    }
+
+    &::placeholder {
+      color: #9ca3af;
+    }
+  }
+
+  .form-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6b7280;
+    font-style: italic;
+  }
+
+  .invalid-feedback {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #ef4444;
+    font-weight: 500;
+  }
+}
+
+// Switches Grid (same as Fields component)
+.switches-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.switch-item {
+  .switch-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+  }
+
+  .switch-input {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    appearance: none;
+    background: #d1d5db;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:checked {
+      background: #667eea;
+
+      + .switch-slider {
+        transform: translateX(20px);
+      }
+    }
+  }
+
+  .switch-slider {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    pointer-events: none;
+    margin-left: -40px;
+    margin-top: 2px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .switch-text {
+    font-weight: 500;
+    color: #374151;
+    font-size: 14px;
+  }
+}
+
+// Modal Footer (same as Fields component)
+.modal-footer {
+  padding: 20px 24px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  background: white;
+
+  ::ng-deep .p-button-text {
+    color: #6b7280;
+    background: transparent;
+    border: none;
+    padding: 10px 20px;
+    font-weight: 500;
+
+    &:hover {
+      background: #f3f4f6;
+      color: #374151;
+    }
+  }
+
+  ::ng-deep .p-button-primary {
+    background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+    border: none;
+    padding: 10px 24px;
+    font-weight: 600;
+
+    &:hover:not(:disabled) {
+      background: linear-gradient(135deg, #5568d3 0%, #6a3d8f 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
     }
   }
 }
