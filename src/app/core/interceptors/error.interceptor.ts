@@ -107,7 +107,12 @@ function extractErrorMessage(error: HttpErrorResponse, url: string, method: stri
 
   // Format 4: error.error.error (some APIs use this format)
   if (error.error?.error && typeof error.error.error === 'string') {
-    return error.error.error;
+    const errorCode = error.error.error;
+    // Translate common error codes to user-friendly messages
+    if (errorCode === 'FormField_FieldCodeExists') {
+      return 'كود الحقل (Field Code) موجود بالفعل. يرجى استخدام كود فريد آخر.';
+    }
+    return errorCode;
   }
 
   // Format 5: Validation errors object

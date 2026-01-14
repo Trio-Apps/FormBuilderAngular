@@ -357,6 +357,22 @@
           </div>
         </div>
 
+        <!-- Workflow Status Indicator -->
+        <div *ngIf="hasDraft" class="workflow-status">
+          <div class="status-icon"
+               [class.status-draft]="isDraftMode && !isSubmitting"
+               [class.status-ready]="isDraftMode && !isSubmitting"
+               [class.status-submitting]="isSubmitting">
+            <i *ngIf="!isSubmitting" class="pi pi-file"></i>
+            <i *ngIf="isSubmitting" class="pi pi-spin pi-spinner"></i>
+          </div>
+          <div class="status-text">
+            <span *ngIf="isDraftMode && !isSubmitting">{{ 'Draft Mode - Save your changes or submit when ready' | translate }}</span>
+            <span *ngIf="isSubmitting">{{ 'Submitting your request...' | translate }}</span>
+            <span *ngIf="!isDraftMode">{{ 'Request submitted successfully' | translate }}</span>
+          </div>
+        </div>
+
         <!-- Form Actions -->
         <div class="form-actions">
           <!-- Approve/Reject Buttons (if submission exists and status is Submitted) -->
@@ -377,22 +393,51 @@
             }}</span>
           </button>
           
-          <!-- Cancel, Draft, and Submit Buttons (always visible) -->
+          <!-- Cancel, Draft/Save, and Submit Buttons -->
           <button type="button" class="btn-cancel" (click)="goBack()">
             Cancel
           </button>
-          <button type="button" class="btn-draft" (click)="saveSubmissionAsDraft()" [disabled]="loading.create">
+
+          <!-- Show Save Draft button only if no draft exists yet -->
+          <button
+            *ngIf="!hasDraft"
+            type="button"
+            class="btn-draft"
+            (click)="saveSubmissionAsDraft()"
+            [disabled]="loading.create || isSubmitting">
             <span *ngIf="!loading.create">
-              <i class="pi pi-file"></i> Save as Draft
+              <i class="pi pi-file"></i> Create Draft
+            </span>
+            <span *ngIf="loading.create">
+              <i class="pi pi-spin pi-spinner"></i> Creating...
+            </span>
+          </button>
+
+          <!-- Show Save Data button if draft exists (for saving changes) -->
+          <button
+            *ngIf="hasDraft && isDraftMode"
+            type="button"
+            class="btn-draft"
+            (click)="saveSubmissionAsDraft()"
+            [disabled]="loading.create || isSubmitting">
+            <span *ngIf="!loading.create">
+              <i class="pi pi-save"></i> Save Changes
             </span>
             <span *ngIf="loading.create">
               <i class="pi pi-spin pi-spinner"></i> Saving...
             </span>
           </button>
-          <button type="submit" class="btn-submit" [disabled]="submissionForm.invalid || fieldsForm.invalid || loading.create">
-            <span *ngIf="!loading.create">Save</span>
-            <span *ngIf="loading.create">
-              <i class="pi pi-spin pi-spinner"></i> Saving...
+
+          <!-- Final Submit button - only enabled when draft exists and not currently submitting -->
+          <button
+            type="submit"
+            class="btn-submit"
+            [disabled]="!hasDraft || !isDraftMode || submissionForm.invalid || fieldsForm.invalid || loading.create || isSubmitting">
+            <span *ngIf="!isSubmitting">
+              <i class="pi pi-send"></i> Submit
+            </span>
+            <span *ngIf="isSubmitting">
+              <i class="pi pi-spin pi-spinner"></i> Submitting...
             </span>
           </button>
         </div>

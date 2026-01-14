@@ -133,12 +133,74 @@ export class TabsService {
   }
 
   /**
+   * Get all deleted tabs with pagination
+   * GET /api/FormTabs/deleted?page=1&pageSize=20
+   *
+   * Description: جلب جميع Tabs المحذوفة مع pagination
+   * Response: PagedResult<FormTabDto>
+   *
+   * @param page Page number (default: 1)
+   * @param pageSize Page size (default: 20)
+   * @returns Observable<PagedResult<FormTabDto>>
+   */
+  getAllDeletedAsync(page: number = 1, pageSize: number = 20): Observable<any> {
+    const params = { page: page.toString(), pageSize: pageSize.toString() };
+
+    return this.http.get<any>(`${this.baseUrl}/deleted`, { params }).pipe(
+      map((response: any) => {
+        // Handle paged response
+        if (response && typeof response === 'object') {
+          const data = response.data || response.items || response.result || [];
+          const result = {
+            items: Array.isArray(data) ? data : [],
+            totalCount: response.totalCount || response.total || data.length || 0,
+            pageNumber: response.pageNumber || response.page || page,
+            pageSize: response.pageSize || pageSize,
+            totalPages: response.totalPages || Math.ceil((response.totalCount || data.length || 0) / pageSize)
+          };
+          return result;
+        }
+        return { items: [], totalCount: 0, pageNumber: page, pageSize, totalPages: 0 };
+      }),
+      catchError((error) => {
+        console.error('[TabsService] Error getting deleted tabs:', error);
+        return of({ items: [], totalCount: 0, pageNumber: page, pageSize, totalPages: 0 });
+      })
+    );
+  }
+
+  /**
+   * Get all tabs including deleted ones
+   * GET /api/FormTabs/all-including-deleted
+   *
+   * Description: جلب جميع Tabs بما فيها المحذوفة
+   * Response: FormTabDto[]
+   *
+   * @returns Observable<FormTabDto[]>
+   */
+  getAllIncludingDeletedAsync(): Observable<FormTabDto[]> {
+    return this.http.get<any>(`${this.baseUrl}/all-including-deleted`).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const data = response.data || response.items || response.result || [];
+          return Array.isArray(data) ? data : [];
+        }
+        return Array.isArray(response) ? response : [];
+      }),
+      catchError((error) => {
+        console.error('[TabsService] Error getting all tabs including deleted:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
    * Restore soft-deleted tab
    * POST /api/FormTabs/{id}/restore
-   * 
+   *
    * Description: يستعيد Tab محذوف (IsDeleted = false)
    * Response: 200 OK (FormTabDto)
-   * 
+   *
    * @param id Tab ID
    * @returns Observable<FormTabDto>
    */

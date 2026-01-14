@@ -49,10 +49,12 @@ import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 export class TabsListComponent implements OnInit, OnDestroy {
   formId!: number;
   tabs: FormTabDto[] = [];
+  deletedTabs: FormTabDto[] = [];
   loading = false;
+  loadingDeleted = false;
   private routeSubscription?: Subscription;
   searchTerm = '';
-  private deletedTabIds: Set<number> = new Set(); // Track deleted tab IDs to filter them out
+  showDeletedTabs = false; // Toggle to show/hide deleted tabs
   
   // Tab Modal updated
   showTabModal = false;
@@ -90,14 +92,12 @@ export class TabsListComponent implements OnInit, OnDestroy {
       const newFormId = +params['formId'];
       if (newFormId && newFormId !== this.formId) {
         this.formId = newFormId;
-        // Load deleted tab IDs from localStorage when formId is available
-        this.loadDeletedTabIds();
         this.loadTabs();
+        this.loadDeletedTabs();
       } else if (newFormId && !this.formId) {
         this.formId = newFormId;
-        // Load deleted tab IDs from localStorage when formId is available
-        this.loadDeletedTabIds();
         this.loadTabs();
+        this.loadDeletedTabs();
       }
     });
   }
@@ -109,33 +109,29 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Load deleted tab IDs from localStorage (persists across sessions and logins)
+   * Load deleted tabs from API
    */
-  private loadDeletedTabIds(): void {
-    try {
-      const savedIds = localStorage.getItem(`deletedTabIds_${this.formId}`);
-      if (savedIds) {
-        const idsArray = JSON.parse(savedIds) as number[];
-        this.deletedTabIds = new Set(idsArray);
-        console.log('[TabsList] Loaded deleted tab IDs from localStorage:', Array.from(this.deletedTabIds));
-      }
-    } catch (error) {
-      console.error('[TabsList] Error loading deleted tab IDs from localStorage:', error);
-      this.deletedTabIds = new Set();
+  loadDeletedTabs(): void {
+    if (!this.formId || isNaN(this.formId)) {
+      return;
     }
-  }
 
-  /**
-   * Save deleted tab IDs to localStorage (persists across sessions and logins)
-   */
-  private saveDeletedTabIds(): void {
-    try {
-      const idsArray = Array.from(this.deletedTabIds);
-      localStorage.setItem(`deletedTabIds_${this.formId}`, JSON.stringify(idsArray));
-      console.log('[TabsList] Saved deleted tab IDs to localStorage:', idsArray);
-    } catch (error) {
-      console.error('[TabsList] Error saving deleted tab IDs to localStorage:', error);
-    }
+    this.loadingDeleted = true;
+    this.tabsService.getAllDeletedAsync(1, 100).subscribe({
+      next: (result) => {
+        // Filter deleted tabs to ensure they belong to this form
+        this.deletedTabs = Array.isArray(result.items)
+          ? result.items.filter((tab: any) => tab.formBuilderId === this.formId)
+          : [];
+        console.log('[TabsList] Loaded deleted tabs:', this.deletedTabs.length);
+        this.loadingDeleted = false;
+      },
+      error: (error) => {
+        console.error('[TabsList] Error loading deleted tabs:', error);
+        this.deletedTabs = [];
+        this.loadingDeleted = false;
+      }
+    });
   }
 
   loadFieldsCountForTab(tabId: number, tab: FormTabDto): void {
@@ -163,59 +159,20 @@ export class TabsListComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.tabsService.getTabs(this.formId).subscribe({
       next: (tabs) => {
-        // Filter tabs to ensure they belong to this form
-        let allTabs = Array.isArray(tabs) ? tabs.filter(tab => 
-          tab.formBuilderId === this.formId
-        ) : [];
+        // Filter tabs to ensure they belong to this form and are not deleted
+        this.tabs = Array.isArray(tabs)
+          ? tabs.filter(tab => tab.formBuilderId === this.formId && tab.isDeleted !== true)
+          : [];
 
-        // Reload deleted tab IDs when formId changes
-        this.loadDeletedTabIds();
+        console.log('[TabsList] Loaded active tabs:', this.tabs.length);
 
-        // Filter out tabs that are in deletedTabIds (soft deleted - hide them completely)
-        const processedTabs = allTabs.filter(tab => {
-          if (this.deletedTabIds.has(tab.id!)) {
-            console.log('[TabsList] Hiding deleted tab (in deletedTabIds):', tab.id, tab.tabName);
-            return false; // Hide this tab completely
-          }
-          return true; // Show this tab
-        });
-        
-        console.log('[TabsList] After filtering - Total tabs:', processedTabs.length, 
-          'Deleted tabs hidden:', allTabs.length - processedTabs.length);
-
-        // Clean up deletedTabIds - remove IDs that are no longer in the API response (hard deleted) or restored
-        const apiTabIds = new Set(allTabs.map(t => t.id));
-        const idsToRemove: number[] = [];
-        this.deletedTabIds.forEach(deletedId => {
-          const tabInApi = allTabs.find(t => t.id === deletedId);
-          if (!tabInApi) {
-            // Tab not in API response - it was hard deleted from server, remove from tracking
-            idsToRemove.push(deletedId);
-          } else if (tabInApi.isDeleted === false) {
-            // Tab is back in API and not deleted (might have been restored)
-            idsToRemove.push(deletedId);
-            console.log('[TabsList] Tab was restored, removing from deleted tracking:', deletedId);
-          }
-        });
-        if (idsToRemove.length > 0) {
-          idsToRemove.forEach(id => this.deletedTabIds.delete(id));
-          this.saveDeletedTabIds();
-          console.log('[TabsList] Cleaned up deleted tab IDs:', idsToRemove);
-        }
-
-        // Filter out soft-deleted tabs (isDeleted = true) - show only non-deleted tabs
-        const visibleTabs = processedTabs.filter(tab => tab.isDeleted !== true);
-        console.log('[TabsList] Visible tabs count:', visibleTabs.length, 'Deleted tabs hidden:', allTabs.length - visibleTabs.length);
-        
-        this.tabs = visibleTabs;
-        
         // Load fields count for each tab
         this.tabs.forEach(tab => {
           if (tab.id) {
             this.loadFieldsCountForTab(tab.id, tab);
           }
         });
-        
+
         this.loading = false;
       },
       error: () => {
@@ -241,7 +198,15 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
   getActiveTabsCount(): number {
-    return this.tabs.filter(t => !t.isDeleted).length;
+    return this.tabs.length;
+  }
+
+  getDeletedTabsCount(): number {
+    return this.deletedTabs.length;
+  }
+
+  getAllTabsCount(): number {
+    return this.tabs.length + this.deletedTabs.length;
   }
 
   getTotalFieldsCount(): number {
@@ -431,35 +396,18 @@ export class TabsListComponent implements OnInit, OnDestroy {
         this.tabsService.softDelete(id).subscribe({
           next: () => {
             console.log('[TabsList] Soft delete API response received');
-            
-            // Add to deleted tabs set to hide it completely
-            this.deletedTabIds.add(id);
-            console.log('[TabsList] Added tab to deletedTabIds:', id);
-            
-            // Save to localStorage to persist across page refreshes, logout/login, and browser sessions
-            this.saveDeletedTabIds();
-            console.log('[TabsList] Saved deletedTabIds to localStorage');
 
-            // Update tab in array - mark as deleted
-            const tabIndex = this.tabs.findIndex(t => t.id === id);
-            if (tabIndex !== -1) {
-              this.tabs[tabIndex] = {
-                ...this.tabs[tabIndex],
-                isDeleted: true
-              };
-              // Remove from visible list (filter out deleted)
-              this.tabs = this.tabs.filter(t => t.isDeleted !== true);
-            } else {
-              console.warn('[TabsList] Tab not found in tabs array:', id);
-            }
-            
-            console.log('[TabsList] After deletion - remaining tabs:', this.tabs.length);
+            // Remove from active tabs list
+            this.tabs = this.tabs.filter(t => t.id !== id);
+
+            // Reload deleted tabs to show the newly deleted tab
+            this.loadDeletedTabs();
 
             this.loading = false;
-            
+
             // Force change detection to update UI immediately
             this.cdr.detectChanges();
-            
+
             this.messageService.add({
               severity: 'success',
               summary: 'Success',
@@ -470,7 +418,7 @@ export class TabsListComponent implements OnInit, OnDestroy {
           error: (error: any) => {
             this.loading = false;
             console.error('[TabsList] Error deleting tab:', error);
-            
+
             let errorMessage = 'Failed to delete tab';
             if (error?.error?.message) {
               errorMessage = error.error.message;
@@ -487,6 +435,82 @@ export class TabsListComponent implements OnInit, OnDestroy {
         });
       }
     });
+  }
+
+  /**
+   * Restore a soft-deleted tab
+   */
+  restoreTab(id: number): void {
+    const tabToRestore = this.deletedTabs.find(t => t.id === id);
+    if (!tabToRestore) {
+      console.warn('[TabsList] Tab not found for restoration:', id);
+      return;
+    }
+
+    this.confirmationService.confirm({
+      message: `Are you sure you want to restore "${tabToRestore.tabName}"?`,
+      header: 'Confirm Restore',
+      icon: 'pi pi-refresh',
+      acceptButtonStyleClass: 'p-button-success',
+      rejectButtonStyleClass: 'p-button-secondary',
+      accept: () => {
+        console.log('[TabsList] User confirmed restoration for tab:', id);
+        this.loading = true;
+        this.tabsService.restore(id).subscribe({
+          next: (restoredTab) => {
+            console.log('[TabsList] Tab restored successfully:', restoredTab);
+
+            // Remove from deleted tabs list
+            this.deletedTabs = this.deletedTabs.filter(t => t.id !== id);
+
+            // Add to active tabs list
+            this.tabs.push(restoredTab);
+
+            // Load fields count for the restored tab
+            this.loadFieldsCountForTab(restoredTab.id!, restoredTab);
+
+            this.loading = false;
+
+            // Force change detection to update UI immediately
+            this.cdr.detectChanges();
+
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: 'Tab restored successfully',
+              life: 5000
+            });
+          },
+          error: (error: any) => {
+            this.loading = false;
+            console.error('[TabsList] Error restoring tab:', error);
+
+            let errorMessage = 'Failed to restore tab';
+            if (error?.error?.message) {
+              errorMessage = error.error.message;
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: errorMessage
+            });
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Toggle showing/hiding deleted tabs
+   */
+  toggleDeletedTabs(): void {
+    this.showDeletedTabs = !this.showDeletedTabs;
+    if (this.showDeletedTabs && this.deletedTabs.length === 0) {
+      this.loadDeletedTabs();
+    }
   }
 
 }

@@ -66,16 +66,19 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ tabs.length }}</div>
-          <div class="stat-label">{{ 'tabs.totalTabs' | translate }}</div>
+          <div class="stat-label">{{ 'tabs.activeTabs' | translate }}</div>
         </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-success">
-          <i class="pi pi-check-circle"></i>
+      <div class="stat-card" *ngIf="deletedTabs.length > 0 || loadingDeleted">
+        <div class="stat-icon stat-icon-danger">
+          <i class="pi pi-trash"></i>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ getActiveTabsCount() }}</div>
-          <div class="stat-label">{{ 'tabs.activeTabs' | translate }}</div>
+          <div class="stat-value">
+            <span *ngIf="!loadingDeleted">{{ deletedTabs.length }}</span>
+            <i *ngIf="loadingDeleted" class="pi pi-spin pi-spinner"></i>
+          </div>
+          <div class="stat-label">{{ 'tabs.deletedTabs' | translate }}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -97,6 +100,14 @@
           {{ 'tabs.tabsList' | translate }}
         </h3>
         <div class="table-actions">
+          <button
+            *ngIf="deletedTabs.length > 0 || showDeletedTabs"
+            class="btn-secondary btn-sm"
+            (click)="toggleDeletedTabs()"
+            [disabled]="loadingDeleted">
+            <i class="pi" [class.pi-eye]="!showDeletedTabs" [class.pi-eye-slash]="showDeletedTabs"></i>
+            <span>{{ (showDeletedTabs ? 'tabs.hideDeleted' : 'tabs.showDeleted') | translate }}</span>
+          </button>
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input
@@ -195,6 +206,80 @@
                   </button>
                   <button class="action-btn action-delete" (click)="deleteTab(tab.id)" [title]="'common.delete' | translate">
                     <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Deleted Tabs Section -->
+      <div *ngIf="showDeletedTabs && deletedTabs.length > 0" class="deleted-tabs-section">
+        <div class="section-divider">
+          <h4 class="section-title">
+            <i class="pi pi-trash text-danger"></i>
+            {{ 'tabs.deletedTabs' | translate }} ({{ deletedTabs.length }})
+          </h4>
+        </div>
+
+        <table class="fields-table deleted-table">
+          <thead>
+            <tr>
+              <th class="col-order">#</th>
+              <th class="col-name">{{ 'tabs.tabName' | translate }}</th>
+              <th class="col-code">{{ 'tabs.tabCode' | translate }}</th>
+              <th class="col-type">{{ 'tabs.tabOrder' | translate }}</th>
+              <th class="col-options">{{ 'common.fields' | translate }}</th>
+              <th class="col-status">{{ 'common.status' | translate }}</th>
+              <th class="col-actions">{{ 'common.actions' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let tab of deletedTabs; let i = index" class="deleted-row">
+              <td class="col-order">
+                <span class="order-number">{{ tab.tabOrder || i + 1 }}</span>
+              </td>
+              <td class="col-name">
+                <div class="field-name-wrapper">
+                  <div class="field-name-main">{{ tab.tabName || '-' }}</div>
+                  <div class="field-name-meta" *ngIf="tab.foreignTabName">
+                    <span class="meta-item">
+                      <i class="pi pi-language"></i> {{ tab.foreignTabName }}
+                    </span>
+                  </div>
+                </div>
+              </td>
+              <td class="col-code">
+                <code class="code-badge">{{ tab.tabCode || '-' }}</code>
+              </td>
+              <td class="col-type">
+                <span class="type-badge">
+                  {{ tab.tabOrder || '-' }}
+                </span>
+              </td>
+              <td class="col-options">
+                <span class="options-count" *ngIf="tab.fieldsCount && tab.fieldsCount > 0">
+                  <i class="pi pi-list"></i>
+                  {{ tab.fieldsCount }}
+                </span>
+                <span class="options-count empty" *ngIf="!tab.fieldsCount || tab.fieldsCount === 0">
+                  {{ 'common.noData' | translate }}
+                </span>
+              </td>
+              <td class="col-status">
+                <span class="status-badge status-deleted">
+                  <i class="pi pi-times-circle"></i>
+                  {{ 'common.deleted' | translate }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <div class="actions-menu">
+                  <button
+                    class="action-btn action-restore"
+                    (click)="restoreTab(tab.id)"
+                    [title]="'tabs.restore' | translate">
+                    <i class="pi pi-refresh"></i>
                   </button>
                 </div>
               </td>

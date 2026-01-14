@@ -24,6 +24,10 @@ import { environment } from '../../../environments/environment';
 import { AttachmentTypesService } from '../../FormBuilder/services/attachment-types.service';
 import { CreateAttachmentTypeDto } from '../../FormBuilder/form-builder/models/attachment-types.model';
 import { CALCULATION_OPERATIONS, CalculationOperation, getRecommendedCalculationOperation } from '../../FormBuilder/constants/calculation-operations';
+import { ValidationService } from '../../angular-validation/services/validation.service';
+import { FormSubmissionService } from '../../angular-form-submission/services/form-submission.service';
+import { ValidationErrorDisplayComponent } from '../../angular-validation/components/validation-error-display.component';
+import { ValidationErrorCollection } from '../../angular-validation/models/validation-error.model';
 
 @Component({
   selector: 'app-fields-list',
@@ -37,7 +41,8 @@ import { CALCULATION_OPERATIONS, CalculationOperation, getRecommendedCalculation
     TooltipModule,
     DialogModule,
     ButtonModule,
-    RouterLink
+    RouterLink,
+    ValidationErrorDisplayComponent
   ],
   templateUrl: './fields-list.component.html',
   styleUrls: ['./fields-list.component.scss'],
@@ -82,6 +87,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   // Reactive Form
   fieldForm: FormGroup;
+
+  // Validation System
+  validationErrors = new ValidationErrorCollection();
 
   // Field Type Filter
   searchTerm = '';
@@ -199,7 +207,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    private validationService: ValidationService,
+    private formSubmissionService: FormSubmissionService
   ) {
     // Initialize the form
     this.fieldForm = this.fb.group({
@@ -1019,19 +1029,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         error: (error) => {
           this.loading.save = false;
           
-          // Use DuplicateValidationHelper for unified error handling
-          const fieldData = this.fieldForm.value;
-          DuplicateValidationHelper.handleDuplicateError(
-            error,
-            this.messageService,
-            this.translationService,
-            {
-              entityType: 'Field Code',
-              fieldName: 'Field Code',
-              fallbackValue: fieldData.fieldCode,
-              fieldNameVariations: ['fieldcode', 'field code', 'fieldcode', 'fieldname', 'field name']
-            }
-          );
+          // Use the new validation system for enhanced error handling
+          this.handleFieldSaveError(error);
         }
       });
     } else {
@@ -1108,18 +1107,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         error: (error) => {
           this.loading.save = false;
           
-          // Use DuplicateValidationHelper for unified error handling
-          DuplicateValidationHelper.handleDuplicateError(
-            error,
-            this.messageService,
-            this.translationService,
-            {
-              entityType: 'Field Code',
-              fieldName: 'Field Code',
-              fallbackValue: fieldData.fieldCode,
-              fieldNameVariations: ['fieldcode', 'field code', 'fieldcode', 'fieldname', 'field name']
-            }
-          );
+          // Use the new validation system for enhanced error handling
+          this.handleFieldSaveError(error);
         }
       });
     }
@@ -4291,29 +4280,65 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       };
 
       if (this.existingDataSource?.id) {
-        // Update existing DataSource
-        this.fieldDataSourceService.updateDataSource(this.existingDataSource.id, {
-          sourceType: dataSourceDto.sourceType,
-          apiUrl: dataSourceDto.apiUrl,
-          httpMethod: dataSourceDto.httpMethod,
-          requestBodyJson: dataSourceDto.requestBodyJson,
-          valuePath: dataSourceDto.valuePath,
-          textPath: dataSourceDto.textPath,
-          isActive: dataSourceDto.isActive!,
-          isDeleted: this.existingDataSource.isDeleted !== undefined ? this.existingDataSource.isDeleted : false
-        }).subscribe({
-          next: () => {
-            resolve();
-          },
-          error: () => {
-            this.messageService.add({
-              severity: 'error',
-              summary: 'Error',
-              detail: 'Failed to update DataSource'
-            });
-            reject();
-          }
-        });
+        // Check if sourceType is changing - if so, delete old and create new
+        if (this.existingDataSource.sourceType !== this.dataSourceType) {
+          console.log('[FieldsList] SourceType changing from', this.existingDataSource.sourceType, 'to', this.dataSourceType, '- deleting old and creating new');
+          // Delete old DataSource first
+          this.fieldDataSourceService.deleteDataSource(this.existingDataSource.id).subscribe({
+            next: () => {
+              console.log('[FieldsList] Old DataSource deleted, creating new one');
+              // Then create new DataSource
+              this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
+                next: (createdDataSource) => {
+                  this.existingDataSource = createdDataSource;
+                  resolve();
+                },
+                error: (error) => {
+                  console.error('[FieldsList] Error creating new DataSource:', error);
+                  this.messageService.add({
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: 'Failed to create new DataSource'
+                  });
+                  reject();
+                }
+              });
+            },
+            error: (error) => {
+              console.error('[FieldsList] Error deleting old DataSource:', error);
+              this.messageService.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to delete old DataSource'
+              });
+              reject();
+            }
+          });
+        } else {
+          // Update existing DataSource (same sourceType)
+          this.fieldDataSourceService.updateDataSource(this.existingDataSource.id, {
+            sourceType: dataSourceDto.sourceType,
+            apiUrl: dataSourceDto.apiUrl,
+            httpMethod: dataSourceDto.httpMethod,
+            requestBodyJson: dataSourceDto.requestBodyJson,
+            valuePath: dataSourceDto.valuePath,
+            textPath: dataSourceDto.textPath,
+            isActive: dataSourceDto.isActive!,
+            isDeleted: this.existingDataSource.isDeleted !== undefined ? this.existingDataSource.isDeleted : false
+          }).subscribe({
+            next: () => {
+              resolve();
+            },
+            error: () => {
+              this.messageService.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to update DataSource'
+              });
+              reject();
+            }
+          });
+        }
       } else {
         // Create new DataSource
         this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
@@ -4367,6 +4392,44 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       summary: 'Info',
       detail: 'Add section feature coming soon'
     });
+  }
+
+  /**
+   * Handle field save errors using the validation system
+   */
+  private handleFieldSaveError(error: any): void {
+    // Extract validation errors using the validation service
+    this.validationErrors = this.validationService.extractValidationErrors(error);
+
+    // Set errors on form controls for field-specific errors
+    this.validationErrors.getAllErrors().forEach(validationError => {
+      this.validationService.setFieldErrors(this.fieldForm, validationError.field, [validationError]);
+    });
+
+    // Handle duplicate validation using the existing helper
+    const fieldData = this.fieldForm.value;
+    DuplicateValidationHelper.handleDuplicateError(
+      error,
+      this.messageService,
+      this.translationService,
+      {
+        entityType: 'Field Code',
+        fieldName: 'Field Code',
+        fallbackValue: fieldData.fieldCode,
+        fieldNameVariations: ['fieldcode', 'field code', 'fieldcode', 'fieldname', 'field name']
+      }
+    );
+
+    // Show general validation errors if any (duplicate errors are already handled above)
+    const generalErrors = this.validationErrors.getFieldErrors('general');
+    if (generalErrors.length > 0) {
+      this.messageService.add({
+        severity: 'error',
+        summary: this.translationService.getCurrentLanguage() === 'ar' ? 'خطأ' : 'Error',
+        detail: this.validationService.getAllErrorMessages(this.validationErrors),
+        life: 8000
+      });
+    }
   }
 
   /**

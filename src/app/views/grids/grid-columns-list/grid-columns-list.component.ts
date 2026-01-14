@@ -1878,28 +1878,74 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       };
 
       if (this.existingColumnDataSource?.id) {
-        // Update existing DataSource
-        this.dataSourcesService.updateDataSource(this.existingColumnDataSource.id, {
-          sourceType: dataSourceDto.sourceType,
-          apiUrl: dataSourceDto.apiUrl,
-          httpMethod: dataSourceDto.httpMethod,
-          requestBodyJson: dataSourceDto.requestBodyJson,
-          valuePath: dataSourceDto.valuePath,
-          textPath: dataSourceDto.textPath,
-          isActive: dataSourceDto.isActive
-        }).subscribe({
-          next: () => {
-            resolve(this.existingColumnDataSource!.id!); // Return existing DataSource ID
-          },
-          error: () => {
-            this.messageService.add({
-              severity: 'error',
-              summary: 'Error',
-              detail: 'Failed to update DataSource'
-            });
-            reject();
-          }
-        });
+        // Check if sourceType is changing - if so, delete old and create new
+        const isSourceTypeChanging = this.existingColumnDataSource.sourceType !== this.dataSourceType;
+        
+        if (isSourceTypeChanging) {
+          // Delete old DataSource and create new one when sourceType changes
+          console.log('[GridColumnsList] SourceType changing from', this.existingColumnDataSource.sourceType, 'to', this.dataSourceType, '- deleting old and creating new');
+          this.dataSourcesService.deleteDataSource(this.existingColumnDataSource.id).subscribe({
+            next: () => {
+              // Old DataSource deleted, now create new one
+              console.log('[GridColumnsList] Creating new DataSource after deleting old one');
+              this.dataSourcesService.createDataSource(dataSourceDto).subscribe({
+                next: (createdDataSource) => {
+                  const dataSourceId = createdDataSource?.id;
+                  if (dataSourceId) {
+                    this.existingColumnDataSource = createdDataSource;
+                    resolve(dataSourceId);
+                  } else {
+                    console.error('[GridColumnsList] Created DataSource but no ID returned');
+                    reject();
+                  }
+                },
+                error: (error) => {
+                  console.error('[GridColumnsList] Error creating new DataSource:', error);
+                  this.messageService.add({
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: 'Failed to create new DataSource'
+                  });
+                  reject();
+                }
+              });
+            },
+            error: (error) => {
+              console.error('[GridColumnsList] Error deleting old DataSource:', error);
+              this.messageService.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to delete old DataSource'
+              });
+              reject();
+            }
+          });
+        } else {
+          // Update existing DataSource (same sourceType)
+          this.dataSourcesService.updateDataSource(this.existingColumnDataSource.id, {
+            sourceType: dataSourceDto.sourceType,
+            apiUrl: dataSourceDto.apiUrl,
+            httpMethod: dataSourceDto.httpMethod,
+            requestBodyJson: dataSourceDto.requestBodyJson,
+            valuePath: dataSourceDto.valuePath,
+            textPath: dataSourceDto.textPath,
+            isActive: dataSourceDto.isActive
+          }).subscribe({
+            next: (updatedDataSource) => {
+              this.existingColumnDataSource = updatedDataSource;
+              resolve(this.existingColumnDataSource.id!); // Return existing DataSource ID
+            },
+            error: (error) => {
+              console.error('[GridColumnsList] Error updating DataSource:', error);
+              this.messageService.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to update DataSource'
+              });
+              reject();
+            }
+          });
+        }
       } else {
         // Create new DataSource
         console.log('[GridColumnsList] Creating DataSource for column:', {
@@ -2077,9 +2123,67 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
               } else {
                 this.loading = false;
               }
-            } else if (this.columnOptionsFormArray.length > 0 && this.editingColumn?.id) {
-              // Static: save options only
-              this.saveColumnOptions(this.editingColumn.id, true);
+            } else if (this.dataSourceType === 'Static') {
+              // Static: delete existing data source (if any) and clear dataSourceId, then save options
+              if (!this.editingColumn?.id) {
+                this.loading = false;
+                return;
+              }
+              const columnDataSourceId = this.editingColumn.dataSourceId || this.columnForm.get('dataSourceId')?.value;
+              if (columnDataSourceId || this.existingColumnDataSource?.id) {
+                // Column has a data source - delete it and clear dataSourceId first
+                this.saveColumnDataSource(this.editingColumn.id).then(() => {
+                  // Data source deleted, now update column to clear dataSourceId
+                  this.gridService.updateColumn(this.editingColumn!.id!, {
+                    dataSourceId: undefined,
+                    isActive: normalizedIsActive,
+                    isVisible: normalizedIsVisible
+                  }).subscribe({
+                    next: () => {
+                      // Column updated, now save static options if any
+                      if (this.columnOptionsFormArray.length > 0) {
+                        this.saveColumnOptions(this.editingColumn!.id!, true);
+                      } else {
+                        this.loading = false;
+                        this.loadColumns();
+                        this.closeColumnModal();
+                        this.messageService.add({
+                          severity: 'success',
+                          summary: 'Success',
+                          detail: 'Column updated successfully'
+                        });
+                      }
+                    },
+                    error: (error) => {
+                      console.error('[GridColumnsList] Error clearing dataSourceId:', error);
+                      this.loading = false;
+                      this.loadColumns();
+                      this.closeColumnModal();
+                      this.messageService.add({
+                        severity: 'error',
+                        summary: 'Error',
+                        detail: 'Failed to clear data source from column'
+                      });
+                    }
+                  });
+                }).catch((error) => {
+                  console.error('[GridColumnsList] Error deleting data source:', error);
+                  this.loading = false;
+                });
+              } else if (this.columnOptionsFormArray.length > 0) {
+                // No data source, just save static options
+                this.saveColumnOptions(this.editingColumn.id, true);
+              } else {
+                // No data source and no options to save
+                this.loading = false;
+                this.loadColumns();
+                this.closeColumnModal();
+                this.messageService.add({
+                  severity: 'success',
+                  summary: 'Success',
+                  detail: 'Column updated successfully'
+                });
+              }
             } else {
               this.loading = false;
               this.loadColumns();
@@ -2187,9 +2291,23 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
               } else {
                 this.loading = false;
               }
-            } else if (this.columnOptionsFormArray.length > 0 && columnId) {
-              // Static: save options only
-              this.saveColumnOptions(columnId, true);
+            } else if (this.dataSourceType === 'Static' && this.columnOptionsFormArray.length > 0 && columnId) {
+              // Static: save options only (only when dataSourceType is Static and no dataSourceId exists)
+              // Double-check: if column has dataSourceId, don't save static options
+              const columnDataSourceId = this.columnForm.get('dataSourceId')?.value;
+              if (columnDataSourceId) {
+                console.warn('[GridColumnsList] Column has dataSourceId, skipping static options save');
+                this.loading = false;
+                this.loadColumns();
+                this.closeColumnModal();
+                this.messageService.add({
+                  severity: 'success',
+                  summary: 'Success',
+                  detail: 'Column created successfully'
+                });
+              } else {
+                this.saveColumnOptions(columnId, true);
+              }
             } else {
               this.loading = false;
               this.loadColumns();
@@ -2276,6 +2394,20 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
    * Save column options using GridColumnOptionsService API
    */
   private saveColumnOptions(columnId: number, isSelectType: boolean): void {
+    // Safety check: Only allow saving static options when dataSourceType is 'Static'
+    if (this.dataSourceType !== 'Static') {
+      console.warn('[GridColumnsList] Cannot save static options for column with external data source (type:', this.dataSourceType, ')');
+      this.loading = false;
+      this.loadColumns();
+      this.closeColumnModal();
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Cannot Save Options',
+        detail: 'Static options cannot be added to columns with external data sources (API or LookupTable)'
+      });
+      return;
+    }
+
     if (!isSelectType || this.columnOptionsFormArray.length === 0) {
       this.loading = false;
       this.loadColumns();

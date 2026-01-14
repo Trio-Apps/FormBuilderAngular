@@ -24,6 +24,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
+import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
 import { Subscription, forkJoin, of } from 'rxjs';
@@ -45,7 +46,8 @@ import { CalculatedFieldComponent } from '../../public-form/components/calculate
     InputNumberModule,
     ButtonModule,
     CheckboxModule,
-    CalculatedFieldComponent
+    CalculatedFieldComponent,
+    TranslatePipe
   ],
   templateUrl: './form-submission-create.component.html',
   styleUrls: ['./form-submission-create.component.scss'],
@@ -56,6 +58,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   documentType: DocumentType | null = null;
   submissionId: number | null = null; // For edit mode
   isEditMode = false; // Flag to determine if we're editing
+
+  // Draft → Save → Submit workflow state
+  hasDraft = false; // Whether a draft has been created
+  isDraftMode = true; // Whether we're in draft mode (before final submit)
+  isSubmitting = false; // Whether final submit is in progress
   
   // Submission approval/reject state
   currentSubmission: FormSubmissionDto | null = null;
@@ -393,6 +400,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // This will load field values, and attachments will be loaded after fields are loaded in processFields
     if (this.isEditMode && this.submissionId) {
       this.loadSubmissionForEdit();
+    } else {
+      // Create draft for new submissions
+      this.createDraftIfNeeded();
     }
   }
 
@@ -418,6 +428,64 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         console.error('Error loading tabs:', error);
         this.tabs = [];
         this.loading.tabs = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /**
+   * Create draft submission if needed (for new submissions)
+   */
+  createDraftIfNeeded(): void {
+    // Only create draft if we have form data and no existing submission
+    if (!this.selectedFormId || this.hasDraft || this.isEditMode) {
+      return;
+    }
+
+    // Get current user ID (you might need to adjust this based on your auth service)
+    const currentUserId = this.authService.userName();
+    if (!currentUserId) {
+      console.warn('[FormSubmissionCreate] No current user found, cannot create draft');
+      return;
+    }
+
+    // Get project ID - you might need to adjust this based on your requirements
+    // For now, we'll use a default or get it from route params
+    const projectId = 1; // TODO: Get actual project ID
+
+    console.log('[FormSubmissionCreate] Creating draft submission:', {
+      formBuilderId: this.selectedFormId,
+      projectId,
+      submittedByUserId: currentUserId
+    });
+
+    this.loading.create = true;
+    this.formSubmissionsService.createDraft(this.selectedFormId, projectId, currentUserId).subscribe({
+      next: (draftSubmission) => {
+        console.log('[FormSubmissionCreate] Draft created successfully:', draftSubmission);
+        this.submissionId = draftSubmission.id!;
+        this.hasDraft = true;
+        this.isDraftMode = true;
+        this.currentSubmission = draftSubmission;
+
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Draft Created',
+          detail: 'Draft submission has been created successfully',
+          life: 3000
+        });
+
+        this.loading.create = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('[FormSubmissionCreate] Error creating draft:', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to create draft submission'
+        });
+        this.loading.create = false;
         this.cdr.detectChanges();
       }
     });
@@ -3020,109 +3088,38 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  /**
+   * Save as draft - saves data to existing draft or creates draft first
+   */
   async saveSubmissionAsDraft(): Promise<void> {
-    // For draft, we only check essential fields (formBuilderId, documentTypeId)
-    // Field values can be empty/incomplete for drafts
-    if (!this.submissionForm.get('formBuilderId')?.value) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Validation Error',
-        detail: 'Please select a form'
-      });
+    console.log('[FormSubmissionCreate] saveSubmissionAsDraft called');
+
+    // If no draft exists yet, create one first
+    if (!this.hasDraft) {
+      console.log('[FormSubmissionCreate] No draft exists, creating draft first...');
+      this.createDraftIfNeeded();
+
+      // Wait a bit for draft creation, then save data
+      setTimeout(() => {
+        if (this.submissionId) {
+          this.saveSubmissionData(this.submissionId, 'Draft');
+        }
+      }, 1000);
       return;
     }
 
-    // Get formBuilderId from documentType (fixed value)
-    if (!this.documentType?.formBuilderId) {
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Document type does not have a form associated with it'
-      });
-      return;
-    }
-
-    // Get default series (fixed value) - create one automatically if not available
-    if (this.documentSeries.length === 0) {
-      console.log('[FormSubmissionCreate] No document series available, attempting to create default series...');
-      const defaultSeries = await this.createDefaultSeries();
-      
-      if (!defaultSeries || !defaultSeries.id) {
-        const currentLang = this.translationService.getCurrentLanguage();
-        const errorMessage = currentLang === 'ar' 
-          ? 'لا يوجد سلسلة وثائق متاحة. يرجى إنشاء سلسلة وثائق أولاً من إعدادات أنواع الوثائق.'
-          : 'No document series available. Please create a document series first from Document Types settings.';
-        
-        this.messageService.add({
-          severity: 'error',
-          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
-          detail: errorMessage
-        });
-        return;
-      }
-    }
-
-    const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
-    if (!defaultSeries || !defaultSeries.id) {
-      const currentLang = this.translationService.getCurrentLanguage();
-      const errorMessage = currentLang === 'ar' 
-        ? 'لا يوجد سلسلة وثائق صالحة متاحة.'
-        : 'No valid document series available.';
-      
-      this.messageService.add({
-        severity: 'error',
-        summary: currentLang === 'ar' ? 'خطأ' : 'Error',
-        detail: errorMessage
-      });
-      return;
-    }
-
-    const userId = this.authService.userName();
-    if (!userId) {
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'User not found. Please login again.'
-      });
-      return;
-    }
-
-    const formData = this.submissionForm.getRawValue();
-    const createDto: CreateFormSubmissionDto = {
-      formBuilderId: this.documentType.formBuilderId, // Fixed value - from documentType
-      documentTypeId: this.documentTypeId,
-      seriesId: defaultSeries.id, // Fixed value - use default series
-      submittedByUserId: userId,
-      status: 'Draft' // Set status to Draft
-    };
-
-    this.loading.create = true;
-    
-    // If edit mode, update existing submission status to Draft
-    if (this.isEditMode && this.submissionId) {
-      // Update status to Draft
-      this.submissionForm.patchValue({ status: 'Draft' });
+    // Draft exists, just save the data
+    if (this.submissionId) {
+      console.log('[FormSubmissionCreate] Draft exists, saving data...');
       this.saveSubmissionData(this.submissionId, 'Draft');
-      return;
+    } else {
+      console.error('[FormSubmissionCreate] No submissionId available for draft save');
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No draft submission available'
+      });
     }
-    
-    // Create new submission with Draft status
-    this.formSubmissionsService.createSubmission(createDto).subscribe({
-      next: (submission: FormSubmissionDto) => {
-        this.saveSubmissionData(submission.id, 'Draft');
-      },
-      error: (error: any) => {
-        this.loading.create = false;
-        console.error('Error creating draft submission:', error);
-        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to save submission as draft';
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: errorMessage
-        });
-        this.cdr.detectChanges();
-      }
-    });
   }
 
   /**
@@ -3153,6 +3150,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     return 'Submitted';
   }
 
+  /**
+   * Final submit - uses the submit endpoint to change status and trigger workflow
+   */
   async saveSubmission(): Promise<void> {
     if (this.submissionForm.invalid) {
       this.markFormGroupTouched(this.submissionForm);
@@ -3252,8 +3252,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const userId = this.authService.userName();
-    if (!userId) {
+    const currentUserId = this.authService.userName();
+    if (!currentUserId) {
       this.messageService.add({
         severity: 'error',
         summary: 'Error',
@@ -3270,67 +3270,84 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       formBuilderId: this.documentType.formBuilderId, // Fixed value - from documentType
       documentTypeId: this.documentTypeId,
       seriesId: defaultSeries.id, // Fixed value - use default series
-      submittedByUserId: userId,
+      submittedByUserId: currentUserId,
       status: submissionStatus // Determined by approval workflow configuration
     };
 
-    this.loading.create = true;
-    
-    // If edit mode, update existing submission
-    if (this.isEditMode && this.submissionId) {
-      const submissionId = this.submissionId; // Store in local variable to avoid null check issues
-      // Get current status from loaded submission or form data
-      const currentStatus = (this as any)._currentSubmissionStatus || formData.status || 'Draft';
-      console.log('[FormSubmissionCreate] Current submission status:', currentStatus);
-      
-      // Update status based on approval workflow configuration if it was Draft
-      if (currentStatus === 'Draft') {
-        // Determine status based on approval workflow (Task 2)
-        const newStatus = this.determineSubmissionStatus();
-        console.log(`[FormSubmissionCreate] Updating status from Draft to ${newStatus} based on approval workflow configuration`);
-        
-        // Update status
-        const updateDto = { status: newStatus };
-        this.formSubmissionsService.updateSubmission(submissionId, updateDto).subscribe({
-          next: () => {
-            console.log(`[FormSubmissionCreate] Status updated from Draft to ${newStatus}`);
-            this.saveSubmissionData(submissionId, newStatus);
-          },
-          error: (error) => {
-            console.error('[FormSubmissionCreate] Error updating status:', error);
-            const currentLang = this.translationService.getCurrentLanguage();
-            this.messageService.add({
-              severity: 'warn',
-              summary: currentLang === 'ar' ? 'تحذير' : 'Warning',
-              detail: currentLang === 'ar' 
-                ? 'فشل تحديث الـ status. سيتم المتابعة مع حفظ البيانات.' 
-                : 'Failed to update status. Will continue with saving data.'
-            });
-            // Continue with save even if status update fails
-            this.saveSubmissionData(submissionId, newStatus);
-          }
-        });
-      } else {
-        // Keep existing status if not Draft
-        this.saveSubmissionData(submissionId, currentStatus);
-      }
+    // Validate that we have a draft submission to submit
+    if (!this.submissionId) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No draft submission found. Please save as draft first.'
+      });
       return;
     }
-    
-    // Create new submission
-    this.formSubmissionsService.createSubmission(createDto).subscribe({
-      next: (submission: FormSubmissionDto) => {
-        this.saveSubmissionData(submission.id);
-      },
-      error: (error: any) => {
+
+    const submitUserId = this.authService.userName();
+    if (!currentUserId) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'User not found. Please login again.'
+      });
+      return;
+    }
+
+    // Optional: Save data before submitting (to ensure latest changes are saved)
+    console.log('[FormSubmissionCreate] Saving data before final submit...');
+    this.saveSubmissionData(this.submissionId, 'Draft');
+
+    // Final submit - change status and trigger workflow
+    this.isSubmitting = true;
+    console.log('[FormSubmissionCreate] Performing final submit for submission:', this.submissionId);
+
+    this.formSubmissionsService.submitSubmission({
+      submissionId: this.submissionId,
+      submittedByUserId: submitUserId!
+    }).subscribe({
+      next: (submittedSubmission) => {
+        console.log('[FormSubmissionCreate] Submission completed successfully:', submittedSubmission);
+
+        this.isDraftMode = false;
+        this.currentSubmission = submittedSubmission;
+
+        const currentLang = this.translationService.getCurrentLanguage();
+        const statusMessage = submittedSubmission.status === 'Approved' ?
+          (currentLang === 'ar' ? 'تمت الموافقة على الطلب تلقائياً' : 'Request auto-approved') :
+          (currentLang === 'ar' ? 'تم إرسال الطلب للمراجعة' : 'Request submitted for review');
+
+        this.messageService.add({
+          severity: 'success',
+          summary: currentLang === 'ar' ? 'تم بنجاح' : 'Success',
+          detail: statusMessage,
+          life: 5000
+        });
+
+        this.isSubmitting = false;
         this.loading.create = false;
-        console.error('Error creating submission:', error);
-        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to create submission';
+
+        // Navigate to success page or submission details
+        this.router.navigate(['/form-submissions', submittedSubmission.id]);
+
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        this.isSubmitting = false;
+        this.loading.create = false;
+
+        console.error('[FormSubmissionCreate] Error during final submit:', error);
+
+        const currentLang = this.translationService.getCurrentLanguage();
+        const errorMessage = error?.message ||
+          (currentLang === 'ar' ? 'فشل في إرسال الطلب' : 'Failed to submit request');
+
         this.messageService.add({
           severity: 'error',
-          summary: 'Error',
+          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
           detail: errorMessage
         });
+
         this.cdr.detectChanges();
       }
     });

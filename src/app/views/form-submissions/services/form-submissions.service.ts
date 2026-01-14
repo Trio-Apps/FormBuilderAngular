@@ -132,6 +132,11 @@ export interface SaveFormSubmissionGridCellDto {
   valueJson?: string;
 }
 
+export interface SubmitFormDto {
+  submissionId: number;
+  submittedByUserId: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -273,6 +278,15 @@ export class FormSubmissionsService {
 
   /**
    * Create draft submission
+   * POST /api/FormSubmissions/draft?formBuilderId={id}&projectId={projectId}&submittedByUserId={userId}
+   *
+   * This creates a new draft submission with:
+   * - Status = "Draft"
+   * - StageId = null
+   *
+   * @param formBuilderId The form builder ID
+   * @param projectId The project ID
+   * @param submittedByUserId The user who created the draft
    */
   createDraft(formBuilderId: number, projectId: number, submittedByUserId: string): Observable<FormSubmissionDto> {
     return this.http.post<any>(`${this.baseUrl}/draft`, null, {
@@ -368,6 +382,10 @@ export class FormSubmissionsService {
 
   /**
    * Save form submission data (field values, attachments, grid data)
+   * POST /api/FormSubmissions/save-data
+   *
+   * Saves the form data without changing the submission status.
+   * The submission remains in its current status (usually "Draft").
    */
   saveSubmissionData(dto: SaveFormSubmissionDataDto): Observable<void> {
     return this.http.post<any>(`${this.baseUrl}/save-data`, dto).pipe(
@@ -384,18 +402,34 @@ export class FormSubmissionsService {
   /**
    * Submit form submission
    * POST /api/FormSubmissions/submit
-   * 
+   *
    * Workflow Logic:
    * - If DocumentType has no ApprovalWorkflow → Auto-approve (status = "Approved")
    * - If DocumentType has Active ApprovalWorkflow → Submit (status = "Submitted")
    * - If DocumentType has Inactive ApprovalWorkflow → Auto-approve (status = "Approved")
+   *
+   * @param dto SubmitFormDto containing submissionId and submittedByUserId
    */
-  submitSubmission(submissionId: number, submittedByUserId: string): Observable<FormSubmissionDto> {
-    return this.http.post<any>(`${this.baseUrl}/submit`, {
-      submissionId,
-      submittedByUserId
-    }).pipe(
+  submitSubmission(dto: SubmitFormDto): Observable<FormSubmissionDto>;
+  /**
+   * Submit form submission (legacy method with separate parameters)
+   */
+  submitSubmission(submissionId: number, submittedByUserId: string): Observable<FormSubmissionDto>;
+  submitSubmission(submissionIdOrDto: number | SubmitFormDto, submittedByUserId?: string): Observable<FormSubmissionDto> {
+    let requestBody: SubmitFormDto;
+
+    if (typeof submissionIdOrDto === 'object') {
+      requestBody = submissionIdOrDto;
+    } else {
+      requestBody = {
+        submissionId: submissionIdOrDto,
+        submittedByUserId: submittedByUserId!
+      };
+    }
+
+    return this.http.post<any>(`${this.baseUrl}/submit`, requestBody).pipe(
       map((response: any) => {
+        console.log(`[FormSubmissionsService] Submit successful for submission ${requestBody.submissionId}`);
         // Handle ServiceResult<T> or direct object response
         if (response && typeof response === 'object') {
           if (response.success !== undefined) {
@@ -408,7 +442,7 @@ export class FormSubmissionsService {
         return response;
       }),
       catchError((error) => {
-        console.error(`[FormSubmissionsService] Error submitting form submission ${submissionId}:`, error);
+        console.error(`[FormSubmissionsService] Error submitting form submission ${requestBody.submissionId}:`, error);
         
         // Extract error message
         const errorResponse = error?.error;
