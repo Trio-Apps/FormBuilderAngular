@@ -1,9 +1,9 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChildren, QueryList } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto, FormSubmissionDetailDto } from '../services/form-submissions.service';
-import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../models/approve-reject-submission.model';
+// Approve/Reject imports removed - only available in admin dashboard
 import { FormSubmissionValuesService, BulkFormSubmissionValuesDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto } from '../services/form-submission-values.service';
 import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
@@ -32,6 +32,13 @@ import { debounceTime, distinctUntilChanged, catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { FileUploadService } from '../../FormBuilder/services/file-upload.service';
 import { CalculatedFieldComponent } from '../../public-form/components/calculated-field.component';
+import { GridViewComponent } from '../../public-form/components/grid-view.component';
+import { DocumentApprovalHistoryService, CreateDocumentApprovalHistoryDto } from '../../FormBuilder/services/document-approval-history.service';
+import { ApprovalWorkflowRuntimeService } from '../../FormBuilder/services/approval-workflow-runtime.service';
+import { ApprovalWorkflowService } from '../../FormBuilder/services/approval-workflow.service';
+import { ApprovalStageService } from '../../FormBuilder/services/approval-stage.service';
+import { GridService } from '../../FormBuilder/services/grid.service';
+import { FormGridDto } from '../../FormBuilder/form-builder/models/grid-dto.model';
 
 @Component({
   selector: 'app-form-submission-create',
@@ -47,6 +54,7 @@ import { CalculatedFieldComponent } from '../../public-form/components/calculate
     ButtonModule,
     CheckboxModule,
     CalculatedFieldComponent,
+    GridViewComponent,
     TranslatePipe
   ],
   templateUrl: './form-submission-create.component.html',
@@ -66,10 +74,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   
   // Submission approval/reject state
   currentSubmission: FormSubmissionDto | null = null;
-  isApproving = false;
-  isRejecting = false;
-  approveRejectComments: string = '';
-  showApproveRejectModal = false;
+  // Approve/Reject functionality removed - only available in admin dashboard
 
   // Forms, Tabs, Fields
   forms: FormBuilderDto[] = [];
@@ -130,6 +135,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     uploading: false
   };
 
+  // Grid components reference
+  @ViewChildren(GridViewComponent) gridComponents!: QueryList<GridViewComponent>;
+
+  // Grids for each tab (grids that are not associated with fields)
+  tabGrids: { [tabId: number]: FormGridDto[] } = {};
+
   private routeSubscription?: Subscription;
   private fieldsFormValueChangesSubscription?: Subscription;
   private isEvaluatingRules = false; // Flag to prevent infinite loops
@@ -154,7 +165,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     private messageService: MessageService,
     public translationService: TranslationService,
     private authService: AuthService,
-    public fileUploadService: FileUploadService
+    public fileUploadService: FileUploadService,
+    private documentApprovalHistoryService: DocumentApprovalHistoryService,
+    private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService,
+    private approvalStageService: ApprovalStageService,
+    private approvalWorkflowService: ApprovalWorkflowService,
+    private gridService: GridService
   ) {
     // Submission form
     this.submissionForm = this.fb.group({
@@ -416,6 +432,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.tabsService.getTabs(formId).subscribe({
       next: (tabs: FormTabDto[]) => {
         this.tabs = tabs.filter(t => t.isActive).sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
+        // Load grids for tabs
+        this.loadTabGrids();
         // Auto-select first tab
         if (this.tabs.length > 0) {
           this.activeTabIndex = 0;
@@ -431,6 +449,61 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  /**
+   * Load grids for each tab (grids that are not associated with fields)
+   */
+  loadTabGrids(): void {
+    if (!this.tabs || this.tabs.length === 0) {
+      return;
+    }
+
+    // Get all gridIds that are already associated with fields
+    const fieldGridIds = new Set<number>();
+    this.tabs.forEach(tab => {
+      tab.fields?.forEach(field => {
+        if (field.gridId && field.gridId > 0) {
+          fieldGridIds.add(field.gridId);
+        }
+      });
+    });
+
+    // Load grids for each tab
+    this.tabs.forEach(tab => {
+      if (!tab.id) return;
+
+      // Try to load grids - use getGridsByTabId first, then filter for active ones
+      this.gridService.getGridsByTabId(tab.id).subscribe({
+        next: (response) => {
+          const allGrids = response.data || [];
+          // Filter for active grids only
+          const activeGrids = allGrids.filter(grid => grid.isActive);
+          // Filter out grids that are already associated with fields
+          const standaloneGrids = activeGrids.filter(grid => !fieldGridIds.has(grid.id));
+          // Sort by gridOrder
+          standaloneGrids.sort((a, b) => (a.gridOrder || 0) - (b.gridOrder || 0));
+          this.tabGrids[tab.id!] = standaloneGrids;
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          // Silently handle 404 (no grids for this tab) - this is normal
+          if (error?.status === 404) {
+            this.tabGrids[tab.id!] = [];
+          } else {
+            console.warn(`[FormSubmissionCreate] Failed to load grids for tab ${tab.id}:`, error);
+            this.tabGrids[tab.id!] = [];
+          }
+        }
+      });
+    });
+  }
+
+  /**
+   * Get grids for a specific tab
+   */
+  getTabGrids(tabId: number): FormGridDto[] {
+    return this.tabGrids[tabId] || [];
   }
 
   /**
@@ -2852,6 +2925,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Update form with current status
         this.submissionForm.patchValue({ status: submission.status });
         
+        // If submission status is Draft, mark as draft
+        if (submission.status === 'Draft') {
+          this.hasDraft = true;
+          this.isDraftMode = true;
+          console.log('[FormSubmissionCreate] Edit Mode: Submission is Draft, hasDraft set to true');
+        }
+        
         // Load field values
         this.formSubmissionValuesService.getBySubmissionId(submissionId).subscribe({
           next: (fieldValues) => {
@@ -3274,6 +3354,26 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       status: submissionStatus // Determined by approval workflow configuration
     };
 
+    // In Edit Mode, if submission status is not Draft, just update the data without submitting
+    if (this.isEditMode && this.currentSubmission && this.currentSubmission.status !== 'Draft') {
+      console.log('[FormSubmissionCreate] Edit Mode: Submission status is', this.currentSubmission.status, '- updating data only');
+      this.isSubmitting = true;
+      
+      // Just save the data without submitting
+      this.saveSubmissionData(this.submissionId!, this.currentSubmission.status);
+      
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Submission updated successfully'
+      });
+      
+      this.isSubmitting = false;
+      this.loading.create = false;
+      this.cdr.detectChanges();
+      return;
+    }
+
     // Validate that we have a draft submission to submit
     if (!this.submissionId) {
       this.messageService.add({
@@ -3308,14 +3408,29 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: (submittedSubmission) => {
         console.log('[FormSubmissionCreate] Submission completed successfully:', submittedSubmission);
+        console.log('[FormSubmissionCreate] Initial status from backend:', submittedSubmission.status);
 
         this.isDraftMode = false;
         this.currentSubmission = submittedSubmission;
 
+        // Always update status to "Submitted" regardless of backend response
+        // This ensures consistency - user wants status to always be "Submitted" after submission
+        if (submittedSubmission.status !== 'Submitted') {
+          console.log('[FormSubmissionCreate] Status is not Submitted, updating to Submitted...');
+          this.formSubmissionsService.updateSubmission(submittedSubmission.id, { status: 'Submitted' }).subscribe({
+            next: () => {
+              console.log('[FormSubmissionCreate] ✅ Status updated to Submitted');
+              submittedSubmission.status = 'Submitted';
+              this.currentSubmission!.status = 'Submitted';
+            },
+            error: (updateError) => {
+              console.warn('[FormSubmissionCreate] Failed to update status to Submitted:', updateError);
+            }
+          });
+        }
+
         const currentLang = this.translationService.getCurrentLanguage();
-        const statusMessage = submittedSubmission.status === 'Approved' ?
-          (currentLang === 'ar' ? 'تمت الموافقة على الطلب تلقائياً' : 'Request auto-approved') :
-          (currentLang === 'ar' ? 'تم إرسال الطلب للمراجعة' : 'Request submitted for review');
+        const statusMessage = currentLang === 'ar' ? 'تم إرسال الطلب للمراجعة' : 'Request submitted for review';
 
         this.messageService.add({
           severity: 'success',
@@ -3323,6 +3438,129 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           detail: statusMessage,
           life: 5000
         });
+
+        // If submission status is "Submitted", activate workflow stage and set stageId
+        if (submittedSubmission.status === 'Submitted') {
+          console.log('[FormSubmissionCreate] Submission status is Submitted, setting stageId');
+          console.log('[FormSubmissionCreate] Document Type ID from submission:', submittedSubmission.documentTypeId);
+          
+          // Get documentTypeId from submission (more reliable than this.documentType)
+          const docTypeId = submittedSubmission.documentTypeId || this.documentTypeId;
+          
+          if (docTypeId) {
+            // Load document type to get approvalWorkflowId if not already loaded
+            const loadDocumentTypeAndSetStageId = () => {
+              let approvalWorkflowId: number | null | undefined = null;
+              
+              if (this.documentType?.approvalWorkflowId && this.documentType.approvalWorkflowId > 0) {
+                approvalWorkflowId = this.documentType.approvalWorkflowId;
+                console.log('[FormSubmissionCreate] Using approvalWorkflowId from loaded documentType:', approvalWorkflowId);
+                setStageId(approvalWorkflowId);
+              } else {
+                // Load document type to get approvalWorkflowId
+                console.log('[FormSubmissionCreate] Loading document type to get approvalWorkflowId...', 'docTypeId:', docTypeId);
+                this.documentTypesService.getDocumentTypeById(docTypeId).subscribe({
+                  next: (documentType) => {
+                    console.log('[FormSubmissionCreate] Loaded document type:', {
+                      id: documentType?.id,
+                      name: documentType?.name,
+                      approvalWorkflowId: documentType?.approvalWorkflowId,
+                      approvalWorkflowName: documentType?.approvalWorkflowName,
+                      hasWorkflow: !!documentType?.approvalWorkflowId
+                    });
+                    
+                    if (documentType?.approvalWorkflowId && documentType.approvalWorkflowId > 0) {
+                      console.log('[FormSubmissionCreate] Found approvalWorkflowId:', documentType.approvalWorkflowId, 'setting stageId...');
+                      this.documentType = documentType; // Cache it
+                      setStageId(documentType.approvalWorkflowId);
+                    } else {
+                      console.warn('[FormSubmissionCreate] No approval workflow ID found in document type. Creating workflow automatically...');
+                      console.log('[FormSubmissionCreate] DocumentType:', {
+                        id: documentType?.id,
+                        name: documentType?.name,
+                        approvalWorkflowId: documentType?.approvalWorkflowId,
+                        approvalWorkflowName: documentType?.approvalWorkflowName
+                      });
+                      
+                      // Create workflow automatically and assign it to document type
+                      this.createAndAssignWorkflow(docTypeId, documentType, (workflowId: number) => {
+                        this.documentType = documentType; // Cache it
+                        setStageId(workflowId);
+                      });
+                    }
+                  },
+                  error: (docTypeError) => {
+                    console.error('[FormSubmissionCreate] Failed to load document type:', docTypeError);
+                    console.error('[FormSubmissionCreate] Error details:', {
+                      status: docTypeError?.status,
+                      statusText: docTypeError?.statusText,
+                      message: docTypeError?.message,
+                      error: docTypeError?.error
+                    });
+                  }
+                });
+              }
+            };
+            
+            const setStageId = (approvalWorkflowId: number | null | undefined) => {
+              if (!approvalWorkflowId) {
+                console.warn('[FormSubmissionCreate] No approval workflow ID available');
+                return;
+              }
+              
+              // Get the first stage from workflow and update submission with stageId directly
+              this.approvalStageService.getAllByWorkflowId(approvalWorkflowId).subscribe({
+                next: (stages) => {
+                  if (stages && stages.length > 0) {
+                    // Get the first stage (lowest stageOrder)
+                    const firstStage = stages
+                      .filter(s => !s.isDeleted)
+                      .sort((a, b) => a.stageOrder - b.stageOrder)[0];
+                    
+                    if (firstStage && firstStage.id) {
+                      console.log('[FormSubmissionCreate] Found first stage:', firstStage.id, 'updating submission stageId immediately');
+                      // Update submission with stageId immediately
+                      this.formSubmissionsService.updateSubmission(submittedSubmission.id, { stageId: firstStage.id }).subscribe({
+                        next: () => {
+                          console.log('[FormSubmissionCreate] ✅ Submission stageId updated successfully to:', firstStage.id);
+                        },
+                        error: (updateError) => {
+                          console.error('[FormSubmissionCreate] ❌ Failed to update submission stageId:', updateError);
+                          console.error('[FormSubmissionCreate] Update error details:', JSON.stringify(updateError, null, 2));
+                        }
+                      });
+                    } else {
+                      console.warn('[FormSubmissionCreate] No valid stage found in workflow');
+                    }
+                  } else {
+                    console.warn('[FormSubmissionCreate] No stages found in workflow');
+                  }
+                },
+                error: (stagesError) => {
+                  console.error('[FormSubmissionCreate] Failed to get workflow stages:', stagesError);
+                }
+              });
+              
+              // Also try to activate the workflow stage (this might set stageId automatically in backend)
+              this.approvalWorkflowRuntimeService.activateStage(submittedSubmission.id).subscribe({
+                next: () => {
+                  console.log('[FormSubmissionCreate] Workflow stage activated successfully');
+                },
+                error: (activateError) => {
+                  console.warn('[FormSubmissionCreate] Failed to activate workflow stage:', activateError);
+                  // Don't block user flow, but log the error
+                }
+              });
+            };
+            
+            loadDocumentTypeAndSetStageId();
+          } else {
+            console.warn('[FormSubmissionCreate] No documentTypeId found in submission or component');
+          }
+        }
+        
+        // Note: Status is already updated to "Submitted" above, so we don't need to handle "Approved" case separately
+        // The code above ensures status is always "Submitted" after submission
 
         this.isSubmitting = false;
         this.loading.create = false;
@@ -3349,6 +3587,132 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         });
 
         this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /**
+   * Create workflow automatically and assign it to document type
+   */
+  private createAndAssignWorkflow(docTypeId: number, documentType: DocumentType, callback: (workflowId: number) => void): void {
+    if (!documentType || !documentType.id) {
+      console.error('[FormSubmissionCreate] Cannot create workflow - documentType is invalid');
+      return;
+    }
+
+    const workflowName = `Default Workflow for ${documentType.name || 'Document Type'} (${documentType.id})`;
+    console.log('[FormSubmissionCreate] Checking if workflow exists:', workflowName);
+    
+    // First, check if workflow with this name already exists
+    this.approvalWorkflowService.getApprovalWorkflowByName(workflowName).subscribe({
+      next: (existingWorkflow) => {
+        if (existingWorkflow && existingWorkflow.id) {
+          console.log('[FormSubmissionCreate] ✅ Found existing workflow:', existingWorkflow.id, 'using it...');
+          // Use existing workflow
+          this.assignWorkflowToDocumentType(docTypeId, existingWorkflow.id, callback);
+        } else {
+          // Workflow doesn't exist, create new one
+          console.log('[FormSubmissionCreate] Workflow not found, creating new workflow:', workflowName, 'for documentTypeId:', docTypeId);
+          this.approvalWorkflowService.createApprovalWorkflow({
+            name: workflowName,
+            documentTypeId: docTypeId
+          }).subscribe({
+            next: (createdWorkflow) => {
+              console.log('[FormSubmissionCreate] ✅ Workflow created successfully:', createdWorkflow.id);
+              // Backend creates default stage automatically, just assign workflow
+              this.assignWorkflowToDocumentType(docTypeId, createdWorkflow.id, callback);
+            },
+            error: (createError) => {
+              console.error('[FormSubmissionCreate] Failed to create workflow:', createError);
+              const errorMessage = createError?.message || '';
+              
+              // If error is "Workflow name already exists", try to find it again
+              if (errorMessage.includes('already exists') || errorMessage.includes('Workflow name already exists')) {
+                console.log('[FormSubmissionCreate] Workflow name already exists, searching for existing workflow...');
+                this.approvalWorkflowService.getApprovalWorkflowByName(workflowName).subscribe({
+                  next: (foundWorkflow) => {
+                    if (foundWorkflow && foundWorkflow.id) {
+                      console.log('[FormSubmissionCreate] ✅ Found existing workflow after error:', foundWorkflow.id);
+                      this.assignWorkflowToDocumentType(docTypeId, foundWorkflow.id, callback);
+                    } else {
+                      console.error('[FormSubmissionCreate] Could not find existing workflow even though name exists');
+                    }
+                  },
+                  error: (searchError) => {
+                    console.error('[FormSubmissionCreate] Failed to search for existing workflow:', searchError);
+                  }
+                });
+              } else {
+                console.error('[FormSubmissionCreate] Error details:', {
+                  status: createError?.status,
+                  statusText: createError?.statusText,
+                  message: createError?.message,
+                  error: createError?.error
+                });
+              }
+            }
+          });
+        }
+      },
+      error: (searchError) => {
+        console.error('[FormSubmissionCreate] Failed to search for existing workflow:', searchError);
+        // If search fails, try to create anyway
+        console.log('[FormSubmissionCreate] Attempting to create workflow anyway...');
+        this.approvalWorkflowService.createApprovalWorkflow({
+          name: workflowName,
+          documentTypeId: docTypeId
+        }).subscribe({
+          next: (createdWorkflow) => {
+            console.log('[FormSubmissionCreate] ✅ Workflow created successfully:', createdWorkflow.id);
+            // Backend creates default stage automatically, just assign workflow
+            this.assignWorkflowToDocumentType(docTypeId, createdWorkflow.id, callback);
+          },
+          error: (createError) => {
+            console.error('[FormSubmissionCreate] Failed to create workflow:', createError);
+          }
+        });
+      }
+    });
+  }
+
+  private assignWorkflowToDocumentType(docTypeId: number, workflowId: number, callback: (workflowId: number) => void): void {
+    // Assign workflow to document type - need to include all required fields
+    // First, reload document type to get all fields, then update with workflow ID
+    this.documentTypesService.getDocumentTypeById(docTypeId).subscribe({
+      next: (fullDocumentType) => {
+        // Update with all existing fields + new workflow ID
+        const updateDto: any = {
+          name: fullDocumentType.name,
+          code: fullDocumentType.code,
+          menuCaption: fullDocumentType.menuCaption || fullDocumentType.name,
+          approvalWorkflowId: workflowId
+        };
+        
+        // Include optional fields if they exist
+        if (fullDocumentType.formBuilderId) updateDto.formBuilderId = fullDocumentType.formBuilderId;
+        if (fullDocumentType.menuOrder !== undefined) updateDto.menuOrder = fullDocumentType.menuOrder;
+        if (fullDocumentType.parentMenuId !== undefined) updateDto.parentMenuId = fullDocumentType.parentMenuId;
+        if (fullDocumentType.isActive !== undefined) updateDto.isActive = fullDocumentType.isActive;
+        
+        this.documentTypesService.updateDocumentType(docTypeId, updateDto).subscribe({
+          next: () => {
+            console.log('[FormSubmissionCreate] ✅ Workflow assigned to document type successfully');
+            if (this.documentType) {
+              this.documentType = { ...this.documentType, approvalWorkflowId: workflowId }; // Update cached documentType
+            }
+            callback(workflowId);
+          },
+          error: (assignError) => {
+            console.error('[FormSubmissionCreate] Failed to assign workflow to document type:', assignError);
+            // Still call callback with the workflow
+            callback(workflowId);
+          }
+        });
+      },
+      error: (loadError) => {
+        console.error('[FormSubmissionCreate] Failed to load document type for update:', loadError);
+        // Still call callback with the workflow
+        callback(workflowId);
       }
     });
   }
@@ -3734,18 +4098,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     console.log('[FormSubmissionCreate] Total upload observables added:', saveObservables.length);
 
     if (saveObservables.length === 0) {
-      this.loading.create = false;
-      this.messageService.add({
-        severity: 'success',
-        summary: 'Success',
-        detail: this.isEditMode ? 'Form submission updated successfully' : 'Form submission created successfully'
-      });
-      setTimeout(() => this.goBack(), 1000);
-      return;
-    }
-
-    forkJoin(saveObservables).subscribe({
-      next: () => {
+      // Save grid data even if no other observables
+      this.saveAllGridsData().then(() => {
         this.loading.create = false;
         this.messageService.add({
           severity: 'success',
@@ -3753,6 +4107,40 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           detail: this.isEditMode ? 'Form submission updated successfully' : 'Form submission created successfully'
         });
         setTimeout(() => this.goBack(), 1000);
+      }).catch((error) => {
+        console.error('[FormSubmissionCreate] Error saving grid data:', error);
+        this.loading.create = false;
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Warning',
+          detail: 'Form saved but some grid data may not have been saved'
+        });
+        setTimeout(() => this.goBack(), 1000);
+      });
+      return;
+    }
+
+    forkJoin(saveObservables).subscribe({
+      next: () => {
+        // Save grid data after other data is saved
+        this.saveAllGridsData().then(() => {
+          this.loading.create = false;
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: this.isEditMode ? 'Form submission updated successfully' : 'Form submission created successfully'
+          });
+          setTimeout(() => this.goBack(), 1000);
+        }).catch((error) => {
+          console.error('[FormSubmissionCreate] Error saving grid data:', error);
+          this.loading.create = false;
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Form saved but some grid data may not have been saved'
+          });
+          setTimeout(() => this.goBack(), 1000);
+        });
       },
       error: (error: any) => {
         this.loading.create = false;
@@ -3768,125 +4156,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
   }
 
-  /**
-   * Check if submission can be approved/rejected
-   */
-  canApproveReject(): boolean {
-    return this.currentSubmission !== null && 
-           this.currentSubmission.status === 'Submitted' &&
-           this.submissionId !== null &&
-           this.submissionId > 0;
-  }
-
-  /**
-   * Approve submission
-   */
-  approveSubmission(): void {
-    if (!this.currentSubmission || !this.submissionId) {
-      return;
-    }
-
-    this.isApproving = true;
-    
-    // Get current user ID
-    const currentUserId = this.authService.userName() || 'public-user';
-    
-    // Note: stageId is required - using 1 as default (adjust based on your workflow)
-    const approveDto: ApproveSubmissionDto = {
-      submissionId: this.submissionId,
-      stageId: 1, // TODO: Get actual stageId from submission or workflow
-      actionByUserId: currentUserId,
-      comments: this.approveRejectComments || null
-    };
-
-    this.formSubmissionsService.approveSubmissionDto(approveDto).subscribe({
-      next: (response: ApiResponse<FormSubmissionDto>) => {
-        this.isApproving = false;
-        this.showApproveRejectModal = false;
-        this.approveRejectComments = '';
-        
-        if (response.statusCode === 200 || response.success) {
-          // Reload submission to update status
-          this.loadSubmissionForEdit();
-          
-          const currentLang = this.translationService.getCurrentLanguage();
-          this.messageService.add({
-            severity: 'success',
-            summary: currentLang === 'ar' ? 'نجح' : 'Success',
-            detail: currentLang === 'ar' ? 'تمت الموافقة على الطلب بنجاح' : 'Submission approved successfully'
-          });
-        }
-      },
-      error: (error) => {
-        this.isApproving = false;
-        const currentLang = this.translationService.getCurrentLanguage();
-        this.messageService.add({
-          severity: 'error',
-          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
-          detail: currentLang === 'ar' ? 'حدث خطأ أثناء الموافقة على الطلب' : 'An error occurred while approving the submission'
-        });
-      }
-    });
-  }
-
-  /**
-   * Reject submission
-   */
-  rejectSubmission(): void {
-    if (!this.currentSubmission || !this.submissionId) {
-      return;
-    }
-
-    this.isRejecting = true;
-    
-    // Get current user ID
-    const currentUserId = this.authService.userName() || 'public-user';
-    
-    // Note: stageId is required - using 1 as default (adjust based on your workflow)
-    const rejectDto: RejectSubmissionDto = {
-      submissionId: this.submissionId,
-      stageId: 1, // TODO: Get actual stageId from submission or workflow
-      actionByUserId: currentUserId,
-      comments: this.approveRejectComments || null
-    };
-
-    this.formSubmissionsService.rejectSubmissionDto(rejectDto).subscribe({
-      next: (response: ApiResponse<FormSubmissionDto>) => {
-        this.isRejecting = false;
-        this.showApproveRejectModal = false;
-        this.approveRejectComments = '';
-        
-        if (response.statusCode === 200 || response.success) {
-          // Reload submission to update status
-          this.loadSubmissionForEdit();
-          
-          const currentLang = this.translationService.getCurrentLanguage();
-          this.messageService.add({
-            severity: 'success',
-            summary: currentLang === 'ar' ? 'نجح' : 'Success',
-            detail: currentLang === 'ar' ? 'تم رفض الطلب بنجاح' : 'Submission rejected successfully'
-          });
-        }
-      },
-      error: (error) => {
-        this.isRejecting = false;
-        const currentLang = this.translationService.getCurrentLanguage();
-        this.messageService.add({
-          severity: 'error',
-          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
-          detail: currentLang === 'ar' ? 'حدث خطأ أثناء رفض الطلب' : 'An error occurred while rejecting the submission'
-        });
-      }
-    });
-  }
-
-  /**
-   * Close approve/reject modal
-   */
-  closeApproveRejectModal(): void {
-    this.showApproveRejectModal = false;
-    this.approveRejectComments = '';
-  }
+  // Approve/Reject functionality removed - only available in admin dashboard
 
   /**
    * Get option text (like FormViewComponent)
@@ -4244,5 +4514,57 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     // Trigger change detection
     this.cdr.detectChanges();
+  }
+
+  // ==================== Grid Methods ====================
+
+  /**
+   * Get all grid fields from the current form
+   */
+  getGridFields(): FormFieldDto[] {
+    return this.fields.filter(field => this.getFieldType(field) === 'grid');
+  }
+
+  /**
+   * Check if the form has any grid fields
+   */
+  hasGridFields(): boolean {
+    return this.getGridFields().length > 0;
+  }
+
+  /**
+   * Save all grid data from grid components
+   * Called after form submission is created/updated
+   */
+  async saveAllGridsData(): Promise<void> {
+    const gridFields = this.getGridFields();
+    console.log('[FormSubmissionCreate] saveAllGridsData called, grid fields count:', gridFields.length);
+    
+    if (gridFields.length === 0 || !this.gridComponents || this.gridComponents.length === 0) {
+      console.log('[FormSubmissionCreate] No grid fields or components to save');
+      return;
+    }
+
+    const gridComponentsArray = this.gridComponents.toArray();
+    console.log('[FormSubmissionCreate] Grid components count:', gridComponentsArray.length);
+
+    for (const gridComponent of gridComponentsArray) {
+      if (gridComponent.hasGridData()) {
+        console.log('[FormSubmissionCreate] Saving grid data for grid:', gridComponent.grid?.gridName);
+        try {
+          const response = await gridComponent.saveGridData().toPromise();
+          console.log('[FormSubmissionCreate] Grid data saved:', response);
+        } catch (error) {
+          console.error('[FormSubmissionCreate] Error saving grid data:', error);
+        }
+      }
+    }
+  }
+
+  /**
+   * Check if field is a grid field
+   */
+  isGridField(field: FormFieldDto): boolean {
+    return this.getFieldType(field) === 'grid';
   }
 }

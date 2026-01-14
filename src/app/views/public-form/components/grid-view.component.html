@@ -170,6 +170,104 @@
                 <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
                   {{ getError(row.rowIndex, column.id) }}
                 </div>
+                
+                <!-- Password Input -->
+                <input
+                  *ngSwitchCase="'password'"
+                  type="password"
+                  class="grid-input"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [placeholder]="column.defaultValue || ''"
+                  [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+                
+                <!-- Time Input -->
+                <input
+                  *ngSwitchCase="'time'"
+                  type="time"
+                  class="grid-input"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+                
+                <!-- DateTime Input -->
+                <input
+                  *ngSwitchCase="'datetime-local'"
+                  type="datetime-local"
+                  class="grid-input"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+                
+                <!-- URL Input -->
+                <input
+                  *ngSwitchCase="'url'"
+                  type="url"
+                  class="grid-input"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [placeholder]="column.defaultValue || 'https://'"
+                  [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+                
+                <!-- Phone/Tel Input -->
+                <input
+                  *ngSwitchCase="'tel'"
+                  type="tel"
+                  class="grid-input"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [placeholder]="column.defaultValue || ''"
+                  [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
+                
+                <!-- Color Input -->
+                <input
+                  *ngSwitchCase="'color'"
+                  type="color"
+                  class="grid-input grid-input-color"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id) || '#000000'"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [required]="isColumnRequired(column)"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
+                />
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
 
                 <!-- Select Dropdown -->
                 <ng-container *ngSwitchCase="'select'">
@@ -232,7 +330,7 @@
       <button
         type="button"
         class="btn-save-grid"
-        (click)="saveGridData()"
+        (click)="onSaveGridClick()"
         [disabled]="saving || rows.length === 0">
         <i class="pi" [class.pi-spin]="saving" [class.pi-spinner]="saving" [class.pi-save]="!saving"></i>
         {{ saving ? (translationService.translate('formView.saving') || 'Saving...') : (translationService.translate('formView.save') || 'Save Grid') }}

@@ -22,9 +22,13 @@ import { environment } from '../../environments/environment';
 import { catchError, of, forkJoin, Observable } from 'rxjs';
 import { GridViewComponent } from './components/grid-view.component';
 import { CalculatedFieldComponent } from './components/calculated-field.component';
+import { DocumentApprovalHistoryService, CreateDocumentApprovalHistoryDto } from '../FormBuilder/services/document-approval-history.service';
 import { CalculationEngineService } from '../FormBuilder/services/calculation-engine.service';
 import { GridService } from '../FormBuilder/services/grid.service';
 import { FormGridDto } from '../FormBuilder/form-builder/models/grid-dto.model';
+import { ApprovalWorkflowRuntimeService } from '../FormBuilder/services/approval-workflow-runtime.service';
+import { ApprovalStageService } from '../FormBuilder/services/approval-stage.service';
+import { ApprovalWorkflowService } from '../FormBuilder/services/approval-workflow.service';
 
 @Component({
   selector: 'app-form-view',
@@ -125,7 +129,11 @@ export class FormViewComponent implements OnInit {
     private storageService: StorageService,
     private calculationEngine: CalculationEngineService,
     private cdr: ChangeDetectorRef,
-    private gridService: GridService
+    private gridService: GridService,
+    private documentApprovalHistoryService: DocumentApprovalHistoryService,
+    private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService,
+    private approvalStageService: ApprovalStageService,
+    private approvalWorkflowService: ApprovalWorkflowService
   ) { }
 
   ngOnInit(): void {
@@ -172,19 +180,40 @@ export class FormViewComponent implements OnInit {
    * Save all grid data (called from form submission)
    */
   saveAllGridsData(): Observable<any[]> {
+    console.log('[FormView] ===== saveAllGridsData called =====');
     const gridComponents = this.gridViewComponents?.toArray() || [];
+    console.log('[FormView] Grid components found:', gridComponents.length);
+    
     if (gridComponents.length === 0) {
+      console.log('[FormView] No grid components found, skipping grid save');
       return of([]);
     }
 
+    // Log details of each grid
+    gridComponents.forEach((grid, index) => {
+      console.log(`[FormView] Grid ${index}:`, {
+        gridId: grid.grid?.id,
+        gridName: grid.grid?.gridName,
+        submissionId: grid.submissionId,
+        hasGridData: grid.hasGridData(),
+        rowsCount: grid.rows?.length || 0
+      });
+    });
+
     const saveObservables = gridComponents
-      .filter(grid => grid.hasGridData() && grid.submissionId > 0)
+      .filter(grid => {
+        const shouldSave = grid.hasGridData() && grid.submissionId > 0;
+        console.log(`[FormView] Grid ${grid.grid?.gridName}: shouldSave=${shouldSave}, hasData=${grid.hasGridData()}, submissionId=${grid.submissionId}`);
+        return shouldSave;
+      })
       .map(grid => grid.saveGridData());
 
     if (saveObservables.length === 0) {
+      console.log('[FormView] No grids with data to save');
       return of([]);
     }
 
+    console.log('[FormView] Saving', saveObservables.length, 'grids');
     return forkJoin(saveObservables);
   }
 
@@ -4346,12 +4375,78 @@ export class FormViewComponent implements OnInit {
         this.isDraftMode = false;
         this.currentSubmission = submittedSubmission;
 
+        console.log('[FormView] Initial status from backend:', submittedSubmission.status);
+
+        // Always update status to "Submitted" regardless of backend response
+        // This ensures consistency - user wants status to always be "Submitted" after submission
+        if (submittedSubmission.status !== 'Submitted') {
+          console.log('[FormView] Status is not Submitted, updating to Submitted...');
+          this.formSubmissionsService.updateSubmission(currentSubmissionId, { status: 'Submitted' }).subscribe({
+            next: () => {
+              console.log('[FormView] ✅ Status updated to Submitted');
+              submittedSubmission.status = 'Submitted';
+              this.currentSubmission!.status = 'Submitted';
+            },
+            error: (updateError) => {
+              console.warn('[FormView] Failed to update status to Submitted:', updateError);
+            }
+          });
+        }
+
         const currentLang = this.translationService.getCurrentLanguage();
-        const statusMessage = submittedSubmission.status === 'Approved' ?
-          (currentLang === 'ar' ? 'تمت الموافقة على الطلب تلقائياً' : 'Request auto-approved') :
-          (currentLang === 'ar' ? 'تم إرسال الطلب للمراجعة' : 'Request submitted for review');
+        const statusMessage = currentLang === 'ar' ? 'تم إرسال الطلب للمراجعة' : 'Request submitted for review';
 
         console.log('[FormView] Final submission status:', submittedSubmission.status);
+        console.log('[FormView] Submission ID:', currentSubmissionId);
+        console.log('[FormView] Document Type ID from submission:', submittedSubmission.documentTypeId);
+
+        // Always set stageId (status will be Submitted after update above)
+        // We'll handle both cases: if status is already Submitted or if we just updated it
+        const finalStatus = submittedSubmission.status === 'Submitted' ? 'Submitted' : 'Submitted'; // Always Submitted now
+        if (finalStatus === 'Submitted') {
+          console.log('[FormView] ✅ Status is Submitted, setting stageId...');
+          
+          // Get documentTypeId from multiple sources (priority order):
+          // 1. From submission object (most reliable)
+          // 2. From query params
+          // 3. From form (load it)
+          let docTypeId: number | null = null;
+          
+          if (submittedSubmission.documentTypeId) {
+            docTypeId = submittedSubmission.documentTypeId;
+            console.log('[FormView] Using documentTypeId from submission:', docTypeId);
+          } else {
+            // Try query params
+            const queryDocTypeId = this.route.snapshot.queryParams['documentTypeId'] ? +this.route.snapshot.queryParams['documentTypeId'] : null;
+            if (queryDocTypeId && queryDocTypeId > 0) {
+              docTypeId = queryDocTypeId;
+              console.log('[FormView] Using documentTypeId from query params:', docTypeId);
+            } else if (this.form && this.form.id) {
+              // Try to load from form
+              console.log('[FormView] Loading documentTypeId from form...');
+              this.documentTypesService.getDocumentTypeByFormId(this.form.id).subscribe({
+                next: (documentType) => {
+                  if (documentType && documentType.id) {
+                    console.log('[FormView] Loaded documentTypeId from form:', documentType.id);
+                    this.loadAndSetStageId(documentType.id, currentSubmissionId);
+                  } else {
+                    console.warn('[FormView] No documentTypeId found in form');
+                  }
+                },
+                error: (docTypeError) => {
+                  console.error('[FormView] Failed to load documentTypeId from form:', docTypeError);
+                }
+              });
+              return; // Exit early, will continue in callback
+            }
+          }
+          
+          if (docTypeId) {
+            this.loadAndSetStageId(docTypeId, currentSubmissionId);
+          } else {
+            console.warn('[FormView] No documentTypeId found in submission, query params, or form');
+          }
+        }
 
         // Step 6: Redirect to success page
         const queryParams: any = {
@@ -4364,8 +4459,10 @@ export class FormViewComponent implements OnInit {
         }
         
         // Add documentTypeId if available
-        if (documentTypeId) {
-          queryParams.documentTypeId = documentTypeId;
+        const finalDocTypeId = submittedSubmission.documentTypeId || 
+                               (this.route.snapshot.queryParams['documentTypeId'] ? +this.route.snapshot.queryParams['documentTypeId'] : null);
+        if (finalDocTypeId) {
+          queryParams.documentTypeId = finalDocTypeId;
         }
         
         // Navigate to success page
@@ -4377,6 +4474,7 @@ export class FormViewComponent implements OnInit {
           (currentLang === 'ar' ? 'فشل في إرسال الطلب' : 'Failed to submit request');
         alert(errorMsg);
         this.isSubmitting = false;
+        this.isSaving = false;
         return;
       }
     } catch (error) {
@@ -4385,23 +4483,230 @@ export class FormViewComponent implements OnInit {
         ? 'حدث خطأ أثناء إرسال النموذج. يرجى المحاولة مرة أخرى.'
         : 'An error occurred while submitting the form. Please try again.';
       alert(errorMessage);
+      this.isSubmitting = false;
+      this.isSaving = false;
     } finally {
       this.isSubmitting = false;
+      this.isSaving = false;
     }
   }
 
   /**
-   * Handle cancel action
+   * Load document type and set stageId
    */
-  onCancel(): void {
-    const confirmMessage = this.translationService.getCurrentLanguage() === 'ar'
-      ? 'هل أنت متأكد من إلغاء النموذج؟ سيتم فقدان جميع البيانات المدخلة.'
-      : 'Are you sure you want to cancel? All entered data will be lost.';
-    
-    if (confirm(confirmMessage)) {
-      // Reset form or navigate away
-      window.location.reload();
+  private loadAndSetStageId(docTypeId: number, submissionId: number): void {
+    console.log('[FormView] Loading document type to get approvalWorkflowId...', 'docTypeId:', docTypeId);
+    this.documentTypesService.getDocumentTypeById(docTypeId).subscribe({
+      next: (documentType) => {
+        console.log('[FormView] Loaded document type:', {
+          id: documentType?.id,
+          name: documentType?.name,
+          approvalWorkflowId: documentType?.approvalWorkflowId,
+          approvalWorkflowName: documentType?.approvalWorkflowName,
+          hasWorkflow: !!documentType?.approvalWorkflowId
+        });
+        
+        if (documentType?.approvalWorkflowId && documentType.approvalWorkflowId > 0) {
+          console.log('[FormView] Found approvalWorkflowId:', documentType.approvalWorkflowId, 'setting stageId...');
+          this.setStageIdForSubmission(documentType.approvalWorkflowId, submissionId);
+        } else {
+          console.warn('[FormView] No approval workflow ID found in document type. DocumentType:', {
+            id: documentType?.id,
+            name: documentType?.name,
+            approvalWorkflowId: documentType?.approvalWorkflowId,
+            approvalWorkflowName: documentType?.approvalWorkflowName
+          });
+          console.warn('[FormView] Attempting to create workflow automatically...');
+          
+          // Try to create workflow automatically (will fail with 401 if no auth, but we'll handle it gracefully)
+          this.createAndAssignWorkflow(docTypeId, documentType, submissionId);
+        }
+      },
+      error: (docTypeError) => {
+        console.error('[FormView] Failed to load document type:', docTypeError);
+        console.error('[FormView] Error details:', {
+          status: docTypeError?.status,
+          statusText: docTypeError?.statusText,
+          message: docTypeError?.message,
+          error: docTypeError?.error
+        });
+      }
+    });
+  }
+
+  /**
+   * Create workflow automatically and assign it to document type
+   */
+  private createAndAssignWorkflow(docTypeId: number, documentType: any, submissionId: number): void {
+    if (!documentType || !documentType.id) {
+      console.error('[FormView] Cannot create workflow - documentType is invalid');
+      return;
     }
+
+    const workflowName = `Default Workflow for ${documentType.name || 'Document Type'} (${documentType.id})`;
+    console.log('[FormView] Checking if workflow exists:', workflowName);
+    
+    // First, check if workflow with this name already exists
+    this.approvalWorkflowService.getApprovalWorkflowByName(workflowName).subscribe({
+      next: (existingWorkflow) => {
+        if (existingWorkflow && existingWorkflow.id) {
+          console.log('[FormView] ✅ Found existing workflow:', existingWorkflow.id, 'using it...');
+          // Use existing workflow
+          this.assignWorkflowToDocumentType(docTypeId, existingWorkflow.id, documentType, submissionId);
+        } else {
+          // Workflow doesn't exist, create new one
+          console.log('[FormView] Workflow not found, creating new workflow:', workflowName, 'for documentTypeId:', docTypeId);
+          this.approvalWorkflowService.createApprovalWorkflow({
+            name: workflowName,
+            documentTypeId: docTypeId
+          }).subscribe({
+            next: (createdWorkflow) => {
+              console.log('[FormView] ✅ Workflow created successfully:', createdWorkflow.id);
+              // Backend creates default stage automatically, just assign workflow
+              this.assignWorkflowToDocumentType(docTypeId, createdWorkflow.id, documentType, submissionId);
+            },
+            error: (createError) => {
+              console.error('[FormView] Failed to create workflow:', createError);
+              const errorMessage = createError?.message || '';
+              
+              // If error is "Workflow name already exists", try to find it again
+              if (errorMessage.includes('already exists') || errorMessage.includes('Workflow name already exists')) {
+                console.log('[FormView] Workflow name already exists, searching for existing workflow...');
+                this.approvalWorkflowService.getApprovalWorkflowByName(workflowName).subscribe({
+                  next: (foundWorkflow) => {
+                    if (foundWorkflow && foundWorkflow.id) {
+                      console.log('[FormView] ✅ Found existing workflow after error:', foundWorkflow.id);
+                      this.assignWorkflowToDocumentType(docTypeId, foundWorkflow.id, documentType, submissionId);
+                    } else {
+                      console.error('[FormView] Could not find existing workflow even though name exists');
+                    }
+                  },
+                  error: (searchError) => {
+                    console.error('[FormView] Failed to search for existing workflow:', searchError);
+                  }
+                });
+              } else {
+                console.error('[FormView] Error details:', {
+                  status: createError?.status,
+                  statusText: createError?.statusText,
+                  message: createError?.message,
+                  error: createError?.error
+                });
+              }
+            }
+          });
+        }
+      },
+      error: (searchError) => {
+        console.error('[FormView] Failed to search for existing workflow:', searchError);
+        // If search fails, try to create anyway
+        console.log('[FormView] Attempting to create workflow anyway...');
+        this.approvalWorkflowService.createApprovalWorkflow({
+          name: workflowName,
+          documentTypeId: docTypeId
+        }).subscribe({
+          next: (createdWorkflow) => {
+            console.log('[FormView] ✅ Workflow created successfully:', createdWorkflow.id);
+            // Backend creates default stage automatically, just assign workflow
+            this.assignWorkflowToDocumentType(docTypeId, createdWorkflow.id, documentType, submissionId);
+          },
+          error: (createError) => {
+            console.error('[FormView] Failed to create workflow:', createError);
+          }
+        });
+      }
+    });
+  }
+
+  private assignWorkflowToDocumentType(docTypeId: number, workflowId: number, documentType: any, submissionId: number): void {
+    // Assign workflow to document type - need to include all required fields
+    // First, reload document type to get all fields, then update with workflow ID
+    this.documentTypesService.getDocumentTypeById(docTypeId).subscribe({
+      next: (fullDocumentType) => {
+        // Update with all existing fields + new workflow ID
+        const updateDto: any = {
+          name: fullDocumentType.name,
+          code: fullDocumentType.code,
+          menuCaption: fullDocumentType.menuCaption || fullDocumentType.name,
+          approvalWorkflowId: workflowId
+        };
+        
+        // Include optional fields if they exist
+        if (fullDocumentType.formBuilderId) updateDto.formBuilderId = fullDocumentType.formBuilderId;
+        if (fullDocumentType.menuOrder !== undefined) updateDto.menuOrder = fullDocumentType.menuOrder;
+        if (fullDocumentType.parentMenuId !== undefined) updateDto.parentMenuId = fullDocumentType.parentMenuId;
+        if (fullDocumentType.isActive !== undefined) updateDto.isActive = fullDocumentType.isActive;
+        
+        this.documentTypesService.updateDocumentType(docTypeId, updateDto).subscribe({
+          next: () => {
+            console.log('[FormView] ✅ Workflow assigned to document type successfully');
+            
+            // Update local documentType cache
+            if (documentType) {
+              documentType.approvalWorkflowId = workflowId;
+            }
+            
+            // Now get stages and set stageId
+            this.setStageIdForSubmission(workflowId, submissionId);
+          },
+          error: (assignError) => {
+            console.error('[FormView] Failed to assign workflow to document type:', assignError);
+            // Still try to set stageId with the workflow
+            this.setStageIdForSubmission(workflowId, submissionId);
+          }
+        });
+      },
+      error: (loadError) => {
+        console.error('[FormView] Failed to load document type for update:', loadError);
+        // Still try to set stageId with the workflow
+        this.setStageIdForSubmission(workflowId, submissionId);
+      }
+    });
+  }
+
+
+  /**
+   * Set stageId for submission
+   */
+  private setStageIdForSubmission(approvalWorkflowId: number, submissionId: number): void {
+    // Get the first stage from workflow and update submission with stageId immediately
+    this.approvalStageService.getAllByWorkflowId(approvalWorkflowId).subscribe({
+      next: (stages) => {
+        if (stages && stages.length > 0) {
+          // Get the first stage (lowest stageOrder)
+          const firstStage = stages
+            .filter(s => !s.isDeleted)
+            .sort((a, b) => a.stageOrder - b.stageOrder)[0];
+          
+          if (firstStage && firstStage.id) {
+            console.log('[FormView] Found first stage:', firstStage.id, 'updating submission stageId immediately');
+            // Update submission with stageId immediately
+            this.formSubmissionsService.updateSubmission(submissionId, { stageId: firstStage.id }).subscribe({
+              next: () => {
+                console.log('[FormView] ✅ Submission stageId updated successfully to:', firstStage.id);
+              },
+              error: (updateError) => {
+                console.error('[FormView] ❌ Failed to update submission stageId:', updateError);
+                console.error('[FormView] Update error details:', JSON.stringify(updateError, null, 2));
+              }
+            });
+          } else {
+            console.warn('[FormView] No valid stage found in workflow');
+          }
+        } else {
+          console.warn('[FormView] No stages found in workflow');
+        }
+      },
+      error: (stagesError) => {
+        console.error('[FormView] Failed to get workflow stages:', stagesError);
+      }
+    });
+    
+    // Note: activateStage is NOT called from public form because:
+    // 1. It requires authentication (which public forms don't have)
+    // 2. Stage activation is an admin action, not a public user action
+    // The stageId is set above, and stage activation should happen through admin dashboard
+    console.log('[FormView] Stage activation skipped for public form (requires admin authentication)');
   }
 
   /**
@@ -4419,6 +4724,7 @@ export class FormViewComponent implements OnInit {
       },
       error: (error) => {
         // Silently handle - submission may not exist or may require auth
+        console.warn('[FormView] Failed to load submission data:', error);
       }
     });
   }
@@ -4427,111 +4733,22 @@ export class FormViewComponent implements OnInit {
    * Check if submission can be approved/rejected
    */
   canApproveReject(): boolean {
-    return this.currentSubmission !== null && 
-           this.currentSubmission.status === 'Submitted' &&
-           this.submissionId > 0;
+    // Approve/Reject functionality removed - only available in admin dashboard
+    return false;
   }
 
   /**
-   * Approve submission
+   * Handle cancel action
    */
-  approveSubmission(): void {
-    if (!this.currentSubmission || !this.submissionId) {
-      return;
+  onCancel(): void {
+    const confirmMessage = this.translationService.getCurrentLanguage() === 'ar'
+      ? 'هل أنت متأكد من إلغاء النموذج؟ سيتم فقدان جميع البيانات المدخلة.'
+      : 'Are you sure you want to cancel? All entered data will be lost.';
+    
+    if (confirm(confirmMessage)) {
+      // Reset form or navigate away
+      window.location.reload();
     }
-
-    this.isApproving = true;
-    
-    // Get current user ID
-    const currentUserId = this.storageService.getUsername() || 'public-user';
-    
-    // Note: stageId is required - using 1 as default (adjust based on your workflow)
-    const approveDto: ApproveSubmissionDto = {
-      submissionId: this.submissionId,
-      stageId: 1, // TODO: Get actual stageId from submission or workflow
-      actionByUserId: currentUserId,
-      comments: this.approveRejectComments || null
-    };
-
-    this.formSubmissionsService.approveSubmissionDto(approveDto).subscribe({
-      next: (response: ApiResponse<FormSubmissionDto>) => {
-        this.isApproving = false;
-        this.showApproveRejectModal = false;
-        this.approveRejectComments = '';
-        
-        if (response.statusCode === 200 || response.success) {
-          // Reload submission to update status
-          this.loadSubmissionData();
-          
-          const message = this.translationService.getCurrentLanguage() === 'ar'
-            ? 'تمت الموافقة على الطلب بنجاح'
-            : 'Submission approved successfully';
-          alert(message);
-        }
-      },
-      error: (error) => {
-        this.isApproving = false;
-        const message = this.translationService.getCurrentLanguage() === 'ar'
-          ? 'حدث خطأ أثناء الموافقة على الطلب'
-          : 'An error occurred while approving the submission';
-        alert(message);
-      }
-    });
-  }
-
-  /**
-   * Reject submission
-   */
-  rejectSubmission(): void {
-    if (!this.currentSubmission || !this.submissionId) {
-      return;
-    }
-
-    this.isRejecting = true;
-    
-    // Get current user ID
-    const currentUserId = this.storageService.getUsername() || 'public-user';
-    
-    // Note: stageId is required - using 1 as default (adjust based on your workflow)
-    const rejectDto: RejectSubmissionDto = {
-      submissionId: this.submissionId,
-      stageId: 1, // TODO: Get actual stageId from submission or workflow
-      actionByUserId: currentUserId,
-      comments: this.approveRejectComments || null
-    };
-
-    this.formSubmissionsService.rejectSubmissionDto(rejectDto).subscribe({
-      next: (response: ApiResponse<FormSubmissionDto>) => {
-        this.isRejecting = false;
-        this.showApproveRejectModal = false;
-        this.approveRejectComments = '';
-        
-        if (response.statusCode === 200 || response.success) {
-          // Reload submission to update status
-          this.loadSubmissionData();
-          
-          const message = this.translationService.getCurrentLanguage() === 'ar'
-            ? 'تم رفض الطلب بنجاح'
-            : 'Submission rejected successfully';
-          alert(message);
-        }
-      },
-      error: (error) => {
-        this.isRejecting = false;
-        const message = this.translationService.getCurrentLanguage() === 'ar'
-          ? 'حدث خطأ أثناء رفض الطلب'
-          : 'An error occurred while rejecting the submission';
-        alert(message);
-      }
-    });
-  }
-
-  /**
-   * Close approve/reject modal
-   */
-  closeApproveRejectModal(): void {
-    this.showApproveRejectModal = false;
-    this.approveRejectComments = '';
   }
 }
 

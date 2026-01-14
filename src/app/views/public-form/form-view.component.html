@@ -418,23 +418,7 @@
 
   <!-- Form Actions Buttons Section -->
   <div class="form-actions" *ngIf="tabs && tabs.length > 0">
-    <!-- Approve/Reject Buttons (if submission exists and status is Submitted) -->
-    <button type="button" class="btn-approve" *ngIf="canApproveReject()" (click)="approveSubmission()" [disabled]="isApproving">
-      <i class="pi pi-check" *ngIf="!isApproving"></i>
-      <i class="pi pi-spin pi-spinner" *ngIf="isApproving"></i>
-      <span>{{ isApproving 
-        ? (translationService.getCurrentLanguage() === 'ar' ? 'جاري الموافقة...' : 'Approving...')
-        : (translationService.getCurrentLanguage() === 'ar' ? 'موافقة' : 'Approve')
-      }}</span>
-    </button>
-    <button type="button" class="btn-reject" *ngIf="canApproveReject()" (click)="rejectSubmission()" [disabled]="isRejecting">
-      <i class="pi pi-times" *ngIf="!isRejecting"></i>
-      <i class="pi pi-spin pi-spinner" *ngIf="isRejecting"></i>
-      <span>{{ isRejecting 
-        ? (translationService.getCurrentLanguage() === 'ar' ? 'جاري الرفض...' : 'Rejecting...')
-        : (translationService.getCurrentLanguage() === 'ar' ? 'رفض' : 'Reject')
-      }}</span>
-    </button>
+    <!-- Approve/Reject buttons removed - only shown in admin dashboard -->
     
     <!-- Cancel and Submit Buttons (always visible) -->
     <button type="button" class="btn-cancel" (click)="onCancel()">

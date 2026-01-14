@@ -393,7 +393,7 @@
             </select>
           </ng-container>
           <div class="invalid-feedback" *ngIf="getCellFormControl(i).get('cellValue')?.invalid && getCellFormControl(i).get('cellValue')?.touched">
-            {{ translateLabel('common.fieldRequired') || 'This field is required' }}
+            {{ getCellErrorMessage(i) }}
           </div>
         </div>
       </div>

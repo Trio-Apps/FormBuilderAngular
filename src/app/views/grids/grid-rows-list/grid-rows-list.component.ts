@@ -622,12 +622,13 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     this.currentInputLanguage = 'en';
     this.cellsFormArray.clear();
 
-    // Add form controls for each column
+    // Add form controls for each column with type validation
     this.columns.forEach(column => {
       if (column.id) {
+        const validators = this.getValidatorsForColumn(column);
         const cellControl = this.fb.group<CellFormGroup>({
           columnId: this.fb.control(column.id, Validators.required),
-          cellValue: this.fb.control(column.defaultValue || '', column.isRequired ? Validators.required : null)
+          cellValue: this.fb.control(column.defaultValue || '', validators)
         });
         this.cellsFormArray.push(cellControl);
       }
@@ -651,12 +652,13 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     this.currentInputLanguage = 'en';
     this.cellsFormArray.clear();
 
-    // Add form controls for each column with existing values
+    // Add form controls for each column with existing values and type validation
     this.columns.forEach(column => {
       const cellValue = this.getCellValue(row, column.id);
+      const validators = this.getValidatorsForColumn(column);
       const cellControl = this.fb.group<CellFormGroup>({
         columnId: this.fb.control(column.id, Validators.required),
-        cellValue: this.fb.control(cellValue || column.defaultValue || '', column.isRequired ? Validators.required : null)
+        cellValue: this.fb.control(cellValue || column.defaultValue || '', validators)
       });
       this.cellsFormArray.push(cellControl);
     });
@@ -685,6 +687,12 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
   }
 
   saveRow(): void {
+    console.log('[GridRows] saveRow called');
+    console.log('[GridRows] rowForm value:', this.rowForm.value);
+    console.log('[GridRows] rowForm.value.cells:', this.rowForm.value.cells);
+    console.log('[GridRows] cellsFormArray.value:', this.cellsFormArray.value);
+    console.log('[GridRows] columns:', this.columns);
+    
     if (this.rowForm.invalid) {
       this.markFormGroupTouched(this.rowForm);
       this.messageService.add({
@@ -715,6 +723,8 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
 
     this.savingRow = true;
     const formValue = this.rowForm.value;
+    console.log('[GridRows] formValue:', formValue);
+    console.log('[GridRows] formValue.cells:', formValue.cells);
 
     // Validate row data against column rules
     const rowData = this.buildRowDataObject(formValue.cells || []);
@@ -822,8 +832,13 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
   }
 
   private createCells(rowId: number, cells: any[]): void {
+    console.log('[GridRows] createCells called with rowId:', rowId, 'cells:', cells);
+    console.log('[GridRows] cells array length:', cells?.length);
+    console.log('[GridRows] cells JSON:', JSON.stringify(cells, null, 2));
+    
     if (!cells || cells.length === 0) {
       // No cells to create, just reload rows
+      console.warn('[GridRows] ⚠️ No cells to create - cells array is empty or null');
       this.savingRow = false;
       this.closeRowModal();
       this.loadRows();
@@ -836,17 +851,22 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     }
 
     // Filter out empty cells if needed, or create all cells
-    const cellObservables = cells
-      .filter((cell: any) => cell && cell.columnId) // Ensure cell has columnId
+    console.log('[GridRows] Filtering cells with columnId...');
+    const filteredCells = cells.filter((cell: any) => cell && cell.columnId);
+    console.log('[GridRows] Filtered cells count:', filteredCells.length);
+    console.log('[GridRows] Filtered cells:', JSON.stringify(filteredCells, null, 2));
+    
+    const cellObservables = filteredCells
       .map((cell: any) => {
         const createCellDto: CreateFormSubmissionGridCellDto = {
           rowId: rowId,
           columnId: cell.columnId,
           cellValue: cell.cellValue || ''
         };
+        console.log('[GridRows] Creating cell with DTO:', createCellDto);
         return this.gridService.createCell(createCellDto).pipe(
           catchError(error => {
-            console.error('Error creating cell:', error);
+            console.error('[GridRows] ❌ Error creating cell:', error);
             return of({ statusCode: 500, message: 'Failed to create cell' });
           })
         );
@@ -1071,9 +1091,45 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
   getInputType(column: FormGridColumnDto): string {
     const dataType = (column.dataType || '').toLowerCase();
     if (dataType.includes('email')) return 'email';
-    if (dataType.includes('number') || dataType.includes('numeric')) return 'number';
+    if (dataType.includes('number') || dataType.includes('numeric') || dataType.includes('int') || dataType.includes('decimal') || dataType.includes('float')) return 'number';
     if (dataType.includes('date')) return 'date';
     return 'text';
+  }
+
+  /**
+   * Get validators based on column data type
+   */
+  private getValidatorsForColumn(column: FormGridColumnDto): any[] {
+    const validators: any[] = [];
+    
+    // Required validation
+    if (column.isRequired) {
+      validators.push(Validators.required);
+    }
+    
+    const dataType = (column.dataType || '').toLowerCase();
+    
+    // Number validation - only numbers allowed
+    if (dataType.includes('number') || dataType.includes('numeric') || dataType.includes('int') || dataType.includes('decimal') || dataType.includes('float')) {
+      validators.push(Validators.pattern(/^-?\d*\.?\d*$/));
+    }
+    
+    // Email validation
+    if (dataType.includes('email')) {
+      validators.push(Validators.email);
+    }
+    
+    // Min length validation
+    if (column.minLength && column.minLength > 0) {
+      validators.push(Validators.minLength(column.minLength));
+    }
+    
+    // Max length validation
+    if (column.maxLength && column.maxLength > 0) {
+      validators.push(Validators.maxLength(column.maxLength));
+    }
+    
+    return validators;
   }
 
   hasColumnOptions(column: FormGridColumnDto): boolean {
@@ -1095,10 +1151,35 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
   getCellErrorMessage(index: number): string {
     const cellControl = this.getCellFormControl(index);
     const column = this.getColumnForCell(index);
+    const columnLabel = this.getColumnLabel(column);
+    const lang = this.translationService.getCurrentLanguage();
     
     const cellValueControl = cellControl.get('cellValue');
+    
     if (cellValueControl?.hasError('required')) {
-      return `${this.getColumnLabel(column)} is required`;
+      return lang === 'ar' ? `${columnLabel} مطلوب` : `${columnLabel} is required`;
+    }
+    
+    if (cellValueControl?.hasError('pattern')) {
+      const dataType = (column.dataType || '').toLowerCase();
+      if (dataType.includes('number') || dataType.includes('numeric') || dataType.includes('int') || dataType.includes('decimal') || dataType.includes('float')) {
+        return lang === 'ar' ? `${columnLabel} يجب أن يكون رقماً` : `${columnLabel} must be a number`;
+      }
+      return lang === 'ar' ? `${columnLabel} قيمة غير صالحة` : `${columnLabel} has invalid format`;
+    }
+    
+    if (cellValueControl?.hasError('email')) {
+      return lang === 'ar' ? `${columnLabel} يجب أن يكون بريد إلكتروني صحيح` : `${columnLabel} must be a valid email`;
+    }
+    
+    if (cellValueControl?.hasError('minlength')) {
+      const minLength = cellValueControl.errors?.['minlength']?.requiredLength;
+      return lang === 'ar' ? `${columnLabel} يجب أن يكون على الأقل ${minLength} حرف` : `${columnLabel} must be at least ${minLength} characters`;
+    }
+    
+    if (cellValueControl?.hasError('maxlength')) {
+      const maxLength = cellValueControl.errors?.['maxlength']?.requiredLength;
+      return lang === 'ar' ? `${columnLabel} يجب ألا يتجاوز ${maxLength} حرف` : `${columnLabel} must not exceed ${maxLength} characters`;
     }
     
     return '';

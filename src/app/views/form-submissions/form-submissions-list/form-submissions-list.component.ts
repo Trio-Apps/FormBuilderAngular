@@ -3293,8 +3293,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    * Check if submission can be approved/rejected
    */
   canApproveReject(submission: FormSubmissionDto): boolean {
-    // Only allow approve/reject for Submitted status
-    return submission.status === 'Submitted';
+    // Allow approve/reject for Submitted and Pending Approval statuses
+    // Also allow for Approved status if admin wants to change it
+    return submission.status === 'Submitted' || 
+           submission.status === 'Pending Approval' || 
+           submission.status === 'Approved';
   }
 }
 

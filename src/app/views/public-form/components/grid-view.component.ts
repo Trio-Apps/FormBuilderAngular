@@ -77,6 +77,23 @@ export class GridViewComponent implements OnInit, OnChanges {
   }
 
   /**
+   * Click handler wrapper to execute saveGridData() and ensure the observable is subscribed.
+   */
+  onSaveGridClick(): void {
+    this.saveGridData().subscribe({
+      next: (response) => {
+        // Response handling is performed inside saveGridData; nothing else needed here.
+      },
+      error: (err) => {
+        // saveGridData has internal catchError, but guard against unexpected errors
+        console.error('[GridView] Unexpected error while saving grid:', err);
+        this.saving = false;
+        this.error = 'Error saving grid data';
+      }
+    });
+  }
+
+  /**
    * Load field types to determine input types for columns
    */
   private loadFieldTypes(callback?: () => void): void {
@@ -1186,10 +1203,8 @@ export class GridViewComponent implements OnInit, OnChanges {
           rowIndex: row.rowIndex,
           isActive: row.isActive,
           cells: this.columns.map((col) => {
-            const cellData: BulkGridCellDto = {
-              columnId: col.id,
-              cellValue: this.getCellValue(row.rowIndex, col.id)
-            };
+            const value = this.getCellValue(row.rowIndex, col.id);
+            const cellData: BulkGridCellDto = this.buildCellData(col, value);
             return cellData;
           })
         };
@@ -1206,8 +1221,19 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Save grid data (with validation)
    */
   saveGridData(): Observable<ApiResponse<FormSubmissionGridRowDto[]>> {
+    console.log('[GridView] ===== saveGridData called =====');
+    console.log('[GridView] Grid:', this.grid?.gridName, 'ID:', this.grid?.id);
+    console.log('[GridView] SubmissionId:', this.submissionId);
+    console.log('[GridView] Rows count:', this.rows?.length);
+    console.log('[GridView] Columns count:', this.columns?.length);
+    
     if (!this.grid || !this.grid.id || !this.submissionId || this.submissionId <= 0) {
       this.error = 'Cannot save: Missing grid or submission ID';
+      console.error('[GridView] ❌ Cannot save:', this.error, {
+        grid: this.grid,
+        gridId: this.grid?.id,
+        submissionId: this.submissionId
+      });
       return of({ statusCode: 400, message: this.error, data: [] });
     }
 
@@ -1224,16 +1250,16 @@ export class GridViewComponent implements OnInit, OnChanges {
           rowIndex: row.rowIndex,
           isActive: row.isActive,
           cells: this.columns.map((col) => {
-            const cellData: BulkGridCellDto = {
-              columnId: col.id,
-              cellValue: this.getCellValue(row.rowIndex, col.id)
-            };
+            const value = this.getCellValue(row.rowIndex, col.id);
+            const cellData: BulkGridCellDto = this.buildCellData(col, value);
             return cellData;
           })
         };
         return rowData;
       })
     };
+    
+    console.log('[GridView] Bulk data to save:', JSON.stringify(bulkData, null, 2));
 
     // First validate, then save
     return this.validateGridData().pipe(
@@ -1344,9 +1370,36 @@ export class GridViewComponent implements OnInit, OnChanges {
     if (dataType === 'select') return 'select';
 
     // 2) Fallbacks for special types based on dataType
+    
+    // Email type
     if (dataType.includes('email')) return 'email';
-    if (dataType.includes('number') || dataType.includes('numeric')) return 'number';
+    
+    // Password type
+    if (dataType.includes('password') || dataType.includes('pass')) return 'password';
+    
+    // Number types: num, number, numeric, int, integer, float, decimal, double
+    if (dataType.includes('num') || dataType.includes('int') || dataType.includes('float') || 
+        dataType.includes('decimal') || dataType.includes('double')) {
+      return 'number';
+    }
+    
+    // Date types
     if (dataType.includes('date')) return 'date';
+    
+    // Time type
+    if (dataType.includes('time') && !dataType.includes('datetime')) return 'time';
+    
+    // DateTime type
+    if (dataType.includes('datetime')) return 'datetime-local';
+    
+    // URL type
+    if (dataType.includes('url') || dataType.includes('link')) return 'url';
+    
+    // Phone/Tel type
+    if (dataType.includes('phone') || dataType.includes('tel') || dataType.includes('mobile')) return 'tel';
+    
+    // Color type
+    if (dataType.includes('color')) return 'color';
 
     // 3) If column.fieldType is an options type (e.g. Combobox/MultiSelect configured as options column)
     // treat it as select even if dataType is generic
@@ -1465,7 +1518,68 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Check if grid has data
    */
   hasGridData(): boolean {
-    return this.rows.length > 0;
+    const hasData = this.rows.length > 0;
+    console.log('[GridView] hasGridData called:', hasData, 'rows count:', this.rows.length);
+    return hasData;
+  }
+
+  /**
+   * Build cell data with correct value fields based on column type
+   */
+  private buildCellData(col: FormGridColumnDto, value: string): BulkGridCellDto {
+    const dataType = (col.dataType || '').toLowerCase();
+    const cellData: BulkGridCellDto = {
+      columnId: col.id,
+      columnCode: col.columnCode || `col_${col.id}`,
+      cellValue: value,
+      valueString: value || ''
+    };
+
+    // Set numeric value if applicable (num, number, numeric, int, float, decimal, double)
+    if (dataType.includes('num') || dataType.includes('int') || dataType.includes('float') || 
+        dataType.includes('decimal') || dataType.includes('double')) {
+      const numValue = this.parseNumberValue(value);
+      if (numValue !== undefined) {
+        cellData.valueNumber = numValue;
+      }
+    }
+
+    // Set boolean value if applicable
+    if (dataType.includes('bool') || dataType.includes('checkbox')) {
+      cellData.valueBool = value === 'true' || value === '1' || value === 'yes';
+    }
+
+    // Set date value if applicable
+    if (dataType.includes('date')) {
+      if (value) {
+        cellData.valueDate = value;
+      }
+    }
+
+    // Set JSON value
+    if (value) {
+      try {
+        cellData.valueJson = JSON.stringify(value);
+      } catch {
+        cellData.valueJson = value;
+      }
+    }
+
+    return cellData;
+  }
+
+  /**
+   * Parse a string value to number, returns undefined if not valid
+   */
+  private parseNumberValue(value: string): number | undefined {
+    if (!value || value.trim() === '') {
+      return undefined;
+    }
+    const num = parseFloat(value);
+    if (!isNaN(num) && isFinite(num)) {
+      return num;
+    }
+    return undefined;
   }
 
   /**

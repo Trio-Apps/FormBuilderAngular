@@ -194,7 +194,13 @@ export interface BulkGridRowDto {
 
 export interface BulkGridCellDto {
   columnId: number;
-  cellValue: string;
+  columnCode: string;
+  cellValue?: string;
+  valueString?: string;
+  valueNumber?: number;
+  valueDate?: string;
+  valueBool?: boolean;
+  valueJson?: string;
 }
 
 // ===== Complete Grid Data (with nested cells) =====

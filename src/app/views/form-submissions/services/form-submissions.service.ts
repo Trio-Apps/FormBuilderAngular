@@ -88,6 +88,7 @@ export interface UpdateFormSubmissionDto {
   documentNumber?: string;
   status?: string;
   submittedDate?: Date;
+  stageId?: number;
 }
 
 export interface SaveFormSubmissionDataDto {
@@ -313,12 +314,16 @@ export class FormSubmissionsService {
    * Update form submission
    */
   updateSubmission(id: number, dto: UpdateFormSubmissionDto): Observable<void> {
+    console.log('[FormSubmissionsService] updateSubmission called:', { id, dto });
+    console.log('[FormSubmissionsService] DTO JSON:', JSON.stringify(dto));
     return this.http.put<any>(`${this.baseUrl}/${id}`, dto).pipe(
-      map(() => {
+      map((response) => {
+        console.log('[FormSubmissionsService] ✅ Update response:', response);
         return;
       }),
       catchError((error) => {
-        console.error(`Error updating form submission ${id}:`, error);
+        console.error(`[FormSubmissionsService] ❌ Error updating form submission ${id}:`, error);
+        console.error('[FormSubmissionsService] Error details:', JSON.stringify(error, null, 2));
         throw error;
       })
     );

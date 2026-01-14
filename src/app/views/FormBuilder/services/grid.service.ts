@@ -448,11 +448,20 @@ export class GridService {
    * Note: This endpoint may not exist yet in backend
    */
   bulkSaveGridData(data: BulkSaveGridDataDto): Observable<ApiResponse<FormSubmissionGridRowDto[]>> {
+    console.log('[GridService] bulkSaveGridData called');
+    console.log('[GridService] Sending rows only:', JSON.stringify(data.rows, null, 2));
     return this.http.post<ApiResponse<FormSubmissionGridRowDto[]>>(
       `${this.baseUrl}/FormSubmissionGridRows/submission/${data.submissionId}/grid/${data.gridId}/bulk`,
-      data
+      data.rows  // Send only the rows array, not the entire object
     ).pipe(
-      catchError(() => of({ statusCode: 500, message: 'Error saving grid data', data: [] }))
+      map((response) => {
+        console.log('[GridService] ✅ bulkSaveGridData response:', response);
+        return response;
+      }),
+      catchError((error) => {
+        console.error('[GridService] ❌ bulkSaveGridData error:', error);
+        return of({ statusCode: 500, message: 'Error saving grid data', data: [] });
+      })
     );
   }
 
@@ -487,11 +496,20 @@ export class GridService {
    * Create cell
    */
   createCell(cell: CreateFormSubmissionGridCellDto): Observable<ApiResponse<FormSubmissionGridCellDto>> {
+    console.log('[GridService] createCell called with:', cell);
+    console.log('[GridService] createCell JSON:', JSON.stringify(cell));
     return this.http.post<ApiResponse<FormSubmissionGridCellDto>>(
       `${this.baseUrl}/FormSubmissionGridCells`,
       cell
     ).pipe(
-      catchError(() => of({ statusCode: 500, message: 'Error creating cell', data: {} as FormSubmissionGridCellDto }))
+      map((response) => {
+        console.log('[GridService] ✅ createCell response:', response);
+        return response;
+      }),
+      catchError((error) => {
+        console.error('[GridService] ❌ createCell error:', error);
+        return of({ statusCode: 500, message: 'Error creating cell', data: {} as FormSubmissionGridCellDto });
+      })
     );
   }
 
@@ -540,15 +558,24 @@ export class GridService {
     gridId: number,
     data: BulkSaveGridDataDto
   ): Observable<ApiResponse<GridValidationResultDto>> {
+    console.log('[GridService] validateGridData called');
+    console.log('[GridService] Validating rows:', JSON.stringify(data.rows, null, 2));
     return this.http.post<ApiResponse<GridValidationResultDto>>(
       `${this.baseUrl}/FormSubmissionGridRows/submission/${submissionId}/grid/${gridId}/validate`,
-      data
+      data.rows  // Send only the rows array, not the entire object
     ).pipe(
-      catchError(() => of({
-        statusCode: 500,
-        message: 'Error validating grid data',
-        data: { isValid: false, errors: [], warnings: [] }
-      }))
+      map((response) => {
+        console.log('[GridService] ✅ validateGridData response:', response);
+        return response;
+      }),
+      catchError((error) => {
+        console.error('[GridService] ❌ validateGridData error:', error);
+        return of({
+          statusCode: 500,
+          message: 'Error validating grid data',
+          data: { isValid: false, errors: [], warnings: [] }
+        });
+      })
     );
   }
 
