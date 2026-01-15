@@ -14,6 +14,7 @@ import { ButtonModule } from 'primeng/button';
 export class FormSubmissionSuccessComponent implements OnInit {
   submissionId: number | null = null;
   formCode: string | null = null;
+  documentNumber: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -22,11 +23,12 @@ export class FormSubmissionSuccessComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    // Get submissionId and formCode from query params
+    // Get submissionId, formCode, and documentNumber from query params
     this.submissionId = this.route.snapshot.queryParams['submissionId'] 
       ? +this.route.snapshot.queryParams['submissionId'] 
       : null;
     this.formCode = this.route.snapshot.queryParams['formCode'] || null;
+    this.documentNumber = this.route.snapshot.queryParams['documentNumber'] || null;
   }
 
   goBack(): void {

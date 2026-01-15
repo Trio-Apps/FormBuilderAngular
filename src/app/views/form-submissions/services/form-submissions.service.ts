@@ -279,7 +279,7 @@ export class FormSubmissionsService {
 
   /**
    * Create draft submission
-   * POST /api/FormSubmissions/draft?formBuilderId={id}&projectId={projectId}&submittedByUserId={userId}
+   * POST /api/FormSubmissions/draft?formBuilderId={id}&projectId={projectId}&submittedByUserId={userId}&seriesId={seriesId}
    *
    * This creates a new draft submission with:
    * - Status = "Draft"
@@ -288,15 +288,21 @@ export class FormSubmissionsService {
    * @param formBuilderId The form builder ID
    * @param projectId The project ID
    * @param submittedByUserId The user who created the draft
+   * @param seriesId The document series ID (required for backend validation)
    */
-  createDraft(formBuilderId: number, projectId: number, submittedByUserId: string): Observable<FormSubmissionDto> {
-    return this.http.post<any>(`${this.baseUrl}/draft`, null, {
-      params: {
-        formBuilderId: formBuilderId.toString(),
-        projectId: projectId.toString(),
-        submittedByUserId: submittedByUserId
-      }
-    }).pipe(
+  createDraft(formBuilderId: number, projectId: number, submittedByUserId: string, seriesId?: number): Observable<FormSubmissionDto> {
+    const params: any = {
+      formBuilderId: formBuilderId.toString(),
+      projectId: projectId.toString(),
+      submittedByUserId: submittedByUserId
+    };
+    
+    // Add seriesId if provided
+    if (seriesId && seriesId > 0) {
+      params.seriesId = seriesId.toString();
+    }
+    
+    return this.http.post<any>(`${this.baseUrl}/draft`, null, { params }).pipe(
       map((response: any) => {
         if (response && typeof response === 'object' && !response.id) {
           return response.data || response.result || response;

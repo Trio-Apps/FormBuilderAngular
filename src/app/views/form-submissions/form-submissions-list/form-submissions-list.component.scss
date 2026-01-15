@@ -1467,3 +1467,37 @@
   }
 }
 
+// Grids Section in View Submission Details
+.grids-section {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 24px;
+  margin: 20px auto;
+  max-width: 100%;
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    color: #1f2937;
+    font-size: 18px;
+    font-weight: 600;
+    
+    i {
+      color: #00bfa5;
+    }
+  }
+
+  .grid-wrapper {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+

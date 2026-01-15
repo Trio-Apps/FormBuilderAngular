@@ -128,7 +128,32 @@ export class GridViewComponent implements OnInit, OnChanges {
       this.loadGrid();
       }
     }
-    if (changes['submissionId'] && !changes['submissionId'].firstChange) {
+    // Reload grid data when submissionId changes to a valid value
+    if (changes['submissionId']) {
+      const newSubmissionId = changes['submissionId'].currentValue;
+      const oldSubmissionId = changes['submissionId'].previousValue;
+      console.log('[GridView] ngOnChanges - submissionId changed:', { old: oldSubmissionId, new: newSubmissionId, hasGrid: !!this.grid });
+      
+      // Load data if submissionId becomes valid (> 0) and different from before
+      if (newSubmissionId > 0 && newSubmissionId !== oldSubmissionId) {
+        if (this.grid) {
+          console.log('[GridView] submissionId changed, reloading grid data');
+          this.loadGridData();
+        } else {
+          // Grid not loaded yet, store flag to load data after grid initializes
+          console.log('[GridView] submissionId set but grid not loaded yet - will load after grid init');
+          (this as any)._pendingDataLoad = true;
+        }
+      }
+    }
+  }
+
+  /**
+   * Public method to reload grid data (can be called from parent component)
+   */
+  reloadGridData(): void {
+    console.log('[GridView] reloadGridData called, grid:', this.grid?.gridName, 'submissionId:', this.submissionId);
+    if (this.grid && this.submissionId > 0) {
       this.loadGridData();
     }
   }
@@ -525,10 +550,13 @@ export class GridViewComponent implements OnInit, OnChanges {
     // Initialize grid data structure
     this.initializeGridData();
     
-    // Load existing data if submissionId is available
-    if (this.submissionId > 0) {
+    // Load existing data if submissionId is available OR if there was a pending load
+    if (this.submissionId > 0 || (this as any)._pendingDataLoad) {
+      console.log('[GridView] initializeData - loading grid data, submissionId:', this.submissionId, 'pendingLoad:', (this as any)._pendingDataLoad);
+      (this as any)._pendingDataLoad = false;
       this.loadGridData();
     } else {
+      console.log('[GridView] initializeData - no submissionId, skipping data load');
       this.loading = false;
     }
   }
@@ -909,20 +937,38 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Load grid data (rows and cells)
    */
   private loadGridData(): void {
+    console.log('[GridView] loadGridData called:', {
+      gridId: this.grid?.id,
+      gridName: this.grid?.gridName,
+      submissionId: this.submissionId
+    });
+    
     if (!this.grid || !this.grid.id || !this.submissionId || this.submissionId <= 0) {
+      console.log('[GridView] loadGridData - skipping (missing grid or submissionId)');
       this.loading = false;
       return;
     }
 
+    console.log('[GridView] Loading rows for submission', this.submissionId, 'grid', this.grid.id);
+    this.loading = true;
     this.gridService.getRowsBySubmissionAndGrid(this.submissionId, this.grid.id).subscribe({
       next: (response: ApiResponse<FormSubmissionGridRowDto[]>) => {
         this.rows = response.data || [];
+        console.log('[GridView] ✅ Loaded', this.rows.length, 'rows for grid', this.grid?.gridName);
+        console.log('[GridView] Rows data:', this.rows.map(r => ({ id: r.id, rowIndex: r.rowIndex, isActive: r.isActive })));
         this.rows.sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0));
         
         // Load cells for each row
-        this.loadCells();
+        if (this.rows.length > 0) {
+          this.loadCells();
+        } else {
+          console.log('[GridView] No rows found, initializing empty grid');
+          this.initializeGridData();
+          this.loading = false;
+        }
       },
-      error: () => {
+      error: (error) => {
+        console.error('[GridView] ❌ Error loading grid rows:', error);
         this.error = 'Error loading grid data';
         this.loading = false;
       }
@@ -933,7 +979,10 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Load cells for all rows
    */
   private loadCells(): void {
+    console.log('[GridView] loadCells called, rows count:', this.rows.length);
+    
     if (this.rows.length === 0) {
+      console.log('[GridView] No rows to load cells for');
       this.initializeGridData();
       this.loading = false;
       return;
@@ -943,10 +992,12 @@ export class GridViewComponent implements OnInit, OnChanges {
     const total = this.rows.length;
 
     this.rows.forEach((row) => {
-      if (row.id) {
+      console.log('[GridView] Loading cells for row:', { id: row.id, rowIndex: row.rowIndex });
+      if (row.id && row.id > 0) {
         this.gridService.getCellsByRow(row.id).subscribe({
           next: (response: ApiResponse<FormSubmissionGridCellDto[]>) => {
             const cells = response.data || [];
+            console.log('[GridView] ✅ Loaded', cells.length, 'cells for row', row.id);
             
             // Initialize row data
             if (!this.gridData[row.rowIndex]) {
@@ -957,15 +1008,18 @@ export class GridViewComponent implements OnInit, OnChanges {
             cells.forEach((cell: FormSubmissionGridCellDto) => {
               if (cell.columnId) {
                 this.gridData[row.rowIndex][cell.columnId] = cell.cellValue || '';
+                console.log('[GridView] Cell value:', { rowIndex: row.rowIndex, columnId: cell.columnId, value: cell.cellValue });
               }
             });
             
             loaded++;
             if (loaded === total) {
+              console.log('[GridView] All cells loaded, gridData:', this.gridData);
               this.loading = false;
             }
           },
-          error: () => {
+          error: (error) => {
+            console.error('[GridView] ❌ Error loading cells for row', row.id, error);
             loaded++;
             if (loaded === total) {
               this.loading = false;
@@ -973,6 +1027,7 @@ export class GridViewComponent implements OnInit, OnChanges {
           }
         });
       } else {
+        console.log('[GridView] Row has no ID, skipping cell load:', row);
         loaded++;
         if (loaded === total) {
           this.loading = false;
@@ -1598,6 +1653,27 @@ export class GridViewComponent implements OnInit, OnChanges {
       }
     }
     return true;
+  }
+
+  /**
+   * Check if grid has required columns
+   */
+  hasRequiredColumns(): boolean {
+    return this.columns.some(col => col.isRequired === true);
+  }
+
+  /**
+   * Check if grid requires minimum rows
+   */
+  requiresMinRows(): boolean {
+    return !!(this.grid?.minRows && this.grid.minRows > 0);
+  }
+
+  /**
+   * Get minimum rows required
+   */
+  getMinRows(): number {
+    return this.grid?.minRows || 0;
   }
 
   /**

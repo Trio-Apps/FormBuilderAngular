@@ -1,0 +1,104 @@
+<div class="my-submissions-container">
+  <p-toast></p-toast>
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="header-left">
+        <h1 class="page-title">
+          <i class="pi pi-file-edit"></i>
+          {{ translationService.getCurrentLanguage() === 'ar' ? 'طلباتي' : 'My Submissions' }}
+        </h1>
+        <p class="page-subtitle">
+          {{ translationService.getCurrentLanguage() === 'ar' 
+            ? 'عرض جميع الطلبات التي قمت بإنشائها' 
+            : 'View all submissions you have created' }}
+        </p>
+      </div>
+      <div class="header-right">
+        <button class="btn-refresh" (click)="refreshData()" [disabled]="loading">
+          <i class="pi pi-refresh" [class.pi-spin]="loading"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Section -->
+  <div class="search-section">
+    <div class="search-box">
+      <i class="pi pi-search"></i>
+      <input 
+        type="text" 
+        [(ngModel)]="searchTerm" 
+        (input)="onSearchChange()"
+        [placeholder]="translationService.getCurrentLanguage() === 'ar' ? 'بحث...' : 'Search...'"
+        class="search-input" />
+    </div>
+    <div class="results-count">
+      {{ filteredSubmissions.length }} 
+      {{ translationService.getCurrentLanguage() === 'ar' ? 'طلب' : 'submission(s)' }}
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading-state">
+    <i class="pi pi-spin pi-spinner"></i>
+    <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'جاري التحميل...' : 'Loading...' }}</p>
+  </div>
+
+  <!-- Empty State -->
+  <div *ngIf="!loading && filteredSubmissions.length === 0" class="empty-state">
+    <i class="pi pi-inbox"></i>
+    <h3>{{ translationService.getCurrentLanguage() === 'ar' ? 'لا توجد طلبات' : 'No Submissions' }}</h3>
+    <p>{{ translationService.getCurrentLanguage() === 'ar' 
+      ? 'لم تقم بإنشاء أي طلبات بعد.' 
+      : 'You have not created any submissions yet.' }}</p>
+  </div>
+
+  <!-- Submissions Table -->
+  <div *ngIf="!loading && filteredSubmissions.length > 0" class="submissions-table-container">
+    <table class="submissions-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>{{ translationService.getCurrentLanguage() === 'ar' ? 'رقم المستند' : 'Document Number' }}</th>
+          <th>{{ translationService.getCurrentLanguage() === 'ar' ? 'نوع المستند' : 'Document Type' }}</th>
+          <th>{{ translationService.getCurrentLanguage() === 'ar' ? 'اسم النموذج' : 'Form Name' }}</th>
+          <th>{{ translationService.getCurrentLanguage() === 'ar' ? 'تاريخ الإنشاء' : 'Created Date' }}</th>
+          <th>{{ translationService.getCurrentLanguage() === 'ar' ? 'الحالة' : 'Status' }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let submission of getPaginatedSubmissions(); let i = index">
+          <td>{{ first + i + 1 }}</td>
+          <td>
+            <span class="document-number">
+              <i class="pi pi-file"></i>
+              {{ submission.documentNumber || '-' }}
+            </span>
+          </td>
+          <td>{{ submission.documentTypeName || '-' }}</td>
+          <td>{{ submission.formName || '-' }}</td>
+          <td>{{ formatDate(submission.createdDate) }}</td>
+          <td>
+            <span class="status-badge" [ngClass]="getStatusClass(submission.status)">
+              {{ submission.status }}
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="pagination-container">
+      <p-paginator 
+        [rows]="rows" 
+        [totalRecords]="totalRecords" 
+        [first]="first"
+        [rowsPerPageOptions]="[5, 10, 20, 50]"
+        (onPageChange)="onPageChange($event)">
+      </p-paginator>
+    </div>
+  </div>
+</div>
+

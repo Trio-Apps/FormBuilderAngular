@@ -70,6 +70,15 @@ export const navItems: INavData[] = [
   },
   {
     title: true,
+    name: 'My Work'
+  },
+  {
+    name: 'My Submissions',
+    url: '/my-submissions',
+    iconComponent: { name: 'cil-file-edit' }
+  },
+  {
+    title: true,
     name: 'Projects'
   },
   
@@ -84,5 +93,4 @@ export const navItems: INavData[] = [
     iconComponent: { name: 'cil-lock-locked' }
   }
 ];
-  
-;
+

@@ -8,6 +8,9 @@ export interface ProjectDto {
   code: string;
   description: string;
   isActive: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedByUserId?: string;
 }
 
 export interface CreateProjectDto {

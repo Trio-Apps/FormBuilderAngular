@@ -74,8 +74,25 @@
     font-size: 1rem;
     color: #374151;
     
+    &:not(:last-child) {
+      margin-bottom: 0.75rem;
+    }
+    
     strong {
       color: #1f2937;
+      margin-left: 0.5rem;
+    }
+    
+    .document-number {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 1.1rem;
+      letter-spacing: 0.5px;
       margin-left: 0.5rem;
     }
   }

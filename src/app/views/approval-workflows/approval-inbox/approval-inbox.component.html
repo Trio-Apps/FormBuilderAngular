@@ -3,11 +3,16 @@
     <div class="nav-content">
       <div class="nav-left">
         <div class="nav-title-section">
-          <h1 class="page-title">Approval Inbox</h1>
-          <p class="page-subtitle">Pending approvals awaiting your action</p>
+          <!-- ✅ Different title for Admin vs User -->
+          <h1 class="page-title">{{ isAdmin ? 'Approval Inbox' : 'My Submissions' }}</h1>
+          <p class="page-subtitle">{{ isAdmin ? 'Pending approvals awaiting your action' : 'View your submitted requests' }}</p>
         </div>
       </div>
       <div class="nav-right">
+        <!-- ✅ Show role badge -->
+        <span class="role-badge" [class.admin-badge]="isAdmin" [class.user-badge]="!isAdmin">
+          {{ isAdmin ? 'Admin' : 'User' }}
+        </span>
         <button class="btn-icon" (click)="refreshData()" [disabled]="loading.inbox" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
@@ -18,9 +23,11 @@
   <div class="main-content">
     <div class="document-types-section">
       <div class="section-header">
-        <h3>Pending Approvals</h3>
+        <h3>{{ isAdmin ? 'Pending Approvals' : 'My Submissions' }}</h3>
         <div class="header-actions">
+          <!-- ✅ Only Admin can toggle between views -->
           <button 
+            *ngIf="isAdmin"
             pButton 
             [label]="showAllSubmissions ? 'Show Inbox Only' : 'Show All Submissions'" 
             [icon]="showAllSubmissions ? 'pi pi-filter' : 'pi pi-list'" 
@@ -71,12 +78,15 @@
                 <span class="badge badge-info">{{ submission.status }}</span>
               </td>
               <td>
-                <div class="action-buttons">
+                <!-- ✅ Only Admin can Approve/Reject -->
+                <div class="action-buttons" *ngIf="isAdmin">
                   <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" 
                     (click)="openActionModalForSubmission(submission, 'Approved')" pTooltip="Approve"></button>
                   <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" 
                     (click)="openActionModalForSubmission(submission, 'Rejected')" pTooltip="Reject"></button>
                 </div>
+                <!-- ✅ User can only view -->
+                <span *ngIf="!isAdmin" class="view-only-text">View Only</span>
               </td>
             </tr>
           </ng-template>
@@ -126,13 +136,14 @@
             <td>{{ item.submittedByUserName || item.submittedByUserId || '-' }}</td>
             <td>{{ formatDate(item.submittedDate) }}</td>
             <td>
-              <!-- Only show action buttons for items assigned to this user (stageId > 0) -->
-              <!-- Items with stageId = 0 are filtered out and won't appear here -->
-              <div class="action-buttons">
+              <!-- ✅ Only Admin can Approve/Reject/Return -->
+              <div class="action-buttons" *ngIf="isAdmin">
                 <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" (click)="openActionModal(item, 'Approved')" pTooltip="Approve"></button>
                 <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" (click)="openActionModal(item, 'Rejected')" pTooltip="Reject"></button>
                 <button pButton label="Return" icon="pi pi-reply" class="p-button-warning p-button-sm" (click)="openActionModal(item, 'Returned')" pTooltip="Return"></button>
               </div>
+              <!-- ✅ User can only view -->
+              <span *ngIf="!isAdmin" class="view-only-text">View Only</span>
             </td>
           </tr>
         </ng-template>

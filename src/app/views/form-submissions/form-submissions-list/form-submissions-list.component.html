@@ -422,6 +422,28 @@
       </form>
     </div>
 
+    <!-- Grid Section -->
+    <div class="form-display-section grids-section" *ngIf="submissionGrids && submissionGrids.length > 0">
+      <h3 class="section-title" style="margin-bottom: 16px; color: #333; font-size: 16px; font-weight: 600;">
+        <i class="pi pi-th-large" style="margin-right: 8px;"></i>
+        {{ translationService.getCurrentLanguage() === 'ar' ? 'الجداول' : 'Grids' }}
+      </h3>
+      
+      <div *ngFor="let grid of submissionGrids" class="grid-wrapper" style="margin-bottom: 24px;">
+        <app-grid-view
+          *ngIf="selectedSubmission?.id"
+          [gridId]="grid.id"
+          [submissionId]="selectedSubmission!.id!"
+          [isReadOnly]="isViewMode"
+          [gridTitle]="translationService.getCurrentLanguage() === 'ar' && grid.foreignGridName ? grid.foreignGridName : grid.gridName">
+        </app-grid-view>
+        <div *ngIf="!selectedSubmission?.id" class="loading-grid">
+          <i class="pi pi-spin pi-spinner"></i>
+          Loading grid...
+        </div>
+      </div>
+    </div>
+
     <div class="dialog-footer">
       <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeSubmissionModal()" [disabled]="loading.save"></button>
       <button type="submit" pButton 

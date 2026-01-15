@@ -14,8 +14,12 @@
         : 'Thank you! Your form has been submitted successfully and will be reviewed soon.' }}
     </p>
     
-    <div class="success-details" *ngIf="submissionId">
-      <p class="detail-item">
+    <div class="success-details" *ngIf="submissionId || documentNumber">
+      <p class="detail-item" *ngIf="documentNumber">
+        <strong>{{ translationService.getCurrentLanguage() === 'ar' ? 'رقم المستند:' : 'Document Number:' }}</strong>
+        <span class="document-number">{{ documentNumber }}</span>
+      </p>
+      <p class="detail-item" *ngIf="submissionId">
         <strong>{{ translationService.getCurrentLanguage() === 'ar' ? 'رقم الطلب:' : 'Submission ID:' }}</strong>
         {{ submissionId }}
       </p>

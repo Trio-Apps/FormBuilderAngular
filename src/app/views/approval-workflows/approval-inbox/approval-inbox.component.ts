@@ -49,6 +49,9 @@ export class ApprovalInboxComponent implements OnInit {
   currentUserId: string | null = null;
   currentUsername: string | null = null; // Store username separately in case backend needs it
   showAllSubmissions = false; // Toggle between inbox and all submissions
+  
+  // ✅ Role-based access control
+  isAdmin = false; // Only admins can Approve/Reject
 
   loading = {
     inbox: false,
@@ -91,6 +94,12 @@ export class ApprovalInboxComponent implements OnInit {
     } else {
       this.translationService.setLanguage('en');
     }
+
+    // ✅ Check if user is Admin
+    const userRole = this.storageService.getRole() || this.authService.role();
+    const adminRoles = ['administration', 'admin'];
+    this.isAdmin = userRole ? adminRoles.includes(userRole.toLowerCase()) : false;
+    console.log('[ApprovalInbox] 🔐 User Role:', userRole, '| Is Admin:', this.isAdmin);
 
     // Get current user ID - try multiple sources
     // First try: getUserId from storage
@@ -348,14 +357,28 @@ export class ApprovalInboxComponent implements OnInit {
   /**
    * Load all submissions with Submitted status (for display when inbox is empty)
    * تحميل جميع الـ Submissions بحالة Submitted (للعرض عندما لا توجد pending approvals)
+   * ✅ Non-admin users only see their own submissions
    */
   loadAllSubmittedSubmissions(): void {
     this.formSubmissionsService.getAllSubmissions().subscribe({
       next: (submissions: FormSubmissionDto[]) => {
         // Filter only Submitted status submissions
-        this.allSubmissions = (submissions || []).filter(sub => 
+        let filtered = (submissions || []).filter(sub => 
           sub.status === 'Submitted'
         );
+        
+        // ✅ Non-admin users can only see their own submissions
+        if (!this.isAdmin) {
+          filtered = filtered.filter(sub => {
+            const submittedBy = sub.submittedByUserId?.trim().toLowerCase();
+            const currentUser = this.currentUsername?.trim().toLowerCase();
+            const currentId = this.currentUserId?.trim().toLowerCase();
+            return submittedBy === currentUser || submittedBy === currentId;
+          });
+          console.log('[ApprovalInbox] 👤 User view - showing only own submissions:', filtered.length);
+        }
+        
+        this.allSubmissions = filtered;
         this.cdr.detectChanges();
       },
       error: (error) => {
@@ -370,6 +393,7 @@ export class ApprovalInboxComponent implements OnInit {
    * Load all submissions with Submitted status (for "Show All Submissions" toggle)
    * تحميل جميع الـ Submissions بحالة Submitted (للعرض فقط، لا للموافقة)
    * Note: This is only for viewing, not for approval. Only inbox items can be approved.
+   * ✅ Non-admin users only see their own submissions
    */
   loadAllSubmissions(): void {
     // Only load if user wants to see all submissions (not for approval)
@@ -381,9 +405,21 @@ export class ApprovalInboxComponent implements OnInit {
     this.formSubmissionsService.getAllSubmissions().subscribe({
       next: (submissions: FormSubmissionDto[]) => {
         // Filter only Submitted status submissions (for viewing only)
-        this.allSubmissions = (submissions || []).filter(sub => 
+        let filtered = (submissions || []).filter(sub => 
           sub.status === 'Submitted' || sub.status === 'Pending'
         );
+        
+        // ✅ Non-admin users can only see their own submissions
+        if (!this.isAdmin) {
+          filtered = filtered.filter(sub => {
+            const submittedBy = sub.submittedByUserId?.trim().toLowerCase();
+            const currentUser = this.currentUsername?.trim().toLowerCase();
+            const currentId = this.currentUserId?.trim().toLowerCase();
+            return submittedBy === currentUser || submittedBy === currentId;
+          });
+        }
+        
+        this.allSubmissions = filtered;
         this.loading.inbox = false;
         this.cdr.detectChanges();
       },

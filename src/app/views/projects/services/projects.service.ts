@@ -159,7 +159,12 @@ export class ProjectsService {
   }
 
   /**
-   * DELETE - Delete project
+   * DELETE - Delete project (uses Soft Delete automatically)
+   * DELETE /api/Projects/{id}
+   * 
+   * Description: يحذف Project باستخدام Soft Delete (IsDeleted = true)
+   * API Behavior: DeleteAsync uses soft delete automatically
+   * Response: 204 No Content
    */
   deleteProject(id: number): Observable<boolean> {
     return this.http.delete(`${this.baseUrl}/${id}`).pipe(
@@ -167,6 +172,100 @@ export class ProjectsService {
       catchError((error) => {
         console.error(`[ProjectsService] Error deleting project ${id}:`, error);
         throw error;
+      })
+    );
+  }
+
+  /**
+   * Soft delete project
+   * DELETE /api/Projects/{id} - DeleteAsync uses soft delete automatically
+   * 
+   * @param id Project ID
+   * @returns Observable<boolean>
+   */
+  softDelete(id: number): Observable<boolean> {
+    return this.deleteProject(id);
+  }
+
+  /**
+   * Get all deleted projects with pagination
+   * GET /api/Projects/deleted?page=1&pageSize=20
+   *
+   * Description: جلب جميع Projects المحذوفة مع pagination
+   * Response: PagedResult<ProjectDto>
+   */
+  getDeletedProjects(page: number = 1, pageSize: number = 100): Observable<PagedResult<ProjectDto>> {
+    const params = new HttpParams()
+      .set('page', page.toString())
+      .set('pageSize', pageSize.toString());
+
+    return this.http.get<any>(`${this.baseUrl}/deleted`, { params }).pipe(
+      map((response: any) => {
+        // Handle paged response
+        if (response && typeof response === 'object') {
+          const data = response.data || response.items || response.result || [];
+          return {
+            items: Array.isArray(data) ? data : [],
+            totalCount: response.totalCount || response.total || data.length || 0,
+            page: response.pageNumber || response.page || page,
+            pageSize: response.pageSize || pageSize,
+            totalPages: response.totalPages || Math.ceil((response.totalCount || data.length || 0) / pageSize),
+            hasPrevious: page > 1,
+            hasNext: page < (response.totalPages || 1)
+          };
+        }
+        return {
+          items: [],
+          totalCount: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+          hasPrevious: false,
+          hasNext: false
+        };
+      }),
+      catchError((error) => {
+        console.error('[ProjectsService] Error getting deleted projects:', error);
+        return of({
+          items: [],
+          totalCount: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+          hasPrevious: false,
+          hasNext: false
+        });
+      })
+    );
+  }
+
+  /**
+   * Restore soft-deleted project
+   * POST /api/Projects/{id}/restore
+   *
+   * Description: يستعيد Project محذوف (IsDeleted = false)
+   * Response: 200 OK (ProjectDto)
+   */
+  restore(id: number): Observable<ProjectDto> {
+    const projectId = Number(id);
+    if (isNaN(projectId) || projectId <= 0) {
+      throw new Error(`Invalid project ID: ${id}`);
+    }
+
+    console.log('[ProjectsService] Restoring project:', { id: projectId });
+
+    return this.http.post<any>(`${this.baseUrl}/${projectId}/restore`, {}).pipe(
+      map((response: any) => {
+        console.log('[ProjectsService] Project restored successfully');
+        if (response && typeof response === 'object' && !response.id) {
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        console.error('[ProjectsService] Error restoring project:', error);
+        const errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to restore project';
+        throw new Error(errorMessage);
       })
     );
   }

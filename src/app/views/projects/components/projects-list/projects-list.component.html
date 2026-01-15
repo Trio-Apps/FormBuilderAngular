@@ -60,6 +60,15 @@
           <div class="stat-label">Active Projects</div>
         </div>
       </div>
+      <div class="stat-card" style="--card-index: 2" *ngIf="deletedProjects.length > 0">
+        <div class="stat-icon stat-icon-danger">
+          <i class="pi pi-trash"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getDeletedProjectsCount() }}</div>
+          <div class="stat-label">Deleted Projects</div>
+        </div>
+      </div>
     </div>
 
     <!-- Projects Table Card -->
@@ -86,6 +95,17 @@
           <div class="results-count">
             {{ filteredProjects.length }} projects found
           </div>
+          <!-- Toggle Deleted Projects Button -->
+          <button
+            *ngIf="deletedProjects.length > 0"
+            class="btn-toggle-deleted"
+            [class.active]="showDeletedProjects"
+            (click)="toggleDeletedProjects()"
+            [title]="showDeletedProjects ? 'Hide Deleted Projects' : 'Show Deleted Projects'"
+          >
+            <i class="pi" [ngClass]="showDeletedProjects ? 'pi-eye-slash' : 'pi-eye'"></i>
+            <span>{{ showDeletedProjects ? 'Hide' : 'Show' }} Deleted ({{ deletedProjects.length }})</span>
+          </button>
         </div>
       </div>
 
@@ -186,6 +206,69 @@
           (onPageChange)="onPageChange($event)"
           [rowsPerPageOptions]="[5, 10, 20, 50]"
         ></p-paginator>
+
+        <!-- Deleted Projects Section -->
+        <div *ngIf="showDeletedProjects && deletedProjects.length > 0" class="deleted-projects-section">
+          <div class="section-divider">
+            <h4 class="section-title">
+              <i class="pi pi-trash text-danger"></i>
+              Deleted Projects ({{ deletedProjects.length }})
+            </h4>
+          </div>
+
+          <p-table [value]="deletedProjects" styleClass="p-datatable-sm projects-table deleted-table">
+            <ng-template pTemplate="header">
+              <tr>
+                <th class="icon-cell text-center" style="width: 70px; padding-left: 24px; padding-right: 16px;"></th>
+                <th class="name-cell text-left" style="min-width: 200px; padding-left: 16px; padding-right: 16px;">Name</th>
+                <th class="code-cell text-left" style="min-width: 120px; padding-left: 16px; padding-right: 16px;">Code</th>
+                <th class="description-cell text-left" style="min-width: 250px; padding-left: 16px; padding-right: 16px;">Description</th>
+                <th class="status-cell text-left" style="min-width: 100px; padding-left: 16px; padding-right: 16px;">Status</th>
+                <th class="actions-cell text-right" style="min-width: 150px; padding-left: 16px; padding-right: 32px;">Actions</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-project let-i="rowIndex">
+              <tr class="align-middle deleted-row">
+                <td class="icon-cell text-center" style="width: 70px; padding-left: 24px; padding-right: 16px;">
+                  <i class="pi pi-briefcase"></i>
+                </td>
+                <td class="name-cell text-left" style="min-width: 200px; padding-left: 16px; padding-right: 16px;">
+                  <div class="project-name">
+                    <strong>{{ project.name }}</strong>
+                  </div>
+                </td>
+                <td class="code-cell text-left" style="min-width: 120px; padding-left: 16px; padding-right: 16px;">
+                  <span class="badge-code">
+                    <i class="pi pi-hashtag" style="font-size: 10px; margin-right: 4px;"></i>
+                    {{ project.code }}
+                  </span>
+                </td>
+                <td class="description-cell text-left" style="min-width: 250px; padding-left: 16px; padding-right: 16px;">
+                  <span class="text-muted" [title]="project.description">
+                    {{ project.description || 'No description' }}
+                  </span>
+                </td>
+                <td class="status-cell text-left" style="min-width: 100px; padding-left: 16px; padding-right: 16px;">
+                  <span class="status-badge status-deleted">
+                    <i class="pi pi-times-circle"></i>
+                    Deleted
+                  </span>
+                </td>
+                <td class="actions-cell text-right" style="min-width: 150px; padding-left: 16px; padding-right: 32px;">
+                  <div class="actions-menu">
+                    <button
+                      class="action-btn action-restore"
+                      title="Restore"
+                      (click)="restoreProject(project)"
+                    >
+                      <i class="pi pi-refresh"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
       </div>
     </div>
   </div>

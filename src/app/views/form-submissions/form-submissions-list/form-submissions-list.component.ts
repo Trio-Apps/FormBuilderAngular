@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChildren, QueryList } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -25,6 +25,9 @@ import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { CheckboxModule } from 'primeng/checkbox';
 import { CalculatedFieldComponent } from '../../public-form/components/calculated-field.component';
+import { GridViewComponent } from '../../public-form/components/grid-view.component';
+import { GridService } from '../../FormBuilder/services/grid.service';
+import { FormGridDto } from '../../FormBuilder/form-builder/models/grid-dto.model';
 import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
 import { StorageService } from '../../../auth/storage.service';
@@ -51,7 +54,8 @@ import { environment } from '../../../environments/environment';
     TableModule,
     PaginatorModule,
     CheckboxModule,
-    CalculatedFieldComponent
+    CalculatedFieldComponent,
+    GridViewComponent
   ],
   templateUrl: './form-submissions-list.component.html',
   styleUrls: ['./form-submissions-list.component.scss'],
@@ -76,6 +80,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   addSubmissionForm!: FormGroup;
   fieldsForm!: FormGroup; // Dynamic form for fields
   fieldFiles: { [fieldId: number]: File[] } = {}; // Store files for file fields
+
+  // Grid support for View/Edit Submission
+  submissionGrids: FormGridDto[] = [];
+  @ViewChildren(GridViewComponent) gridComponents!: QueryList<GridViewComponent>;
 
   // Loading States
   loading = {
@@ -121,13 +129,14 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   searchTerm = '';
   statusFilter: string | null = null;
   showOnlyMySubmissions: boolean = true; // Filter to show only current user's submissions (enabled by default)
+  
+  // ✅ Role-based access control
+  isAdmin = false; // Only admins can Approve/Reject
+  currentUsername: string | null = null;
   statusOptions = [
     { label: 'All Statuses', value: null },
     { label: 'Draft', value: 'Draft' },
-    { label: 'Submitted', value: 'Submitted' },
-    { label: 'Approved', value: 'Approved' },
-    { label: 'Rejected', value: 'Rejected' },
-    { label: 'Pending Approval', value: 'Pending Approval' }
+    { label: 'Submitted', value: 'Submitted' }
   ];
 
   // Pagination
@@ -155,7 +164,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     public fileUploadService: FileUploadService,
     private storageService: StorageService,
-    private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService
+    private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService,
+    private gridService: GridService
   ) {
     // Initialize forms
     this.submissionForm = this.fb.group({
@@ -222,6 +232,13 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       this.translationService.setLanguage('en');
       localStorage.setItem('adminLanguagePreference', 'en');
     }
+
+    // ✅ Check if user is Admin
+    const userRole = this.storageService.getRole() || this.authService.role();
+    const adminRoles = ['administration', 'admin'];
+    this.isAdmin = userRole ? adminRoles.includes(userRole.toLowerCase()) : false;
+    this.currentUsername = this.storageService.getUsername() || this.authService.userName();
+    console.log('[FormSubmissionsList] 🔐 User Role:', userRole, '| Is Admin:', this.isAdmin);
 
     // Get documentTypeId from route
     this.routeSubscription = this.route.params.subscribe(params => {
@@ -341,14 +358,25 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   filterSubmissions(): void {
     let filtered = [...this.submissions];
 
-    // Filter by current user if "Show Only My Submissions" is enabled
-    if (this.showOnlyMySubmissions) {
-      const currentUserId = this.authService.userName();
+    // ✅ Always hide deleted submissions and only show Draft/Submitted
+    // Users should only see Draft and Submitted submissions
+    filtered = filtered.filter(sub => {
+      const status = (sub.status || '').toLowerCase();
+      // Only show Draft and Submitted submissions
+      return status === 'draft' || status === 'submitted';
+    });
+
+    // ✅ Non-admin users ALWAYS see only their own submissions
+    // Admin can toggle "Show Only My Submissions"
+    if (!this.isAdmin || this.showOnlyMySubmissions) {
+      const currentUserId = this.currentUsername || this.authService.userName();
       if (currentUserId) {
-        filtered = filtered.filter(sub => 
-          sub.submittedByUserId === currentUserId || 
-          sub.submittedByUserName === currentUserId
-        );
+        filtered = filtered.filter(sub => {
+          const submittedBy = sub.submittedByUserId?.trim().toLowerCase();
+          const submittedByName = sub.submittedByUserName?.trim().toLowerCase();
+          const currentUser = currentUserId.trim().toLowerCase();
+          return submittedBy === currentUser || submittedByName === currentUser;
+        });
       }
     }
 
@@ -364,7 +392,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       );
     }
 
-    // Filter by status
+    // Filter by status (only if user selected Draft or Submitted)
     if (this.statusFilter) {
       filtered = filtered.filter(sub => sub.status === this.statusFilter);
     }
@@ -408,6 +436,12 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     
     // Clear previous attachments to avoid showing wrong attachments
     this.fieldAttachments = {};
+    this.submissionGrids = []; // Clear previous grids
+    
+    // Load grids for this form
+    if (submission.formBuilderId) {
+      this.loadGridsForSubmission(submission.formBuilderId);
+    }
     
     // Initialize submission form with basic info
     this.submissionForm.patchValue({
@@ -1308,10 +1342,57 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     this.selectedSubmission = null;
     this.submissionFields = [];
     this.fieldAttachments = {}; // Clear attachments
+    this.submissionGrids = []; // Clear grids
     this.editSubmissionValuesForm = this.fb.group({}); // Reset form
     this.submissionForm.reset({
       documentNumber: '',
       status: 'Submitted' // Default status is Submitted
+    });
+  }
+
+  /**
+   * Load grids for submission view/edit
+   */
+  loadGridsForSubmission(formBuilderId: number): void {
+    // Load tabs first to get grids for each tab
+    this.tabsService.getTabs(formBuilderId).subscribe({
+      next: (tabs: FormTabDto[]) => {
+        const gridObservables = tabs.map(tab => 
+          this.gridService.getGridsByTabId(tab.id).pipe(
+            catchError(() => of({ data: [] }))
+          )
+        );
+
+        if (gridObservables.length === 0) {
+          this.submissionGrids = [];
+          return;
+        }
+
+        forkJoin(gridObservables).subscribe({
+          next: (responses: any[]) => {
+            const allGrids: FormGridDto[] = [];
+            responses.forEach(response => {
+              const grids = response.data || [];
+              // Filter for active grids only
+              const activeGrids = grids.filter((grid: FormGridDto) => grid.isActive);
+              allGrids.push(...activeGrids);
+            });
+            // Sort by gridOrder
+            allGrids.sort((a, b) => (a.gridOrder || 0) - (b.gridOrder || 0));
+            this.submissionGrids = allGrids;
+            console.log('[FormSubmissionsList] Loaded grids for view:', this.submissionGrids.length);
+            this.cdr.detectChanges();
+          },
+          error: (error) => {
+            console.error('[FormSubmissionsList] Error loading grids:', error);
+            this.submissionGrids = [];
+          }
+        });
+      },
+      error: (error) => {
+        console.error('[FormSubmissionsList] Error loading tabs for grids:', error);
+        this.submissionGrids = [];
+      }
     });
   }
 
@@ -3293,6 +3374,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    * Check if submission can be approved/rejected
    */
   canApproveReject(submission: FormSubmissionDto): boolean {
+    // ✅ Only Admin can approve/reject
+    if (!this.isAdmin) {
+      return false;
+    }
     // Allow approve/reject for Submitted and Pending Approval statuses
     // Also allow for Approved status if admin wants to change it
     return submission.status === 'Submitted' || 

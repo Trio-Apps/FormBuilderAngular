@@ -29,6 +29,8 @@ import { FormGridDto } from '../FormBuilder/form-builder/models/grid-dto.model';
 import { ApprovalWorkflowRuntimeService } from '../FormBuilder/services/approval-workflow-runtime.service';
 import { ApprovalStageService } from '../FormBuilder/services/approval-stage.service';
 import { ApprovalWorkflowService } from '../FormBuilder/services/approval-workflow.service';
+import { MessageService } from 'primeng/api';
+import { ToastModule } from 'primeng/toast';
 
 @Component({
   selector: 'app-form-view',
@@ -36,10 +38,12 @@ import { ApprovalWorkflowService } from '../FormBuilder/services/approval-workfl
   imports: [
     CommonModule,
     GridViewComponent,
-    CalculatedFieldComponent
+    CalculatedFieldComponent,
+    ToastModule
   ],
   templateUrl: './form-view.component.html',
-  styleUrls: ['./form-view.component.scss']
+  styleUrls: ['./form-view.component.scss'],
+  providers: [MessageService]
 })
 export class FormViewComponent implements OnInit {
   formCode!: string;
@@ -133,7 +137,8 @@ export class FormViewComponent implements OnInit {
     private documentApprovalHistoryService: DocumentApprovalHistoryService,
     private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService,
     private approvalStageService: ApprovalStageService,
-    private approvalWorkflowService: ApprovalWorkflowService
+    private approvalWorkflowService: ApprovalWorkflowService,
+    private messageService: MessageService
   ) { }
 
   ngOnInit(): void {
@@ -224,11 +229,35 @@ export class FormViewComponent implements OnInit {
     const gridComponents = this.gridViewComponents?.toArray() || [];
     const errors: string[] = [];
 
-    gridComponents.forEach((grid, index) => {
-      if (grid.hasGridData()) {
-        // Check if grid is valid
-        if (!grid.isGridValid()) {
+    gridComponents.forEach((grid) => {
           const gridName = grid.getGridTitle();
+      const hasData = grid.hasGridData();
+      const rowCount = grid.rows?.length || 0;
+
+      // Check if grid requires minimum rows
+      if (grid.requiresMinRows()) {
+        const minRows = grid.getMinRows();
+        if (rowCount < minRows) {
+          errors.push(`Grid "${gridName}" requires at least ${minRows} row(s). Currently has ${rowCount} row(s).`);
+          return;
+        }
+      }
+
+      // Check if grid has required columns
+      if (grid.hasRequiredColumns()) {
+        if (!hasData || rowCount === 0) {
+          // Grid has required columns but no data
+          errors.push(`Grid "${gridName}" has required columns. Please add data.`);
+          return;
+        }
+        // Check if data is valid (all required fields filled)
+        if (!grid.isGridValid()) {
+          errors.push(`Grid "${gridName}" has validation errors. Please fill all required fields.`);
+          return;
+        }
+      } else if (hasData) {
+        // Grid has data but no required columns - still validate if data exists
+        if (!grid.isGridValid()) {
           errors.push(`Grid "${gridName}" has validation errors. Please fill all required fields.`);
         }
       }
@@ -1860,6 +1889,9 @@ export class FormViewComponent implements OnInit {
    */
   async validateFormBeforeSubmit(): Promise<{ valid: boolean; errors: string[] }> {
     const errors: string[] = [];
+    
+    // Clear previous validation errors
+    this.fieldValidationErrors = {};
 
     // 1. Validate required fields and field-specific validations
     if (this.tabs) {
@@ -1871,7 +1903,7 @@ export class FormViewComponent implements OnInit {
           }
 
           const value = this.getFieldValue(field);
-          const fieldLabel = this.getFieldLabel(field);
+          const fieldCode = field.fieldCode || `field_${field.id}`;
 
           // Validate required fields
           if (this.isRequired(field)) {
@@ -1882,13 +1914,21 @@ export class FormViewComponent implements OnInit {
               const hasUploadedFiles = field.id && this.uploadedFiles[field.id] && this.uploadedFiles[field.id].length > 0;
               const hasPendingFiles = field.id && this.pendingFiles[field.id] && this.pendingFiles[field.id].length > 0;
               if (!hasUploadedFiles && !hasPendingFiles) {
-                errors.push(`Field "${fieldLabel}" is required`);
+                const errorMsg = this.translationService.getCurrentLanguage() === 'ar' 
+                  ? 'هذا الحقل مطلوب' 
+                  : 'This field is required';
+                this.fieldValidationErrors[fieldCode] = errorMsg;
+                errors.push(errorMsg);
               }
             } else {
               // For other field types, use standard validation
               if (value === undefined || value === null || value === '' || 
                   (Array.isArray(value) && value.length === 0)) {
-                errors.push(`Field "${fieldLabel}" is required`);
+                const errorMsg = this.translationService.getCurrentLanguage() === 'ar' 
+                  ? 'هذا الحقل مطلوب' 
+                  : 'This field is required';
+                this.fieldValidationErrors[fieldCode] = errorMsg;
+                errors.push(errorMsg);
               }
             }
           }
@@ -1899,7 +1939,8 @@ export class FormViewComponent implements OnInit {
               !(Array.isArray(value) && value.length === 0)) {
             const validationError = this.validateFieldValue(field, value);
             if (validationError) {
-              errors.push(`"${fieldLabel}": ${validationError}`);
+              this.fieldValidationErrors[fieldCode] = validationError;
+              errors.push(validationError);
             }
           }
         });
@@ -1929,6 +1970,41 @@ export class FormViewComponent implements OnInit {
       valid: errors.length === 0,
       errors
     };
+  }
+
+  /**
+   * Check if field has validation error
+   */
+  hasFieldError(field: FormFieldDto): boolean {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    return !!this.fieldValidationErrors[fieldCode];
+  }
+
+  /**
+   * Get field error message
+   */
+  getFieldError(field: FormFieldDto): string {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    return this.fieldValidationErrors[fieldCode] || '';
+  }
+
+  /**
+   * Clear field error on input change
+   */
+  clearFieldError(field: FormFieldDto): void {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    if (this.fieldValidationErrors[fieldCode]) {
+      delete this.fieldValidationErrors[fieldCode];
+    }
+  }
+
+  /**
+   * Check if field is password type
+   */
+  isPasswordField(field: FormFieldDto): boolean {
+    const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+    const fieldTypeNameLower = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
+    return fieldTypeNameLower.includes('password') || fieldCodeLower === 'password' || fieldCodeLower === 'pwd';
   }
 
   /**
@@ -3964,10 +4040,16 @@ export class FormViewComponent implements OnInit {
     }
 
     if (!this.form || !this.form.id) {
-      const errorMessage = this.translationService.getCurrentLanguage() === 'ar'
+      const currentLang = this.translationService.getCurrentLanguage();
+      const errorMessage = currentLang === 'ar'
         ? 'النموذج غير موجود'
         : 'Form not found';
-      alert(errorMessage);
+      this.messageService.add({
+        severity: 'error',
+        summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+        detail: errorMessage,
+        life: 7000
+      });
       return;
     }
 
@@ -3975,9 +4057,12 @@ export class FormViewComponent implements OnInit {
     const validation = await this.validateFormBeforeSubmit();
     
     if (!validation.valid) {
-      // Show validation errors
-      const errorMessage = validation.errors.join('\n');
-      alert(errorMessage);
+      // Errors are now shown inline under each field (fieldValidationErrors)
+      // Scroll to first error field
+      const firstErrorField = document.querySelector('.field-error-message');
+      if (firstErrorField) {
+        firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -4011,7 +4096,12 @@ export class FormViewComponent implements OnInit {
           const errorMsg = currentLang === 'ar'
             ? 'خطأ: لا يمكن إرسال النموذج بدون تحديد نوع المستند (documentTypeId). يرجى التأكد من أن النموذج مرتبط بنوع مستند صحيح.'
             : 'Error: Cannot submit form without document type (documentTypeId). Please ensure the form is linked to a valid document type.';
-          alert(errorMsg);
+          this.messageService.add({
+            severity: 'error',
+            summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+            detail: errorMsg,
+            life: 10000
+          });
           this.isSubmitting = false;
           return;
         }
@@ -4025,41 +4115,106 @@ export class FormViewComponent implements OnInit {
 
       // Step 1: Load document series first (same as FormSubmissionCreateComponent)
       let actualSeriesId: number | null = null;
+      let hasActiveSeries = false;
+      
       if (currentSubmissionId === 0) {
         try {
           // Load document series from API
           const documentSeries = await this.documentTypesService.getDocumentSeriesByDocumentTypeId(documentTypeId).toPromise();
           
+          console.log('[FormView] Loaded document series:', {
+            total: documentSeries?.length || 0,
+            documentTypeId,
+            projectId,
+            series: documentSeries?.map(s => ({ id: s.id, code: s.seriesCode, isActive: s.isActive, projectId: s.projectId }))
+          });
+          
           if (documentSeries && documentSeries.length > 0) {
             // Filter series by Project ID first to ensure backend validation passes
             const projectSeries = documentSeries.filter((s: DocumentSeries) => s.projectId === projectId);
+
+            console.log('[FormView] Series filtering:', {
+              totalSeries: documentSeries.length,
+              projectId,
+              projectSeriesCount: projectSeries.length,
+              allSeries: documentSeries.map(s => ({ 
+                id: s.id, 
+                code: s.seriesCode, 
+                isActive: s.isActive, 
+                isActiveType: typeof s.isActive,
+                projectId: s.projectId 
+              }))
+            });
 
             // Use project-specific series if available, otherwise fallback to all info
             const availableSeries = projectSeries.length > 0 ? projectSeries : documentSeries;
 
             // First priority: Use active series
-            const activeSeries = availableSeries.filter((s: DocumentSeries) => s.isActive);
+            // Check isActive in multiple ways to handle different response formats
+            const activeSeries = availableSeries.filter((s: DocumentSeries) => {
+              // Handle different formats: boolean true, number 1, string "true", or undefined/null (treat as false)
+              const isActiveValue: any = s.isActive;
+              let isActive = false;
+              
+              if (isActiveValue === true) {
+                isActive = true;
+              } else if (typeof isActiveValue === 'number' && isActiveValue === 1) {
+                isActive = true;
+              } else if (typeof isActiveValue === 'string') {
+                isActive = isActiveValue.toLowerCase() === 'true' || isActiveValue === '1';
+              } else if (isActiveValue === undefined || isActiveValue === null) {
+                // If isActive is not provided, check if series is not deleted (assume active if not deleted)
+                isActive = s.isDeleted !== true;
+              }
+              
+              console.log('[FormView] Checking series:', { 
+                id: s.id, 
+                code: s.seriesCode, 
+                isActive: s.isActive, 
+                isActiveType: typeof s.isActive,
+                isDeleted: s.isDeleted,
+                result: isActive 
+              });
+              return isActive;
+            });
+            
+            console.log('[FormView] Active series found:', {
+              total: activeSeries.length,
+              active: activeSeries.map(s => ({ 
+                id: s.id, 
+                code: s.seriesCode, 
+                isActive: s.isActive,
+                projectId: s.projectId 
+              }))
+            });
             
             if (activeSeries.length > 0) {
+              hasActiveSeries = true;
               // Use default series or first available active series
               const defaultSeries = activeSeries.find((s: DocumentSeries) => s.isDefault) || activeSeries[0];
               if (defaultSeries && defaultSeries.id) {
                 actualSeriesId = defaultSeries.id;
+                console.log('[FormView] Selected active series:', { id: actualSeriesId, code: defaultSeries.seriesCode });
               }
             } else {
-              // Second priority: Use any series (even if inactive) - better than default 1
-              // Prefer one from the same project
-              const bestMatch = availableSeries.find((s: DocumentSeries) => s.id) || availableSeries[0];
-              if (bestMatch && bestMatch.id) {
-                actualSeriesId = bestMatch.id;
+              // Check if there are any series at all (even inactive)
+              if (availableSeries.length > 0) {
+                console.warn('[FormView] No active series found, but inactive series exist:', availableSeries.length);
+                // Don't use inactive series - backend will reject it
+                hasActiveSeries = false;
+              } else {
+                console.warn('[FormView] No series found for documentTypeId:', documentTypeId, 'projectId:', projectId);
+                hasActiveSeries = false;
               }
             }
           } else {
-            // API returned empty array - use fallback series ID
-            // Backend will validate if the series exists
-            actualSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
+            console.warn('[FormView] API returned empty array for documentTypeId:', documentTypeId);
+            hasActiveSeries = false;
           }
         } catch (seriesError: any) {
+          console.error('[FormView] Error loading document series:', seriesError);
+          hasActiveSeries = false;
+          
           // If API call failed, try to verify seriesId: 1 exists by calling getDocumentSeriesById
           // This is a workaround if the list endpoint requires auth but the get by ID doesn't
           if (!actualSeriesId || actualSeriesId === 0) {
@@ -4069,29 +4224,56 @@ export class FormViewComponent implements OnInit {
               // Try to get the series by ID to verify it exists
               const verifiedSeries = await this.documentTypesService.getDocumentSeriesById(fallbackSeriesId).toPromise();
               if (verifiedSeries && verifiedSeries.id) {
-                // Verify it matches our documentTypeId and projectId
-                if (verifiedSeries.documentTypeId === documentTypeId) {
+                // Verify it matches our documentTypeId and projectId and is active
+                if (verifiedSeries.documentTypeId === documentTypeId && verifiedSeries.isActive) {
                   actualSeriesId = verifiedSeries.id;
+                  hasActiveSeries = true;
+                  console.log('[FormView] Verified series is active:', { id: actualSeriesId, code: verifiedSeries.seriesCode });
                 } else {
-                  actualSeriesId = fallbackSeriesId; // Use it anyway, backend will validate
+                  console.warn('[FormView] Verified series is not active or doesn\'t match:', {
+                    id: verifiedSeries.id,
+                    isActive: verifiedSeries.isActive,
+                    documentTypeId: verifiedSeries.documentTypeId,
+                    expectedDocumentTypeId: documentTypeId
+                  });
+                  hasActiveSeries = false;
                 }
               } else {
-                actualSeriesId = fallbackSeriesId;
+                hasActiveSeries = false;
               }
             } catch (verifyError: any) {
-              // If verification also fails, use the fallback
-              actualSeriesId = fallbackSeriesId;
+              console.error('[FormView] Error verifying series:', verifyError);
+              hasActiveSeries = false;
             }
           }
         }
       } else {
         // If submission already exists, use existing seriesId from query params or default to 1
         actualSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
+        // Try to verify it's active
+        try {
+          const verifiedSeries = await this.documentTypesService.getDocumentSeriesById(actualSeriesId).toPromise();
+          hasActiveSeries = verifiedSeries?.isActive === true;
+        } catch {
+          hasActiveSeries = false;
+        }
       }
       
-      // Ensure we have a valid seriesId (use default 1 if still invalid)
-      if (!actualSeriesId || actualSeriesId <= 0) {
-        actualSeriesId = 1; // Default series ID
+      // Check if we have an active series before proceeding
+      if (!hasActiveSeries || !actualSeriesId || actualSeriesId <= 0) {
+        const currentLang = this.translationService.getCurrentLanguage();
+        const message = currentLang === 'ar'
+          ? `لا توجد سلسلة مستندات نشطة لنوع المستند "${documentTypeId}" والمشروع "${projectId}". يرجى تكوين سلسلة مستندات نشطة في إعدادات الإدارة.`
+          : `No active Document Series found for Document Type "${documentTypeId}" and Project ID "${projectId}". Please configure an active Document Series in Admin Setup.`;
+        
+        this.messageService.add({
+          severity: 'error',
+          summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+          detail: message,
+          life: 15000
+        });
+        this.isSubmitting = false;
+        return;
       }
       
       // Validate that we have a seriesId before proceeding
@@ -4116,11 +4298,12 @@ export class FormViewComponent implements OnInit {
             formBuilderId: this.form.id,
             documentTypeId,
             projectId,
+            seriesId: actualSeriesId,
             submittedByUserId: finalUserId
           });
           
           submission = await new Promise<FormSubmissionDto>((resolve, reject) => {
-            this.formSubmissionsService.createDraft(this.form!.id!, projectId, finalUserId).subscribe({
+            this.formSubmissionsService.createDraft(this.form!.id!, projectId, finalUserId, actualSeriesId || undefined).subscribe({
               next: (result) => resolve(result),
               error: (err) => reject(err)
             });
@@ -4139,10 +4322,85 @@ export class FormViewComponent implements OnInit {
         } catch (createError: any) {
           console.error('[FormView] Error creating draft submission:', createError);
           const currentLang = this.translationService.getCurrentLanguage();
-          const errorMsg = createError?.error?.message || createError?.errorMessage || createError?.message || 'Failed to create draft submission';
-          alert(currentLang === 'ar' 
-            ? `فشل إنشاء draft: ${errorMsg}`
-            : `Failed to create draft: ${errorMsg}`);
+          
+          // Extract error information
+          let errorMessage = '';
+          let errorDetails: string[] = [];
+          
+          if (createError?.error) {
+            if (typeof createError.error === 'string') {
+              errorMessage = createError.error;
+            } else if (createError.error.message) {
+              errorMessage = createError.error.message;
+            } else if (createError.error.title) {
+              errorMessage = createError.error.title;
+            } else if (createError.error.detail) {
+              errorMessage = createError.error.detail;
+            }
+            
+            // Extract validation errors if available
+            if (createError.error.errors) {
+              if (typeof createError.error.errors === 'object') {
+                const errors: { [key: string]: string[] } = createError.error.errors;
+                for (const [field, messages] of Object.entries(errors)) {
+                  if (Array.isArray(messages)) {
+                    messages.forEach(msg => errorDetails.push(msg));
+                  } else {
+                    errorDetails.push(String(messages));
+                  }
+                }
+              } else if (Array.isArray(createError.error.errors)) {
+                errorDetails = createError.error.errors;
+              }
+            }
+          }
+          
+          // Fallback to error message if no details found
+          if (!errorMessage) {
+            errorMessage = createError?.error?.message || createError?.errorMessage || createError?.message || 'Failed to create draft submission';
+          }
+          
+          // Check if it's a document series error
+          const errorLower = (errorMessage + ' ' + errorDetails.join(' ')).toLowerCase();
+          const isDocumentSeriesError = errorLower.includes('document series') ||
+                                       errorLower.includes('no active') ||
+                                       errorLower.includes('series') ||
+                                       errorLower.includes('سلسلة');
+          
+          if (isDocumentSeriesError) {
+            // Show document series error message
+            const message = currentLang === 'ar'
+              ? 'لا توجد سلسلة مستندات نشطة. يرجى تكوين سلسلة المستندات في إعدادات الإدارة.'
+              : 'No active Document Series found. Please configure Document Series in Admin Setup.';
+            
+            this.messageService.add({
+              severity: 'error',
+              summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+              detail: message,
+              life: 10000
+            });
+          } else if (errorDetails.length > 0) {
+            // Show validation errors from backend
+            this.messageService.add({
+              severity: 'error',
+              summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+              detail: errorDetails[0] + (errorDetails.length > 1 ? ` (+${errorDetails.length - 1} ${currentLang === 'ar' ? 'أكثر' : 'more'})` : ''),
+              life: 10000
+            });
+          } else {
+            // Show error message from backend
+            const message = currentLang === 'ar'
+              ? `فشل إنشاء المسودة: ${errorMessage}`
+              : `Failed to create draft: ${errorMessage}`;
+            
+            this.messageService.add({
+              severity: 'error',
+              summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+              detail: message,
+              life: 10000
+            });
+          }
+          
           this.isSubmitting = false;
           return;
         }
@@ -4343,9 +4601,14 @@ export class FormViewComponent implements OnInit {
       } catch (saveError: any) {
         console.error('[FormView] Failed to save data:', saveError);
         const currentLang = this.translationService.getCurrentLanguage();
-        alert(currentLang === 'ar'
-          ? 'فشل حفظ البيانات. يرجى المحاولة مرة أخرى.'
-          : 'Failed to save data. Please try again.');
+        this.messageService.add({
+          severity: 'error',
+          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+          detail: currentLang === 'ar'
+            ? 'فشل حفظ البيانات. يرجى المحاولة مرة أخرى.'
+            : 'Failed to save data. Please try again.',
+          life: 7000
+        });
         this.isSaving = false;
         this.isSubmitting = false;
         return;
@@ -4356,7 +4619,7 @@ export class FormViewComponent implements OnInit {
       // Step 5: Final submit using submit endpoint
       console.log('[FormView] Performing final submit...');
       try {
-        const submittedSubmission = await new Promise<FormSubmissionDto>((resolve, reject) => {
+        let submittedSubmission = await new Promise<FormSubmissionDto>((resolve, reject) => {
           this.formSubmissionsService.submitSubmission({
             submissionId: currentSubmissionId,
             submittedByUserId: finalUserId
@@ -4376,6 +4639,34 @@ export class FormViewComponent implements OnInit {
         this.currentSubmission = submittedSubmission;
 
         console.log('[FormView] Initial status from backend:', submittedSubmission.status);
+        console.log('[FormView] Document Number from submit response:', submittedSubmission.documentNumber);
+
+        // If documentNumber is not in the submit response, fetch the submission to get it
+        // Document Number is generated at submission time and stored in the database
+        if (!submittedSubmission.documentNumber) {
+          console.log('[FormView] Document Number not in submit response, fetching submission to get it...');
+          try {
+            const fetchedSubmission = await new Promise<any>((resolve, reject) => {
+              this.formSubmissionsService.getSubmissionById(currentSubmissionId).subscribe({
+                next: (result) => {
+                  console.log('[FormView] ✅ Fetched submission with Document Number:', result?.documentNumber);
+                  resolve(result);
+                },
+                error: (err) => {
+                  console.warn('[FormView] Failed to fetch submission for document number:', err);
+                  resolve(null); // Don't fail the whole flow
+                }
+              });
+            });
+            
+            if (fetchedSubmission && fetchedSubmission.documentNumber) {
+              submittedSubmission.documentNumber = fetchedSubmission.documentNumber;
+              console.log('[FormView] ✅ Got Document Number:', submittedSubmission.documentNumber);
+            }
+          } catch (fetchError) {
+            console.warn('[FormView] Could not fetch document number:', fetchError);
+          }
+        }
 
         // Always update status to "Submitted" regardless of backend response
         // This ensures consistency - user wants status to always be "Submitted" after submission
@@ -4399,6 +4690,7 @@ export class FormViewComponent implements OnInit {
         console.log('[FormView] Final submission status:', submittedSubmission.status);
         console.log('[FormView] Submission ID:', currentSubmissionId);
         console.log('[FormView] Document Type ID from submission:', submittedSubmission.documentTypeId);
+        console.log('[FormView] Final Document Number:', submittedSubmission.documentNumber);
 
         // Always set stageId (status will be Submitted after update above)
         // We'll handle both cases: if status is already Submitted or if we just updated it
@@ -4465,6 +4757,11 @@ export class FormViewComponent implements OnInit {
           queryParams.documentTypeId = finalDocTypeId;
         }
         
+        // Add documentNumber if available
+        if (submittedSubmission.documentNumber) {
+          queryParams.documentNumber = submittedSubmission.documentNumber;
+        }
+        
         // Navigate to success page
         this.router.navigate(['/forms/submission/success'], { queryParams });
       } catch (submitError: any) {
@@ -4472,17 +4769,28 @@ export class FormViewComponent implements OnInit {
         const currentLang = this.translationService.getCurrentLanguage();
         const errorMsg = submitError?.message ||
           (currentLang === 'ar' ? 'فشل في إرسال الطلب' : 'Failed to submit request');
-        alert(errorMsg);
+        this.messageService.add({
+          severity: 'error',
+          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+          detail: errorMsg,
+          life: 7000
+        });
         this.isSubmitting = false;
         this.isSaving = false;
         return;
       }
     } catch (error) {
       console.error('[FormView] Error submitting form:', error);
-      const errorMessage = this.translationService.getCurrentLanguage() === 'ar'
+      const currentLang = this.translationService.getCurrentLanguage();
+      const errorMessage = currentLang === 'ar'
         ? 'حدث خطأ أثناء إرسال النموذج. يرجى المحاولة مرة أخرى.'
         : 'An error occurred while submitting the form. Please try again.';
-      alert(errorMessage);
+      this.messageService.add({
+        severity: 'error',
+        summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+        detail: errorMessage,
+        life: 7000
+      });
       this.isSubmitting = false;
       this.isSaving = false;
     } finally {

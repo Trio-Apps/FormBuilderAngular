@@ -60,6 +60,14 @@
           <!-- Form Header -->
           <div class="form-header-section" *ngIf="selectedFormId">
             <h2 class="form-title">{{ getFormName(selectedFormId) }}</h2>
+            
+            <!-- Document Number Badge -->
+            <div class="document-number-badge" *ngIf="currentSubmission?.documentNumber">
+              <span class="document-number-label">
+                {{ translationService.getCurrentLanguage() === 'ar' ? 'رقم المستند:' : 'Document Number:' }}
+              </span>
+              <span class="document-number-value">{{ currentSubmission?.documentNumber }}</span>
+            </div>
           </div>
 
           <!-- Loading Fields State -->
@@ -91,14 +99,27 @@
                   <ng-container *ngIf="getFieldId(field) || (isFileField(field) && getFileFieldId(field))">
                     <ng-container [ngSwitch]="getFieldType(field)">
                     
-                    <!-- Text Input -->
+                    <!-- Text Input (check if password field) -->
+                    <ng-container *ngSwitchCase="'text'">
                     <input
-                      *ngSwitchCase="'text'"
+                        *ngIf="!isPasswordField(field)"
                       type="text"
                       [id]="getFieldId(field)!"
                       [formControlName]="getFieldId(field)!"
                       class="form-input"
-                      [placeholder]="getFieldPlaceholder(field)">
+                        [class.has-error]="hasFieldError(field)"
+                        [placeholder]="getFieldPlaceholder(field)"
+                        (input)="clearFieldError(field)">
+                      <input
+                        *ngIf="isPasswordField(field)"
+                        type="password"
+                        [id]="getFieldId(field)!"
+                        [formControlName]="getFieldId(field)!"
+                        class="form-input"
+                        [class.has-error]="hasFieldError(field)"
+                        [placeholder]="getFieldPlaceholder(field)"
+                        (input)="clearFieldError(field)">
+                    </ng-container>
 
                     <!-- Email Input -->
                     <input
@@ -107,7 +128,9 @@
                       [id]="getFieldId(field)!"
                       [formControlName]="getFieldId(field)!"
                       class="form-input"
-                      [placeholder]="getFieldPlaceholder(field)">
+                      [class.has-error]="hasFieldError(field)"
+                      [placeholder]="getFieldPlaceholder(field)"
+                      (input)="clearFieldError(field)">
 
                     <!-- Number Input -->
                     <p-inputNumber
@@ -117,7 +140,7 @@
                       [showButtons]="false"
                       [useGrouping]="false"
                       [placeholder]="getFieldPlaceholder(field)"
-                      styleClass="form-input-number">
+                      [styleClass]="hasFieldError(field) ? 'form-input-number has-error' : 'form-input-number'">
                     </p-inputNumber>
 
                     <!-- Calculated Field -->
@@ -133,7 +156,9 @@
                       type="date"
                       [id]="getFieldId(field)!"
                       [formControlName]="getFieldId(field)!"
-                      class="form-input">
+                      class="form-input"
+                      [class.has-error]="hasFieldError(field)"
+                      (change)="clearFieldError(field)">
 
                     <!-- Textarea -->
                     <textarea
@@ -141,19 +166,24 @@
                       [id]="getFieldId(field)!"
                       [formControlName]="getFieldId(field)!"
                       class="form-textarea"
+                      [class.has-error]="hasFieldError(field)"
                       [rows]="4"
-                      [placeholder]="getFieldPlaceholder(field)">
+                      [placeholder]="getFieldPlaceholder(field)"
+                      (input)="clearFieldError(field)">
                     </textarea>
 
                     <!-- Select / Dropdown (Single or Multiple) -->
                     <div *ngSwitchCase="'select'" class="select-wrapper" 
-                      [class.multiple-select]="field.fieldType?.allowMultiple">
+                      [class.multiple-select]="field.fieldType?.allowMultiple"
+                      [class.has-error]="hasFieldError(field)">
                       <select
                         [id]="getFieldId(field)!"
                         [formControlName]="getFieldId(field)!"
                         [multiple]="field.fieldType?.allowMultiple || false"
                         [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
-                        class="form-select">
+                        class="form-select"
+                        [class.has-error]="hasFieldError(field)"
+                        (change)="clearFieldError(field)">
                         <option [ngValue]="''" [disabled]="isRequired(field) && !(field.fieldType?.allowMultiple)"
                           *ngIf="!(field.fieldType?.allowMultiple)">
                           {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') : getFieldPlaceholder(field) }}
@@ -174,7 +204,7 @@
                     </div>
 
                     <!-- Radio Buttons -->
-                    <div *ngSwitchCase="'radio'" class="radio-group">
+                    <div *ngSwitchCase="'radio'" class="radio-group" [class.has-error]="hasFieldError(field)">
                       <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                         {{ translationService.translate('formView.loading') || 'Loading options...' }}
                       </div>
@@ -186,7 +216,7 @@
                           [value]="opt.optionValue"
                           [formControlName]="getFieldId(field)!"
                           [checked]="isOptionSelected(field, opt.optionValue)"
-                          (change)="onRadioChange(field, opt.optionValue, $event)">
+                          (change)="onRadioChange(field, opt.optionValue, $event); clearFieldError(field)">
                         <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
                           {{ getOptionText(opt) }}
                         </label>
@@ -197,7 +227,7 @@
                     </div>
 
                     <!-- Checkbox (Multiple Selection) -->
-                    <div *ngSwitchCase="'checkbox'" class="checkbox-group">
+                    <div *ngSwitchCase="'checkbox'" class="checkbox-group" [class.has-error]="hasFieldError(field)">
                       <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                         {{ translationService.translate('formView.loading') || 'Loading options...' }}
                       </div>
@@ -208,7 +238,7 @@
                           [name]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
                           [value]="opt.optionValue"
                           [checked]="isCheckboxSelected(field, opt.optionValue)"
-                          (change)="onCheckboxChange(field, opt.optionValue, $event)">
+                          (change)="onCheckboxChange(field, opt.optionValue, $event); clearFieldError(field)">
                         <label [for]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)" class="checkbox-label">
                           {{ getOptionText(opt) }}
                         </label>
@@ -243,14 +273,20 @@
                     </div>
 
                     <!-- Grid (Line Items Grid) -->
+                    <ng-container *ngSwitchCase="'grid'">
                     <app-grid-view 
-                      *ngSwitchCase="'grid'" 
+                        *ngIf="submissionId"
                       [field]="field"
                       [gridId]="field.gridId"
-                      [submissionId]="submissionId || 0"
+                        [submissionId]="submissionId"
                       [formBuilderId]="documentType?.formBuilderId || selectedFormId || 0"
-                      [isReadOnly]="!isFieldEditable(field) || !isDraftMode">
+                        [isReadOnly]="!isFieldEditable(field)">
                     </app-grid-view>
+                      <div *ngIf="!submissionId" class="grid-placeholder">
+                        <i class="pi pi-table" style="font-size: 2rem; color: #ccc;"></i>
+                        <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'يرجى حفظ المسودة أولاً' : 'Please save as draft first' }}</p>
+                      </div>
+                    </ng-container>
 
                     <!-- File Upload Field -->
                     <ng-container *ngSwitchCase="'file'">
@@ -334,27 +370,11 @@
                   </ng-container>
                 </div>
 
-                <!-- Validation Messages -->
-                <div *ngIf="getFieldId(field) && fieldsForm.get(getFieldId(field)!)?.touched && fieldsForm.get(getFieldId(field)!)?.errors" class="field-error">
-                  <ng-container [ngSwitch]="true">
-                    <!-- Required -->
-                    <span *ngSwitchCase="fieldsForm.get(getFieldId(field)!)?.errors?.['required']">
-                      This field is required
+                <!-- Validation Messages - Custom validation errors (email, phone, password, required) -->
+                <span *ngIf="hasFieldError(field)" class="field-error-message">
+                  <i class="pi pi-exclamation-circle"></i>
+                  {{ getFieldError(field) }}
                     </span>
-                    <!-- Email -->
-                    <span *ngSwitchCase="fieldsForm.get(getFieldId(field)!)?.errors?.['email']">
-                      Please enter a valid email address
-                    </span>
-                    <!-- MinLength (e.g. password) -->
-                    <span *ngSwitchCase="fieldsForm.get(getFieldId(field)!)?.errors?.['minlength']">
-                      Password must be at least {{ fieldsForm.get(getFieldId(field)!)?.errors?.['minlength']?.requiredLength }} characters
-                    </span>
-                    <!-- Pattern (e.g. phone) -->
-                    <span *ngSwitchCase="fieldsForm.get(getFieldId(field)!)?.errors?.['pattern']">
-                      Please enter a valid value
-                    </span>
-                  </ng-container>
-                </div>
                 </div>
               </ng-container>
             </form>
@@ -371,12 +391,17 @@
               <!-- Grid View -->
               <div class="field-input-wrapper">
                 <app-grid-view 
+                  *ngIf="submissionId"
                   [gridId]="grid.id"
                   [gridTitle]="translationService.getCurrentLanguage() === 'ar' && grid.foreignGridName ? grid.foreignGridName : grid.gridName"
-                  [submissionId]="submissionId || 0"
+                  [submissionId]="submissionId"
                   [formBuilderId]="documentType?.formBuilderId || selectedFormId || 0"
-                  [isReadOnly]="!isDraftMode">
+                  [isReadOnly]="false">
                 </app-grid-view>
+                <div *ngIf="!submissionId" class="grid-placeholder">
+                  <i class="pi pi-table" style="font-size: 2rem; color: #ccc;"></i>
+                  <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'يرجى حفظ المسودة أولاً لإضافة بيانات الجدول' : 'Please save as draft first to add grid data' }}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -443,11 +468,11 @@
             </span>
           </button>
 
-          <!-- Final Submit button - only enabled when draft exists and not currently submitting -->
+          <!-- Final Submit button - enabled when draft exists or in edit mode, and forms are valid -->
           <button
             type="submit"
             class="btn-submit"
-            [disabled]="!hasDraft || !isDraftMode || submissionForm.invalid || fieldsForm.invalid || loading.create || isSubmitting">
+            [disabled]="!hasDraft || submissionForm.invalid || fieldsForm.invalid || loading.create || isSubmitting">
             <span *ngIf="!isSubmitting">
               <i class="pi pi-send"></i> Submit
             </span>

@@ -95,12 +95,20 @@ export const routes: Routes = [
         canActivate: [authGuard]
       },
 
-      // ===== Approval Inbox =====
+      // ===== My Submissions ===== (User views their own submissions)
+      {
+        path: 'my-submissions',
+        loadComponent: () => import('./views/my-submissions/my-submissions.component')
+          .then(m => m.MySubmissionsComponent),
+        canActivate: [authGuard]  // ✅ أي مستخدم مسجل يستطيع رؤية طلباته
+      },
+
+      // ===== Approval Inbox / My Submissions =====
       {
         path: 'approval-inbox',
         loadComponent: () => import('./views/approval-workflows/approval-inbox/approval-inbox.component')
           .then(m => m.ApprovalInboxComponent),
-        canActivate: [authGuard]
+        canActivate: [authGuard]  // ✅ Admin يوافق/يرفض، User يشاهد طلباته فقط
       },
 
       // ===== Approvals History ===== (Admin only)

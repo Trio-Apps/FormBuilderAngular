@@ -113,6 +113,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   // Track calculation errors for each field
   calculationErrors: { [fieldId: number]: string } = {};
 
+  // Track validation errors for each field (for inline validation display)
+  fieldValidationErrors: { [fieldCode: string]: string } = {};
+
   // Track which fields depend on context for reloading options
   private contextDependencies: { [fieldId: number]: string[] } = {}; // fieldId -> array of context field codes
 
@@ -526,14 +529,34 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // For now, we'll use a default or get it from route params
     const projectId = 1; // TODO: Get actual project ID
 
+    // Get seriesId from documentSeries (use default or first active series)
+    let seriesId: number | undefined;
+    if (this.documentSeries && this.documentSeries.length > 0) {
+      const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
+      if (defaultSeries && defaultSeries.id) {
+        seriesId = defaultSeries.id;
+      }
+    }
+
+    if (!seriesId) {
+      console.warn('[FormSubmissionCreate] No document series available, cannot create draft');
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No document series available. Please configure Document Series first.'
+      });
+      return;
+    }
+
     console.log('[FormSubmissionCreate] Creating draft submission:', {
       formBuilderId: this.selectedFormId,
       projectId,
+      seriesId,
       submittedByUserId: currentUserId
     });
 
     this.loading.create = true;
-    this.formSubmissionsService.createDraft(this.selectedFormId, projectId, currentUserId).subscribe({
+    this.formSubmissionsService.createDraft(this.selectedFormId, projectId, currentUserId, seriesId).subscribe({
       next: (draftSubmission) => {
         console.log('[FormSubmissionCreate] Draft created successfully:', draftSubmission);
         this.submissionId = draftSubmission.id!;
@@ -1769,6 +1792,227 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     return field.isVisible ?? true;
   }
 
+  /**
+   * Check if field is password type
+   */
+  isPasswordField(field: FormFieldDto): boolean {
+    const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+    const fieldTypeNameLower = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
+    return fieldTypeNameLower.includes('password') || fieldCodeLower === 'password' || fieldCodeLower === 'pwd';
+  }
+
+  /**
+   * Check if field has validation error (for adding .has-error class)
+   */
+  hasFieldError(field: FormFieldDto): boolean {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    // Check custom validation errors first
+    if (this.fieldValidationErrors[fieldCode]) {
+      return true;
+    }
+    // Also check form control errors
+    const fieldId = this.getFieldId(field);
+    if (!fieldId) return false;
+    const control = this.fieldsForm.get(fieldId);
+    return !!(control?.touched && control?.errors);
+  }
+
+  /**
+   * Get field error message
+   */
+  getFieldError(field: FormFieldDto): string {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    // Return custom validation error if exists
+    if (this.fieldValidationErrors[fieldCode]) {
+      return this.fieldValidationErrors[fieldCode];
+    }
+    // Otherwise return form control error
+    const fieldId = this.getFieldId(field);
+    if (!fieldId) return '';
+    const control = this.fieldsForm.get(fieldId);
+    if (control?.touched && control?.errors) {
+      if (control.errors['required']) {
+        return this.translationService.getCurrentLanguage() === 'ar' 
+          ? 'هذا الحقل مطلوب' 
+          : 'This field is required';
+      }
+    }
+    return '';
+  }
+
+  /**
+   * Clear field error on input change
+   */
+  clearFieldError(field: FormFieldDto): void {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    if (this.fieldValidationErrors[fieldCode]) {
+      delete this.fieldValidationErrors[fieldCode];
+    }
+  }
+
+  /**
+   * Validate email format
+   */
+  validateEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  /**
+   * Validate phone number format (7-20 digits)
+   */
+  validatePhone(phone: string): boolean {
+    const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+    const phoneRegex = /^\+?[0-9]{7,20}$/;
+    return phoneRegex.test(cleanPhone);
+  }
+
+  /**
+   * Validate password (at least 6 characters)
+   */
+  validatePassword(password: string): boolean {
+    return password.length >= 6;
+  }
+
+  /**
+   * Validate field value based on field type
+   */
+  validateFieldValue(field: FormFieldDto, value: any): string | null {
+    if (value === undefined || value === null || value === '') {
+      return null; // Empty values should be caught by required validation
+    }
+
+    const valueStr = String(value).trim();
+    const fieldType = this.getFieldType(field);
+    const fieldTypeNameLower = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
+    const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+
+    // Email validation
+    if (fieldType === 'email' || fieldTypeNameLower.includes('email') || fieldCodeLower === 'email') {
+      if (!this.validateEmail(valueStr)) {
+        return this.translationService.getCurrentLanguage() === 'ar' 
+          ? 'يرجى إدخال بريد إلكتروني صالح' 
+          : 'Please enter a valid email address';
+      }
+    }
+
+    // Phone validation
+    if (fieldTypeNameLower.includes('phone') || fieldTypeNameLower.includes('mobile') ||
+        fieldCodeLower === 'phone' || fieldCodeLower === 'mobile' || fieldCodeLower === 'phone_number') {
+      if (!this.validatePhone(valueStr)) {
+        return this.translationService.getCurrentLanguage() === 'ar' 
+          ? 'يرجى إدخال رقم هاتف صالح (7-20 رقم)' 
+          : 'Please enter a valid phone number (7-20 digits)';
+      }
+    }
+
+    // Password validation
+    if (fieldTypeNameLower.includes('password') || fieldCodeLower === 'password' || fieldCodeLower === 'pwd') {
+      if (!this.validatePassword(valueStr)) {
+        return this.translationService.getCurrentLanguage() === 'ar' 
+          ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' 
+          : 'Password must be at least 6 characters';
+      }
+    }
+
+    return null; // No validation error
+  }
+
+  /**
+   * Validate all fields before submission
+   */
+  validateAllFields(): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    // Clear previous validation errors
+    this.fieldValidationErrors = {};
+
+    // Validate each field
+    this.fields.forEach(field => {
+      if (!this.isFieldVisible(field)) {
+        return; // Skip hidden fields
+      }
+
+      const fieldCode = field.fieldCode || `field_${field.id}`;
+      const fieldId = this.getFieldId(field);
+      const value = fieldId ? this.fieldsForm.get(fieldId)?.value : null;
+
+      // Validate required fields
+      if (this.isRequired(field)) {
+        if (value === undefined || value === null || value === '' || 
+            (Array.isArray(value) && value.length === 0)) {
+          const errorMsg = this.translationService.getCurrentLanguage() === 'ar' 
+            ? 'هذا الحقل مطلوب' 
+            : 'This field is required';
+          this.fieldValidationErrors[fieldCode] = errorMsg;
+          errors.push(`${field.fieldName || fieldCode}: ${errorMsg}`);
+        }
+      }
+
+      // Validate field-specific formats (email, phone, password)
+      if (value !== undefined && value !== null && value !== '' && 
+          !(Array.isArray(value) && value.length === 0)) {
+        const validationError = this.validateFieldValue(field, value);
+        if (validationError) {
+          this.fieldValidationErrors[fieldCode] = validationError;
+          errors.push(`${field.fieldName || fieldCode}: ${validationError}`);
+        }
+      }
+    });
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Validate all grids before submission
+   */
+  validateAllGrids(): { isValid: boolean; errors: string[] } {
+    const gridComponentsArray = this.gridComponents?.toArray() || [];
+    const errors: string[] = [];
+
+    gridComponentsArray.forEach((grid) => {
+      const gridName = grid.getGridTitle();
+      const hasData = grid.hasGridData();
+      const rowCount = grid.rows?.length || 0;
+
+      // Check if grid requires minimum rows
+      if (grid.requiresMinRows()) {
+        const minRows = grid.getMinRows();
+        if (rowCount < minRows) {
+          errors.push(`Grid "${gridName}" requires at least ${minRows} row(s). Currently has ${rowCount} row(s).`);
+          return;
+        }
+      }
+
+      // Check if grid has required columns
+      if (grid.hasRequiredColumns()) {
+        if (!hasData || rowCount === 0) {
+          // Grid has required columns but no data
+          errors.push(`Grid "${gridName}" has required columns. Please add data.`);
+          return;
+        }
+        // Check if data is valid (all required fields filled)
+        if (!grid.isGridValid()) {
+          errors.push(`Grid "${gridName}" has validation errors. Please fill all required fields.`);
+          return;
+        }
+      } else if (hasData) {
+        // Grid has data but no required columns - still validate if data exists
+        if (!grid.isGridValid()) {
+          errors.push(`Grid "${gridName}" has validation errors. Please fill all required fields.`);
+        }
+      }
+    });
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
   onFileSelected(event: any, field: FormFieldDto): void {
     if (!field.id) {
       console.warn('[FormSubmissionCreate] onFileSelected - Field ID is missing');
@@ -2925,11 +3169,16 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Update form with current status
         this.submissionForm.patchValue({ status: submission.status });
         
-        // If submission status is Draft, mark as draft
-        if (submission.status === 'Draft') {
+        // If submission status is Draft, mark as draft (case-insensitive check)
+        if (submission.status?.toLowerCase() === 'draft') {
           this.hasDraft = true;
           this.isDraftMode = true;
           console.log('[FormSubmissionCreate] Edit Mode: Submission is Draft, hasDraft set to true');
+        } else {
+          // For any other status in edit mode, we still need hasDraft=true to enable Submit
+          this.hasDraft = true;
+          this.isDraftMode = false;
+          console.log('[FormSubmissionCreate] Edit Mode: Submission is', submission.status, ', hasDraft set to true, isDraftMode set to false');
         }
         
         // Load field values
@@ -3174,6 +3423,17 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   async saveSubmissionAsDraft(): Promise<void> {
     console.log('[FormSubmissionCreate] saveSubmissionAsDraft called');
 
+    // For drafts, we don't validate required fields - allow partial data
+    // Reset touched state to hide validation errors when saving as draft
+    Object.keys(this.fieldsForm.controls).forEach(key => {
+      const control = this.fieldsForm.get(key);
+      if (control) {
+        control.markAsUntouched();
+        control.markAsPristine();
+      }
+    });
+    this.cdr.detectChanges();
+
     // If no draft exists yet, create one first
     if (!this.hasDraft) {
       console.log('[FormSubmissionCreate] No draft exists, creating draft first...');
@@ -3234,23 +3494,44 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    * Final submit - uses the submit endpoint to change status and trigger workflow
    */
   async saveSubmission(): Promise<void> {
+    // Validate all fields (email, phone, password, required, etc.)
+    const fieldValidation = this.validateAllFields();
+    if (!fieldValidation.isValid) {
+      this.markFormGroupTouched(this.fieldsForm);
+      this.cdr.detectChanges();
+      // Scroll to first error
+      setTimeout(() => {
+        const firstError = document.querySelector('.field-error-message');
+        if (firstError) {
+          firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      return;
+    }
+
     if (this.submissionForm.invalid) {
       this.markFormGroupTouched(this.submissionForm);
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Validation Error',
-        detail: 'Please fill in all required fields'
-      });
+      this.cdr.detectChanges();
+      // Scroll to first error
+      setTimeout(() => {
+        const firstError = document.querySelector('.field-error-message');
+        if (firstError) {
+          firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
       return;
     }
 
     if (this.fields.length > 0 && this.fieldsForm.invalid) {
       this.markFormGroupTouched(this.fieldsForm);
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Validation Error',
-        detail: 'Please fill in all required fields'
-      });
+      this.cdr.detectChanges();
+      // Scroll to first error
+      setTimeout(() => {
+        const firstError = document.querySelector('.field-error-message');
+        if (firstError) {
+          firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
       return;
     }
 
@@ -3284,6 +3565,26 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         summary: 'Validation Error',
         detail: `Please upload files for required fields: ${missingRequiredFiles.join(', ')}`
       });
+      return;
+    }
+
+    // Validate grids
+    const gridValidation = this.validateAllGrids();
+    if (!gridValidation.isValid) {
+      gridValidation.errors.forEach(error => {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Grid Validation Error',
+          detail: error
+        });
+      });
+      // Scroll to first grid with error
+      setTimeout(() => {
+        const gridError = document.querySelector('.grid-container');
+        if (gridError) {
+          gridError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
       return;
     }
 

@@ -1975,3 +1975,194 @@
     text-align: right !important;
   }
 }
+
+/* ================= TOGGLE DELETED BUTTON ================= */
+
+.btn-toggle-deleted {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%);
+  color: #dc2626;
+  padding: 12px 20px;
+  border-radius: 14px;
+  font-weight: 700;
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  box-shadow: 
+    0 4px 12px rgba(239, 68, 68, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+
+  &:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 8px 24px rgba(239, 68, 68, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
+
+  &.active {
+    background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+    color: white;
+    border-color: #dc2626;
+    box-shadow: 
+      0 8px 24px rgba(220, 38, 38, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+
+    &:hover {
+      background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+      box-shadow: 
+        0 12px 32px rgba(220, 38, 38, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+  }
+
+  i {
+    font-size: 16px;
+    transition: transform 0.3s ease;
+  }
+
+  &:hover i {
+    transform: scale(1.2);
+  }
+}
+
+/* ================= DELETED PROJECTS SECTION ================= */
+
+.deleted-projects-section {
+  margin-top: 32px;
+  border-top: 3px solid #fee2e2;
+  padding-top: 32px;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.section-divider {
+  margin-bottom: 24px;
+
+  .section-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: #dc2626;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    letter-spacing: -0.3px;
+
+    i {
+      font-size: 20px;
+      filter: drop-shadow(0 2px 4px rgba(220, 38, 38, 0.3));
+    }
+  }
+}
+
+::ng-deep .deleted-table {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid #fee2e2;
+
+  .p-datatable-thead > tr > th {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border-bottom: 3px solid #fecaca;
+  }
+
+  .p-datatable-tbody > tr {
+    background: #fef2f2;
+    border-left: 4px solid #dc2626;
+
+    &:hover {
+      background: linear-gradient(to right, #fee2e2 0%, #fef2f2 100%);
+      box-shadow: 
+        0 8px 24px rgba(220, 38, 38, 0.15),
+        0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .icon-cell i {
+      background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+      box-shadow: 
+        0 6px 16px rgba(220, 38, 38, 0.3),
+        0 3px 8px rgba(239, 68, 68, 0.2);
+    }
+  }
+
+  .status-deleted {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 28px;
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 
+      0 6px 20px rgba(220, 38, 38, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+
+    i {
+      font-size: 14px;
+    }
+  }
+
+  .action-restore {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 
+      0 6px 20px rgba(16, 185, 129, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+
+    &:hover {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      transform: translateY(-3px) scale(1.1);
+      box-shadow: 
+        0 10px 28px rgba(16, 185, 129, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    i {
+      font-size: 16px;
+      animation: rotateRestore 2s ease-in-out infinite;
+    }
+  }
+
+  @keyframes rotateRestore {
+    0%, 100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-15deg);
+    }
+    75% {
+      transform: rotate(15deg);
+    }
+  }
+}
+
+/* ================= STAT CARD DANGER ================= */
+
+.stat-icon-danger {
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  color: white;
+  box-shadow: 
+    0 8px 24px rgba(220, 38, 38, 0.3),
+    0 4px 12px rgba(239, 68, 68, 0.2);
+}

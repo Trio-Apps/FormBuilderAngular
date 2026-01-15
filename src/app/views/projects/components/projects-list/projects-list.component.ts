@@ -47,8 +47,11 @@ import { TranslationService } from '../../../../core/services/translation.servic
 export class ProjectsListComponent implements OnInit, OnDestroy {
   projects: ProjectDto[] = [];
   filteredProjects: ProjectDto[] = [];
+  deletedProjects: ProjectDto[] = [];
   searchTerm = '';
   loading = false;
+  loadingDeleted = false;
+  showDeletedProjects = false; // Toggle to show/hide deleted projects
 
   // Project Modal
   showProjectModal = false;
@@ -80,6 +83,7 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadProjects();
+    this.loadDeletedProjects();
   }
 
   ngOnDestroy(): void {
@@ -109,6 +113,37 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  /**
+   * Load deleted projects from API
+   */
+  loadDeletedProjects(): void {
+    this.loadingDeleted = true;
+    this.projectsService.getDeletedProjects(1, 100).subscribe({
+      next: (result) => {
+        this.deletedProjects = result.items || [];
+        console.log('[ProjectsList] Loaded deleted projects:', this.deletedProjects.length);
+        this.loadingDeleted = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('[ProjectsList] Error loading deleted projects:', error);
+        this.deletedProjects = [];
+        this.loadingDeleted = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /**
+   * Toggle showing deleted projects
+   */
+  toggleDeletedProjects(): void {
+    this.showDeletedProjects = !this.showDeletedProjects;
+    if (this.showDeletedProjects) {
+      this.loadDeletedProjects();
+    }
   }
 
   onSearch(): void {
@@ -276,25 +311,111 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
       header: 'Confirm Delete',
       icon: 'pi pi-exclamation-triangle',
       acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-secondary',
       accept: () => {
+        console.log('[ProjectsList] User confirmed deletion for project:', project.id);
         this.loading = true;
-        this.projectsService.deleteProject(project.id).subscribe({
+        this.projectsService.softDelete(project.id).subscribe({
           next: () => {
+            console.log('[ProjectsList] Soft delete API response received');
+
+            // Remove from active projects list
+            this.projects = this.projects.filter(p => p.id !== project.id);
+            this.filteredProjects = this.filteredProjects.filter(p => p.id !== project.id);
+            this.paginatedProjects = this.paginatedProjects.filter(p => p.id !== project.id);
+            this.totalItems = Math.max(0, this.totalItems - 1);
+
+            // Reload deleted projects to show the newly deleted project
+            this.loadDeletedProjects();
+
+            this.loading = false;
+
+            // Force change detection to update UI immediately
+            this.cdr.detectChanges();
+
             this.messageService.add({
               severity: 'success',
               summary: 'Success',
-              detail: 'Project deleted successfully'
+              detail: 'Project deleted successfully',
+              life: 5000
             });
-            this.loadProjects();
           },
           error: (error) => {
+            this.loading = false;
             console.error('[ProjectsList] Error deleting project:', error);
+
+            let errorMessage = 'Failed to delete project';
+            if (error?.error?.message) {
+              errorMessage = error.error.message;
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
-              detail: error.error?.message || 'Failed to delete project'
+              detail: errorMessage
             });
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Restore a soft-deleted project
+   */
+  restoreProject(project: ProjectDto): void {
+    this.confirmationService.confirm({
+      message: `Are you sure you want to restore "${project.name}"?`,
+      header: 'Confirm Restore',
+      icon: 'pi pi-refresh',
+      acceptButtonStyleClass: 'p-button-success',
+      rejectButtonStyleClass: 'p-button-secondary',
+      accept: () => {
+        console.log('[ProjectsList] User confirmed restoration for project:', project.id);
+        this.loading = true;
+        this.projectsService.restore(project.id).subscribe({
+          next: (restoredProject) => {
+            console.log('[ProjectsList] Project restored successfully:', restoredProject);
+
+            // Remove from deleted projects list
+            this.deletedProjects = this.deletedProjects.filter(p => p.id !== project.id);
+
+            // Add to active projects list
+            this.projects.push(restoredProject);
+            this.filteredProjects = [...this.projects];
+            this.updatePaginatedProjects();
+            this.totalItems = this.totalItems + 1;
+
             this.loading = false;
+
+            // Force change detection to update UI immediately
+            this.cdr.detectChanges();
+
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: 'Project restored successfully',
+              life: 5000
+            });
+          },
+          error: (error: any) => {
+            this.loading = false;
+            console.error('[ProjectsList] Error restoring project:', error);
+
+            let errorMessage = 'Failed to restore project';
+            if (error?.error?.message) {
+              errorMessage = error.error.message;
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: errorMessage
+            });
           }
         });
       }
@@ -352,6 +473,10 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
 
   getActiveProjectsCount(): number {
     return this.projects.filter(p => p.isActive).length;
+  }
+
+  getDeletedProjectsCount(): number {
+    return this.deletedProjects.length;
   }
 
   private markFormGroupTouched(formGroup: FormGroup): void {

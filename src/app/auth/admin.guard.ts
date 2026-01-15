@@ -12,15 +12,21 @@ export const adminGuard = () => {
   console.log('[adminGuard] Checking access:', {
     isAuthenticated,
     userRole,
-    expectedRole: 'Administration'
+    expectedRoles: ['Administration', 'Admin', 'admin', 'ADMIN']
   });
   
-  // Only allow Administration role to access
-  if (isAuthenticated && userRole === 'Administration') {
-    console.log('[adminGuard] Access granted');
+  // Allow multiple admin role names (case-insensitive)
+  const adminRoles = ['administration', 'admin'];
+  const isAdmin = userRole && adminRoles.includes(userRole.toLowerCase());
+  
+  if (isAuthenticated && isAdmin) {
+    console.log('[adminGuard] ✅ Access granted - User is Admin');
     return true;
   } else {
-    console.log('[adminGuard] Access denied, redirecting...');
+    console.log('[adminGuard] ❌ Access denied:', {
+      reason: !isAuthenticated ? 'Not authenticated' : 'Not an admin',
+      currentRole: userRole
+    });
     // Return UrlTree instead of using router.navigate() to avoid transition conflicts
     if (!isAuthenticated) {
       return router.createUrlTree(['/pages/login']);

@@ -1,3 +1,5 @@
+<p-toast></p-toast>
+
 <div class="form-viewer-container" *ngIf="!loading && !notFound; else stateTemplate">
   <!-- Language Dropdown Button -->
   <div class="language-dropdown-container">
@@ -30,6 +32,14 @@
   <div class="form-header">
     <h1 class="form-title">{{ getFormName(form) }}</h1>
     <p class="form-description" *ngIf="getFormDescription(form)">{{ getFormDescription(form) }}</p>
+    
+    <!-- Document Number Badge -->
+    <div class="document-number-badge" *ngIf="currentSubmission?.documentNumber">
+      <span class="document-number-label">
+        {{ translationService.getCurrentLanguage() === 'ar' ? 'رقم المستند:' : 'Document Number:' }}
+      </span>
+      <span class="document-number-value">{{ currentSubmission?.documentNumber }}</span>
+    </div>
   </div>
 
   <!-- Tabs Navigation (if multiple tabs) -->
@@ -82,29 +92,41 @@
             </small>
             <ng-container [ngSwitch]="getFieldType(field)">
 
-              <!-- Text Input -->
-              <input *ngSwitchCase="'text'" type="text" class="form-input" 
-                [id]="'field_' + field.id"
-                [name]="'field_' + field.id"
-                [placeholder]="getFieldPlaceholder(field)"
-                [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
-                (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+              <!-- Text Input (check if password field) -->
+              <ng-container *ngSwitchCase="'text'">
+                <input *ngIf="!isPasswordField(field)" type="text" class="form-input" 
+                  [id]="'field_' + field.id"
+                  [name]="'field_' + field.id"
+                  [class.has-error]="hasFieldError(field)"
+                  [placeholder]="getFieldPlaceholder(field)"
+                  [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
+                  (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+                <input *ngIf="isPasswordField(field)" type="password" class="form-input" 
+                  [id]="'field_' + field.id"
+                  [name]="'field_' + field.id"
+                  [class.has-error]="hasFieldError(field)"
+                  [placeholder]="getFieldPlaceholder(field)"
+                  [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
+                  (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+              </ng-container>
 
               <!-- Email Input -->
               <input *ngSwitchCase="'email'" type="email" class="form-input" 
                 [id]="'field_' + field.id"
                 [name]="'field_' + field.id"
+                [class.has-error]="hasFieldError(field)"
                 [placeholder]="getFieldPlaceholder(field)"
                 [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
-                (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+                (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- Number Input -->
               <input *ngSwitchCase="'number'" type="number" class="form-input"
                 [id]="'field_' + field.id"
                 [name]="'field_' + field.id"
+                [class.has-error]="hasFieldError(field)"
                 [placeholder]="getFieldPlaceholder(field)" [min]="field.minValue" [max]="field.maxValue"
                 [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
-                (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+                (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- Calculated Field -->
               <app-calculated-field *ngSwitchCase="'calculated'" 
@@ -117,19 +139,22 @@
               <textarea *ngSwitchCase="'textarea'" class="form-textarea" rows="4"
                 [id]="'field_' + field.id"
                 [name]="'field_' + field.id"
+                [class.has-error]="hasFieldError(field)"
                 [placeholder]="getFieldPlaceholder(field)" [disabled]="!isFieldEditable(field)"
-                (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)">{{ getDefaultValue(field) }}</textarea>
+                (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)">{{ getDefaultValue(field) }}</textarea>
 
               <!-- Select / Dropdown (Single or Multiple) -->
               <div *ngSwitchCase="'select'" class="select-wrapper" 
-                [class.multiple-select]="field.fieldType?.allowMultiple">
+                [class.multiple-select]="field.fieldType?.allowMultiple"
+                [class.has-error]="hasFieldError(field)">
                 <select class="form-select"
                   [id]="'field_' + field.id"
                   [name]="'field_' + field.id"
+                  [class.has-error]="hasFieldError(field)"
                   [multiple]="field.fieldType?.allowMultiple || false"
                   [value]="getFieldValue(field)"
                   [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
-                  (change)="onSelectChange(field, $event)">
+                  (change)="clearFieldError(field); onSelectChange(field, $event)">
                   <option [value]="" [disabled]="isRequired(field) && !(field.fieldType?.allowMultiple)"
                     *ngIf="!(field.fieldType?.allowMultiple)">
                     {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') :
@@ -151,7 +176,7 @@
               </div>
 
               <!-- Radio Buttons -->
-              <div *ngSwitchCase="'radio'" class="radio-group">
+              <div *ngSwitchCase="'radio'" class="radio-group" [class.has-error]="hasFieldError(field)">
                 <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                   {{ translationService.translate('formView.loading') || 'Loading options...' }}
                 </div>
@@ -160,7 +185,7 @@
                     [name]="'radio-' + field.id" [value]="opt.optionValue"
                     [checked]="isOptionSelected(field, opt.optionValue)"
                     [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
-                    (change)="onFieldValueChange(field.id, opt.optionValue, field.fieldCode)" />
+                    (change)="clearFieldError(field); onFieldValueChange(field.id, opt.optionValue, field.fieldCode)" />
                   <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
                     {{ getOptionText(opt) }}
                   </label>
@@ -172,7 +197,7 @@
               </div>
 
               <!-- Checkbox (Multiple Selection) -->
-              <div *ngSwitchCase="'checkbox'" class="checkbox-group">
+              <div *ngSwitchCase="'checkbox'" class="checkbox-group" [class.has-error]="hasFieldError(field)">
                 <div *ngIf="isLoadingFieldOptions(field)" class="loading-options">
                   {{ translationService.translate('formView.loading') || 'Loading options...' }}
                 </div>
@@ -181,7 +206,7 @@
                     [name]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
                     [value]="opt.optionValue" [checked]="isCheckboxSelected(field, opt.optionValue)"
                     [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
-                    (change)="onCheckboxChange(field, opt.optionValue, $event)" />
+                    (change)="clearFieldError(field); onCheckboxChange(field, opt.optionValue, $event)" />
                   <label [for]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)" class="checkbox-label">
                     {{ getOptionText(opt) }}
                   </label>
@@ -196,9 +221,10 @@
               <input *ngSwitchCase="'date'" type="date" class="form-input"
                 [id]="'field_' + field.id"
                 [name]="'field_' + field.id"
+                [class.has-error]="hasFieldError(field)"
                 [value]="getDefaultValue(field)"
                 [disabled]="!isFieldEditable(field)"
-                (change)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+                (change)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- File Upload -->
               <div *ngSwitchCase="'file'" class="file-upload-wrapper">
@@ -361,24 +387,44 @@
                   [isReadOnly]="!isFieldEditable(field)"
                   [attr.aria-labelledby]="'label_' + field.id">
                 </app-grid-view>
-                <!-- Otherwise show text input -->
-                <input 
-                  *ngIf="!field.gridId || field.gridId <= 0"
-                  type="text" 
-                  class="form-input" 
-                  [id]="'field_' + field.id"
-                  [name]="'field_' + field.id"
-                  [placeholder]="getFieldPlaceholder(field)"
-                  [value]="getDefaultValue(field)"
-                  [disabled]="!isFieldEditable(field)"
-                  (input)="onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+                <!-- Otherwise show text input (or password if password field) -->
+                <ng-container *ngIf="!field.gridId || field.gridId <= 0">
+                  <input 
+                    *ngIf="!isPasswordField(field)"
+                    type="text" 
+                    class="form-input" 
+                    [id]="'field_' + field.id"
+                    [name]="'field_' + field.id"
+                    [class.has-error]="hasFieldError(field)"
+                    [placeholder]="getFieldPlaceholder(field)"
+                    [value]="getDefaultValue(field)"
+                    [disabled]="!isFieldEditable(field)"
+                    (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+                  <input 
+                    *ngIf="isPasswordField(field)"
+                    type="password" 
+                    class="form-input" 
+                    [id]="'field_' + field.id"
+                    [name]="'field_' + field.id"
+                    [class.has-error]="hasFieldError(field)"
+                    [placeholder]="getFieldPlaceholder(field)"
+                    [value]="getDefaultValue(field)"
+                    [disabled]="!isFieldEditable(field)"
+                    (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+                </ng-container>
               </ng-container>
 
             </ng-container>
           </div>
 
-          <!-- Field Validation Message (for display purposes) -->
-          <div class="field-validation-message" *ngIf="getFieldValidationMessage(field)">
+          <!-- Field Error Message (validation errors shown inline) -->
+          <span class="field-error-message" *ngIf="hasFieldError(field)">
+            <i class="pi pi-exclamation-circle"></i>
+            {{ getFieldError(field) }}
+          </span>
+
+          <!-- Field Validation Message (for display purposes - hints) -->
+          <div class="field-validation-message" *ngIf="!hasFieldError(field) && getFieldValidationMessage(field)">
             <i class="pi pi-info-circle"></i>
             {{ getFieldValidationMessage(field) }}
           </div>

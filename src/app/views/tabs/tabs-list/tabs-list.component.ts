@@ -300,20 +300,105 @@ export class TabsListComponent implements OnInit, OnDestroy {
           });
         },
         error: (error) => {
+          console.error('[TabsList] Tab update error:', error);
           this.loading = false;
           
-          // Use DuplicateValidationHelper for unified error handling
-          DuplicateValidationHelper.handleDuplicateError(
-            error,
-            this.messageService,
-            this.translationService,
-            {
-              entityType: 'Tab Code',
-              fieldName: 'Tab Code',
-              fallbackValue: this.tabCode,
-              fieldNameVariations: ['tabcode', 'tab code', 'tabcode']
+          // Extract error information
+          let errorMessage = '';
+          let errorDetails: string[] = [];
+          
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            } else if (error.error.detail) {
+              errorMessage = error.error.detail;
             }
-          );
+            
+            // Extract validation errors if available (ASP.NET Core ProblemDetails format)
+            if (error.error.errors) {
+              if (typeof error.error.errors === 'object') {
+                const errors: { [key: string]: string[] } = error.error.errors;
+                for (const [field, messages] of Object.entries(errors)) {
+                  if (Array.isArray(messages)) {
+                    messages.forEach(msg => errorDetails.push(msg));
+                  } else {
+                    errorDetails.push(String(messages));
+                  }
+                }
+              } else if (Array.isArray(error.error.errors)) {
+                errorDetails = error.error.errors;
+              }
+            }
+          }
+          
+          const currentLang = this.translationService.getCurrentLanguage();
+          
+          // For 400 Bad Request, treat as validation error
+          if (error.status === 400) {
+            // Check if it's a duplicate error
+            const errorLower = (errorMessage + ' ' + errorDetails.join(' ')).toLowerCase();
+            const isDuplicate = errorLower.includes('duplicate') ||
+                               errorLower.includes('already exists') ||
+                               errorLower.includes('already in use') ||
+                               errorLower.includes('tabcode') ||
+                               errorLower.includes('tab code') ||
+                               errorLower.includes('مكرر') ||
+                               errorLower.includes('موجود') ||
+                               errorLower.includes('unique') ||
+                               errorLower.includes('constraint');
+            
+            if (isDuplicate) {
+              // Show duplicate error message
+              const duplicateValue = this.tabCode || 'N/A';
+              const message = currentLang === 'ar' 
+                ? `كود التبويب "${duplicateValue}" متكرر. يرجى استخدام كود آخر.`
+                : `Tab Code "${duplicateValue}" already exists. Please use a different code.`;
+              
+              this.messageService.add({
+                severity: 'error',
+                summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+                detail: message,
+                life: 10000
+              });
+            } else if (errorDetails.length > 0) {
+              // Show validation errors from backend
+              this.messageService.add({
+                severity: 'error',
+                summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+                detail: errorDetails[0] + (errorDetails.length > 1 ? ` (+${errorDetails.length - 1} ${currentLang === 'ar' ? 'أكثر' : 'more'})` : ''),
+                life: 10000
+              });
+            } else if (errorMessage) {
+              // Show error message from backend
+              this.messageService.add({
+                severity: 'error',
+                summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+                detail: errorMessage,
+                life: 10000
+              });
+            } else {
+              // Show generic validation error message
+              this.messageService.add({
+                severity: 'error',
+                summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+                detail: currentLang === 'ar' ? 'حدث خطأ في التحقق من البيانات. يرجى التحقق من القيم المدخلة.' : 'Validation error occurred. Please check the entered values.',
+                life: 7000
+              });
+            }
+          } else {
+            // For other errors, show generic error message
+            const message = errorMessage || (currentLang === 'ar' ? 'حدث خطأ أثناء تحديث التبويب' : 'An error occurred while updating the tab');
+            this.messageService.add({
+              severity: 'error',
+              summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+              detail: message,
+              life: 7000
+            });
+          }
         }
       });
     } else {
@@ -338,20 +423,105 @@ export class TabsListComponent implements OnInit, OnDestroy {
           });
         },
         error: (error) => {
+          console.error('[TabsList] Tab creation error:', error);
           this.loading = false;
           
-          // Use DuplicateValidationHelper for unified error handling
-          DuplicateValidationHelper.handleDuplicateError(
-            error,
-            this.messageService,
-            this.translationService,
-            {
-              entityType: 'Tab Code',
-              fieldName: 'Tab Code',
-              fallbackValue: this.tabCode,
-              fieldNameVariations: ['tabcode', 'tab code', 'tabcode']
+          // Extract error information
+          let errorMessage = '';
+          let errorDetails: string[] = [];
+          
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.title) {
+              errorMessage = error.error.title;
+            } else if (error.error.detail) {
+              errorMessage = error.error.detail;
             }
-          );
+            
+            // Extract validation errors if available (ASP.NET Core ProblemDetails format)
+            if (error.error.errors) {
+              if (typeof error.error.errors === 'object') {
+                const errors: { [key: string]: string[] } = error.error.errors;
+                for (const [field, messages] of Object.entries(errors)) {
+                  if (Array.isArray(messages)) {
+                    messages.forEach(msg => errorDetails.push(msg));
+                  } else {
+                    errorDetails.push(String(messages));
+                  }
+                }
+              } else if (Array.isArray(error.error.errors)) {
+                errorDetails = error.error.errors;
+              }
+            }
+          }
+          
+          const currentLang = this.translationService.getCurrentLanguage();
+          
+          // For 400 Bad Request, treat as validation error
+          if (error.status === 400) {
+            // Check if it's a duplicate error
+            const errorLower = (errorMessage + ' ' + errorDetails.join(' ')).toLowerCase();
+            const isDuplicate = errorLower.includes('duplicate') ||
+                               errorLower.includes('already exists') ||
+                               errorLower.includes('already in use') ||
+                               errorLower.includes('tabcode') ||
+                               errorLower.includes('tab code') ||
+                               errorLower.includes('مكرر') ||
+                               errorLower.includes('موجود') ||
+                               errorLower.includes('unique') ||
+                               errorLower.includes('constraint');
+            
+            if (isDuplicate) {
+              // Show duplicate error message
+              const duplicateValue = this.tabCode || 'N/A';
+              const message = currentLang === 'ar' 
+                ? `كود التبويب "${duplicateValue}" متكرر. يرجى استخدام كود آخر.`
+                : `Tab Code "${duplicateValue}" already exists. Please use a different code.`;
+              
+              this.messageService.add({
+                severity: 'error',
+                summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+                detail: message,
+                life: 10000
+              });
+            } else if (errorDetails.length > 0) {
+              // Show validation errors from backend
+              this.messageService.add({
+                severity: 'error',
+                summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+                detail: errorDetails[0] + (errorDetails.length > 1 ? ` (+${errorDetails.length - 1} ${currentLang === 'ar' ? 'أكثر' : 'more'})` : ''),
+                life: 10000
+              });
+            } else if (errorMessage) {
+              // Show error message from backend
+              this.messageService.add({
+                severity: 'error',
+                summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+                detail: errorMessage,
+                life: 10000
+              });
+            } else {
+              // Show generic validation error message
+              this.messageService.add({
+                severity: 'error',
+                summary: currentLang === 'ar' ? 'خطأ في التحقق' : 'Validation Error',
+                detail: currentLang === 'ar' ? 'حدث خطأ في التحقق من البيانات. يرجى التحقق من القيم المدخلة.' : 'Validation error occurred. Please check the entered values.',
+                life: 7000
+              });
+            }
+          } else {
+            // For other errors, show generic error message
+            const message = errorMessage || (currentLang === 'ar' ? 'حدث خطأ أثناء إنشاء التبويب' : 'An error occurred while creating the tab');
+            this.messageService.add({
+              severity: 'error',
+              summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+              detail: message,
+              life: 7000
+            });
+          }
         }
       });
     }
