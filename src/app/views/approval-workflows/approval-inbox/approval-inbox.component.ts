@@ -1,6 +1,5 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto, ProcessApprovalActionDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
 import { ApprovalStageAssigneesService } from '../../FormBuilder/services/approval-stage-assignees.service';
@@ -26,7 +25,6 @@ import { TranslationService } from '../../../core/services/translation.service';
   standalone: true,
   imports: [
     CommonModule,
-    RouterLink,
     FormsModule,
     ReactiveFormsModule,
     ToastModule,

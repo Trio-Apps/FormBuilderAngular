@@ -1,6 +1,5 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { FormSubmissionsService, FormSubmissionDto } from '../form-submissions/services/form-submissions.service';
 import { StorageService } from '../../auth/storage.service';
@@ -19,7 +18,6 @@ import { PaginatorModule } from 'primeng/paginator';
   standalone: true,
   imports: [
     CommonModule,
-    RouterLink,
     FormsModule,
     ToastModule,
     TableModule,

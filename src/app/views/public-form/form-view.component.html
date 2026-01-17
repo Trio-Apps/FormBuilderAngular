@@ -88,7 +88,7 @@
               FieldTypeName: {{ field.fieldTypeName }} | 
               HasOptions: {{ field.fieldType?.hasOptions }} | 
               AllowMultiple: {{ field.fieldType?.allowMultiple }} |
-              Options Count: {{ getFieldOptions(field)?.length || 0 }}
+              Options Count: {{ (getFieldOptions(field) || []).length }}
             </small>
             <ng-container [ngSwitch]="getFieldType(field)">
 

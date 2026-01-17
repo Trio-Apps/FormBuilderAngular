@@ -458,22 +458,18 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       submissionObject: submission
     });
     
-    // Create submission detail object from the submission we have
-    const submissionDetail: FormSubmissionDetailDto = {
-      ...submission,
-      id: originalSubmissionId, // Ensure ID is preserved
-      fieldValues: [],
-      attachments: [],
-      gridData: []
-    };
-    this.selectedSubmission = submissionDetail;
-    
-    // Load field values by submission ID
-    this.formSubmissionValuesService.getBySubmissionId(originalSubmissionId).subscribe({
-      next: (fieldValues: FormSubmissionValueDto[]) => {
-        console.log('[FormSubmissionsList] Loaded field values for view:', fieldValues);
-        submissionDetail.fieldValues = fieldValues || [];
-        submissionDetail.id = originalSubmissionId; // Ensure ID is preserved
+    // Use getSubmissionById to get complete submission details including gridData
+    this.formSubmissionsService.getSubmissionById(originalSubmissionId).subscribe({
+      next: (submissionDetail: FormSubmissionDetailDto) => {
+        console.log('[FormSubmissionsList] Loaded submission details with gridData:', submissionDetail);
+        console.log('[FormSubmissionsList] gridData count:', submissionDetail.gridData?.length || 0);
+        
+        // Ensure ID is preserved
+        submissionDetail.id = originalSubmissionId;
+        submissionDetail.fieldValues = submissionDetail.fieldValues || [];
+        submissionDetail.attachments = submissionDetail.attachments || [];
+        submissionDetail.gridData = submissionDetail.gridData || [];
+        
         this.selectedSubmission = submissionDetail;
         
         // Load form fields to display field names
@@ -489,21 +485,47 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
-        console.error('Error loading field values:', error);
-        // Continue anyway - show modal with empty field values
-        submissionDetail.fieldValues = [];
-        submissionDetail.id = originalSubmissionId; // Ensure ID is preserved
+        console.error('[FormSubmissionsList] Error loading submission details:', error);
+        // Fallback: Create submission detail object manually
+        const submissionDetail: FormSubmissionDetailDto = {
+          ...submission,
+          id: originalSubmissionId,
+          fieldValues: [],
+          attachments: [],
+          gridData: []
+        };
         this.selectedSubmission = submissionDetail;
         
-        if (submission.formBuilderId) {
-          this.loadFormFieldsForView(submission.formBuilderId, submissionDetail, originalSubmissionId);
-        } else {
-          // Build form even without fields
-          this.buildEditSubmissionValuesForm(submissionDetail);
-          this.loadAttachmentsForFields(originalSubmissionId, []);
-          this.loading.fieldValues = false;
-          this.showSubmissionModal = true;
-        }
+        // Try to load field values separately as fallback
+        this.formSubmissionValuesService.getBySubmissionId(originalSubmissionId).subscribe({
+          next: (fieldValues: FormSubmissionValueDto[]) => {
+            submissionDetail.fieldValues = fieldValues || [];
+            this.selectedSubmission = submissionDetail;
+            
+            if (submission.formBuilderId) {
+              this.loadFormFieldsForView(submission.formBuilderId, submissionDetail, originalSubmissionId);
+            } else {
+              this.buildEditSubmissionValuesForm(submissionDetail);
+              this.loadAttachmentsForFields(originalSubmissionId, []);
+              this.loading.fieldValues = false;
+              this.showSubmissionModal = true;
+            }
+          },
+          error: (fieldValuesError) => {
+            console.error('[FormSubmissionsList] Error loading field values:', fieldValuesError);
+            submissionDetail.fieldValues = [];
+            this.selectedSubmission = submissionDetail;
+            
+            if (submission.formBuilderId) {
+              this.loadFormFieldsForView(submission.formBuilderId, submissionDetail, originalSubmissionId);
+            } else {
+              this.buildEditSubmissionValuesForm(submissionDetail);
+              this.loadAttachmentsForFields(originalSubmissionId, []);
+              this.loading.fieldValues = false;
+              this.showSubmissionModal = true;
+            }
+          }
+        });
       }
     });
   }

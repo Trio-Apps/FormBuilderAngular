@@ -42,18 +42,22 @@ export interface UpdateDocumentTypeDto {
 /**
  * Document Series - Series configuration for document numbering
  * Linked to DocumentTypeId and ProjectId
+ * 
+ * Updated based on backend API response:
+ * - documentTypeName and projectName can be null
+ * - isDeleted field is not returned by the backend API
  */
 export interface DocumentSeries {
   id?: number;
   documentTypeId: number; // Required - links to DocumentType
-  documentTypeName?: string; // For display
+  documentTypeName?: string | null; // For display - can be null from backend
   projectId: number; // Required - links to Project
-  projectName?: string; // For display
+  projectName?: string | null; // For display - can be null from backend
   seriesCode: string; // Prefix (e.g., LC-AND1-2025), max 50 chars
   nextNumber: number; // Next running value
   isDefault: boolean; // Default series selection
-  isActive?: boolean;
-  isDeleted: boolean;
+  isActive?: boolean; // Active status - boolean from backend
+  // Note: isDeleted is not returned by the backend API
 }
 
 /**
@@ -66,8 +70,8 @@ export interface CreateDocumentSeriesDto {
   seriesCode: string; // Required - Prefix, max 50 chars
   nextNumber?: number; // Optional - default: 1
   isDefault?: boolean; // Optional - default: false
-  isActive?: boolean;
-  isDeleted?: boolean; // Optional - default: false
+  isActive?: boolean; // Optional - default: true
+  // Note: isDeleted is not used in backend API - series are soft-deleted via separate endpoint
 }
 
 /**

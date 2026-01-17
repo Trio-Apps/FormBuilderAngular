@@ -1065,5 +1065,63 @@ export class DocumentTypesService {
 
     return errorMessage;
   }
+
+  // ================= HELPER METHODS ================
+
+  /**
+   * Get active document series for a specific project
+   * Filters series by projectId and isActive status
+   * @param documentTypeId The document type ID
+   * @param projectId The project ID
+   * @returns Observable of active DocumentSeries array
+   */
+  getActiveSeriesForProject(documentTypeId: number, projectId: number): Observable<DocumentSeries[]> {
+    return this.getDocumentSeriesByDocumentTypeId(documentTypeId).pipe(
+      map((series: DocumentSeries[]) => {
+        return series.filter((s: DocumentSeries) => {
+          // Filter by project and active status
+          // isActive is boolean from backend (verified)
+          return s.projectId === projectId && s.isActive === true;
+        });
+      }),
+      catchError((error) => {
+        console.error(`Error getting active series for documentTypeId ${documentTypeId}, projectId ${projectId}:`, error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Get document type name safely (handles null)
+   * @param series DocumentSeries object
+   * @param fallback Fallback text if name is null (default: 'N/A')
+   * @returns Safe display name
+   */
+  getDocumentTypeName(series: DocumentSeries | null | undefined, fallback: string = 'N/A'): string {
+    if (!series) return fallback;
+    return series.documentTypeName ?? fallback;
+  }
+
+  /**
+   * Get project name safely (handles null)
+   * @param series DocumentSeries object
+   * @param fallback Fallback text if name is null (default: 'N/A')
+   * @returns Safe display name
+   */
+  getProjectName(series: DocumentSeries | null | undefined, fallback: string = 'N/A'): string {
+    if (!series) return fallback;
+    return series.projectName ?? fallback;
+  }
+
+  /**
+   * Check if a series is active (boolean check only)
+   * @param series DocumentSeries object
+   * @returns true if series is active
+   */
+  isSeriesActive(series: DocumentSeries | null | undefined): boolean {
+    if (!series) return false;
+    // Backend returns boolean (verified)
+    return series.isActive === true;
+  }
 }
 

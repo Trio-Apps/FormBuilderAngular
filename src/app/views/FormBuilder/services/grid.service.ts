@@ -312,15 +312,28 @@ export class GridService {
     submissionId: number,
     gridId: number
   ): Observable<ApiResponse<FormSubmissionGridRowDto[]>> {
+    console.log(`[GridService] getRowsBySubmissionAndGrid called: submissionId=${submissionId}, gridId=${gridId}`);
+    
     // Early return if submissionId is invalid
     if (!submissionId || submissionId <= 0) {
+      console.warn(`[GridService] Invalid submissionId: ${submissionId}, returning empty array`);
       return of({ statusCode: 200, message: 'No rows found', data: [] });
     }
 
-    return this.http.get<ApiResponse<FormSubmissionGridRowDto[]>>(
-      `${this.baseUrl}/FormSubmissionGridRows/submission/${submissionId}/grid/${gridId}`
-    ).pipe(
-      catchError(() => of({ statusCode: 500, message: 'Error loading rows', data: [] }))
+    const url = `${this.baseUrl}/FormSubmissionGridRows/submission/${submissionId}/grid/${gridId}`;
+    console.log(`[GridService] Requesting rows from: ${url}`);
+
+    return this.http.get<ApiResponse<FormSubmissionGridRowDto[]>>(url).pipe(
+      map((response: ApiResponse<FormSubmissionGridRowDto[]>) => {
+        const rows = response.data || [];
+        console.log(`[GridService] ✅ Received ${rows.length} rows from backend for submissionId=${submissionId}, gridId=${gridId}`);
+        console.log(`[GridService] Rows data:`, rows.map(r => ({ id: r.id, rowIndex: r.rowIndex, isActive: r.isActive })));
+        return response;
+      }),
+      catchError((error) => {
+        console.error(`[GridService] ❌ Error loading rows for submissionId=${submissionId}, gridId=${gridId}:`, error);
+        return of({ statusCode: 500, message: 'Error loading rows', data: [] });
+      })
     );
   }
 
@@ -449,17 +462,41 @@ export class GridService {
    */
   bulkSaveGridData(data: BulkSaveGridDataDto): Observable<ApiResponse<FormSubmissionGridRowDto[]>> {
     console.log('[GridService] bulkSaveGridData called');
+    console.log('[GridService] SubmissionId:', data.submissionId);
+    console.log('[GridService] GridId:', data.gridId);
+    console.log('[GridService] Rows count to send:', data.rows.length);
+    console.log('[GridService] Rows details:', data.rows.map((r, idx) => ({
+      index: idx,
+      rowIndex: r.rowIndex,
+      isActive: r.isActive,
+      cellsCount: r.cells?.length || 0
+    })));
     console.log('[GridService] Sending rows only:', JSON.stringify(data.rows, null, 2));
     return this.http.post<ApiResponse<FormSubmissionGridRowDto[]>>(
       `${this.baseUrl}/FormSubmissionGridRows/submission/${data.submissionId}/grid/${data.gridId}/bulk`,
       data.rows  // Send only the rows array, not the entire object
     ).pipe(
       map((response) => {
-        console.log('[GridService] ✅ bulkSaveGridData response:', response);
+        console.log('[GridService] ✅ bulkSaveGridData response received');
+        console.log('[GridService] Response statusCode:', response.statusCode);
+        console.log('[GridService] Response message:', response.message);
+        console.log('[GridService] Response data (rows) count:', response.data?.length || 0);
+        if (response.data && response.data.length > 0) {
+          console.log('[GridService] Saved rows:', response.data.map(r => ({
+            id: r.id,
+            rowIndex: r.rowIndex,
+            isActive: r.isActive
+          })));
+        }
         return response;
       }),
       catchError((error) => {
         console.error('[GridService] ❌ bulkSaveGridData error:', error);
+        console.error('[GridService] Error details:', {
+          status: error?.status,
+          message: error?.message,
+          error: error?.error
+        });
         return of({ statusCode: 500, message: 'Error saving grid data', data: [] });
       })
     );
@@ -471,10 +508,22 @@ export class GridService {
    * Get cells by row ID
    */
   getCellsByRow(rowId: number): Observable<ApiResponse<FormSubmissionGridCellDto[]>> {
-    return this.http.get<ApiResponse<FormSubmissionGridCellDto[]>>(
-      `${this.baseUrl}/FormSubmissionGridCells/row/${rowId}`
-    ).pipe(
-      catchError(() => of({ statusCode: 500, message: 'Error loading cells', data: [] }))
+    console.log(`[GridService] getCellsByRow called: rowId=${rowId}`);
+    
+    const url = `${this.baseUrl}/FormSubmissionGridCells/row/${rowId}`;
+    console.log(`[GridService] Requesting cells from: ${url}`);
+    
+    return this.http.get<ApiResponse<FormSubmissionGridCellDto[]>>(url).pipe(
+      map((response: ApiResponse<FormSubmissionGridCellDto[]>) => {
+        const cells = response.data || [];
+        console.log(`[GridService] ✅ Received ${cells.length} cells from backend for rowId=${rowId}`);
+        console.log(`[GridService] Cells data:`, cells.map(c => ({ id: c.id, columnId: c.columnId, cellValue: c.cellValue })));
+        return response;
+      }),
+      catchError((error) => {
+        console.error(`[GridService] ❌ Error loading cells for rowId=${rowId}:`, error);
+        return of({ statusCode: 500, message: 'Error loading cells', data: [] });
+      })
     );
   }
 

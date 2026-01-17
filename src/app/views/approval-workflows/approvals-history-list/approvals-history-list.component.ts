@@ -1,6 +1,5 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DocumentApprovalHistoryService, DocumentApprovalHistoryDto } from '../../FormBuilder/services/document-approval-history.service';
 import { MessageService } from 'primeng/api';
@@ -15,7 +14,6 @@ import { TranslationService } from '../../../core/services/translation.service';
   standalone: true,
   imports: [
     CommonModule,
-    RouterLink,
     FormsModule,
     ToastModule,
     TableModule,

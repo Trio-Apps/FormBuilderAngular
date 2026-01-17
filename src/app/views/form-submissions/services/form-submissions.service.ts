@@ -11,7 +11,7 @@ export interface FormSubmissionDto {
   formName?: string;
   version: number;
   documentTypeId: number;
-  documentTypeName?: string;
+  documentTypeName?: string | null; // Can be null from backend
   seriesId: number;
   seriesCode?: string;
   documentNumber?: string;
@@ -187,12 +187,29 @@ export class FormSubmissionsService {
    */
   getSubmissionById(id: number): Observable<FormSubmissionDetailDto> {
     // Try /{id} endpoint first (standard REST pattern)
+    console.log(`[FormSubmissionsService] Getting submission by ID: ${id}`);
     return this.http.get<any>(`${this.baseUrl}/${id}`).pipe(
       map((response: any) => {
-        if (response && typeof response === 'object') {
-          return response.data || response.result || response;
+        const submission = response && typeof response === 'object'
+          ? (response.data || response.result || response)
+          : response;
+        
+        // Log gridData if present
+        if (submission && submission.gridData) {
+          console.log(`[FormSubmissionsService] Submission ${id} has gridData:`, {
+            gridDataCount: submission.gridData.length,
+            grids: submission.gridData.map((g: any) => ({
+              gridId: g.gridId,
+              gridName: g.gridName,
+              rowsCount: g.rows?.length || 0,
+              cellsCount: g.cells?.length || 0
+            }))
+          });
+        } else {
+          console.warn(`[FormSubmissionsService] Submission ${id} has NO gridData!`, submission);
         }
-        return response;
+        
+        return submission;
       }),
       catchError((error) => {
         // If 404, try /details/{id} endpoint as fallback
@@ -200,10 +217,26 @@ export class FormSubmissionsService {
           console.warn(`[FormSubmissionsService] Endpoint /${id} returned 404, trying /details/${id}`);
           return this.http.get<any>(`${this.baseUrl}/details/${id}`).pipe(
             map((response: any) => {
-              if (response && typeof response === 'object') {
-                return response.data || response.result || response;
+              const submission = response && typeof response === 'object'
+                ? (response.data || response.result || response)
+                : response;
+              
+              // Log gridData if present
+              if (submission && submission.gridData) {
+                console.log(`[FormSubmissionsService] Submission ${id} from /details has gridData:`, {
+                  gridDataCount: submission.gridData.length,
+                  grids: submission.gridData.map((g: any) => ({
+                    gridId: g.gridId,
+                    gridName: g.gridName,
+                    rowsCount: g.rows?.length || 0,
+                    cellsCount: g.cells?.length || 0
+                  }))
+                });
+              } else {
+                console.warn(`[FormSubmissionsService] Submission ${id} from /details has NO gridData!`, submission);
               }
-              return response;
+              
+              return submission;
             }),
             catchError((detailsError) => {
               console.error(`[FormSubmissionsService] Both endpoints failed for submission ${id}`);
@@ -288,7 +321,10 @@ export class FormSubmissionsService {
    * @param formBuilderId The form builder ID
    * @param projectId The project ID
    * @param submittedByUserId The user who created the draft
-   * @param seriesId The document series ID (required for backend validation)
+   * @param seriesId The document series ID (optional - backend will auto-select if not provided)
+   * 
+   * Note: If seriesId is not provided, the backend will automatically select an active series
+   * based on documentTypeId and projectId. It's recommended to provide seriesId for better control.
    */
   createDraft(formBuilderId: number, projectId: number, submittedByUserId: string, seriesId?: number): Observable<FormSubmissionDto> {
     const params: any = {
@@ -477,9 +513,11 @@ export class FormSubmissionsService {
 
         // Check for specific error scenarios
         const errorText = errorMessage.toLowerCase();
-        if (errorText.includes('already submitted') || errorText.includes('already approved')) {
-          errorMessage = 'This form submission has already been submitted or approved.';
-        } else if (errorText.includes('draft') && errorText.includes('required')) {
+        // Removed check for "already submitted" - allow resubmission
+        // if (errorText.includes('already submitted') || errorText.includes('already approved')) {
+        //   errorMessage = 'This form submission has already been submitted or approved.';
+        // } else 
+        if (errorText.includes('draft') && errorText.includes('required')) {
           errorMessage = 'Form submission must be in Draft status before submitting.';
         } else if (errorText.includes('not found')) {
           errorMessage = 'Form submission not found.';

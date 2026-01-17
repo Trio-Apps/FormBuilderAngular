@@ -26,6 +26,7 @@ import {
 import { TranslationService } from '../../../core/services/translation.service';
 import { catchError, of, Observable, forkJoin } from 'rxjs';
 import { switchMap, map } from 'rxjs/operators';
+import { FormSubmissionGridDto, FormSubmissionGridCellDto as SubmissionGridCellDto } from '../../form-submissions/services/form-submissions.service';
 
 /**
  * Grid View Component
@@ -135,10 +136,22 @@ export class GridViewComponent implements OnInit, OnChanges {
       console.log('[GridView] ngOnChanges - submissionId changed:', { old: oldSubmissionId, new: newSubmissionId, hasGrid: !!this.grid });
       
       // Load data if submissionId becomes valid (> 0) and different from before
+      // But only if we don't have existing rows (preserve user-added rows)
       if (newSubmissionId > 0 && newSubmissionId !== oldSubmissionId) {
         if (this.grid) {
-          console.log('[GridView] submissionId changed, reloading grid data');
+          // Only reload if we don't have rows yet, or if submissionId was 0 before (first time)
+          if (this.rows.length === 0 || oldSubmissionId === 0 || oldSubmissionId === null) {
+            console.log('[GridView] submissionId changed from', oldSubmissionId, 'to', newSubmissionId, '- reloading grid data');
           this.loadGridData();
+          } else {
+            console.log('[GridView] submissionId changed but preserving existing', this.rows.length, 'rows (not reloading to avoid data loss)');
+            // Update submissionId in existing rows
+            this.rows.forEach(row => {
+              if (row.submissionId !== newSubmissionId) {
+                row.submissionId = newSubmissionId;
+              }
+            });
+          }
         } else {
           // Grid not loaded yet, store flag to load data after grid initializes
           console.log('[GridView] submissionId set but grid not loaded yet - will load after grid init');
@@ -934,6 +947,113 @@ export class GridViewComponent implements OnInit, OnChanges {
   }
 
   /**
+   * Load grid data from submission response (with cells already nested)
+   * This method is called when submission data is loaded with gridData already populated
+   */
+  loadGridDataFromSubmission(gridData: FormSubmissionGridDto[]): void {
+    console.log('[GridView] loadGridDataFromSubmission called:', {
+      gridId: this.grid?.id,
+      gridName: this.grid?.gridName,
+      submissionId: this.submissionId,
+      gridDataCount: gridData?.length || 0
+    });
+
+    if (!this.grid || !this.grid.id) {
+      console.warn('[GridView] Cannot load grid data: grid not loaded yet');
+      return;
+    }
+
+    if (!gridData || gridData.length === 0) {
+      console.log('[GridView] No grid data provided, initializing empty grid');
+      this.initializeGridData();
+      return;
+    }
+
+    // Filter rows for this grid
+    const gridRows = gridData.filter(g => g.gridId === this.grid?.id);
+    console.log('[GridView] Found', gridRows.length, 'rows for grid', this.grid.id);
+
+    if (gridRows.length === 0) {
+      console.log('[GridView] No rows found for this grid, initializing empty grid');
+      this.initializeGridData();
+      return;
+    }
+
+    // Convert FormSubmissionGridDto[] to FormSubmissionGridRowDto[]
+    // Note: cells from submission response use SubmissionGridCellDto format (with valueString, valueNumber, etc.)
+    // but FormSubmissionGridRowDto expects FormSubmissionGridCellDto format (with cellValue)
+    this.rows = gridRows.map(gridRow => {
+      // Convert cells from submission format to grid component format
+      const convertedCells: FormSubmissionGridCellDto[] = (gridRow.cells || []).map((submissionCell: SubmissionGridCellDto) => {
+        // Extract value from submission cell format (valueString, valueNumber, etc.)
+        const cellValue = submissionCell.valueString 
+          || (submissionCell.valueNumber !== null && submissionCell.valueNumber !== undefined ? submissionCell.valueNumber.toString() : '')
+          || (submissionCell.valueBool !== null && submissionCell.valueBool !== undefined ? submissionCell.valueBool.toString() : '')
+          || (submissionCell.valueDate ? new Date(submissionCell.valueDate).toISOString().split('T')[0] : '')
+          || (submissionCell.valueJson ? (() => {
+              try {
+                const parsed = JSON.parse(submissionCell.valueJson);
+                return typeof parsed === 'string' ? parsed : submissionCell.valueJson;
+              } catch {
+                return submissionCell.valueJson;
+              }
+            })() : '')
+          || '';
+
+        // Convert to FormSubmissionGridCellDto format (with cellValue)
+        return {
+          id: submissionCell.id,
+          rowId: submissionCell.rowId,
+          columnId: submissionCell.columnId,
+          cellValue: cellValue
+        } as FormSubmissionGridCellDto;
+      });
+
+      return {
+        id: gridRow.id,
+        submissionId: gridRow.submissionId,
+        gridId: gridRow.gridId,
+        rowIndex: gridRow.rowIndex,
+        isActive: true, // Assume active if not specified
+        isDeleted: false,
+        cells: convertedCells
+      } as FormSubmissionGridRowDto;
+    });
+
+    // Sort by rowIndex
+    this.rows.sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0));
+
+    // Initialize gridData structure and populate cell values
+    this.gridData = {};
+    this.rows.forEach((row) => {
+      if (!this.gridData[row.rowIndex]) {
+        this.gridData[row.rowIndex] = {};
+      }
+
+      // Populate cell values from nested cells
+      if (row.cells && row.cells.length > 0) {
+        row.cells.forEach((cell: FormSubmissionGridCellDto) => {
+          if (cell.columnId) {
+            this.gridData[row.rowIndex][cell.columnId] = cell.cellValue || '';
+            console.log('[GridView] Loaded cell value:', {
+              rowIndex: row.rowIndex,
+              columnId: cell.columnId,
+              value: cell.cellValue,
+              cell: cell
+            });
+          }
+        });
+      }
+    });
+
+    console.log('[GridView] ✅ Loaded grid data from submission:', {
+      rowsCount: this.rows.length,
+      gridData: this.gridData
+    });
+    this.loading = false;
+  }
+
+  /**
    * Load grid data (rows and cells)
    */
   private loadGridData(): void {
@@ -949,13 +1069,29 @@ export class GridViewComponent implements OnInit, OnChanges {
       return;
     }
 
+    // Don't reload if we already have rows (prevents losing unsaved rows when submissionId changes)
+    if (this.rows.length > 0) {
+      console.log('[GridView] loadGridData - skipping reload (already have', this.rows.length, 'rows, preserving unsaved data)');
+      console.log('[GridView] Current rows:', this.rows.map(r => ({ id: r.id, rowIndex: r.rowIndex, isActive: r.isActive })));
+      this.loading = false;
+      return;
+    }
+
     console.log('[GridView] Loading rows for submission', this.submissionId, 'grid', this.grid.id);
     this.loading = true;
     this.gridService.getRowsBySubmissionAndGrid(this.submissionId, this.grid.id).subscribe({
       next: (response: ApiResponse<FormSubmissionGridRowDto[]>) => {
-        this.rows = response.data || [];
-        console.log('[GridView] ✅ Loaded', this.rows.length, 'rows for grid', this.grid?.gridName);
-        console.log('[GridView] Rows data:', this.rows.map(r => ({ id: r.id, rowIndex: r.rowIndex, isActive: r.isActive })));
+        const loadedRows = response.data || [];
+        console.log('[GridView] ✅ Loaded', loadedRows.length, 'rows from backend for grid', this.grid?.gridName);
+        console.log('[GridView] Loaded rows data:', loadedRows.map(r => ({ id: r.id, rowIndex: r.rowIndex, isActive: r.isActive })));
+        
+        // Only set rows if we don't have any (preserve user-added rows)
+        if (this.rows.length === 0) {
+          this.rows = loadedRows;
+        } else {
+          console.log('[GridView] Preserving existing', this.rows.length, 'rows, not overwriting with backend data');
+        }
+        
         this.rows.sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0));
         
         // Load cells for each row
@@ -1007,8 +1143,22 @@ export class GridViewComponent implements OnInit, OnChanges {
             // Populate cell values
             cells.forEach((cell: FormSubmissionGridCellDto) => {
               if (cell.columnId) {
-                this.gridData[row.rowIndex][cell.columnId] = cell.cellValue || '';
-                console.log('[GridView] Cell value:', { rowIndex: row.rowIndex, columnId: cell.columnId, value: cell.cellValue });
+                // Handle different value formats from backend
+                // Backend may send cellValue, valueString, valueNumber, etc.
+                const cellValue = (cell as any).cellValue 
+                  || (cell as any).valueString 
+                  || (cell as any).valueNumber?.toString()
+                  || (cell as any).valueBool?.toString()
+                  || (cell as any).valueDate
+                  || '';
+                
+                this.gridData[row.rowIndex][cell.columnId] = cellValue;
+                console.log('[GridView] Cell value:', { 
+                  rowIndex: row.rowIndex, 
+                  columnId: cell.columnId, 
+                  value: cellValue,
+                  rawCell: cell
+                });
               }
             });
             
@@ -1297,28 +1447,57 @@ export class GridViewComponent implements OnInit, OnChanges {
     this.validationErrors = {};
 
     // Prepare bulk save data
+    // Filter out rows that are marked as deleted or inactive (if needed)
+    // But for now, save all rows to allow resubmission
+    const rowsToSave = this.rows.filter(row => row.isActive !== false);
+    console.log('[GridView] Total rows:', this.rows.length, 'Active rows to save:', rowsToSave.length);
+    console.log('[GridView] Rows details:', this.rows.map(r => ({ 
+      rowIndex: r.rowIndex, 
+      isActive: r.isActive, 
+      id: r.id 
+    })));
+    
     const bulkData: BulkSaveGridDataDto = {
       submissionId: this.submissionId,
       gridId: this.grid.id,
-      rows: this.rows.map((row) => {
+      rows: rowsToSave.map((row) => {
         const rowData: BulkGridRowDto = {
           rowIndex: row.rowIndex,
-          isActive: row.isActive,
+          isActive: row.isActive !== false, // Ensure isActive is true
           cells: this.columns.map((col) => {
             const value = this.getCellValue(row.rowIndex, col.id);
             const cellData: BulkGridCellDto = this.buildCellData(col, value);
             return cellData;
           })
         };
+        console.log(`[GridView] Prepared row ${row.rowIndex} with ${rowData.cells.length} cells`);
         return rowData;
       })
     };
     
+    console.log('[GridView] Bulk data to save - Rows count:', bulkData.rows.length);
     console.log('[GridView] Bulk data to save:', JSON.stringify(bulkData, null, 2));
 
     // First validate, then save
+    console.log('[GridView] Starting validation before save...');
+    console.log('[GridView] About to validate', bulkData.rows.length, 'rows');
     return this.validateGridData().pipe(
       switchMap((validationResult) => {
+        console.log('[GridView] Validation result:', {
+          isValid: validationResult.isValid,
+          errorsCount: validationResult.errors?.length || 0,
+          warningsCount: validationResult.warnings?.length || 0
+        });
+        
+        if (validationResult.errors && validationResult.errors.length > 0) {
+          console.log('[GridView] Validation errors:', validationResult.errors);
+          // Log which rows have errors
+          const rowsWithErrors = [...new Set(validationResult.errors.map(e => e.rowIndex).filter(idx => idx !== undefined))];
+          console.log('[GridView] Rows with validation errors:', rowsWithErrors);
+          console.log('[GridView] Total rows to save:', bulkData.rows.length);
+          console.log('[GridView] Rows that will be saved (if validation passes):', bulkData.rows.map(r => r.rowIndex));
+        }
+        
         if (!validationResult.isValid && validationResult.errors && validationResult.errors.length > 0) {
           // Map validation errors to display format
           this.validationErrors = {};
@@ -1332,17 +1511,42 @@ export class GridViewComponent implements OnInit, OnChanges {
           });
           this.saving = false;
           this.error = 'Grid validation failed. Please fix the errors.';
+          console.error('[GridView] ❌ Validation failed, NOT saving data');
           return of({ statusCode: 400, message: this.error, data: [] });
         }
+        
+        console.log('[GridView] ✅ Validation passed, proceeding to save', bulkData.rows.length, 'rows');
 
         // If validation passes, save the data
+        console.log('[GridView] Calling bulkSaveGridData with', bulkData.rows.length, 'rows');
         return this.gridService.bulkSaveGridData(bulkData).pipe(
           map((response: ApiResponse<FormSubmissionGridRowDto[]>) => {
+            console.log('[GridView] ✅ Save response received');
+            console.log('[GridView] Response statusCode:', response.statusCode);
+            console.log('[GridView] Response message:', response.message);
+            console.log('[GridView] Response data (saved rows) count:', response.data?.length || 0);
+            
             if (response.data) {
+              console.log('[GridView] Saved rows details:', response.data.map(r => ({
+                id: r.id,
+                rowIndex: r.rowIndex,
+                isActive: r.isActive,
+                submissionId: r.submissionId,
+                gridId: r.gridId
+              })));
+              
+              // Check if all rows were saved
+              if (response.data.length < bulkData.rows.length) {
+                console.warn(`[GridView] ⚠️ WARNING: Sent ${bulkData.rows.length} rows but only ${response.data.length} were saved!`);
+                console.warn('[GridView] Sent row indices:', bulkData.rows.map(r => r.rowIndex));
+                console.warn('[GridView] Saved row indices:', response.data.map(r => r.rowIndex));
+              }
+              
               this.rows = response.data;
               this.saving = false;
               this.validationErrors = {};
             } else {
+              console.error('[GridView] ❌ No data in response!');
               this.error = response.message || 'Error saving grid data';
               this.saving = false;
             }

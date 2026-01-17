@@ -1061,6 +1061,32 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     return project ? project.name : `Project #${projectId}`;
   }
 
+  /**
+   * Get project name safely from DocumentSeries (handles null projectName)
+   * @param series DocumentSeries object
+   * @returns Safe display name
+   */
+  getSeriesProjectName(series: DocumentSeries | null | undefined): string {
+    if (!series) return 'N/A';
+    // Backend may return null for projectName, so use helper method
+    if (series.projectName) {
+      return series.projectName;
+    }
+    // Fallback to project lookup
+    return this.getProjectName(series.projectId);
+  }
+
+  /**
+   * Get document type name safely from DocumentSeries (handles null documentTypeName)
+   * @param series DocumentSeries object
+   * @returns Safe display name
+   */
+  getSeriesDocumentTypeName(series: DocumentSeries | null | undefined): string {
+    if (!series) return 'N/A';
+    // Backend may return null for documentTypeName
+    return series.documentTypeName ?? 'N/A';
+  }
+
   closeSeriesModal(): void {
     this.showSeriesModal = false;
     this.showSeriesFormModal = false;

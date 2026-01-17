@@ -5,6 +5,30 @@ import { catchError, map } from 'rxjs/operators';
 import { ValidationService } from '../../angular-validation/services/validation.service';
 import { ValidationErrorCollection, ValidationResponse } from '../../angular-validation/models/validation-error.model';
 
+export interface FormSubmissionDto {
+  id: number;
+  formBuilderId: number;
+  formName?: string;
+  version: number;
+  documentTypeId: number;
+  documentTypeName?: string | null; // Can be null from backend
+  seriesId: number;
+  seriesCode?: string;
+  documentNumber?: string;
+  submittedByUserId?: string;
+  submittedByUserName?: string;
+  submittedDate: Date | string;
+  status: string;
+  createdDate: Date | string;
+  lastUpdatedDate: Date | string;
+}
+
+export interface SaveFormSubmissionDataResponse {
+  success: boolean;
+  message: string;
+  data: FormSubmissionDto;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -194,5 +218,63 @@ export class FormSubmissionService {
     });
 
     return formData;
+  }
+
+  /**
+   * Save form submission data
+   * Returns FormSubmissionDto with updated status
+   */
+  saveFormSubmissionData(
+    url: string,
+    formData: any,
+    options?: {
+      headers?: any;
+      showValidationErrors?: boolean;
+    }
+  ): Observable<SaveFormSubmissionDataResponse> {
+    const showErrors = options?.showValidationErrors !== false;
+    return this.http.post<any>(url, formData, { headers: options?.headers }).pipe(
+      map(response => {
+        // Handle different response formats
+        let submissionData: FormSubmissionDto;
+        let message: string = 'Form submission saved successfully';
+
+        if (response && typeof response === 'object') {
+          // Handle wrapped response (e.g., { statusCode, message, data })
+          if (response.data) {
+            submissionData = response.data;
+            message = response.message || message;
+          } else if (response.id) {
+            // Direct FormSubmissionDto
+            submissionData = response;
+            message = response.message || message;
+          } else {
+            throw new Error('Invalid response format');
+          }
+        } else {
+          throw new Error('Invalid response format');
+        }
+
+        return {
+          success: true,
+          message: message,
+          data: submissionData
+        };
+      }),
+      catchError((error: HttpErrorResponse) => {
+        const validationErrors = this.validationService.extractValidationErrors(error);
+
+        if (showErrors && !validationErrors.isEmpty()) {
+          console.warn('Form validation errors:', validationErrors.getAllErrors());
+        }
+
+        // Return error response
+        return of({
+          success: false,
+          message: error?.error?.message || error?.message || 'Form submission failed',
+          data: {} as FormSubmissionDto
+        });
+      })
+    );
   }
 }

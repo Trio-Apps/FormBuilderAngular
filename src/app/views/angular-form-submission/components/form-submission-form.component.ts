@@ -1,9 +1,9 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, AbstractControl, ValidatorFn } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { ValidationService } from '../../angular-validation/services/validation.service';
-import { FormSubmissionService } from '../services/form-submission.service';
+import { FormSubmissionService, FormSubmissionDto } from '../services/form-submission.service';
 import { ValidationErrorCollection, ValidationResponse } from '../../angular-validation/models/validation-error.model';
 import { ValidationErrorDisplayComponent } from '../../angular-validation/components/validation-error-display.component';
 
@@ -34,6 +34,12 @@ export interface FormField {
   ],
   template: `
     <form [formGroup]="form" (ngSubmit)="onSubmit()" class="form-submission-form">
+      <!-- Status Display -->
+      <div *ngIf="submissionStatus" class="status-display">
+        <label class="status-label">Status:</label>
+        <span [ngClass]="getStatusClass()">{{ submissionStatus }}</span>
+      </div>
+
       <div class="form-field" *ngFor="let field of fields">
         <label [for]="field.name" class="form-label">
           {{ field.label }}
@@ -138,8 +144,8 @@ export interface FormField {
       </div>
 
       <!-- Success Message -->
-      <div *ngIf="successMessage" class="alert alert-success mt-3">
-        {{ successMessage }}
+      <div *ngIf="successMessage || saveMessage" class="alert alert-success mt-3">
+        {{ saveMessage || successMessage }}
       </div>
     </form>
   `,
@@ -287,6 +293,56 @@ export interface FormField {
       border-color: #c3e6cb;
     }
 
+    .status-display {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      padding: 0.75rem 1rem;
+      background-color: #f8f9fa;
+      border-radius: 0.375rem;
+    }
+
+    .status-label {
+      font-weight: 500;
+      color: #495057;
+      margin: 0;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-radius: 0.375rem;
+      text-transform: capitalize;
+    }
+
+    .status-draft {
+      background-color: #6c757d;
+      color: #fff;
+    }
+
+    .status-submitted {
+      background-color: #007bff;
+      color: #fff;
+    }
+
+    .status-approved {
+      background-color: #28a745;
+      color: #fff;
+    }
+
+    .status-rejected {
+      background-color: #dc3545;
+      color: #fff;
+    }
+
+    .status-default {
+      background-color: #6c757d;
+      color: #fff;
+    }
+
     .spinner-border {
       width: 1rem;
       height: 1rem;
@@ -303,24 +359,32 @@ export interface FormField {
     }
   `]
 })
-export class FormSubmissionFormComponent implements OnInit, OnDestroy {
+export class FormSubmissionFormComponent implements OnInit, OnDestroy, OnChanges {
   @Input() fields: FormField[] = [];
   @Input() submitUrl: string = '';
   @Input() submitButtonText: string = 'Submit';
   @Input() cancelButtonText: string = 'Cancel';
   @Input() showCancelButton: boolean = false;
   @Input() initialValues: any = {};
+  @Input() submissionId?: number;
+  @Input() currentStatus: string = 'Draft';
+  @Input() saveUrl?: string;
 
   @Output() formSubmit = new EventEmitter<any>();
   @Output() formSuccess = new EventEmitter<any>();
   @Output() formError = new EventEmitter<ValidationErrorCollection>();
   @Output() formCancel = new EventEmitter<void>();
+  @Output() onSave = new EventEmitter<FormSubmissionDto>();
+  @Output() onStatusChange = new EventEmitter<string>();
 
   form: FormGroup;
   isSubmitting = false;
   validationErrors = new ValidationErrorCollection();
   generalErrors: string[] = [];
   successMessage = '';
+  saveMessage = '';
+  submissionStatus: string = 'Draft';
+  private successMessageTimeout?: any;
 
   private subscriptions: Subscription[] = [];
 
@@ -333,12 +397,22 @@ export class FormSubmissionFormComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.submissionStatus = this.currentStatus || 'Draft';
     this.buildForm();
     this.setupFormValidation();
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['currentStatus'] && !changes['currentStatus'].firstChange) {
+      this.submissionStatus = changes['currentStatus'].currentValue || 'Draft';
+    }
+  }
+
   ngOnDestroy(): void {
     this.subscriptions.forEach(sub => sub.unsubscribe());
+    if (this.successMessageTimeout) {
+      clearTimeout(this.successMessageTimeout);
+    }
   }
 
   private buildForm(): void {
@@ -429,16 +503,75 @@ export class FormSubmissionFormComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Use save() if saveUrl is provided, otherwise use submitForm
+    if (this.saveUrl && this.submissionId) {
+      this.save();
+    } else {
+      this.isSubmitting = true;
+      this.clearMessages();
+
+      const formValue = this.form.value;
+
+      this.formSubmissionService.submitForm(this.submitUrl, formValue)
+        .subscribe(result => {
+          this.isSubmitting = false;
+          this.handleSubmissionResult(result);
+        });
+    }
+  }
+
+  save(): void {
+    if (this.form.invalid || this.isSubmitting || !this.saveUrl || !this.submissionId) {
+      if (this.form.invalid) {
+        this.markFormGroupTouched();
+      }
+      return;
+    }
+
     this.isSubmitting = true;
     this.clearMessages();
 
     const formValue = this.form.value;
 
-    this.formSubmissionService.submitForm(this.submitUrl, formValue)
+    this.formSubmissionService.saveFormSubmissionData(this.saveUrl, formValue)
       .subscribe(result => {
         this.isSubmitting = false;
-        this.handleSubmissionResult(result);
+        this.handleSaveResult(result);
       });
+  }
+
+  private handleSaveResult(result: { success: boolean; message: string; data: FormSubmissionDto }): void {
+    if (result.success && result.data) {
+      // Update status from response
+      const newStatus = result.data.status || this.submissionStatus;
+      const statusChanged = newStatus !== this.submissionStatus;
+
+      if (statusChanged) {
+        this.submissionStatus = newStatus;
+        this.onStatusChange.emit(newStatus);
+      }
+
+      // Show success message
+      this.saveMessage = result.message || 'Form saved successfully!';
+      this.successMessage = this.saveMessage;
+
+      // Hide message after 5 seconds
+      if (this.successMessageTimeout) {
+        clearTimeout(this.successMessageTimeout);
+      }
+      this.successMessageTimeout = setTimeout(() => {
+        this.saveMessage = '';
+        this.successMessage = '';
+      }, 5000);
+
+      // Emit events
+      this.onSave.emit(result.data);
+      this.formSuccess.emit(result.data);
+    } else {
+      // Handle error
+      this.generalErrors = [result.message || 'Failed to save form submission'];
+      this.formError.emit(this.validationErrors);
+    }
   }
 
   private handleSubmissionResult(result: ValidationResponse<any>): void {
@@ -575,5 +708,24 @@ export class FormSubmissionFormComponent implements OnInit, OnDestroy {
 
   isFormValid(): boolean {
     return this.form.valid;
+  }
+
+  /**
+   * Get CSS class for status badge
+   */
+  getStatusClass(): string {
+    const status = this.submissionStatus.toLowerCase();
+    switch (status) {
+      case 'draft':
+        return 'status-badge status-draft';
+      case 'submitted':
+        return 'status-badge status-submitted';
+      case 'approved':
+        return 'status-badge status-approved';
+      case 'rejected':
+        return 'status-badge status-rejected';
+      default:
+        return 'status-badge status-default';
+    }
   }
 }

@@ -1,15 +1,22 @@
 // Document Series Models
 
+/**
+ * Document Series - Series configuration for document numbering
+ * Updated based on backend API response:
+ * - documentTypeName and projectName can be null
+ * - isDeleted field is not returned by the backend API
+ */
 export interface DocumentSeries {
   id: number;
   documentTypeId: number;
-  documentTypeName: string;
+  documentTypeName: string | null; // Can be null from backend
   projectId: number;
-  projectName: string;
+  projectName: string | null; // Can be null from backend
   seriesCode: string;
   nextNumber: number;
   isDefault: boolean;
-  isActive: boolean;
+  isActive: boolean; // Boolean from backend
+  // Note: isDeleted is not returned by the backend API
 }
 
 export interface CreateDocumentSeries {

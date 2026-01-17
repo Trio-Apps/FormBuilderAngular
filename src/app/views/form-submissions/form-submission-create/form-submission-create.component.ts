@@ -275,7 +275,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.documentTypesService.getDocumentSeriesByDocumentTypeId(this.documentTypeId).subscribe({
       next: (series: DocumentSeries[]) => {
         // First priority: Use active series
-        const activeSeries = series.filter(s => s.isActive);
+        // Backend returns isActive as boolean (verified)
+        const activeSeries = series.filter(s => s.isActive === true);
         if (activeSeries.length > 0) {
           this.documentSeries = activeSeries;
         } else {
@@ -3162,6 +3163,21 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.formSubmissionsService.getSubmissionById(submissionId).subscribe({
       next: (submission: FormSubmissionDetailDto) => {
         console.log('[FormSubmissionCreate] Loaded submission for edit:', submission);
+        
+        // Log gridData if present
+        if (submission && submission.gridData) {
+          console.log('[FormSubmissionCreate] Submission has gridData:', {
+            gridDataCount: submission.gridData.length,
+            grids: submission.gridData.map((g: any) => ({
+              gridId: g.gridId,
+              gridName: g.gridName,
+              rowIndex: g.rowIndex,
+              cellsCount: g.cells?.length || 0
+            }))
+          });
+        } else {
+          console.warn('[FormSubmissionCreate] Submission has NO gridData!', submission);
+        }
         // Store current submission for approve/reject
         this.currentSubmission = submission;
         // Store current status

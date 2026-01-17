@@ -42,7 +42,6 @@ import { ValidationErrorCollection } from '../../angular-validation/models/valid
     DialogModule,
     ButtonModule,
     RouterLink,
-    ValidationErrorDisplayComponent
   ],
   templateUrl: './fields-list.component.html',
   styleUrls: ['./fields-list.component.scss'],
