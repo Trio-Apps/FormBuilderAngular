@@ -24,7 +24,7 @@
         <div class="grid-stats" *ngIf="grid">
           <span class="stat-item">
             <i class="pi pi-list" style="font-size: 0.75rem;"></i>
-            <strong>{{ rows.length }}</strong> {{ translationService.translate('grids.rows') || 'Rows' }}
+            <strong>{{ rows.length }}</strong>
           </span>
           <span class="stat-item" *ngIf="grid.minRows">
             <i class="pi pi-arrow-down" style="font-size: 0.75rem;"></i>
@@ -36,7 +36,7 @@
           </span>
           <span class="stat-item">
             <i class="pi pi-eye" style="font-size: 0.75rem;"></i>
-            <strong>{{ visibleColumns.length }}</strong> {{ translationService.translate('grids.columns') || 'Columns' }}
+            <strong>{{ visibleColumns.length }}</strong>
           </span>
         </div>
       </div>
@@ -323,18 +323,6 @@
           </tr>
         </tbody>
       </table>
-    </div>
-
-    <!-- Save Button -->
-    <div class="grid-footer" *ngIf="submissionId > 0">
-      <button
-        type="button"
-        class="btn-save-grid"
-        (click)="onSaveGridClick()"
-        [disabled]="saving || rows.length === 0">
-        <i class="pi" [class.pi-spin]="saving" [class.pi-spinner]="saving" [class.pi-save]="!saving"></i>
-        {{ saving ? (translationService.translate('formView.saving') || 'Saving...') : (translationService.translate('formView.save') || 'Save Grid') }}
-      </button>
     </div>
   </div>
 

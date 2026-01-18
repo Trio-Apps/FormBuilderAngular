@@ -206,20 +206,18 @@
   >
     <form (ngSubmit)="saveGrid()">
       <!-- Language Toggle Buttons -->
-      <div class="mb-3 d-flex gap-2">
+      <div class="mb-3 language-buttons-container">
         <button
           type="button"
-          class="btn"
-          [class.btn-primary]="currentInputLanguage === 'en'"
-          [class.btn-outline-secondary]="currentInputLanguage !== 'en'"
+          class="language-btn"
+          [class.language-btn-active]="currentInputLanguage === 'en'"
           (click)="setInputLanguage('en')">
           English
         </button>
         <button
           type="button"
-          class="btn"
-          [class.btn-primary]="currentInputLanguage === 'ar'"
-          [class.btn-outline-secondary]="currentInputLanguage !== 'ar'"
+          class="language-btn"
+          [class.language-btn-active]="currentInputLanguage === 'ar'"
           (click)="setInputLanguage('ar')">
           العربية
         </button>

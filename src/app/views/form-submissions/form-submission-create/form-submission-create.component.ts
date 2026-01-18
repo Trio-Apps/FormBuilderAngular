@@ -3457,7 +3457,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     console.log(`[FormSubmissionCreate] Found ${fileFields.length} file field(s)`);
     
     if (fileFields.length === 0) {
-      console.warn('[FormSubmissionCreate] No file fields found. All fields:', this.fields.map(f => ({
+      // This is normal - not all forms have file fields
+      console.log('[FormSubmissionCreate] No file fields found in this form. All fields:', this.fields.map(f => ({
         id: f.id,
         fieldCode: f.fieldCode,
         fieldName: f.fieldName,
@@ -5043,8 +5044,15 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    */
   async saveAllGridsData(): Promise<void> {
     const gridFields = this.getGridFields();
-    console.log('[FormSubmissionCreate] saveAllGridsData called, grid fields count:', gridFields.length);
+    console.log('[FormSubmissionCreate] ===== saveAllGridsData called =====');
+    console.log('[FormSubmissionCreate] submissionId:', this.submissionId);
+    console.log('[FormSubmissionCreate] grid fields count:', gridFields.length);
     
+    if (!this.submissionId || this.submissionId <= 0) {
+      console.warn('[FormSubmissionCreate] No submissionId available for saving grid data');
+      return;
+    }
+
     if (gridFields.length === 0 || !this.gridComponents || this.gridComponents.length === 0) {
       console.log('[FormSubmissionCreate] No grid fields or components to save');
       return;
@@ -5053,15 +5061,67 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     const gridComponentsArray = this.gridComponents.toArray();
     console.log('[FormSubmissionCreate] Grid components count:', gridComponentsArray.length);
 
+    // First, update submissionId in all grid components and their rows
+    // We already checked that submissionId is not null/0 above, so we can safely use it
+    const submissionIdValue = this.submissionId!;
     for (const gridComponent of gridComponentsArray) {
-      if (gridComponent.hasGridData()) {
-        console.log('[FormSubmissionCreate] Saving grid data for grid:', gridComponent.grid?.gridName);
+      console.log(`[FormSubmissionCreate] Processing grid component: ${gridComponent.grid?.gridName}`, {
+        currentSubmissionId: gridComponent.submissionId,
+        targetSubmissionId: submissionIdValue,
+        rowsCount: gridComponent.rows?.length || 0,
+        hasGridData: gridComponent.hasGridData()
+      });
+      
+      // Always update submissionId to ensure it's correct (even if it seems correct)
+      if (gridComponent.submissionId !== submissionIdValue) {
+        console.log(`[FormSubmissionCreate] Updating submissionId in grid ${gridComponent.grid?.gridName} from ${gridComponent.submissionId} to ${submissionIdValue}`);
+      }
+      gridComponent.submissionId = submissionIdValue;
+      
+      // Update submissionId in all rows (ALWAYS, even if rows already have the correct submissionId)
+      if (gridComponent.rows && gridComponent.rows.length > 0) {
+        console.log(`[FormSubmissionCreate] Updating submissionId in ${gridComponent.rows.length} rows`);
+        gridComponent.rows.forEach((row, index) => {
+          const oldSubmissionId = row.submissionId;
+          row.submissionId = submissionIdValue;
+          console.log(`[FormSubmissionCreate] Row ${index} (rowIndex: ${row.rowIndex}): submissionId updated from ${oldSubmissionId} to ${row.submissionId}`);
+        });
+      } else {
+        console.log(`[FormSubmissionCreate] Grid ${gridComponent.grid?.gridName} has no rows`);
+      }
+    }
+
+    // Now save all grids with data
+    for (const gridComponent of gridComponentsArray) {
+      const hasData = gridComponent.hasGridData();
+      const rowsCount = gridComponent.rows?.length || 0;
+      
+      console.log(`[FormSubmissionCreate] Checking grid ${gridComponent.grid?.gridName} for save:`, {
+        gridId: gridComponent.grid?.id,
+        submissionId: gridComponent.submissionId,
+        rowsCount: rowsCount,
+        hasGridData: hasData,
+        rows: gridComponent.rows?.map(r => ({ 
+          rowIndex: r.rowIndex, 
+          submissionId: r.submissionId, 
+          isActive: r.isActive 
+        })) || []
+      });
+      
+      if (hasData) {
+        console.log('[FormSubmissionCreate] ✅ Saving grid data for grid:', gridComponent.grid?.gridName);
         try {
           const response = await gridComponent.saveGridData().toPromise();
-          console.log('[FormSubmissionCreate] Grid data saved:', response);
+          console.log('[FormSubmissionCreate] ✅ Grid data saved successfully:', {
+            statusCode: response?.statusCode,
+            message: response?.message,
+            rowsSaved: response?.data?.length || 0
+          });
         } catch (error) {
-          console.error('[FormSubmissionCreate] Error saving grid data:', error);
+          console.error('[FormSubmissionCreate] ❌ Error saving grid data:', error);
         }
+      } else {
+        console.log(`[FormSubmissionCreate] ⚠️ Skipping grid (no data): ${gridComponent.grid?.gridName}, rowsCount: ${rowsCount}`);
       }
     }
   }

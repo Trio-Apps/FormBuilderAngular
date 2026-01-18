@@ -190,23 +190,56 @@ export class FormSubmissionsService {
     console.log(`[FormSubmissionsService] Getting submission by ID: ${id}`);
     return this.http.get<any>(`${this.baseUrl}/${id}`).pipe(
       map((response: any) => {
+        // Log raw response first
+        console.log(`[FormSubmissionsService] Raw API response for submission ${id}:`, response);
+        console.log(`[FormSubmissionsService] Response type:`, typeof response);
+        console.log(`[FormSubmissionsService] Response.data:`, response?.data);
+        console.log(`[FormSubmissionsService] Response.data?.fieldValues:`, response?.data?.fieldValues);
+        console.log(`[FormSubmissionsService] Response.data?.gridData:`, response?.data?.gridData);
+        
         const submission = response && typeof response === 'object'
           ? (response.data || response.result || response)
           : response;
         
-        // Log gridData if present
-        if (submission && submission.gridData) {
-          console.log(`[FormSubmissionsService] Submission ${id} has gridData:`, {
-            gridDataCount: submission.gridData.length,
-            grids: submission.gridData.map((g: any) => ({
-              gridId: g.gridId,
-              gridName: g.gridName,
-              rowsCount: g.rows?.length || 0,
-              cellsCount: g.cells?.length || 0
-            }))
+        // Log submission after extraction
+        console.log(`[FormSubmissionsService] Extracted submission:`, submission);
+        console.log(`[FormSubmissionsService] submission.fieldValues:`, submission?.fieldValues);
+        console.log(`[FormSubmissionsService] submission.gridData:`, submission?.gridData);
+        
+        // Log fieldValues and gridData if present
+        if (submission) {
+          console.log(`[FormSubmissionsService] Submission ${id} data:`, {
+            hasFieldValues: !!(submission.fieldValues && submission.fieldValues.length > 0),
+            fieldValuesCount: submission.fieldValues?.length || 0,
+            hasGridData: !!(submission.gridData && submission.gridData.length > 0),
+            gridDataCount: submission.gridData?.length || 0,
+            hasAttachments: !!(submission.attachments && submission.attachments.length > 0),
+            attachmentsCount: submission.attachments?.length || 0
           });
+          
+          if (submission.fieldValues && submission.fieldValues.length > 0) {
+            console.log(`[FormSubmissionsService] Submission ${id} fieldValues:`, submission.fieldValues.map((fv: any) => ({
+              id: fv.id,
+              fieldId: fv.fieldId,
+              fieldCode: fv.fieldCode,
+              valueString: fv.valueString,
+              valueNumber: fv.valueNumber
+            })));
+          }
+          
+          if (submission.gridData && submission.gridData.length > 0) {
+            console.log(`[FormSubmissionsService] Submission ${id} has gridData:`, {
+              gridDataCount: submission.gridData.length,
+              grids: submission.gridData.map((g: any) => ({
+                gridId: g.gridId,
+                gridName: g.gridName,
+                rowsCount: g.rows?.length || 0,
+                cellsCount: g.cells?.length || 0
+              }))
+            });
+          }
         } else {
-          console.warn(`[FormSubmissionsService] Submission ${id} has NO gridData!`, submission);
+          console.warn(`[FormSubmissionsService] Submission ${id} has NO data!`, submission);
         }
         
         return submission;

@@ -600,3 +600,42 @@
   }
 }
 
+// Language Buttons Styling
+.language-buttons-container {
+  display: flex;
+  gap: 12px;
+  padding: 0;
+  margin-bottom: 16px;
+
+  .language-btn {
+    flex: 1;
+    padding: 12px 24px;
+    border: none;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-weight: 500;
+    font-size: 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+
+    &:hover {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    &.language-btn-active {
+      background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+      color: white;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(40, 106, 97, 0.3);
+
+      &:hover {
+        background: linear-gradient(135deg, #1f5249 0%, #00d4a3 100%);
+        box-shadow: 0 4px 12px rgba(40, 106, 97, 0.4);
+      }
+    }
+  }
+}
+

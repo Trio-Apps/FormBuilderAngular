@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChildren, QueryLis
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { FormSubmissionsService, FormSubmissionDto, FormSubmissionDetailDto, CreateFormSubmissionDto, UpdateFormSubmissionDto } from '../services/form-submissions.service';
+import { FormSubmissionsService, FormSubmissionDto, FormSubmissionDetailDto, CreateFormSubmissionDto, UpdateFormSubmissionDto, FormSubmissionGridDto } from '../services/form-submissions.service';
 import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../models/approve-reject-submission.model';
 import { FormSubmissionValuesService, FormSubmissionValueDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto, BulkFormSubmissionValuesDto } from '../services/form-submission-values.service';
 import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
@@ -32,7 +32,7 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
 import { StorageService } from '../../../auth/storage.service';
 import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
-import { Subscription, forkJoin, of } from 'rxjs';
+import { Subscription, forkJoin, of, Observable } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 
@@ -84,6 +84,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   // Grid support for View/Edit Submission
   submissionGrids: FormGridDto[] = [];
   @ViewChildren(GridViewComponent) gridComponents!: QueryList<GridViewComponent>;
+  pendingGridDataLoad: FormSubmissionDetailDto | null = null;
+
+  // Cache for user inbox items to check stage assignment
+  userInboxCache: ApprovalInboxItemDto[] | null = null;
+  inboxCacheLoaded = false;
 
   // Loading States
   loading = {
@@ -333,6 +338,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
   loadSubmissions(): void {
     this.loading.submissions = true;
+    // Load user inbox cache for stage assignment check (for approve/reject buttons)
+    this.loadUserInboxCache();
+    
     this.formSubmissionsService.getSubmissionsByDocumentTypeId(this.documentTypeId).subscribe({
       next: (submissions: FormSubmissionDto[]) => {
         this.submissions = submissions || [];
@@ -453,22 +461,44 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     const originalSubmissionId = submission.id;
     console.log('[FormSubmissionsList] Viewing submission:', {
       id: originalSubmissionId,
+      submissionId: submission.id,
       documentNumber: submission.documentNumber,
       formBuilderId: submission.formBuilderId,
       submissionObject: submission
     });
     
+    // Validate that we have a valid ID
+    if (!originalSubmissionId || originalSubmissionId <= 0) {
+      console.error('[FormSubmissionsList] Invalid submission ID:', originalSubmissionId);
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Invalid submission ID'
+      });
+      this.loading.fieldValues = false;
+      return;
+    }
+    
     // Use getSubmissionById to get complete submission details including gridData
+    console.log('[FormSubmissionsList] Calling getSubmissionById with ID:', originalSubmissionId);
     this.formSubmissionsService.getSubmissionById(originalSubmissionId).subscribe({
       next: (submissionDetail: FormSubmissionDetailDto) => {
-        console.log('[FormSubmissionsList] Loaded submission details with gridData:', submissionDetail);
+        console.log('[FormSubmissionsList] Raw response from getSubmissionById:', submissionDetail);
+        console.log('[FormSubmissionsList] submissionDetail.id before assignment:', submissionDetail.id);
+        console.log('[FormSubmissionsList] originalSubmissionId:', originalSubmissionId);
+        console.log('[FormSubmissionsList] fieldValues count:', submissionDetail.fieldValues?.length || 0);
         console.log('[FormSubmissionsList] gridData count:', submissionDetail.gridData?.length || 0);
+        console.log('[FormSubmissionsList] attachments count:', submissionDetail.attachments?.length || 0);
         
         // Ensure ID is preserved
         submissionDetail.id = originalSubmissionId;
+        console.log('[FormSubmissionsList] submissionDetail.id after assignment:', submissionDetail.id);
         submissionDetail.fieldValues = submissionDetail.fieldValues || [];
         submissionDetail.attachments = submissionDetail.attachments || [];
         submissionDetail.gridData = submissionDetail.gridData || [];
+        
+        console.log('[FormSubmissionsList] After ensuring defaults - fieldValues count:', submissionDetail.fieldValues.length);
+        console.log('[FormSubmissionsList] After ensuring defaults - fieldValues:', submissionDetail.fieldValues);
         
         this.selectedSubmission = submissionDetail;
         
@@ -480,6 +510,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
           // Build form even without fields (will show field codes)
           this.buildEditSubmissionValuesForm(submissionDetail);
           this.loadAttachmentsForFields(originalSubmissionId, []);
+          this.loadGridDataIntoComponents(submissionDetail);
           this.loading.fieldValues = false;
           this.showSubmissionModal = true;
         }
@@ -507,6 +538,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
             } else {
               this.buildEditSubmissionValuesForm(submissionDetail);
               this.loadAttachmentsForFields(originalSubmissionId, []);
+              this.loadGridDataIntoComponents(submissionDetail);
               this.loading.fieldValues = false;
               this.showSubmissionModal = true;
             }
@@ -521,6 +553,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
             } else {
               this.buildEditSubmissionValuesForm(submissionDetail);
               this.loadAttachmentsForFields(originalSubmissionId, []);
+              this.loadGridDataIntoComponents(submissionDetail);
               this.loading.fieldValues = false;
               this.showSubmissionModal = true;
             }
@@ -555,6 +588,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
                 this.selectedSubmission = submissionDetail;
                 this.buildEditSubmissionValuesForm(submissionDetail);
                 this.loadAttachmentsForFields(actualSubmissionId, []);
+                this.loadGridDataIntoComponents(submissionDetail);
                 this.loading.fieldValues = false;
                 this.showSubmissionModal = true;
                 this.cdr.detectChanges();
@@ -578,6 +612,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
                   // Load attachments for file fields using actual submission ID
                   this.loadAttachmentsForFields(actualSubmissionId, allFields);
                   
+                  // Load grid data from submissionDetail into grid components
+                  this.loadGridDataIntoComponents(submissionDetail);
+                  
                   this.loading.fieldValues = false;
                   this.showSubmissionModal = true;
                   this.cdr.detectChanges();
@@ -588,6 +625,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
                   this.selectedSubmission = submissionDetail;
                   this.buildEditSubmissionValuesForm(submissionDetail);
                   this.loadAttachmentsForFields(actualSubmissionId, []);
+                  this.loadGridDataIntoComponents(submissionDetail);
                   this.loading.fieldValues = false;
                   this.showSubmissionModal = true;
                   this.cdr.detectChanges();
@@ -600,6 +638,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
               this.selectedSubmission = submissionDetail;
               this.buildEditSubmissionValuesForm(submissionDetail);
               this.loadAttachmentsForFields(actualSubmissionId, []);
+              this.loadGridDataIntoComponents(submissionDetail);
               this.loading.fieldValues = false;
               this.showSubmissionModal = true;
               this.cdr.detectChanges();
@@ -610,6 +649,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
           this.selectedSubmission = submissionDetail;
           this.buildEditSubmissionValuesForm(submissionDetail);
           this.loadAttachmentsForFields(actualSubmissionId, []);
+          this.loadGridDataIntoComponents(submissionDetail);
           this.loading.fieldValues = false;
           this.showSubmissionModal = true;
           this.cdr.detectChanges();
@@ -621,6 +661,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         this.selectedSubmission = submissionDetail;
         this.buildEditSubmissionValuesForm(submissionDetail);
         this.loadAttachmentsForFields(actualSubmissionId, []);
+        this.loadGridDataIntoComponents(submissionDetail);
         this.loading.fieldValues = false;
         this.showSubmissionModal = true;
         this.cdr.detectChanges();
@@ -634,28 +675,46 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   }
 
   openEditModalOld(submission: FormSubmissionDto): void {
+    // Load submission details
+    this.loading.fieldValues = true;
+    this.loading.attachments = false;
+    this.isViewMode = false; // Edit mode
+    
+    // Clear previous attachments to avoid showing wrong attachments
+    this.fieldAttachments = {};
+    this.submissionGrids = []; // Clear previous grids
+    
+    // Load grids for this form
+    if (submission.formBuilderId) {
+      this.loadGridsForSubmission(submission.formBuilderId);
+    }
+    
+    // Initialize submission form with basic info
     this.submissionForm.patchValue({
       documentNumber: submission.documentNumber || '',
-      status: submission.status || 'Submitted' // Default status is Submitted
+      status: submission.status || 'Submitted'
     });
     
-    // Load field values directly using FormSubmissionValuesService
-    this.loading.fieldValues = true;
+    // Store original submission ID before creating detail object
+    const originalSubmissionId = submission.id;
+    console.log('[FormSubmissionsList] Editing submission:', {
+      id: originalSubmissionId,
+      documentNumber: submission.documentNumber,
+      formBuilderId: submission.formBuilderId
+    });
     
-    // Create submission detail object from the submission we have
-    const submissionDetail: FormSubmissionDetailDto = {
-      ...submission,
-      fieldValues: [],
-      attachments: [],
-      gridData: []
-    };
-    this.selectedSubmission = submissionDetail;
-    
-    // Load field values by submission ID
-    this.formSubmissionValuesService.getBySubmissionId(submission.id).subscribe({
-      next: (fieldValues: FormSubmissionValueDto[]) => {
-        console.log('[FormSubmissionsList] Loaded field values:', fieldValues);
-        submissionDetail.fieldValues = fieldValues || [];
+    // Use getSubmissionById to get complete submission details including gridData
+    this.formSubmissionsService.getSubmissionById(originalSubmissionId).subscribe({
+      next: (submissionDetail: FormSubmissionDetailDto) => {
+        console.log('[FormSubmissionsList] Loaded submission details for edit with gridData:', submissionDetail);
+        console.log('[FormSubmissionsList] gridData count:', submissionDetail.gridData?.length || 0);
+        
+        // Ensure ID is preserved
+        submissionDetail.id = originalSubmissionId;
+        submissionDetail.fieldValues = submissionDetail.fieldValues || [];
+        submissionDetail.attachments = submissionDetail.attachments || [];
+        submissionDetail.gridData = submissionDetail.gridData || [];
+        
         this.selectedSubmission = submissionDetail;
         
         // Load form fields to display field names
@@ -663,22 +722,58 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
           this.loadFormFieldsForEdit(submission.formBuilderId, submissionDetail);
         } else {
           console.warn('[FormSubmissionsList] No formBuilderId found in submission');
-          this.loading.fieldValues = false;
-    this.showSubmissionModal = true;
-        }
-      },
-      error: (error) => {
-        console.error('Error loading field values:', error);
-        // Continue anyway - show modal with empty field values
-        submissionDetail.fieldValues = [];
-        this.selectedSubmission = submissionDetail;
-        
-        if (submission.formBuilderId) {
-          this.loadFormFieldsForEdit(submission.formBuilderId, submissionDetail);
-        } else {
+          // Build form even without fields (will show field codes)
+          this.buildEditSubmissionValuesForm(submissionDetail);
+          this.loadAttachmentsForFields(originalSubmissionId, []);
+          this.loadGridDataIntoComponents(submissionDetail);
           this.loading.fieldValues = false;
           this.showSubmissionModal = true;
         }
+      },
+      error: (error) => {
+        console.error('[FormSubmissionsList] Error loading submission details for edit:', error);
+        // Fallback: Create submission detail object manually
+        const submissionDetail: FormSubmissionDetailDto = {
+          ...submission,
+          id: originalSubmissionId,
+          fieldValues: [],
+          attachments: [],
+          gridData: []
+        };
+        this.selectedSubmission = submissionDetail;
+        
+        // Try to load field values separately as fallback
+        this.formSubmissionValuesService.getBySubmissionId(originalSubmissionId).subscribe({
+          next: (fieldValues: FormSubmissionValueDto[]) => {
+            submissionDetail.fieldValues = fieldValues || [];
+            this.selectedSubmission = submissionDetail;
+            
+            if (submission.formBuilderId) {
+              this.loadFormFieldsForEdit(submission.formBuilderId, submissionDetail);
+            } else {
+              this.buildEditSubmissionValuesForm(submissionDetail);
+              this.loadAttachmentsForFields(originalSubmissionId, []);
+              this.loadGridDataIntoComponents(submissionDetail);
+              this.loading.fieldValues = false;
+              this.showSubmissionModal = true;
+            }
+          },
+          error: (fieldValuesError) => {
+            console.error('[FormSubmissionsList] Error loading field values:', fieldValuesError);
+            submissionDetail.fieldValues = [];
+            this.selectedSubmission = submissionDetail;
+            
+            if (submission.formBuilderId) {
+              this.loadFormFieldsForEdit(submission.formBuilderId, submissionDetail);
+            } else {
+              this.buildEditSubmissionValuesForm(submissionDetail);
+              this.loadAttachmentsForFields(originalSubmissionId, []);
+              this.loadGridDataIntoComponents(submissionDetail);
+              this.loading.fieldValues = false;
+              this.showSubmissionModal = true;
+            }
+          }
+        });
       }
     });
   }
@@ -741,10 +836,38 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       this.editSubmissionValuesForm.removeControl(key);
     });
 
+    // Ensure fieldValues array exists
+    if (!submissionDetail.fieldValues) {
+      submissionDetail.fieldValues = [];
+    }
+
     // Create form controls for each field value
     if (!submissionDetail.fieldValues || submissionDetail.fieldValues.length === 0) {
-      console.warn('[FormSubmissionsList] No field values found in submission detail');
+      console.log('[FormSubmissionsList] No field values found in submission detail');
       console.log('[FormSubmissionsList] Submission detail:', submissionDetail);
+      console.log('[FormSubmissionsList] Available fields:', this.submissionFields.length);
+      
+      // If we have fields but no values, create empty form controls for all non-file fields
+      if (this.submissionFields && this.submissionFields.length > 0) {
+        console.log('[FormSubmissionsList] Creating empty form controls for', this.submissionFields.length, 'fields');
+        this.submissionFields.forEach(field => {
+          // Skip file/image fields - they don't need form controls, only attachments
+          if (this.isFileField(field.id!)) {
+            return;
+          }
+          
+          const controlName = `field_${field.id}`;
+          const control = this.fb.control({ value: null, disabled: this.isViewMode });
+          this.editSubmissionValuesForm.addControl(controlName, control);
+        });
+        console.log('[FormSubmissionsList] Created', Object.keys(this.editSubmissionValuesForm.controls).length, 'empty form controls');
+        return;
+      }
+      
+      // Only warn if we don't have fields either
+      if (!this.submissionFields || this.submissionFields.length === 0) {
+        console.warn('[FormSubmissionsList] No field values and no fields found - cannot build form');
+      }
       return;
     }
 
@@ -1404,6 +1527,16 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
             this.submissionGrids = allGrids;
             console.log('[FormSubmissionsList] Loaded grids for view:', this.submissionGrids.length);
             this.cdr.detectChanges();
+            
+            // If we have pending grid data to load, load it now
+            if (this.pendingGridDataLoad) {
+              console.log('[FormSubmissionsList] Grids loaded, now loading grid data');
+              const pendingData = this.pendingGridDataLoad;
+              this.pendingGridDataLoad = null; // Clear pending before loading
+              setTimeout(() => {
+                this.attemptLoadGridData(pendingData, 0);
+              }, 300); // Wait for components to initialize
+            }
           },
           error: (error) => {
             console.error('[FormSubmissionsList] Error loading grids:', error);
@@ -1416,6 +1549,131 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         this.submissionGrids = [];
       }
     });
+  }
+
+  /**
+   * Load grid data from submissionDetail into grid components
+   */
+  loadGridDataIntoComponents(submissionDetail: FormSubmissionDetailDto): void {
+    // Check if submission has gridData
+    if (!submissionDetail || !submissionDetail.gridData || submissionDetail.gridData.length === 0) {
+      console.log('[FormSubmissionsList] No gridData to load in submission');
+      return;
+    }
+
+    console.log('[FormSubmissionsList] Loading gridData into components:', {
+      gridDataCount: submissionDetail.gridData.length,
+      grids: submissionDetail.gridData.map(g => ({
+        gridId: g.gridId,
+        gridName: g.gridName,
+        rowIndex: g.rowIndex,
+        cellsCount: g.cells?.length || 0
+      })),
+      submissionGridsLoaded: this.submissionGrids.length
+    });
+
+    // If grids are not loaded yet, store submission detail for later loading
+    if (this.submissionGrids.length === 0) {
+      console.log('[FormSubmissionsList] Grids not loaded yet, storing submission detail for later');
+      this.pendingGridDataLoad = submissionDetail;
+      return;
+    }
+
+    // Grids are loaded, proceed to load data
+    // Store submission detail for loading after components are ready
+    this.pendingGridDataLoad = submissionDetail;
+
+    // Wait for grid components to be initialized, then load data
+    // Use multiple retries to ensure components are ready
+    this.attemptLoadGridData(submissionDetail, 0);
+  }
+
+  /**
+   * Attempt to load grid data with retries
+   */
+  private attemptLoadGridData(submissionDetail: FormSubmissionDetailDto, attempt: number): void {
+    const maxAttempts = 10;
+    const delay = 200; // 200ms between attempts
+
+    setTimeout(() => {
+      const gridComponents = this.gridComponents?.toArray() || [];
+      console.log(`[FormSubmissionsList] Attempt ${attempt + 1}: Grid components available:`, gridComponents.length);
+
+      // Check if components are ready (have grid loaded)
+      const readyComponents = gridComponents.filter(gc => gc.grid?.id);
+      
+      if (readyComponents.length > 0) {
+        console.log('[FormSubmissionsList] Found', readyComponents.length, 'ready grid components');
+        this.loadGridDataIntoComponentsInternal(submissionDetail, readyComponents);
+        this.pendingGridDataLoad = null;
+      } else if (attempt < maxAttempts) {
+        // Retry if components not ready yet
+        console.log(`[FormSubmissionsList] Grid components not ready yet, retrying in ${delay}ms...`);
+        this.attemptLoadGridData(submissionDetail, attempt + 1);
+      } else {
+        console.warn('[FormSubmissionsList] Failed to load grid data after', maxAttempts, 'attempts');
+        this.pendingGridDataLoad = null;
+      }
+    }, delay);
+  }
+
+  /**
+   * Internal method to load grid data into grid components
+   */
+  private loadGridDataIntoComponentsInternal(
+    submissionDetail: FormSubmissionDetailDto,
+    gridComponents: GridViewComponent[]
+  ): void {
+    // Group gridData by gridId
+    const gridDataByGridId = new Map<number, FormSubmissionGridDto[]>();
+    submissionDetail.gridData!.forEach(gridRow => {
+      const gridId = gridRow.gridId;
+      if (!gridDataByGridId.has(gridId)) {
+        gridDataByGridId.set(gridId, []);
+      }
+      gridDataByGridId.get(gridId)!.push(gridRow);
+    });
+
+    console.log('[FormSubmissionsList] Grid data grouped by gridId:', {
+      gridIds: Array.from(gridDataByGridId.keys()),
+      counts: Array.from(gridDataByGridId.entries()).map(([id, rows]) => ({ gridId: id, rowsCount: rows.length }))
+    });
+
+    // Load data into each matching grid component
+    let loadedCount = 0;
+    gridComponents.forEach(gridComponent => {
+      // Check if component has grid loaded
+      if (!gridComponent.grid || !gridComponent.grid.id) {
+        console.warn('[FormSubmissionsList] Grid component not ready yet (no grid.id)');
+        return;
+      }
+
+      const gridId = gridComponent.grid.id;
+      const gridDataForThisGrid = gridDataByGridId.get(gridId);
+
+      if (gridDataForThisGrid && gridDataForThisGrid.length > 0) {
+        console.log('[FormSubmissionsList] Loading grid data into component:', {
+          gridId: gridId,
+          gridName: gridComponent.grid.gridName,
+          rowsCount: gridDataForThisGrid.length,
+          cellsCount: gridDataForThisGrid.reduce((sum, row) => sum + (row.cells?.length || 0), 0)
+        });
+        
+        try {
+          gridComponent.loadGridDataFromSubmission(gridDataForThisGrid);
+          loadedCount++;
+        } catch (error) {
+          console.error('[FormSubmissionsList] Error loading grid data into component:', error);
+        }
+      } else {
+        console.log('[FormSubmissionsList] No gridData found for grid:', {
+          gridId: gridId,
+          gridName: gridComponent.grid.gridName
+        });
+      }
+    });
+
+    console.log('[FormSubmissionsList] ✅ Loaded grid data into', loadedCount, 'component(s)');
   }
 
   saveSubmission(): void {
@@ -2553,8 +2811,33 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
     // Step 1: Create submission
     this.formSubmissionsService.createSubmission(createDto).subscribe({
-      next: (submission: FormSubmissionDto) => {
-        // Step 2: Save field values and attachments
+      next: async (submission: FormSubmissionDto) => {
+        // Step 2: Update submissionId in grid components (if any) and save all grid data
+        // This is similar to public form's onSubmit flow
+        console.log('[createSubmission] Updating submissionId in grid components before saving...');
+        const gridComponents = this.gridComponents?.toArray() || [];
+        if (gridComponents.length > 0) {
+          gridComponents.forEach((grid, index) => {
+            if (grid.submissionId !== submission.id && submission.id > 0) {
+              console.log(`[createSubmission] Updating grid ${index} submissionId from ${grid.submissionId} to ${submission.id}`);
+              grid.submissionId = submission.id;
+            }
+          });
+          // Trigger change detection to ensure grid components are updated
+          this.cdr.detectChanges();
+          // Small delay to ensure grid components process the updated submissionId
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Save grids before saving field values
+          console.log('[createSubmission] Saving grid data with submissionId:', submission.id);
+          try {
+            await this.saveAllGridsData().toPromise();
+          } catch (gridError) {
+            console.warn('[createSubmission] Error saving grids, continuing with field values:', gridError);
+          }
+        }
+        
+        // Step 3: Save field values and attachments
         this.saveSubmissionData(submission.id);
       },
       error: (error: any) => {
@@ -2590,6 +2873,52 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  /**
+   * Save all grid data (similar to public form's saveAllGridsData)
+   */
+  saveAllGridsData(): Observable<any[]> {
+    console.log('[FormSubmissionsList] ===== saveAllGridsData called =====');
+    const gridComponents = this.gridComponents?.toArray() || [];
+    console.log('[FormSubmissionsList] Grid components found:', gridComponents.length);
+    
+    if (gridComponents.length === 0) {
+      console.log('[FormSubmissionsList] No grid components found, skipping grid save');
+      return of([]);
+    }
+
+    // Log details of each grid
+    gridComponents.forEach((grid, index) => {
+      console.log(`[FormSubmissionsList] Grid ${index}:`, {
+        gridId: grid.grid?.id,
+        gridName: grid.grid?.gridName,
+        submissionId: grid.submissionId,
+        hasGridData: grid.hasGridData(),
+        rowsCount: grid.rows?.length || 0
+      });
+    });
+
+    const saveObservables = gridComponents
+      .filter(grid => {
+        const shouldSave = grid.hasGridData() && grid.submissionId > 0;
+        console.log(`[FormSubmissionsList] Grid ${grid.grid?.gridName}: shouldSave=${shouldSave}, hasData=${grid.hasGridData()}, submissionId=${grid.submissionId}`);
+        return shouldSave;
+      })
+      .map(grid => grid.saveGridData());
+
+    if (saveObservables.length === 0) {
+      console.log('[FormSubmissionsList] No grids with data to save');
+      return of([]);
+    }
+
+    console.log('[FormSubmissionsList] Saving', saveObservables.length, 'grids');
+    return forkJoin(saveObservables).pipe(
+      catchError((error) => {
+        console.error('[FormSubmissionsList] Error saving grids:', error);
+        return of([]); // Return empty array on error to allow other operations to continue
+      })
+    );
   }
 
   saveSubmissionData(submissionId: number): void {
@@ -3396,15 +3725,94 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    * Check if submission can be approved/rejected
    */
   canApproveReject(submission: FormSubmissionDto): boolean {
-    // ✅ Only Admin can approve/reject
-    if (!this.isAdmin) {
+    // Allow approve/reject for Submitted and Pending Approval statuses
+    if (submission.status !== 'Submitted' && 
+        submission.status !== 'Pending Approval' && 
+        submission.status !== 'Approved') {
       return false;
     }
-    // Allow approve/reject for Submitted and Pending Approval statuses
-    // Also allow for Approved status if admin wants to change it
-    return submission.status === 'Submitted' || 
-           submission.status === 'Pending Approval' || 
-           submission.status === 'Approved';
+
+    // ✅ Admin can always approve/reject
+    if (this.isAdmin) {
+      return true;
+    }
+
+    // ✅ Stage Assignees can approve/reject submissions assigned to them
+    // Check if this submission is in user's inbox (meaning user is assignee for this stage)
+    if (!this.inboxCacheLoaded && this.userInboxCache === null) {
+      // Cache not loaded yet - trigger async load but return false for now
+      // Will be refreshed after cache is loaded
+      if (!this.loading.approveReject) { // Avoid multiple calls
+        this.loadUserInboxCache();
+      }
+      return false;
+    }
+
+    if (this.userInboxCache && this.userInboxCache.length > 0) {
+      // Check if submission exists in user's inbox (user is assignee for this stage)
+      const inboxItem = this.userInboxCache.find(item => item.submissionId === submission.id);
+      if (inboxItem && inboxItem.stageId && inboxItem.stageId > 0) {
+        console.log(`[canApproveReject] ✅ User is assignee for submission ${submission.id}, stageId: ${inboxItem.stageId}`);
+        return true;
+      } else {
+        console.log(`[canApproveReject] ❌ Submission ${submission.id} not found in user inbox (${this.userInboxCache.length} items checked)`);
+      }
+    } else {
+      console.log(`[canApproveReject] ❌ User inbox cache is empty or not loaded. Cache loaded: ${this.inboxCacheLoaded}, Cache items: ${this.userInboxCache?.length || 0}`);
+    }
+
+    // User is neither admin nor stage assignee for this submission
+    return false;
+  }
+
+  /**
+   * Load user inbox cache to check stage assignments
+   */
+  loadUserInboxCache(): void {
+    if (this.inboxCacheLoaded || (this.userInboxCache !== null && this.userInboxCache !== undefined)) {
+      console.log('[FormSubmissionsList] Inbox cache already loaded or loading, skipping...');
+      return; // Already loaded or loading
+    }
+
+    const currentUserId = this.storageService.getUserId()?.toString() || this.authService.userName();
+    if (!currentUserId) {
+      console.log('[FormSubmissionsList] No user ID found, skipping inbox cache load');
+      this.userInboxCache = [];
+      this.inboxCacheLoaded = true; // Mark as loaded (no user = no inbox)
+      return;
+    }
+
+    console.log('[FormSubmissionsList] ===== Loading user inbox cache for stage assignment check =====');
+    console.log('[FormSubmissionsList] User ID:', currentUserId);
+    this.approvalWorkflowRuntimeService.getApprovalInboxForUser(currentUserId).subscribe({
+      next: (inboxItems: ApprovalInboxItemDto[]) => {
+        console.log('[FormSubmissionsList] Raw inbox items received:', inboxItems?.length || 0);
+        console.log('[FormSubmissionsList] Inbox items:', inboxItems.map(item => ({
+          submissionId: item.submissionId,
+          stageId: item.stageId,
+          stageName: item.stageName
+        })));
+        
+        // Filter to only assigned items (stageId > 0)
+        this.userInboxCache = (inboxItems || []).filter(item => item.stageId && item.stageId > 0);
+        this.inboxCacheLoaded = true;
+        console.log(`[FormSubmissionsList] ✅ Loaded ${this.userInboxCache.length} inbox items for user ${currentUserId}`);
+        console.log(`[FormSubmissionsList] Filtered inbox items (stageId > 0):`, this.userInboxCache.map(item => ({
+          submissionId: item.submissionId,
+          stageId: item.stageId
+        })));
+        
+        // Trigger change detection to update approve/reject buttons
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('[FormSubmissionsList] ❌ Error loading inbox cache:', error);
+        this.userInboxCache = [];
+        this.inboxCacheLoaded = true;
+        // Don't block UI - just mark as loaded with empty cache
+        this.cdr.detectChanges();
+      }
+    });
   }
 }
 

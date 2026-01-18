@@ -275,17 +275,12 @@
                     <!-- Grid (Line Items Grid) -->
                     <ng-container *ngSwitchCase="'grid'">
                     <app-grid-view 
-                        *ngIf="submissionId"
                       [field]="field"
                       [gridId]="field.gridId"
-                        [submissionId]="submissionId"
+                      [submissionId]="submissionId || 0"
                       [formBuilderId]="documentType?.formBuilderId || selectedFormId || 0"
-                        [isReadOnly]="!isFieldEditable(field)">
+                      [isReadOnly]="!isFieldEditable(field)">
                     </app-grid-view>
-                      <div *ngIf="!submissionId" class="grid-placeholder">
-                        <i class="pi pi-table" style="font-size: 2rem; color: #ccc;"></i>
-                        <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'يرجى حفظ المسودة أولاً' : 'Please save as draft first' }}</p>
-                      </div>
                     </ng-container>
 
                     <!-- File Upload Field -->
@@ -391,17 +386,12 @@
               <!-- Grid View -->
               <div class="field-input-wrapper">
                 <app-grid-view 
-                  *ngIf="submissionId"
                   [gridId]="grid.id"
                   [gridTitle]="translationService.getCurrentLanguage() === 'ar' && grid.foreignGridName ? grid.foreignGridName : grid.gridName"
-                  [submissionId]="submissionId"
+                  [submissionId]="submissionId || 0"
                   [formBuilderId]="documentType?.formBuilderId || selectedFormId || 0"
                   [isReadOnly]="false">
                 </app-grid-view>
-                <div *ngIf="!submissionId" class="grid-placeholder">
-                  <i class="pi pi-table" style="font-size: 2rem; color: #ccc;"></i>
-                  <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'يرجى حفظ المسودة أولاً لإضافة بيانات الجدول' : 'Please save as draft first to add grid data' }}</p>
-                </div>
               </div>
             </div>
           </div>

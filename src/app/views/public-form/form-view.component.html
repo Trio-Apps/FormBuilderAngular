@@ -81,15 +81,6 @@
 
           <!-- Field Input (Google Forms style - preview only, empty answer) -->
           <div class="field-input-wrapper">
-            <!-- Debug: Field Type (uncomment for debugging) -->
-            <small style="color: #999; font-size: 0.75rem; display: block; margin-bottom: 5px;">
-              Field: {{ field.fieldName }} | 
-              Type: {{ getFieldType(field) }} | 
-              FieldTypeName: {{ field.fieldTypeName }} | 
-              HasOptions: {{ field.fieldType?.hasOptions }} | 
-              AllowMultiple: {{ field.fieldType?.allowMultiple }} |
-              Options Count: {{ (getFieldOptions(field) || []).length }}
-            </small>
             <ng-container [ngSwitch]="getFieldType(field)">
 
               <!-- Text Input (check if password field) -->

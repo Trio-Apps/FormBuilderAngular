@@ -142,18 +142,26 @@ export class GridViewComponent implements OnInit, OnChanges {
           // Only reload if we don't have rows yet, or if submissionId was 0 before (first time)
           if (this.rows.length === 0 || oldSubmissionId === 0 || oldSubmissionId === null) {
             console.log('[GridView] submissionId changed from', oldSubmissionId, 'to', newSubmissionId, '- reloading grid data');
-          this.loadGridData();
+            this.loadGridData();
           } else {
             console.log('[GridView] submissionId changed but preserving existing', this.rows.length, 'rows (not reloading to avoid data loss)');
-            // Update submissionId in existing rows
+            // Update submissionId in existing rows (important: update rows added before submissionId was available)
             this.rows.forEach(row => {
               if (row.submissionId !== newSubmissionId) {
+                console.log(`[GridView] Updating row ${row.rowIndex} submissionId from ${row.submissionId} to ${newSubmissionId}`);
                 row.submissionId = newSubmissionId;
               }
             });
           }
         } else {
-          // Grid not loaded yet, store flag to load data after grid initializes
+          // Grid not loaded yet, but if submissionId changed from 0 to > 0, update existing rows
+          if (this.rows.length > 0 && (oldSubmissionId === 0 || oldSubmissionId === null || oldSubmissionId === undefined)) {
+            console.log('[GridView] Grid not loaded yet, but updating existing rows with new submissionId:', newSubmissionId);
+            this.rows.forEach(row => {
+              row.submissionId = newSubmissionId;
+            });
+          }
+          // Store flag to load data after grid initializes
           console.log('[GridView] submissionId set but grid not loaded yet - will load after grid init');
           (this as any)._pendingDataLoad = true;
         }
@@ -1249,15 +1257,38 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Add new row
    */
   addRow(): void {
+    console.log('[GridView] ===== addRow() called =====');
+    console.log('[GridView] Current state:', {
+      isReadOnly: this.isReadOnly,
+      grid: this.grid?.gridName,
+      gridId: this.grid?.id,
+      submissionId: this.submissionId,
+      currentRowsCount: this.rows.length,
+      maxRows: this.grid?.maxRows
+    });
+
     // Check if grid is read-only
     if (this.isReadOnly) {
+      console.warn('[GridView] Cannot add row: Grid is read-only');
       this.error = 'Grid is read-only. Cannot add rows.';
       return;
     }
 
+    // Allow adding rows even if submissionId is 0 or not set yet
+    // submissionId will be updated later when draft is created/saved
+    // This matches the behavior in public form where rows can be added before submissionId is available
+
     // Check maximum rows constraint
     if (this.grid?.maxRows && this.rows.length >= this.grid.maxRows) {
+      console.warn('[GridView] Cannot add row: Maximum rows reached', this.grid.maxRows);
       this.error = `Maximum ${this.grid.maxRows} rows allowed. Cannot add more rows.`;
+      return;
+    }
+
+    // Check if grid is loaded
+    if (!this.grid || !this.grid.id) {
+      console.warn('[GridView] Cannot add row: Grid not loaded yet');
+      this.error = 'Grid is not loaded yet. Please wait...';
       return;
     }
 
@@ -1268,13 +1299,20 @@ export class GridViewComponent implements OnInit, OnChanges {
 
     const newRow: FormSubmissionGridRowDto = {
       id: 0, // New row, will be assigned by backend
-      submissionId: this.submissionId,
+      submissionId: this.submissionId || 0, // Use current submissionId or 0 if not set yet (will be updated later)
       gridId: this.grid?.id || 0,
       rowIndex: newIndex,
       isActive: true,
       isDeleted: false,
       cells: []
     };
+
+    console.log('[GridView] Creating new row:', {
+      rowIndex: newIndex,
+      submissionId: newRow.submissionId,
+      gridId: newRow.gridId,
+      note: newRow.submissionId === 0 ? 'submissionId will be updated when draft is saved' : 'submissionId is available'
+    });
 
     this.rows.push(newRow);
     this.gridData[newIndex] = {};
@@ -1286,6 +1324,12 @@ export class GridViewComponent implements OnInit, OnChanges {
 
     // Clear error if successful
     this.error = '';
+    
+    console.log('[GridView] ✅ Row added successfully. Total rows:', this.rows.length);
+    console.log('[GridView] Rows array:', this.rows.map(r => ({ rowIndex: r.rowIndex, submissionId: r.submissionId })));
+    
+    // Trigger change detection
+    this.cdr.detectChanges();
   }
 
   /**

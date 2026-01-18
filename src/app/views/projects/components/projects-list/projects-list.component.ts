@@ -162,15 +162,41 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
   }
 
   updatePaginatedProjects(): void {
+    this.totalPages = Math.ceil(this.filteredProjects.length / this.itemsPerPage);
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
     const endIndex = startIndex + this.itemsPerPage;
     this.paginatedProjects = this.filteredProjects.slice(startIndex, endIndex);
   }
 
   onPageChange(event: any): void {
-    this.currentPage = event.page + 1;
-    this.itemsPerPage = event.rows;
+    if (event && typeof event.first === 'number') {
+      this.currentPage = Math.floor(event.first / this.itemsPerPage) + 1;
+      if (event.rows) {
+        this.itemsPerPage = event.rows;
+      }
+    } else {
+      this.currentPage = event.page + 1;
+      this.itemsPerPage = event.rows;
+    }
     this.updatePaginatedProjects();
+  }
+
+  getPageNumbers(): number[] {
+    const pages: number[] = [];
+    const maxPagesToShow = 5;
+
+    let startPage = Math.max(1, this.currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(this.totalPages, startPage + maxPagesToShow - 1);
+
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    return pages;
   }
 
   openProjectModal(project?: ProjectDto): void {
