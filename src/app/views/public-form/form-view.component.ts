@@ -21,6 +21,7 @@ import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse, FormRule
 import { TranslationService } from '../../core/services/translation.service';
 import { environment } from '../../environments/environment';
 import { catchError, of, forkJoin, Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { GridViewComponent } from './components/grid-view.component';
 import { CalculatedFieldComponent } from './components/calculated-field.component';
 import { DocumentApprovalHistoryService, CreateDocumentApprovalHistoryDto } from '../FormBuilder/services/document-approval-history.service';
@@ -1300,11 +1301,23 @@ export class FormViewComponent implements OnInit {
       }
     }
 
+    // 2.5) Password - Check BEFORE calculated (password fields should NOT be treated as calculated)
+    // Password fields are treated as text fields, but isPasswordField() is used in template to render type="password"
+    if (typeName.includes('password') || 
+        fieldCodeLower === 'password' || 
+        fieldCodeLower === 'pwd' ||
+        fieldCodeLower.includes('password') ||
+        fieldNameLower === 'password' ||
+        fieldNameLower.includes('password')) {
+      return 'text'; // Return 'text' so template can use isPasswordField() to render type="password"
+    }
+
     // 3) Calculated - Check BEFORE number/date/text (calculated fields should be detected even without expressionText)
     // A field is calculated if:
     // 1. fieldTypeId is 14 (Calculated type)
     // 2. Type name is 'Calculated'
     // 3. OR has expressionText (for backward compatibility)
+    // BUT: Skip if it's a password field (checked above)
     if (typeName === 'calculated' || this.calculationEngine.isCalculatedField(field)) {
       return 'calculated';
     }
@@ -2005,8 +2018,14 @@ export class FormViewComponent implements OnInit {
    */
   isPasswordField(field: FormFieldDto): boolean {
     const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+    const fieldNameLower = (field.fieldName || '').toLowerCase();
     const fieldTypeNameLower = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
-    return fieldTypeNameLower.includes('password') || fieldCodeLower === 'password' || fieldCodeLower === 'pwd';
+    return fieldTypeNameLower.includes('password') || 
+           fieldCodeLower === 'password' || 
+           fieldCodeLower === 'pwd' ||
+           fieldCodeLower.includes('password') ||
+           fieldNameLower === 'password' ||
+           fieldNameLower.includes('password');
   }
 
   /**
@@ -2040,16 +2059,14 @@ export class FormViewComponent implements OnInit {
     // Recalculate calculated fields if needed (async, don't wait)
     const changedCode = fieldCode || idKey;
     this.calculateFields(changedCode).then(() => {
-      // Trigger change detection after calculation completes
+      // Mark for check after calculation completes - Angular will handle change detection
       this.cdr.markForCheck();
-      this.cdr.detectChanges();
     }).catch(error => {
       console.error(`[FormView] Error in calculation for field ${changedCode}:`, error);
     });
 
-    // Mark for check and detect changes immediately
+    // Mark for check - Angular's change detection will pick up the changes automatically
     this.cdr.markForCheck();
-    this.cdr.detectChanges();
   }
 
   /**
@@ -2520,6 +2537,15 @@ export class FormViewComponent implements OnInit {
    * Check if field is editable (base + dynamic rules)
    */
   isFieldEditable(field: FormFieldDto): boolean {
+    // Password fields should always be editable (unless explicitly disabled)
+    if (this.isPasswordField(field)) {
+      const dynamicState = this.dynamicFieldStates[field.fieldCode];
+      if (dynamicState && dynamicState.isReadOnly !== undefined) {
+        return !dynamicState.isReadOnly;
+      }
+      return field.isEditable !== false;
+    }
+
     // Calculated fields are always read-only
     if (this.calculationEngine.isCalculatedField(field)) {
       return false;
@@ -2671,11 +2697,6 @@ export class FormViewComponent implements OnInit {
       // Single selection: direct comparison
       const valStr = String(selectedValue).trim();
       const isSelected = valStr === optStr;
-      
-      // Debug log (can be removed later)
-      if (isSelected) {
-        console.log(`[FormView] Radio/Select selected: field ${field.id}, option ${optStr}, value:`, valStr);
-      }
       
       return isSelected;
     }
@@ -3734,23 +3755,161 @@ export class FormViewComponent implements OnInit {
 
     const queryParams = this.route.snapshot.queryParams;
     let documentTypeId: number = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1;
-    const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 6; // Default to 6 if not provided (most common project)
+    let projectId: number | null = queryParams['projectId'] ? +queryParams['projectId'] : null;
     const token = this.storageService.getToken();
     const submittedByUserId = token ? (this.storageService.getUsername() || 'public-user') : 'public-user';
 
-    console.log('[FormView] Creating draft submission on load:', {
-      formBuilderId: this.form.id,
-      documentTypeId,
-      projectId,
-      submittedByUserId
-    });
+    // Validate and load active documentTypeId if the provided one is inactive/soft-deleted
+    const loadActiveDocumentTypeId = async (docTypeId: number): Promise<number> => {
+      try {
+        // First try to get active document type by ID (only returns if active and not deleted)
+        const docType = await this.documentTypesService.getActiveDocumentTypeById(docTypeId).toPromise();
+        if (docType && docType.id) {
+          console.log('[FormView] DocumentTypeId from query params is active:', docTypeId);
+          return docTypeId;
+        } else {
+          console.warn('[FormView] DocumentTypeId from query params is inactive or deleted, loading active one');
+          // If we have formBuilderId, try to get document type by formBuilderId
+          if (this.form?.id) {
+            const docTypeByForm = await this.documentTypesService.getDocumentTypeByFormBuilderId(this.form.id).toPromise();
+            if (docTypeByForm && docTypeByForm.id) {
+              console.log('[FormView] Using documentTypeId from formBuilderId:', docTypeByForm.id);
+              return docTypeByForm.id;
+            }
+          }
+          // Fallback to first active document type
+          const activeTypes = await this.documentTypesService.getActiveDocumentTypes().toPromise();
+          if (activeTypes && activeTypes.length > 0 && activeTypes[0]?.id) {
+            console.log('[FormView] Using first active documentTypeId:', activeTypes[0].id);
+            return activeTypes[0].id;
+          }
+        }
+      } catch (error) {
+        console.warn('[FormView] Error checking documentTypeId, trying to load active:', error);
+        try {
+          // If we have formBuilderId, try to get document type by formBuilderId
+          if (this.form?.id) {
+            const docTypeByForm = await this.documentTypesService.getDocumentTypeByFormBuilderId(this.form.id).toPromise();
+            if (docTypeByForm && docTypeByForm.id) {
+              return docTypeByForm.id;
+            }
+          }
+          // Fallback to first active document type
+          const activeTypes = await this.documentTypesService.getActiveDocumentTypes().toPromise();
+          if (activeTypes && activeTypes.length > 0 && activeTypes[0]?.id) {
+            return activeTypes[0].id;
+          }
+        } catch (e) {
+          console.error('[FormView] Error loading active document types:', e);
+        }
+      }
+      // Fallback to original if we can't find an active one
+      return docTypeId;
+    };
 
-    // First, load document series to get seriesId
-    this.documentTypesService.getDocumentSeriesByDocumentTypeId(documentTypeId).subscribe({
+    // Validate and load active projectId if the provided one is inactive/soft-deleted
+    const loadActiveProjectId = async (projId: number | null): Promise<number | null> => {
+      if (!projId) {
+        // No projectId in query params, load from API
+        const projects = await this.projectsService.getActiveProjects().toPromise();
+        if (projects && projects.length > 0 && projects[0]?.id) {
+          console.log('[FormView] No projectId in query params, using first active project:', projects[0].id);
+          return projects[0].id;
+        }
+        return null;
+      }
+
+      try {
+        const project = await this.projectsService.getProjectById(projId).toPromise();
+        if (project && project.isActive && !project.isDeleted) {
+          console.log('[FormView] ProjectId from query params is active:', projId);
+          return projId;
+        } else {
+          console.warn('[FormView] ProjectId from query params is inactive or deleted, loading active one');
+          const activeProjects = await this.projectsService.getActiveProjects().toPromise();
+          if (activeProjects && activeProjects.length > 0 && activeProjects[0]?.id) {
+            console.log('[FormView] Using active projectId:', activeProjects[0].id);
+            return activeProjects[0].id;
+          }
+        }
+      } catch (error) {
+        console.warn('[FormView] Error checking projectId, trying to load active:', error);
+        try {
+          const activeProjects = await this.projectsService.getActiveProjects().toPromise();
+          if (activeProjects && activeProjects.length > 0 && activeProjects[0]?.id) {
+            return activeProjects[0].id;
+          }
+        } catch (e) {
+          console.error('[FormView] Error loading active projects:', e);
+        }
+      }
+      // Fallback to original if we can't find an active one
+      return projId;
+    };
+
+    // Load active IDs
+    const loadProjectId = async (): Promise<number | null> => {
+      return await loadActiveProjectId(projectId);
+    };
+
+    // Load active documentTypeId and projectId
+    Promise.all([
+      loadActiveDocumentTypeId(documentTypeId),
+      loadProjectId()
+    ]).then(async ([activeDocTypeId, resolvedProjectId]) => {
+      // Update documentTypeId if it changed
+      documentTypeId = activeDocTypeId;
+      if (!resolvedProjectId) {
+        console.warn('[FormView] No projectId available (not in query params and API failed), cannot create draft on load');
+        return;
+      }
+
+      projectId = resolvedProjectId;
+
+      // Ensure projectId is not null (TypeScript check)
+      if (!projectId) {
+        console.warn('[FormView] projectId is null, cannot create draft on load');
+        return;
+      }
+
+      // Create a const with correct type for TypeScript
+      const finalProjectId: number = projectId;
+
+      console.log('[FormView] Creating draft submission on load:', {
+        formBuilderId: this.form!.id!,
+        documentTypeId,
+        projectId: finalProjectId,
+        submittedByUserId
+      });
+
+      // Verify the Document Type associated with this Form is active before proceeding
+      // The backend validates this and will reject if inactive
+      try {
+        const formDocumentType = await this.documentTypesService.getDocumentTypeByFormId(this.form!.id!).toPromise();
+        if (formDocumentType && (!formDocumentType.isActive || formDocumentType.isDeleted)) {
+          console.warn('[FormView] Document Type associated with Form is inactive or deleted. Cannot create draft on load.', {
+            documentTypeId: formDocumentType.id,
+            isActive: formDocumentType.isActive,
+            isDeleted: formDocumentType.isDeleted
+          });
+          return; // Fail silently - form can still be used, just won't have auto-draft
+        }
+        
+        // If form has documentType but query params have different one, use form's documentType (which is now verified active)
+        if (formDocumentType && formDocumentType.id) {
+          documentTypeId = formDocumentType.id;
+          console.log('[FormView] Using Document Type from Form (verified active):', documentTypeId);
+        }
+      } catch (docTypeError: any) {
+        console.warn('[FormView] Could not verify Document Type for Form, will attempt draft creation anyway:', docTypeError?.message || docTypeError);
+      }
+
+      // Then load document series to get seriesId
+      this.documentTypesService.getDocumentSeriesByDocumentTypeId(documentTypeId).subscribe({
       next: (documentSeries) => {
         console.log('[FormView] Loaded document series for draft creation:', {
           documentTypeId,
-          projectId,
+          projectId: finalProjectId,
           totalSeries: documentSeries?.length || 0,
           series: documentSeries?.map(s => ({ id: s.id, code: s.seriesCode, isActive: s.isActive, projectId: s.projectId }))
         });
@@ -3760,18 +3919,29 @@ export class FormViewComponent implements OnInit {
           return;
         }
 
-        // Filter by project and find active series
-        const projectSeries = documentSeries.filter((s: DocumentSeries) => s.projectId === projectId);
-        const availableSeries = projectSeries.length > 0 ? projectSeries : documentSeries;
+        // Filter by project and find active series - MUST use only project-specific series
+        const projectSeries = documentSeries.filter((s: DocumentSeries) => s.projectId === finalProjectId);
         
-        // Find active series (backend returns boolean)
-        const activeSeries = availableSeries.filter((s: DocumentSeries) => {
+        // NEVER fallback to series from other projects - this causes "Document Series does not belong to Project" error
+        if (projectSeries.length === 0) {
+          console.warn('[FormView] No document series found for projectId:', finalProjectId, 'documentTypeId:', documentTypeId);
+          console.warn('[FormView] Available series for documentTypeId:', documentSeries.map(s => ({
+            id: s.id,
+            projectId: s.projectId,
+            code: s.seriesCode,
+            isActive: s.isActive
+          })));
+          return;
+        }
+        
+        // Find active series (backend returns boolean) - only from project-specific series
+        const activeSeries = projectSeries.filter((s: DocumentSeries) => {
           // Backend returns isActive as boolean
           return s.isActive === true;
         });
 
         if (activeSeries.length === 0) {
-          console.warn('[FormView] No active document series found, cannot create draft on load');
+          console.warn('[FormView] No active document series found for projectId:', finalProjectId, 'cannot create draft on load');
           return;
         }
 
@@ -3788,7 +3958,7 @@ export class FormViewComponent implements OnInit {
         
         // Now create draft with seriesId
         if (!this.form || !this.form.id) return;
-        this.formSubmissionsService.createDraft(this.form.id, projectId, submittedByUserId, seriesId).subscribe({
+        this.formSubmissionsService.createDraft(this.form.id, finalProjectId, submittedByUserId, seriesId).subscribe({
           next: (submission) => {
             if (submission && submission.id) {
               this.submissionId = submission.id;
@@ -3811,7 +3981,8 @@ export class FormViewComponent implements OnInit {
         // Fail silently if we can't load document series
         console.warn('[FormView] Could not load document series for draft creation on load:', err?.message || err);
       }
-    });
+      });
+    }); // End of loadProjectId().then()
   }
 
   // ===== Multilingual Content Helpers =====
@@ -4203,25 +4374,69 @@ export class FormViewComponent implements OnInit {
         }
       }
       
+      // IMPORTANT: Verify the Document Type associated with this Form is active before proceeding
+      // The backend validates the Form's Document Type, not the documentTypeId from query params
+      try {
+        const formDocumentType = await this.documentTypesService.getDocumentTypeByFormId(this.form!.id!).toPromise();
+        if (formDocumentType && (!formDocumentType.isActive || formDocumentType.isDeleted)) {
+          const currentLang = this.translationService.getCurrentLanguage();
+          const errorMsg = currentLang === 'ar'
+            ? 'نوع المستند المرتبط بهذا النموذج غير نشط. يرجى تفعيل نوع المستند في إعدادات أنواع المستندات أولاً.'
+            : 'Document Type is not active. Please activate the Document Type in Document Types settings first.';
+          this.messageService.add({
+            severity: 'error',
+            summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+            detail: errorMsg,
+            life: 15000
+          });
+          this.isSubmitting = false;
+          return;
+        }
+        
+        // Use the Document Type from Form (which is now verified active)
+        if (formDocumentType && formDocumentType.id) {
+          documentTypeId = formDocumentType.id;
+          console.log('[FormView] Using Document Type from Form (verified active):', documentTypeId);
+        }
+      } catch (docTypeError: any) {
+        // If we can't verify, continue - backend will validate and return error if needed
+        console.warn('[FormView] Could not verify Document Type for Form:', docTypeError?.message || docTypeError);
+      }
+      
       const seriesId = routeQueryParams['seriesId'] ? +routeQueryParams['seriesId'] : 1; // Default to 1 if not provided
-      let projectId: number | null = routeQueryParams['projectId'] ? +routeQueryParams['projectId'] : null; // Will be set from series or default to 6
+      let projectId: number | null = routeQueryParams['projectId'] ? +routeQueryParams['projectId'] : null;
       const submittedByUserId = routeQueryParams['userId'] || 'public-user'; // Default user ID
 
-      // Ensure projectId is never null - load from API if not provided
+      // Validate and load active projectId if the provided one is inactive/soft-deleted
       if (!projectId) {
+        console.log('[FormView] No projectId in query params, attempting to load from API');
         try {
           const projects = await this.projectsService.getActiveProjects().toPromise();
           if (projects && projects.length > 0 && projects[0]?.id) {
             projectId = projects[0].id;
             console.log('[FormView] No projectId in query params, using first active project from API:', projectId);
           } else {
-            // Fallback if no projects available
             projectId = 1;
             console.warn('[FormView] No active projects found in API, defaulting to projectId: 1');
           }
         } catch (error) {
           console.error('[FormView] Error loading projects, defaulting to projectId: 1', error);
           projectId = 1; // Fallback
+        }
+      } else {
+        // Validate projectId - check if it's active
+        try {
+          const project = await this.projectsService.getProjectById(projectId).toPromise();
+          if (!project || !project.isActive || project.isDeleted) {
+            console.warn('[FormView] ProjectId from query params is inactive or deleted, loading active one');
+            const activeProjects = await this.projectsService.getActiveProjects().toPromise();
+            if (activeProjects && activeProjects.length > 0 && activeProjects[0]?.id) {
+              projectId = activeProjects[0].id;
+              console.log('[FormView] Using active projectId:', projectId);
+            }
+          }
+        } catch (error) {
+          console.warn('[FormView] Error validating projectId, continuing with provided value:', error);
         }
       }
 
@@ -4232,6 +4447,7 @@ export class FormViewComponent implements OnInit {
       let hasActiveSeries = false;
       let availableSeries: DocumentSeries[] = []; // Declare outside to use in retry logic
       let allDocumentSeries: DocumentSeries[] = []; // Store all series for diagnostic messages
+      let shouldAllowAutoSelectSeries = false; // Flag to allow backend auto-selection when 404 is ignored from query params
       
       if (currentSubmissionId === 0) {
         try {
@@ -4241,31 +4457,37 @@ export class FormViewComponent implements OnInit {
           // Store all series for diagnostic messages
           allDocumentSeries = documentSeries || [];
           
-          // If projectId not provided in query params, use first available projectId from series
-          if (!projectId && documentSeries && documentSeries.length > 0) {
-            // Get unique project IDs from available series
-            const projectIds = [...new Set(documentSeries.map(s => s.projectId).filter(id => id != null))] as number[];
-            if (projectIds.length > 0) {
-              projectId = projectIds[0]; // Use first available project ID
-              console.log('[FormView] No projectId in query params, using first available projectId from series:', projectId);
-            }
-          }
-          
-          // If still no projectId, try to load from API
+          // Only try to determine projectId if not already provided in query params
+          // If projectId is in query params, use it as-is (even if project is inactive/soft-deleted)
           if (!projectId) {
-            try {
-              const projects = await this.projectsService.getActiveProjects().toPromise();
-              if (projects && projects.length > 0 && projects[0]?.id) {
-                projectId = projects[0].id;
-                console.log('[FormView] No projectId found in query params or series, using first active project from API:', projectId);
-              } else {
-                projectId = 1; // Fallback
-                console.warn('[FormView] No active projects found in API, defaulting to projectId: 1');
+            // Try to get projectId from series first
+            if (documentSeries && documentSeries.length > 0) {
+              // Get unique project IDs from available series
+              const projectIds = [...new Set(documentSeries.map(s => s.projectId).filter(id => id != null))] as number[];
+              if (projectIds.length > 0) {
+                projectId = projectIds[0]; // Use first available project ID
+                console.log('[FormView] No projectId in query params, using first available projectId from series:', projectId);
               }
-            } catch (error) {
-              console.error('[FormView] Error loading projects, defaulting to projectId: 1', error);
-              projectId = 1; // Fallback
             }
+            
+            // If still no projectId, try to load from API (only active projects)
+            if (!projectId) {
+              try {
+                const projects = await this.projectsService.getActiveProjects().toPromise();
+                if (projects && projects.length > 0 && projects[0]?.id) {
+                  projectId = projects[0].id;
+                  console.log('[FormView] No projectId found in query params or series, using first active project from API:', projectId);
+                } else {
+                  projectId = 1; // Fallback
+                  console.warn('[FormView] No active projects found in API, defaulting to projectId: 1');
+                }
+              } catch (error) {
+                console.error('[FormView] Error loading projects, defaulting to projectId: 1', error);
+                projectId = 1; // Fallback
+              }
+            }
+          } else {
+            console.log('[FormView] Using projectId from query params (may be inactive/soft-deleted), skipping project loading from API/series');
           }
           
           console.log('[FormView] Loaded document series:', {
@@ -4380,12 +4602,25 @@ export class FormViewComponent implements OnInit {
           
           // If API call failed, try to verify seriesId: 1 exists by calling getDocumentSeriesById
           // This is a workaround if the list endpoint requires auth but the get by ID doesn't
+          // If seriesId is not found (404), ignore error and continue without seriesId for auto-selection
           if (!actualSeriesId || actualSeriesId === 0) {
             const fallbackSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
             
             try {
               // Try to get the series by ID to verify it exists
-              const verifiedSeries = await this.documentTypesService.getDocumentSeriesById(fallbackSeriesId).toPromise();
+              // If 404, ignore error and continue without seriesId - series will be auto-selected
+              const verifiedSeries = await this.documentTypesService.getDocumentSeriesById(fallbackSeriesId).pipe(
+                catchError(error => {
+                  // Check for 404: either from HttpErrorResponse (error.status) or from service (error.message)
+                  if (error.status === 404 || error.message === 'Document series not found') {
+                    // Ignore 404 error and continue without seriesId - series will be auto-selected
+                    console.warn(`[FormView] Series ID ${fallbackSeriesId} not found (404), will auto-select series`);
+                    return of(null); // Return null to indicate series not found
+                  }
+                  // Re-throw other errors
+                  throw error;
+                })
+              ).toPromise();
               if (verifiedSeries && verifiedSeries.id) {
                 // Verify it matches our documentTypeId and projectId and is active
                 if (verifiedSeries.documentTypeId === documentTypeId && verifiedSeries.isActive) {
@@ -4402,9 +4637,13 @@ export class FormViewComponent implements OnInit {
                   hasActiveSeries = false;
                 }
               } else {
+                // Series not found (returned null from catchError) - continue without seriesId
+                // Allow backend to auto-select series when 404 is ignored
                 hasActiveSeries = false;
+                shouldAllowAutoSelectSeries = true; // Allow backend to auto-select series
               }
             } catch (verifyError: any) {
+              // Handle any other errors (non-404)
               console.error('[FormView] Error verifying series:', verifyError);
               hasActiveSeries = false;
             }
@@ -4414,8 +4653,20 @@ export class FormViewComponent implements OnInit {
         // If submission already exists, validate seriesId from query params
         if (seriesId && seriesId > 0) {
           // Verify the series exists, is active, and belongs to the correct project
+          // If seriesId is not found (404), ignore error and continue without seriesId for auto-selection
           try {
-            const verifiedSeries = await this.documentTypesService.getDocumentSeriesById(seriesId).toPromise();
+            const verifiedSeries = await this.documentTypesService.getDocumentSeriesById(seriesId).pipe(
+              catchError(error => {
+                // Check for 404: either from HttpErrorResponse (error.status) or from service (error.message)
+                if (error.status === 404 || error.message === 'Document series not found') {
+                  // Ignore 404 error and continue without seriesId - series will be auto-selected
+                  console.warn(`[FormView] Series ID ${seriesId} not found (404), will auto-select series`);
+                  return of(null); // Return null to indicate series not found
+                }
+                // Re-throw other errors
+                throw error;
+              })
+            ).toPromise();
             if (verifiedSeries && verifiedSeries.id) {
               // Check if series belongs to the correct project
               if (verifiedSeries.projectId !== projectId) {
@@ -4447,11 +4698,15 @@ export class FormViewComponent implements OnInit {
                 });
               }
             } else {
+              // Series not found (returned null from catchError) - continue without seriesId
+              // Allow backend to auto-select series when 404 is ignored from query params
               actualSeriesId = null;
               hasActiveSeries = false;
+              shouldAllowAutoSelectSeries = true; // Allow backend to auto-select series
             }
-          } catch {
-            console.warn('[FormView] Failed to verify seriesId from query params:', seriesId);
+          } catch (error: any) {
+            // Handle any other errors (non-404)
+            console.warn('[FormView] Failed to verify seriesId from query params:', seriesId, error);
             actualSeriesId = null;
             hasActiveSeries = false;
           }
@@ -4463,7 +4718,8 @@ export class FormViewComponent implements OnInit {
       }
       
       // Check if we have a series before proceeding
-      if (!actualSeriesId || actualSeriesId <= 0 || !hasActiveSeries) {
+      // Allow auto-selection if 404 was intentionally ignored from query params
+      if ((!actualSeriesId || actualSeriesId <= 0 || !hasActiveSeries) && !shouldAllowAutoSelectSeries) {
         // Ensure projectId is not null before building error message
         if (!projectId) {
           try {
@@ -4842,10 +5098,21 @@ export class FormViewComponent implements OnInit {
                               !(Array.isArray(fieldValue) && fieldValue.length === 0);
 
               if (hasValue) {
+                // Ensure fieldCode is not empty (backend requires it)
+                if (!field.fieldCode || field.fieldCode.trim() === '') {
+                  console.warn(`[FormView] Field "${field.fieldName}" (ID: ${field.id}) has no fieldCode, using fieldName as fallback`);
+                }
+                
                 const valueDto: CreateFormSubmissionValueDto = {
                   submissionId: currentSubmissionId,
                   fieldId: field.id,
-                  fieldCode: field.fieldCode
+                  fieldCode: field.fieldCode || field.fieldName || `FIELD_${field.id}`,
+                  // Initialize all value fields - backend requires them to be present
+                  valueString: "",
+                  valueNumber: undefined,
+                  valueDate: undefined,
+                  valueBool: undefined,
+                  valueJson: ""
                 };
 
                 const fieldType = this.getFieldType(field);
@@ -4854,66 +5121,74 @@ export class FormViewComponent implements OnInit {
                   case 'number':
                     const numValue = Number(fieldValue);
                     valueDto.valueNumber = numValue;
-                    valueDto.valueJson = JSON.stringify(numValue);
-                    valueDto.valueString = String(numValue);
+                    // Keep string/JSON as empty string (required), others as null
+                    valueDto.valueString = "";
+                    valueDto.valueJson = "";
                     break;
                   case 'date':
                     const dateValue = fieldValue instanceof Date ? fieldValue : new Date(fieldValue);
-                    valueDto.valueDate = dateValue;
-                    valueDto.valueJson = JSON.stringify(dateValue.toISOString());
-                    valueDto.valueString = dateValue.toISOString();
+                    if (!isNaN(dateValue.getTime())) {
+                      valueDto.valueDate = dateValue;
+                      // Keep string/JSON as empty string (required), others as null
+                      valueDto.valueString = "";
+                      valueDto.valueJson = "";
+                    } else {
+                      console.warn(`[FormView] Invalid date value for field "${field.fieldName}": ${fieldValue}`);
+                      valueDto.valueString = String(fieldValue); // Fallback to string
+                      valueDto.valueJson = "";
+                    }
                     break;
                   case 'boolean':
                   case 'switch':
                     const boolValue = Boolean(fieldValue);
                     valueDto.valueBool = boolValue;
-                    valueDto.valueJson = JSON.stringify(boolValue);
-                    valueDto.valueString = String(boolValue);
+                    // Keep string/JSON as empty string (required), others as null
+                    valueDto.valueString = "";
+                    valueDto.valueJson = "";
                     break;
                   case 'checkbox':
+                    // For checkbox, store as JSON array if multiple values
                     if (Array.isArray(fieldValue)) {
                       valueDto.valueJson = JSON.stringify(fieldValue);
-                      valueDto.valueString = fieldValue.join(', ');
+                      valueDto.valueString = "";
                     } else {
                       valueDto.valueString = String(fieldValue);
-                      valueDto.valueJson = JSON.stringify(fieldValue);
+                      valueDto.valueJson = "";
                     }
                     break;
                   case 'select':
                   case 'radio':
+                    // For select, radio, and other string fields
                     const optionValue = String(fieldValue);
                     valueDto.valueString = optionValue;
                     const numOptionValue = Number(optionValue);
                     if (!isNaN(numOptionValue) && isFinite(numOptionValue) && optionValue.trim() !== '') {
                       valueDto.valueNumber = numOptionValue;
-                      valueDto.valueJson = JSON.stringify(numOptionValue);
+                      valueDto.valueJson = "";
                     } else {
-                      valueDto.valueJson = JSON.stringify(optionValue);
+                      valueDto.valueJson = "";
                     }
                     break;
                   default:
+                    // For text, email, password, and other string fields
                     if (Array.isArray(fieldValue)) {
                       valueDto.valueJson = JSON.stringify(fieldValue);
-                      valueDto.valueString = fieldValue.join(', ');
+                      valueDto.valueString = "";
                     } else {
                       const stringValue = String(fieldValue);
                       valueDto.valueString = stringValue;
-                      valueDto.valueJson = JSON.stringify(stringValue);
+                      valueDto.valueJson = "";
                     }
                     break;
                 }
 
-                // Ensure valueJson is always set
-                if (!valueDto.valueJson) {
-                  valueDto.valueJson = valueDto.valueString ? JSON.stringify(valueDto.valueString) : JSON.stringify(null);
+                // Ensure valueJson is always set (use empty string if not set)
+                if (valueDto.valueJson === undefined || valueDto.valueJson === null) {
+                  valueDto.valueJson = "";
                 }
-                if (valueDto.valueJson && !valueDto.valueString) {
-                  try {
-                    const parsed = JSON.parse(valueDto.valueJson);
-                    valueDto.valueString = typeof parsed === 'string' ? parsed : String(parsed);
-                  } catch {
-                    valueDto.valueString = valueDto.valueJson;
-                  }
+                // Ensure valueString is always set (use empty string if not set)
+                if (valueDto.valueString === undefined || valueDto.valueString === null) {
+                  valueDto.valueString = "";
                 }
 
                 fieldValues.push(valueDto);
@@ -5253,8 +5528,30 @@ export class FormViewComponent implements OnInit {
    */
   private loadAndSetStageId(docTypeId: number, submissionId: number): void {
     console.log('[FormView] Loading document type to get approvalWorkflowId...', 'docTypeId:', docTypeId);
-    this.documentTypesService.getDocumentTypeById(docTypeId).subscribe({
+    
+    // Try to get active document type by ID first, or by formBuilderId if available
+    const loadDocumentType = (): Observable<any> => {
+      if (this.form?.id) {
+        // Try to get by formBuilderId first (more reliable for active document types)
+        return this.documentTypesService.getDocumentTypeByFormBuilderId(this.form.id).pipe(
+          catchError(() => {
+            // Fallback to getActiveDocumentTypeById
+            return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
+          })
+        );
+      } else {
+        // Use getActiveDocumentTypeById
+        return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
+      }
+    };
+
+    loadDocumentType().subscribe({
       next: (documentType) => {
+        if (!documentType) {
+          console.warn('[FormView] Document type not found or is deleted. docTypeId:', docTypeId);
+          return;
+        }
+        
         console.log('[FormView] Loaded document type:', {
           id: documentType?.id,
           name: documentType?.name,
@@ -5276,7 +5573,7 @@ export class FormViewComponent implements OnInit {
           console.warn('[FormView] Attempting to create workflow automatically...');
           
           // Try to create workflow automatically (will fail with 401 if no auth, but we'll handle it gracefully)
-          this.createAndAssignWorkflow(docTypeId, documentType, submissionId);
+          this.createAndAssignWorkflow(documentType.id, documentType, submissionId);
         }
       },
       error: (docTypeError) => {
@@ -5378,8 +5675,28 @@ export class FormViewComponent implements OnInit {
   private assignWorkflowToDocumentType(docTypeId: number, workflowId: number, documentType: any, submissionId: number): void {
     // Assign workflow to document type - need to include all required fields
     // First, reload document type to get all fields, then update with workflow ID
-    this.documentTypesService.getDocumentTypeById(docTypeId).subscribe({
+    // Use getActiveDocumentTypeById or getDocumentTypeByFormBuilderId to get active document type
+    const loadDocumentType = (): Observable<any> => {
+      if (this.form?.id) {
+        return this.documentTypesService.getDocumentTypeByFormBuilderId(this.form.id).pipe(
+          catchError(() => {
+            return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
+          })
+        );
+      } else {
+        return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
+      }
+    };
+
+    loadDocumentType().subscribe({
       next: (fullDocumentType) => {
+        if (!fullDocumentType) {
+          console.warn('[FormView] Document type not found or is deleted. Cannot assign workflow. docTypeId:', docTypeId);
+          // Still try to set stageId with the workflow
+          this.setStageIdForSubmission(workflowId, submissionId);
+          return;
+        }
+
         // Update with all existing fields + new workflow ID
         const updateDto: any = {
           name: fullDocumentType.name,
@@ -5394,7 +5711,7 @@ export class FormViewComponent implements OnInit {
         if (fullDocumentType.parentMenuId !== undefined) updateDto.parentMenuId = fullDocumentType.parentMenuId;
         if (fullDocumentType.isActive !== undefined) updateDto.isActive = fullDocumentType.isActive;
         
-        this.documentTypesService.updateDocumentType(docTypeId, updateDto).subscribe({
+        this.documentTypesService.updateDocumentType(fullDocumentType.id, updateDto).subscribe({
           next: () => {
             console.log('[FormView] ✅ Workflow assigned to document type successfully');
             

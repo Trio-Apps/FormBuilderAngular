@@ -9,6 +9,7 @@ import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, Fo
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { DocumentType, DocumentSeries, CreateDocumentSeriesDto } from '../../FormBuilder/form-builder/models/document-types.model';
 import { DocumentSettingsService } from '../../FormBuilder/services/document-settings.service';
+import { ProjectsService } from '../../projects/services/projects.service';
 import { FormsService } from '../../FormBuilder/services/forms.service';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FieldsService } from '../../FormBuilder/services/fields.service';
@@ -27,7 +28,7 @@ import { CheckboxModule } from 'primeng/checkbox';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
-import { Subscription, forkJoin, of } from 'rxjs';
+import { Subscription, forkJoin, of, Observable } from 'rxjs';
 import { debounceTime, distinctUntilChanged, catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { FileUploadService } from '../../FormBuilder/services/file-upload.service';
@@ -156,6 +157,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     private formSubmissionAttachmentsService: FormSubmissionAttachmentsService,
     private documentTypesService: DocumentTypesService,
     private documentSettingsService: DocumentSettingsService,
+    private projectsService: ProjectsService,
     private formsService: FormsService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
@@ -307,7 +309,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   /**
    * Create a default document series automatically
-   * Uses default projectId = 1 if no projects available
+   * Loads projectId dynamically from query params or API
    */
   private async createDefaultSeries(): Promise<DocumentSeries | null> {
     if (!this.documentTypeId) {
@@ -315,16 +317,27 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
 
     try {
-      // Try to get first available project, or use default projectId = 1
-      let projectId = 1; // Default project ID
+      // Get projectId from query params first, then load from API
+      const routeQueryParams = this.route.snapshot.queryParams;
+      let projectId: number | null = routeQueryParams['projectId'] ? +routeQueryParams['projectId'] : null;
       
-      try {
-        const projects = await this.documentSettingsService.getActiveProjects().toPromise();
-        if (projects && projects.length > 0) {
-          projectId = projects[0].id || 1;
+      // If no projectId in query params, load from API
+      if (!projectId) {
+        try {
+          const projects = await this.projectsService.getActiveProjects().toPromise();
+          if (projects && projects.length > 0 && projects[0]?.id) {
+            projectId = projects[0].id;
+            console.log('[FormSubmissionCreate] No projectId in query params, using first active project:', projectId);
+          }
+        } catch (error) {
+          console.warn('[FormSubmissionCreate] Could not load projects from API:', error);
         }
-      } catch (error) {
-        console.warn('[FormSubmissionCreate] Could not load projects, using default projectId = 1');
+      }
+      
+      // If still no projectId, cannot create series
+      if (!projectId) {
+        console.warn('[FormSubmissionCreate] No projectId available (not in query params and API failed), cannot create default series');
+        return null;
       }
 
       // Generate a series code based on document type
@@ -513,7 +526,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   /**
    * Create draft submission if needed (for new submissions)
    */
-  createDraftIfNeeded(): void {
+  async createDraftIfNeeded(): Promise<void> {
     // Only create draft if we have form data and no existing submission
     if (!this.selectedFormId || this.hasDraft || this.isEditMode) {
       return;
@@ -526,38 +539,153 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Get project ID - you might need to adjust this based on your requirements
-    // For now, we'll use a default or get it from route params
-    const projectId = 1; // TODO: Get actual project ID
+    // Get project ID from query params first, then load from API (like public-form)
+    const routeQueryParams = this.route.snapshot.queryParams;
+    let projectId: number | null = routeQueryParams['projectId'] ? +routeQueryParams['projectId'] : null;
 
-    // Get seriesId from documentSeries (use default or first active series)
+    // Validate and load active projectId if the provided one is inactive/soft-deleted (like public-form)
+    const loadActiveProjectId = async (projId: number | null): Promise<number | null> => {
+      if (!projId) {
+        // No projectId in query params, load from API
+        try {
+          const projects = await this.projectsService.getActiveProjects().toPromise();
+          if (projects && projects.length > 0 && projects[0]?.id) {
+            console.log('[FormSubmissionCreate] No projectId in query params, using first active project:', projects[0].id);
+            return projects[0].id;
+          }
+        } catch (error) {
+          console.warn('[FormSubmissionCreate] Error loading active projects:', error);
+        }
+        return null;
+      }
+
+      try {
+        const project = await this.projectsService.getProjectById(projId).toPromise();
+        if (project && project.isActive && !project.isDeleted) {
+          console.log('[FormSubmissionCreate] ProjectId from query params is active:', projId);
+          return projId;
+        } else {
+          console.warn('[FormSubmissionCreate] ProjectId from query params is inactive or deleted, loading active one');
+          try {
+            const activeProjects = await this.projectsService.getActiveProjects().toPromise();
+            if (activeProjects && activeProjects.length > 0 && activeProjects[0]?.id) {
+              console.log('[FormSubmissionCreate] Using active projectId:', activeProjects[0].id);
+              return activeProjects[0].id;
+            }
+          } catch (error) {
+            console.warn('[FormSubmissionCreate] Error loading active projects:', error);
+          }
+        }
+      } catch (error) {
+        console.warn('[FormSubmissionCreate] Error checking projectId, trying to load active:', error);
+        try {
+          const activeProjects = await this.projectsService.getActiveProjects().toPromise();
+          if (activeProjects && activeProjects.length > 0 && activeProjects[0]?.id) {
+            return activeProjects[0].id;
+          }
+        } catch (e) {
+          console.error('[FormSubmissionCreate] Error loading active projects:', e);
+        }
+      }
+      // Fallback to original if we can't find an active one
+      return projId;
+    };
+
+    // Load active projectId
+    const resolvedProjectId = await loadActiveProjectId(projectId);
+    if (!resolvedProjectId) {
+      console.warn('[FormSubmissionCreate] No projectId available (not in query params and API failed), cannot create draft');
+      return;
+    }
+    projectId = resolvedProjectId;
+
+    // Get seriesId from query params first, then fallback to documentSeries
     let seriesId: number | undefined;
-    if (this.documentSeries && this.documentSeries.length > 0) {
-      const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
-      if (defaultSeries && defaultSeries.id) {
-        seriesId = defaultSeries.id;
+    const querySeriesId = routeQueryParams['seriesId'] ? +routeQueryParams['seriesId'] : null;
+    
+    if (querySeriesId && querySeriesId > 0) {
+      // Verify seriesId from query params - if 404, ignore error and continue without seriesId
+      try {
+        const verifiedSeries = await this.documentTypesService.getDocumentSeriesById(querySeriesId).pipe(
+          catchError(error => {
+            // Check for 404: either from HttpErrorResponse (error.status) or from service (error.message)
+            if (error.status === 404 || error.message === 'Document series not found') {
+              // Ignore 404 error and continue without seriesId - series will be auto-selected
+              console.warn(`[FormSubmissionCreate] Series ID ${querySeriesId} not found (404), will auto-select series`);
+              return of(null); // Return null to indicate series not found
+            }
+            // Re-throw other errors
+            throw error;
+          })
+        ).toPromise();
+        
+        if (verifiedSeries && verifiedSeries.id) {
+          // Check if series belongs to the correct documentTypeId
+          if (verifiedSeries.documentTypeId !== this.documentTypeId) {
+            console.warn('[FormSubmissionCreate] SeriesId from query params does not belong to documentTypeId:', {
+              seriesId: querySeriesId,
+              seriesDocumentTypeId: verifiedSeries.documentTypeId,
+              requiredDocumentTypeId: this.documentTypeId
+            });
+            // Don't use this series - it belongs to a different document type
+            // Will continue without seriesId for auto-selection
+            seriesId = undefined;
+          } else {
+            // Series is valid - use its projectId and seriesId
+            seriesId = verifiedSeries.id;
+            // Use projectId from verifiedSeries to ensure consistency (if series has projectId)
+            if (verifiedSeries.projectId) {
+              projectId = verifiedSeries.projectId;
+              console.log('[FormSubmissionCreate] Using projectId from verifiedSeries:', projectId);
+            }
+            console.log('[FormSubmissionCreate] Using seriesId from query params:', seriesId, {
+              projectId: projectId,
+              documentTypeId: verifiedSeries.documentTypeId,
+              isActive: verifiedSeries.isActive
+            });
+          }
+        } else {
+          // Series not found (404) - will continue without seriesId for auto-selection
+          console.warn('[FormSubmissionCreate] SeriesId from query params not found, will auto-select series');
+        }
+      } catch (error: any) {
+        // Handle any other errors (non-404)
+        console.warn('[FormSubmissionCreate] Failed to verify seriesId from query params:', querySeriesId, error);
+        // Continue without seriesId - will auto-select
+      }
+    }
+    
+    // If no seriesId from query params, get from documentSeries (use default or first active series)
+    if (!seriesId) {
+      if (this.documentSeries && this.documentSeries.length > 0) {
+        const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
+        if (defaultSeries && defaultSeries.id) {
+          seriesId = defaultSeries.id;
+        }
       }
     }
 
-    if (!seriesId) {
-      console.warn('[FormSubmissionCreate] No document series available, cannot create draft');
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'No document series available. Please configure Document Series first.'
-      });
+    // If still no seriesId, allow backend to auto-select (seriesId is optional)
+    // Don't show error - backend will auto-select series when seriesId is not provided
+
+    // Ensure projectId is not null (TypeScript check)
+    if (!projectId) {
+      console.warn('[FormSubmissionCreate] projectId is null, cannot create draft');
       return;
     }
 
+    // Create a const with correct type for TypeScript
+    const finalProjectId: number = projectId;
+
     console.log('[FormSubmissionCreate] Creating draft submission:', {
       formBuilderId: this.selectedFormId,
-      projectId,
+      projectId: finalProjectId,
       seriesId,
       submittedByUserId: currentUserId
     });
 
     this.loading.create = true;
-    this.formSubmissionsService.createDraft(this.selectedFormId, projectId, currentUserId, seriesId).subscribe({
+    this.formSubmissionsService.createDraft(this.selectedFormId, finalProjectId, currentUserId, seriesId).subscribe({
       next: (draftSubmission) => {
         console.log('[FormSubmissionCreate] Draft created successfully:', draftSubmission);
         this.submissionId = draftSubmission.id!;
@@ -1220,11 +1348,23 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       }
     }
 
+    // 2.5) Password - Check BEFORE calculated (password fields should NOT be treated as calculated)
+    // Password fields are treated as text fields, but isPasswordField() is used in template to render type="password"
+    if (typeName.includes('password') || 
+        fieldCodeLower === 'password' || 
+        fieldCodeLower === 'pwd' ||
+        fieldCodeLower.includes('password') ||
+        fieldNameLower === 'password' ||
+        fieldNameLower.includes('password')) {
+      return 'text'; // Return 'text' so template can use isPasswordField() to render type="password"
+    }
+
     // 3) Calculated - Check BEFORE number/date/text (calculated fields should be detected even without expressionText)
     // A field is calculated if:
     // 1. fieldTypeId is 14 (Calculated type)
     // 2. Type name is 'Calculated'
     // 3. OR has expressionText (for backward compatibility)
+    // BUT: Skip if it's a password field (checked above)
     if (typeName === 'calculated' || this.calculationEngine.isCalculatedField(field)) {
       return 'calculated';
     }
@@ -1798,8 +1938,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    */
   isPasswordField(field: FormFieldDto): boolean {
     const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+    const fieldNameLower = (field.fieldName || '').toLowerCase();
     const fieldTypeNameLower = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
-    return fieldTypeNameLower.includes('password') || fieldCodeLower === 'password' || fieldCodeLower === 'pwd';
+    return fieldTypeNameLower.includes('password') || 
+           fieldCodeLower === 'password' || 
+           fieldCodeLower === 'pwd' ||
+           fieldCodeLower.includes('password') ||
+           fieldNameLower === 'password' ||
+           fieldNameLower.includes('password');
   }
 
   /**
@@ -3776,8 +3922,30 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               } else {
                 // Load document type to get approvalWorkflowId
                 console.log('[FormSubmissionCreate] Loading document type to get approvalWorkflowId...', 'docTypeId:', docTypeId);
-                this.documentTypesService.getDocumentTypeById(docTypeId).subscribe({
+                
+                // Try to get active document type by ID first, or by formBuilderId if available
+                const loadDocumentType = (): Observable<any> => {
+                  if (this.documentType?.formBuilderId) {
+                    // Try to get by formBuilderId first (more reliable for active document types)
+                    return this.documentTypesService.getDocumentTypeByFormBuilderId(this.documentType.formBuilderId).pipe(
+                      catchError(() => {
+                        // Fallback to getActiveDocumentTypeById
+                        return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
+                      })
+                    );
+                  } else {
+                    // Use getActiveDocumentTypeById
+                    return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
+                  }
+                };
+
+                loadDocumentType().subscribe({
                   next: (documentType) => {
+                    if (!documentType) {
+                      console.warn('[FormSubmissionCreate] Document type not found or is deleted. docTypeId:', docTypeId);
+                      return;
+                    }
+                    
                     console.log('[FormSubmissionCreate] Loaded document type:', {
                       id: documentType?.id,
                       name: documentType?.name,
@@ -3800,7 +3968,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
                       });
                       
                       // Create workflow automatically and assign it to document type
-                      this.createAndAssignWorkflow(docTypeId, documentType, (workflowId: number) => {
+                      this.createAndAssignWorkflow(documentType.id, documentType, (workflowId: number) => {
                         this.documentType = documentType; // Cache it
                         setStageId(workflowId);
                       });
@@ -3995,8 +4163,28 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   private assignWorkflowToDocumentType(docTypeId: number, workflowId: number, callback: (workflowId: number) => void): void {
     // Assign workflow to document type - need to include all required fields
     // First, reload document type to get all fields, then update with workflow ID
-    this.documentTypesService.getDocumentTypeById(docTypeId).subscribe({
+    // Use getActiveDocumentTypeById or getDocumentTypeByFormBuilderId to get active document type
+    const loadDocumentType = (): Observable<any> => {
+      if (this.documentType?.formBuilderId) {
+        return this.documentTypesService.getDocumentTypeByFormBuilderId(this.documentType.formBuilderId).pipe(
+          catchError(() => {
+            return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
+          })
+        );
+      } else {
+        return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
+      }
+    };
+
+    loadDocumentType().subscribe({
       next: (fullDocumentType) => {
+        if (!fullDocumentType) {
+          console.warn('[FormSubmissionCreate] Document type not found or is deleted. Cannot assign workflow. docTypeId:', docTypeId);
+          // Still call callback with the workflow
+          callback(workflowId);
+          return;
+        }
+
         // Update with all existing fields + new workflow ID
         const updateDto: any = {
           name: fullDocumentType.name,
@@ -4011,7 +4199,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         if (fullDocumentType.parentMenuId !== undefined) updateDto.parentMenuId = fullDocumentType.parentMenuId;
         if (fullDocumentType.isActive !== undefined) updateDto.isActive = fullDocumentType.isActive;
         
-        this.documentTypesService.updateDocumentType(docTypeId, updateDto).subscribe({
+        this.documentTypesService.updateDocumentType(fullDocumentType.id, updateDto).subscribe({
           next: () => {
             console.log('[FormSubmissionCreate] ✅ Workflow assigned to document type successfully');
             if (this.documentType) {

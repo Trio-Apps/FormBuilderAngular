@@ -195,7 +195,7 @@ export class ApprovalStageService {
 
   /**
    * Soft delete approval stage
-   * Uses PUT /api/ApprovalStage/{id} with isDeleted: true
+   * Uses DELETE /api/ApprovalStage/{id} (this endpoint performs soft delete)
    */
   softDelete(id: number, deletedByUserId?: string): Observable<void> {
     const stageId = Number(id);
@@ -205,20 +205,16 @@ export class ApprovalStageService {
 
     console.log('[ApprovalStageService] Soft deleting approval stage:', { id: stageId, deletedByUserId });
 
-    // First get the stage to get all required fields for update
-    return this.getById(stageId).pipe(
-      mergeMap((stage: ApprovalStageDto) => {
-        // Use update method with all required fields from existing stage + isDeleted: true
-        const updateDto: UpdateApprovalStageDto = {
-          workflowId: stage.workflowId, // Required by API
-          stageName: stage.stageName, // Include to maintain existing value
-          stageOrder: stage.stageOrder, // Include to maintain existing value
-          minAmount: stage.minAmount, // Include to maintain existing value
-          maxAmount: stage.maxAmount, // Include to maintain existing value
-          isFinalStage: stage.isFinalStage, // Include to maintain existing value
-          isDeleted: true
-        };
-        return this.update(stageId, updateDto);
+    const params: any = {};
+    if (deletedByUserId) {
+      params.deletedByUserId = deletedByUserId;
+    }
+
+    // Use DELETE /api/ApprovalStage/{id} - this endpoint performs soft delete
+    return this.http.delete<any>(`${this.baseUrl}/${stageId}`, { params }).pipe(
+      map(() => {
+        console.log('[ApprovalStageService] Approval stage soft deleted successfully');
+        return;
       }),
       catchError((error) => {
         console.error('[ApprovalStageService] Error soft deleting approval stage:', error);

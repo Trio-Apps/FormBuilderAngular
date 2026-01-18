@@ -255,22 +255,30 @@ export class ApprovalDelegationService {
   }
 
   /**
-   * Delete delegation
-   * DELETE /api/ApprovalDelegation/{id}
+   * Soft delete delegation
+   * Uses DELETE /api/ApprovalDelegation/{id} (this endpoint performs soft delete)
    */
-  deleteDelegation(id: number): Observable<void> {
+  deleteDelegation(id: number, deletedByUserId?: string): Observable<void> {
     const delegationId = Number(id);
     if (isNaN(delegationId) || delegationId <= 0) {
       return throwError(() => new Error(`Invalid delegation ID: ${id}`));
     }
 
-    return this.http.delete<any>(`${this.baseUrl}/${delegationId}`).pipe(
+    console.log('[ApprovalDelegationService] Soft deleting delegation:', { id: delegationId, deletedByUserId });
+
+    const params: any = {};
+    if (deletedByUserId) {
+      params.deletedByUserId = deletedByUserId;
+    }
+
+    // Use DELETE /api/ApprovalDelegation/{id} - this endpoint performs soft delete
+    return this.http.delete<any>(`${this.baseUrl}/${delegationId}`, { params }).pipe(
       map(() => {
-        console.log('[ApprovalDelegationService] Delegation deleted successfully');
+        console.log('[ApprovalDelegationService] Delegation soft deleted successfully');
         return;
       }),
       catchError((error) => {
-        console.error('[ApprovalDelegationService] Error deleting delegation:', error);
+        console.error('[ApprovalDelegationService] Error soft deleting delegation:', error);
         
         if (error.status === 404) {
           throw new Error('Delegation not found');

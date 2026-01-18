@@ -261,22 +261,30 @@ export class ApprovalStageAssigneesService {
   }
 
   /**
-   * Delete assignee
-   * DELETE /api/ApprovalStageAssignees/{id}
+   * Soft delete assignee
+   * Uses DELETE /api/ApprovalStageAssignees/{id} (this endpoint performs soft delete)
    */
-  deleteAssignee(id: number): Observable<void> {
+  deleteAssignee(id: number, deletedByUserId?: string): Observable<void> {
     const assigneeId = Number(id);
     if (isNaN(assigneeId) || assigneeId <= 0) {
       return throwError(() => new Error(`Invalid assignee ID: ${id}`));
     }
 
-    return this.http.delete<any>(`${this.baseUrl}/${assigneeId}`).pipe(
+    console.log('[ApprovalStageAssigneesService] Soft deleting assignee:', { id: assigneeId, deletedByUserId });
+
+    const params: any = {};
+    if (deletedByUserId) {
+      params.deletedByUserId = deletedByUserId;
+    }
+
+    // Use DELETE /api/ApprovalStageAssignees/{id} - this endpoint performs soft delete
+    return this.http.delete<any>(`${this.baseUrl}/${assigneeId}`, { params }).pipe(
       map(() => {
-        console.log('[ApprovalStageAssigneesService] Assignee deleted successfully');
+        console.log('[ApprovalStageAssigneesService] Assignee soft deleted successfully');
         return;
       }),
       catchError((error) => {
-        console.error('[ApprovalStageAssigneesService] Error deleting assignee:', error);
+        console.error('[ApprovalStageAssigneesService] Error soft deleting assignee:', error);
 
         if (error.status === 404) {
           throw new Error('Assignee not found');

@@ -106,7 +106,8 @@
                   [name]="'field_' + field.id"
                   [class.has-error]="hasFieldError(field)"
                   [placeholder]="getFieldPlaceholder(field)"
-                  [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
+                  [value]="getFieldValue(field) || ''" 
+                  [disabled]="!isFieldEditable(field)"
                   (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
               </ng-container>
 
@@ -397,7 +398,7 @@
                     [name]="'field_' + field.id"
                     [class.has-error]="hasFieldError(field)"
                     [placeholder]="getFieldPlaceholder(field)"
-                    [value]="getDefaultValue(field)"
+                    [value]="getFieldValue(field)"
                     [disabled]="!isFieldEditable(field)"
                     (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
                   <input 
@@ -408,7 +409,7 @@
                     [name]="'field_' + field.id"
                     [class.has-error]="hasFieldError(field)"
                     [placeholder]="getFieldPlaceholder(field)"
-                    [value]="getDefaultValue(field)"
+                    [value]="getFieldValue(field) || ''"
                     [disabled]="!isFieldEditable(field)"
                     (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
                 </ng-container>

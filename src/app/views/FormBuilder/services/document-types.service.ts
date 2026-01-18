@@ -78,12 +78,12 @@ export class DocumentTypesService {
 
   /**
    * Get document type by FormBuilderId
-   * Uses getAllDocumentTypes and filters by formBuilderId
+   * Uses getActiveDocumentTypes and filters by formBuilderId (only returns active, non-deleted types)
    */
   getDocumentTypeByFormId(formBuilderId: number): Observable<DocumentType | null> {
-    return this.getAllDocumentTypes().pipe(
+    return this.getActiveDocumentTypes().pipe(
       map((types: DocumentType[]) => {
-        const docType = types.find(t => t.formBuilderId === formBuilderId);
+        const docType = types.find(t => t.formBuilderId === formBuilderId && t.isActive && !t.isDeleted);
         return docType || null;
       }),
       catchError((error) => {
@@ -128,6 +128,7 @@ export class DocumentTypesService {
    * Get document type by ID
    * GET /api/DocumentTypes/{id}
    * Response: ServiceResult<DocumentTypeDto>
+   * Note: This will return 404 if the document type is soft-deleted
    */
   getDocumentTypeById(id: number): Observable<DocumentType> {
     return this.http.get<any>(`${this.baseUrl}/${id}`).pipe(
@@ -148,9 +149,47 @@ export class DocumentTypesService {
       catchError((error) => {
         console.error(`Error fetching document type with ID ${id}:`, error);
         if (error.status === 404) {
-          throw new Error('Document type not found');
+          throw new Error('Document type not found or is deleted');
         }
         throw error;
+      })
+    );
+  }
+
+  /**
+   * Get active document type by ID
+   * Uses GET /api/DocumentTypes/active and filters by ID
+   * This method will only return document types that are active and not deleted
+   */
+  getActiveDocumentTypeById(id: number): Observable<DocumentType | null> {
+    return this.getActiveDocumentTypes().pipe(
+      map((types: DocumentType[]) => {
+        const docType = types.find(t => t.id === id && t.isActive && !t.isDeleted);
+        return docType || null;
+      }),
+      catchError((error) => {
+        console.error(`Error fetching active document type with ID ${id}:`, error);
+        return of(null);
+      })
+    );
+  }
+
+  /**
+   * Get document type by FormBuilderId using FormBuilderDocumentSettings
+   * GET /api/FormBuilderDocumentSettings/form/{formBuilderId}
+   * This returns the active document type associated with the form
+   */
+  getDocumentTypeByFormBuilderId(formBuilderId: number): Observable<DocumentType | null> {
+    // Import DocumentSettingsService dynamically to avoid circular dependency
+    // For now, we'll use getActiveDocumentTypes and filter by formBuilderId
+    return this.getActiveDocumentTypes().pipe(
+      map((types: DocumentType[]) => {
+        const docType = types.find(t => t.formBuilderId === formBuilderId && t.isActive && !t.isDeleted);
+        return docType || null;
+      }),
+      catchError((error) => {
+        console.error(`Error fetching document type for FormBuilderId ${formBuilderId}:`, error);
+        return of(null);
       })
     );
   }

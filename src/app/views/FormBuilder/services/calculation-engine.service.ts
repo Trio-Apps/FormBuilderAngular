@@ -567,6 +567,21 @@ export class CalculationEngineService {
    * Check if a field is a calculated field
    */
   isCalculatedField(field: FormFieldDto): boolean {
+    // First check if it's a password field - password fields should NEVER be treated as calculated
+    const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+    const fieldNameLower = (field.fieldName || '').toLowerCase();
+    const fieldTypeNameLower = (field.fieldTypeName || field.fieldType?.typeName || '').toLowerCase();
+    const isPassword = fieldTypeNameLower.includes('password') || 
+                       fieldCodeLower === 'password' || 
+                       fieldCodeLower === 'pwd' ||
+                       fieldCodeLower.includes('password') ||
+                       fieldNameLower === 'password' ||
+                       fieldNameLower.includes('password');
+    
+    if (isPassword) {
+      return false; // Password fields are never calculated
+    }
+
     // Check fieldTypeId first (should be 14 for Calculated based on static array)
     const isCalculatedById = field.fieldTypeId === 14;
     

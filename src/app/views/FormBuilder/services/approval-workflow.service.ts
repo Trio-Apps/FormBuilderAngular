@@ -207,7 +207,7 @@ export class ApprovalWorkflowService {
 
   /**
    * Soft delete approval workflow
-   * Uses PUT /api/ApprovalWorkflow/{id} with isDeleted: true
+   * Uses DELETE /api/ApprovalWorkflow/{id} (this endpoint performs soft delete)
    */
   softDelete(id: number, deletedByUserId?: string): Observable<void> {
     const workflowId = Number(id);
@@ -217,15 +217,16 @@ export class ApprovalWorkflowService {
 
     console.log('[ApprovalWorkflowService] Soft deleting approval workflow:', { id: workflowId, deletedByUserId });
 
-    // First get the workflow to get documentTypeId (required for update)
-    return this.getApprovalWorkflowById(workflowId).pipe(
-      mergeMap((workflow: ApprovalWorkflowDto) => {
-        // Use update method with isDeleted: true and documentTypeId for soft delete
-        const updateDto: UpdateApprovalWorkflowDto = {
-          documentTypeId: workflow.documentTypeId, // Required by API
-          isDeleted: true
-        };
-        return this.updateApprovalWorkflow(workflowId, updateDto);
+    const params: any = {};
+    if (deletedByUserId) {
+      params.deletedByUserId = deletedByUserId;
+    }
+
+    // Use DELETE /api/ApprovalWorkflow/{id} - this endpoint performs soft delete
+    return this.http.delete<any>(`${this.baseUrl}/${workflowId}`, { params }).pipe(
+      map(() => {
+        console.log('[ApprovalWorkflowService] Approval workflow soft deleted successfully');
+        return;
       }),
       catchError((error) => {
         console.error('[ApprovalWorkflowService] Error soft deleting approval workflow:', error);
