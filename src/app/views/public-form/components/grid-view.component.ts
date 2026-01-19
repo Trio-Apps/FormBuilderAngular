@@ -963,11 +963,27 @@ export class GridViewComponent implements OnInit, OnChanges {
       gridId: this.grid?.id,
       gridName: this.grid?.gridName,
       submissionId: this.submissionId,
-      gridDataCount: gridData?.length || 0
+      gridDataCount: gridData?.length || 0,
+      columnsCount: this.columns?.length || 0,
+      visibleColumnsCount: this.visibleColumns?.length || 0
     });
 
     if (!this.grid || !this.grid.id) {
       console.warn('[GridView] Cannot load grid data: grid not loaded yet');
+      return;
+    }
+
+    // Wait for columns to be loaded if not ready yet
+    if (!this.columns || this.columns.length === 0) {
+      console.warn('[GridView] Columns not loaded yet, waiting...');
+      setTimeout(() => {
+        if (this.columns && this.columns.length > 0) {
+          this.loadGridDataFromSubmission(gridData);
+        } else {
+          console.error('[GridView] Columns still not loaded after wait, initializing empty grid');
+          this.initializeGridData();
+        }
+      }, 500);
       return;
     }
 
@@ -1033,6 +1049,10 @@ export class GridViewComponent implements OnInit, OnChanges {
 
     // Initialize gridData structure and populate cell values
     this.gridData = {};
+    
+    console.log('[GridView] Available columns:', this.columns.map(c => ({ id: c.id, name: c.columnName, code: c.columnCode })));
+    console.log('[GridView] Visible columns:', this.visibleColumns.map(c => ({ id: c.id, name: c.columnName, code: c.columnCode })));
+    
     this.rows.forEach((row) => {
       if (!this.gridData[row.rowIndex]) {
         this.gridData[row.rowIndex] = {};
@@ -1040,24 +1060,79 @@ export class GridViewComponent implements OnInit, OnChanges {
 
       // Populate cell values from nested cells
       if (row.cells && row.cells.length > 0) {
+        console.log(`[GridView] Processing row ${row.rowIndex} with ${row.cells.length} cells`);
         row.cells.forEach((cell: FormSubmissionGridCellDto) => {
           if (cell.columnId) {
-            this.gridData[row.rowIndex][cell.columnId] = cell.cellValue || '';
+            const cellValue = cell.cellValue || '';
+            
+            // Verify column exists
+            const columnExists = this.columns.some(c => c.id === cell.columnId);
+            if (!columnExists) {
+              console.warn(`[GridView] Column ${cell.columnId} not found in columns list!`, {
+                cellColumnId: cell.columnId,
+                availableColumnIds: this.columns.map(c => c.id)
+              });
+            }
+            
+            this.gridData[row.rowIndex][cell.columnId] = cellValue;
             console.log('[GridView] Loaded cell value:', {
               rowIndex: row.rowIndex,
               columnId: cell.columnId,
-              value: cell.cellValue,
-              cell: cell
+              value: cellValue,
+              cellValueType: typeof cellValue,
+              cellValueLength: cellValue ? cellValue.length : 0,
+              columnExists: columnExists,
+              cell: cell,
+              gridDataAfter: this.gridData[row.rowIndex][cell.columnId],
+              gridDataRowKeys: Object.keys(this.gridData[row.rowIndex])
             });
+          } else {
+            console.warn('[GridView] Cell has no columnId:', cell);
           }
         });
+      } else {
+        console.warn(`[GridView] Row ${row.rowIndex} has no cells!`, {
+          row: row,
+          rowCells: row.cells
+        });
       }
+    });
+    
+    // Verify gridData structure
+    console.log('[GridView] Final gridData structure:', {
+      gridDataKeys: Object.keys(this.gridData),
+      gridDataRows: Object.keys(this.gridData).map(key => ({
+        rowIndex: key,
+        columns: Object.keys(this.gridData[Number(key)] || {}),
+        values: Object.entries(this.gridData[Number(key)] || {}).map(([colId, val]) => ({
+          columnId: colId,
+          value: val
+        }))
+      }))
     });
 
     console.log('[GridView] ✅ Loaded grid data from submission:', {
       rowsCount: this.rows.length,
-      gridData: this.gridData
+      gridData: this.gridData,
+      gridDataKeys: Object.keys(this.gridData),
+      sampleRowData: this.rows.length > 0 ? {
+        rowIndex: this.rows[0].rowIndex,
+        cellsCount: this.rows[0].cells?.length || 0,
+        gridDataForRow: this.gridData[this.rows[0].rowIndex]
+      } : null
     });
+    
+    // Trigger change detection multiple times to ensure UI updates
+    // Use setTimeout to ensure change detection happens after data is fully loaded
+    setTimeout(() => {
+      this.cdr.detectChanges();
+      // Force another change detection after a short delay to ensure all bindings update
+      setTimeout(() => {
+        this.cdr.detectChanges();
+        console.log('[GridView] Change detection triggered after data load');
+      }, 100);
+    }, 0);
+    
     this.loading = false;
   }
 
@@ -1229,7 +1304,12 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Get cell value
    */
   getCellValue(rowIndex: number, columnId: number): string {
-    return this.gridData[rowIndex]?.[columnId] || '';
+    const value = this.gridData[rowIndex]?.[columnId] || '';
+    // Debug logging (can be removed later)
+    if (value && value !== '') {
+      console.log(`[GridView] getCellValue: rowIndex=${rowIndex}, columnId=${columnId}, value=${value}`);
+    }
+    return value;
   }
 
   /**

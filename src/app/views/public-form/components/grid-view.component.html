@@ -278,8 +278,8 @@
                     *ngIf="!isLoadingColumnOptions(column)"
                     class="grid-select"
                     [class.is-invalid]="hasError(row.rowIndex, column.id) || hasColumnOptionsError(column)"
-                    [value]="getCellValue(row.rowIndex, column.id)"
-                    (change)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                    [ngModel]="getCellValue(row.rowIndex, column.id)"
+                    (ngModelChange)="setCellValue(row.rowIndex, column.id, $event)"
                     [required]="isColumnRequired(column)"
                     [disabled]="isColumnReadOnly(column) || isReadOnly || hasColumnOptionsError(column)">
                     <option value="">{{ translationService.translate('formView.selectOption') || 'Select...' }}</option>

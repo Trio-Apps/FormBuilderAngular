@@ -458,11 +458,11 @@
             </span>
           </button>
 
-          <!-- Final Submit button - enabled when draft exists or in edit mode, and forms are valid -->
+          <!-- Final Submit button - enabled when forms are valid -->
           <button
             type="submit"
             class="btn-submit"
-            [disabled]="!hasDraft || submissionForm.invalid || fieldsForm.invalid || loading.create || isSubmitting">
+            [disabled]="submissionForm.invalid || fieldsForm.invalid || loading.create || isSubmitting">
             <span *ngIf="!isSubmitting">
               <i class="pi pi-send"></i> Submit
             </span>
