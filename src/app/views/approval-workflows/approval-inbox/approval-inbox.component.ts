@@ -541,6 +541,54 @@ export class ApprovalInboxComponent implements OnInit {
     this.rows = event.rows;
   }
 
+  /**
+   * Check if user can approve/reject this item
+   * User can approve if:
+   * 1. User is admin, OR
+   * 2. Item is in inboxItems (user is assigned as Stage Assignee with stageId > 0)
+   */
+  canApproveReject(item: ApprovalInboxItemDto | null): boolean {
+    if (!item) return false;
+    
+    // Admin can always approve
+    if (this.isAdmin) {
+      return true;
+    }
+    
+    // Non-admin users can only approve if item is in inboxItems (assigned to them)
+    // Items in inboxItems have stageId > 0, meaning user is assigned as Stage Assignee
+    const isAssigned = item.stageId !== null && item.stageId !== undefined && item.stageId > 0;
+    
+    // Also verify item is actually in inboxItems
+    const isInInbox = this.inboxItems.some(inboxItem => 
+      inboxItem.submissionId === item.submissionId && 
+      inboxItem.stageId === item.stageId
+    );
+    
+    return isAssigned && isInInbox;
+  }
+
+  /**
+   * Check if user can approve/reject this submission
+   * For submissions table, check if there's a corresponding inbox item
+   */
+  canApproveRejectSubmission(submission: FormSubmissionDto | null): boolean {
+    if (!submission) return false;
+    
+    // Admin can always approve
+    if (this.isAdmin) {
+      return true;
+    }
+    
+    // Non-admin users can only approve if there's a corresponding inbox item
+    // This means user is assigned as Stage Assignee for this submission's stage
+    const hasInboxItem = this.inboxItems.some(item => 
+      item.submissionId === submission.id
+    );
+    
+    return hasInboxItem;
+  }
+
   openActionModal(item: ApprovalInboxItemDto, actionType: 'Approved' | 'Rejected' | 'Returned'): void {
     this.selectedItem = item;
     this.selectedSubmission = null;
@@ -1004,10 +1052,37 @@ export class ApprovalInboxComponent implements OnInit {
           error: error?.error,
           message: error?.message
         });
-        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to process action';
+        
+        // Extract error message from backend response
+        let errorMessage = 'Failed to process action';
+        
+        // Check for 400 (Bad Request) - usually validation/permission errors from backend
+        if (error?.status === 400) {
+          errorMessage = error?.error?.message || 
+                        error?.error?.errorMessage || 
+                        error?.error?.detail ||
+                        'You are not assigned to approve this document. Only Stage Assignees can approve documents.';
+        } else if (error?.status === 403) {
+          errorMessage = 'You do not have permission to perform this action.';
+        } else if (error?.status === 401) {
+          errorMessage = 'Unauthorized. Please log in again.';
+        } else if (error?.error) {
+          if (typeof error.error === 'string') {
+            errorMessage = error.error;
+          } else if (error.error.message) {
+            errorMessage = error.error.message;
+          } else if (error.error.errorMessage) {
+            errorMessage = error.error.errorMessage;
+          } else if (error.error.detail) {
+            errorMessage = error.error.detail;
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+        
         this.messageService.add({
           severity: 'error',
-          summary: 'Error',
+          summary: error?.status === 400 ? 'Access Denied' : 'Error',
           detail: errorMessage,
           life: 5000
         });
@@ -1035,14 +1110,42 @@ export class ApprovalInboxComponent implements OnInit {
       return;
     }
 
+    // CRITICAL: Check if user can approve this submission
+    // User can only approve if there's a corresponding inbox item (user is assigned as Stage Assignee)
+    if (!this.canApproveRejectSubmission(this.selectedSubmission)) {
+      console.error('[ApprovalInbox] ⚠️ SECURITY: User tried to approve submission without being assigned');
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Access Denied',
+        detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
+        life: 5000
+      });
+      return;
+    }
+
+    // Find the corresponding inbox item to get the correct stageId
+    const inboxItem = this.inboxItems.find(item => item.submissionId === this.selectedSubmission!.id);
+    const stageId = inboxItem?.stageId || 1; // Use inbox item's stageId, or default to 1 if not found
+
+    if (!inboxItem || stageId === 0 || stageId < 0) {
+      console.error('[ApprovalInbox] ⚠️ SECURITY: No valid inbox item found for submission');
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Access Denied',
+        detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
+        life: 5000
+      });
+      return;
+    }
+
     this.loading.action = true;
     const formData = this.actionForm.value;
 
-    // Use approve/reject endpoints with default stageId = 1
+    // Use approve/reject endpoints with stageId from inbox item
     if (this.actionType === 'Approved') {
       const approveDto: ApproveSubmissionDto = {
         submissionId: this.selectedSubmission.id,
-        stageId: 1, // Default stageId
+        stageId: stageId, // Use stageId from inbox item
         actionByUserId: this.currentUserId,
         comments: formData.comments || null
       };
@@ -1066,10 +1169,37 @@ export class ApprovalInboxComponent implements OnInit {
         error: (error) => {
           console.error('[ApprovalInbox] Error approving submission:', error);
           this.loading.action = false;
-          let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to approve document';
+          
+          // Extract error message from backend response
+          let errorMessage = 'Failed to approve document';
+          
+          // Check for 400 (Bad Request) - usually validation/permission errors from backend
+          if (error?.status === 400) {
+            errorMessage = error?.error?.message || 
+                          error?.error?.errorMessage || 
+                          error?.error?.detail ||
+                          'You are not assigned to approve this document. Only Stage Assignees can approve documents.';
+          } else if (error?.status === 403) {
+            errorMessage = 'You do not have permission to approve this document.';
+          } else if (error?.status === 401) {
+            errorMessage = 'Unauthorized. Please log in again.';
+          } else if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.errorMessage) {
+              errorMessage = error.error.errorMessage;
+            } else if (error.error.detail) {
+              errorMessage = error.error.detail;
+            }
+          } else if (error?.message) {
+            errorMessage = error.message;
+          }
+          
           this.messageService.add({
             severity: 'error',
-            summary: 'Error',
+            summary: error?.status === 400 ? 'Access Denied' : 'Error',
             detail: errorMessage,
             life: 5000
           });
@@ -1079,7 +1209,7 @@ export class ApprovalInboxComponent implements OnInit {
     } else if (this.actionType === 'Rejected') {
       const rejectDto: RejectSubmissionDto = {
         submissionId: this.selectedSubmission.id,
-        stageId: 1, // Default stageId
+        stageId: stageId, // Use stageId from inbox item
         actionByUserId: this.currentUserId,
         comments: formData.comments || null
       };
@@ -1103,10 +1233,37 @@ export class ApprovalInboxComponent implements OnInit {
         error: (error) => {
           console.error('[ApprovalInbox] Error rejecting submission:', error);
           this.loading.action = false;
-          let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to reject document';
+          
+          // Extract error message from backend response
+          let errorMessage = 'Failed to reject document';
+          
+          // Check for 400 (Bad Request) - usually validation/permission errors from backend
+          if (error?.status === 400) {
+            errorMessage = error?.error?.message || 
+                          error?.error?.errorMessage || 
+                          error?.error?.detail ||
+                          'You are not assigned to reject this document. Only Stage Assignees can reject documents.';
+          } else if (error?.status === 403) {
+            errorMessage = 'You do not have permission to reject this document.';
+          } else if (error?.status === 401) {
+            errorMessage = 'Unauthorized. Please log in again.';
+          } else if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.error.errorMessage) {
+              errorMessage = error.error.errorMessage;
+            } else if (error.error.detail) {
+              errorMessage = error.error.detail;
+            }
+          } else if (error?.message) {
+            errorMessage = error.message;
+          }
+          
           this.messageService.add({
             severity: 'error',
-            summary: 'Error',
+            summary: error?.status === 400 ? 'Access Denied' : 'Error',
             detail: errorMessage,
             life: 5000
           });

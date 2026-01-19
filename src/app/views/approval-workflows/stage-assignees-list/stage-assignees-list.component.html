@@ -63,9 +63,18 @@
         <div>
           <strong>Stage Name:</strong> {{ stage.stageName }}<br>
           <strong>Stage Order:</strong> {{ stage.stageOrder }}<br>
-          <strong>Final Stage:</strong> {{ stage.isFinalStage ? 'Yes' : 'No' }}
+          <strong>Final Stage:</strong> {{ stage.isFinalStage ? 'Yes' : 'No' }}<br>
+          <strong *ngIf="minimumRequiredAssignees !== null && minimumRequiredAssignees !== undefined">
+            Minimum Required Assignees:</strong> {{ minimumRequiredAssignees !== null && minimumRequiredAssignees !== undefined ? minimumRequiredAssignees : 'Not set' }}<br>
+          <strong>Current Active Assignees:</strong> {{ activeAssigneesCount }}
         </div>
       </div>
+    </div>
+
+    <!-- Warning Message -->
+    <div *ngIf="getWarningMessage()" class="alert alert-warning" style="margin-bottom: 24px; padding: 16px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; color: #856404;">
+      <i class="pi pi-exclamation-triangle" style="margin-right: 8px;"></i>
+      <strong>Warning:</strong> {{ getWarningMessage() }}
     </div>
 
     <!-- Assignees Section -->
@@ -146,12 +155,34 @@
                   (click)="openEditModal(assignee)"
                   pTooltip="Edit"
                   tooltipPosition="top"></button>
+                
+                <!-- Deactivate Button (only for active assignees) -->
+                <button pButton 
+                  *ngIf="assignee.isActive"
+                  icon="pi pi-ban" 
+                  class="p-button-text p-button-sm action-btn action-btn-warning" 
+                  (click)="deactivateAssignee(assignee)"
+                  [disabled]="loading.save || !canDeleteOrDeactivate(assignee)"
+                  pTooltip="Deactivate Assignee"
+                  tooltipPosition="top"></button>
+
+                <!-- Activate Button (only for inactive assignees) -->
+                <button pButton 
+                  *ngIf="!assignee.isActive"
+                  icon="pi pi-check" 
+                  class="p-button-text p-button-sm action-btn action-btn-success" 
+                  (click)="activateAssignee(assignee)"
+                  [disabled]="loading.save"
+                  pTooltip="Activate Assignee"
+                  tooltipPosition="top"></button>
+
+                <!-- Delete Button -->
                 <button pButton 
                   icon="pi pi-trash" 
                   class="p-button-text p-button-sm action-btn action-btn-danger" 
                   (click)="deleteAssignee(assignee)"
-                  [disabled]="loading.delete"
-                  pTooltip="Delete"
+                  [disabled]="loading.delete || (assignee.isActive && !canDeleteOrDeactivate(assignee))"
+                  pTooltip="Delete Assignee"
                   tooltipPosition="top"></button>
               </div>
             </td>

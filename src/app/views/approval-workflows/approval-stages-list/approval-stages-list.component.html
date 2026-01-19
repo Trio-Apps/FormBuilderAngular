@@ -302,6 +302,77 @@
         </div>
       </div>
 
+      <!-- Amount Field Code (Optional) - يظهر عند تحديد MinAmount أو MaxAmount أو عند وجود workflowId -->
+      <div class="form-field-wrapper" *ngIf="hasAmountRange() || workflowId">
+        <label class="field-label" for="amountFieldCode">Amount Field (Optional)</label>
+        <div class="field-input-wrapper">
+          <select
+            id="amountFieldCode"
+            name="amountFieldCode"
+            formControlName="amountFieldCode"
+            class="form-input"
+            [disabled]="loading.formFields"
+            [class.input-error]="stageForm.get('amountFieldCode')?.invalid && stageForm.get('amountFieldCode')?.touched">
+            <option [ngValue]="null">-- All Numeric Fields --</option>
+            <option *ngIf="!loading.formFields && formFields.length === 0" [ngValue]="null" disabled>
+              No numeric fields available
+            </option>
+            <option *ngFor="let field of formFields" [ngValue]="field.fieldCode">
+              {{ field.fieldName }} ({{ field.dataType }})
+            </option>
+          </select>
+          <div *ngIf="loading.formFields" class="field-loading" style="margin-top: 8px; color: #666; font-size: 12px;">
+            <i class="pi pi-spin pi-spinner"></i>
+            <span>Loading fields...</span>
+          </div>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          <span *ngIf="!loading.formFields && formFields.length === 0">
+            No numeric fields found for this workflow.
+          </span>
+          <span *ngIf="loading.formFields || formFields.length > 0">
+            Select a specific field to validate, or leave empty to validate all numeric fields.
+          </span>
+        </div>
+      </div>
+
+      <!-- Minimum Required Assignees -->
+      <div class="form-field-wrapper">
+        <label class="field-label" for="minimumRequiredAssignees">Minimum Required Assignees</label>
+        <div class="field-input-wrapper">
+          <p-inputNumber
+            id="minimumRequiredAssignees"
+            name="minimumRequiredAssignees"
+            formControlName="minimumRequiredAssignees"
+            [min]="0"
+            [showButtons]="true"
+            placeholder="0"
+            styleClass="w-full"
+            autocomplete="off">
+          </p-inputNumber>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          Minimum number of assignees required for this stage.
+        </div>
+      </div>
+
+      <!-- Active -->
+      <div class="form-field-wrapper">
+        <div class="checkbox-group">
+          <div class="checkbox-option">
+            <p-checkbox 
+              formControlName="isActive"
+              [binary]="true"
+              inputId="isActive"
+              name="isActive">
+            </p-checkbox>
+            <label class="checkbox-label" for="isActive">Active</label>
+          </div>
+        </div>
+      </div>
+
       <!-- Final Stage -->
       <div class="form-field-wrapper">
         <div class="checkbox-group">

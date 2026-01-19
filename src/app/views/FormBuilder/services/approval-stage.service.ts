@@ -6,6 +6,19 @@ import { environment } from '../../../environments/environment';
 
 // ==================== Approval Stage DTOs ====================
 
+export interface FormField {
+  id: number;
+  fieldCode: string;
+  fieldName: string;
+  dataType: string;
+}
+
+export interface ApiResponse<T> {
+  statusCode: number;
+  message: string;
+  data: T;
+}
+
 export interface ApprovalStageDto {
   id: number;
   workflowId: number;
@@ -14,7 +27,10 @@ export interface ApprovalStageDto {
   minAmount?: number | null;
   maxAmount?: number | null;
   isFinalStage: boolean;
+  isActive?: boolean;
   isDeleted: boolean;
+  minimumRequiredAssignees?: number | null;
+  amountFieldCode?: string | null;
   workflowName?: string;
 }
 
@@ -25,7 +41,10 @@ export interface CreateApprovalStageDto {
   minAmount?: number | null;
   maxAmount?: number | null;
   isFinalStage: boolean;
+  isActive?: boolean;
   isDeleted?: boolean;
+  minimumRequiredAssignees?: number | null;
+  amountFieldCode?: string | null;
 }
 
 export interface UpdateApprovalStageDto {
@@ -35,7 +54,10 @@ export interface UpdateApprovalStageDto {
   minAmount?: number | null;
   maxAmount?: number | null;
   isFinalStage?: boolean;
+  isActive?: boolean;
   isDeleted?: boolean;
+  minimumRequiredAssignees?: number | null;
+  amountFieldCode?: string | null;
 }
 
 @Injectable({
@@ -47,6 +69,27 @@ export class ApprovalStageService {
   constructor(private http: HttpClient) {}
 
   // ==================== CRUD Operations ====================
+
+  /**
+   * Get form fields by workflow ID
+   * GET /api/ApprovalStage/workflow/{workflowId}/form-fields
+   */
+  getFormFieldsByWorkflowId(workflowId: number): Observable<ApiResponse<FormField[]>> {
+    const workflowIdNum = Number(workflowId);
+    if (isNaN(workflowIdNum) || workflowIdNum <= 0) {
+      return throwError(() => new Error(`Invalid workflow ID: ${workflowId}`));
+    }
+
+    return this.http.get<ApiResponse<FormField[]>>(
+      `${this.baseUrl}/workflow/${workflowIdNum}/form-fields`
+    ).pipe(
+      catchError((error) => {
+        console.error(`Error fetching form fields for workflow ${workflowId}:`, error);
+        const errorMessage = this.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
 
   /**
    * Get all approval stages for a workflow
@@ -130,7 +173,10 @@ export class ApprovalStageService {
       minAmount: dto.minAmount !== undefined ? dto.minAmount : null,
       maxAmount: dto.maxAmount !== undefined ? dto.maxAmount : null,
       isFinalStage: dto.isFinalStage !== undefined ? dto.isFinalStage : false,
-      isDeleted: dto.isDeleted !== undefined ? dto.isDeleted : false
+      isActive: dto.isActive !== undefined ? dto.isActive : true,
+      isDeleted: dto.isDeleted !== undefined ? dto.isDeleted : false,
+      minimumRequiredAssignees: dto.minimumRequiredAssignees !== undefined ? dto.minimumRequiredAssignees : null,
+      amountFieldCode: dto.amountFieldCode || null
     };
 
     console.log('[ApprovalStageService] Creating approval stage:', createDto);

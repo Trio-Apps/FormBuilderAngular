@@ -452,6 +452,27 @@
         icon="pi pi-save"
         [disabled]="submissionForm.invalid || loading.save"
         [loading]="loading.save"></button>
+      <!-- Approve/Reject buttons for users who can approve/reject -->
+      <button 
+        *ngIf="isViewMode && canApproveReject(selectedSubmission!)"
+        type="button" 
+        pButton 
+        label="Approve" 
+        icon="pi pi-check" 
+        class="p-button-success"
+        (click)="openApproveRejectModal(selectedSubmission!, 'approve')"
+        [disabled]="loading.save || loadingApproveReject">
+      </button>
+      <button 
+        *ngIf="isViewMode && canApproveReject(selectedSubmission!)"
+        type="button" 
+        pButton 
+        label="Reject" 
+        icon="pi pi-times" 
+        class="p-button-danger"
+        (click)="openApproveRejectModal(selectedSubmission!, 'reject')"
+        [disabled]="loading.save || loadingApproveReject">
+      </button>
     </div>
   </form>
 </p-dialog>

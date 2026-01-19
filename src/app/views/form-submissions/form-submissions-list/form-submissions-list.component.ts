@@ -32,8 +32,10 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
 import { StorageService } from '../../../auth/storage.service';
 import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
+import { ApprovalStageAssigneesService, ApprovalStageAssigneeDto } from '../../FormBuilder/services/approval-stage-assignees.service';
+import { ApprovalStageService } from '../../FormBuilder/services/approval-stage.service';
 import { Subscription, forkJoin, of, Observable } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 
 @Component({
@@ -89,6 +91,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   // Cache for user inbox items to check stage assignment
   userInboxCache: ApprovalInboxItemDto[] | null = null;
   inboxCacheLoaded = false;
+  // Cache for user stage assignments (fallback if inbox is empty)
+  userStageAssignmentsCache: Map<number, boolean> = new Map(); // stageId -> isAssignee
+  stageAssignmentsCacheLoaded = false;
 
   // Loading States
   loading = {
@@ -170,7 +175,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     public fileUploadService: FileUploadService,
     private storageService: StorageService,
     private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService,
-    private gridService: GridService
+    private gridService: GridService,
+    private stageAssigneesService: ApprovalStageAssigneesService,
+    private stageService: ApprovalStageService
   ) {
     // Initialize forms
     this.submissionForm = this.fb.group({
@@ -276,6 +283,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         // Always load forms and series
         this.loadForms();
         this.loadDocumentSeries();
+        // Load stage assignments cache if workflow exists (for approve/reject fallback)
+        if (this.documentType?.approvalWorkflowId) {
+          this.loadUserStageAssignmentsCache();
+        }
         this.loading.documentType = false;
         this.cdr.detectChanges();
       },
@@ -440,7 +451,24 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     // Load submission details
     this.loading.fieldValues = true;
     this.loading.attachments = false; // Reset attachments loading state
-    this.isViewMode = true; // Set to view mode to show submission information
+    
+    // Ensure inbox cache is loaded before checking permissions
+    if (!this.inboxCacheLoaded && this.userInboxCache === null) {
+      this.loadUserInboxCache();
+    }
+    
+    // Always set to view mode (read-only), but allow approve/reject buttons if user has permission
+    // The approve/reject buttons will be shown in the template based on canApproveReject()
+    this.isViewMode = true; // View-only mode
+    
+    console.log('[FormSubmissionsList] viewSubmissionDetails:', {
+      submissionId: submission.id,
+      canApproveReject: this.canApproveReject(submission),
+      isViewMode: this.isViewMode,
+      isAdmin: this.isAdmin,
+      inboxCacheLoaded: this.inboxCacheLoaded,
+      inboxCacheCount: this.userInboxCache?.length || 0
+    });
     
     // Clear previous attachments to avoid showing wrong attachments
     this.fieldAttachments = {};
@@ -3725,15 +3753,19 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    * Check if submission can be approved/rejected
    */
   canApproveReject(submission: FormSubmissionDto): boolean {
+    console.log(`[FormSubmissionsList] [canApproveReject] Checking submission ${submission.id}, status: ${submission.status}`);
+    
     // Allow approve/reject for Submitted and Pending Approval statuses
     if (submission.status !== 'Submitted' && 
         submission.status !== 'Pending Approval' && 
         submission.status !== 'Approved') {
+      console.log(`[FormSubmissionsList] [canApproveReject] ❌ Submission status '${submission.status}' not allowed for approve/reject`);
       return false;
     }
 
     // ✅ Admin can always approve/reject
     if (this.isAdmin) {
+      console.log(`[FormSubmissionsList] [canApproveReject] ✅ User is admin, allowing approve/reject`);
       return true;
     }
 
@@ -3742,6 +3774,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     if (!this.inboxCacheLoaded && this.userInboxCache === null) {
       // Cache not loaded yet - trigger async load but return false for now
       // Will be refreshed after cache is loaded
+      console.log(`[FormSubmissionsList] [canApproveReject] Inbox cache not loaded yet, loading...`);
       if (!this.loading.approveReject) { // Avoid multiple calls
         this.loadUserInboxCache();
       }
@@ -3752,17 +3785,152 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       // Check if submission exists in user's inbox (user is assignee for this stage)
       const inboxItem = this.userInboxCache.find(item => item.submissionId === submission.id);
       if (inboxItem && inboxItem.stageId && inboxItem.stageId > 0) {
-        console.log(`[canApproveReject] ✅ User is assignee for submission ${submission.id}, stageId: ${inboxItem.stageId}`);
+        console.log(`[FormSubmissionsList] [canApproveReject] ✅ User is assignee for submission ${submission.id}, stageId: ${inboxItem.stageId}`);
         return true;
       } else {
-        console.log(`[canApproveReject] ❌ Submission ${submission.id} not found in user inbox (${this.userInboxCache.length} items checked)`);
+        console.log(`[FormSubmissionsList] [canApproveReject] ❌ Submission ${submission.id} not found in user inbox (${this.userInboxCache.length} items checked)`);
       }
     } else {
-      console.log(`[canApproveReject] ❌ User inbox cache is empty or not loaded. Cache loaded: ${this.inboxCacheLoaded}, Cache items: ${this.userInboxCache?.length || 0}`);
+      console.log(`[FormSubmissionsList] [canApproveReject] ❌ User inbox cache is empty or not loaded. Cache loaded: ${this.inboxCacheLoaded}, Cache items: ${this.userInboxCache?.length || 0}`);
+      
+      // Fallback: Check if user is assignee for any stage in the workflow
+      // This is a fallback in case inbox is empty but user is still an assignee
+      if (this.documentType?.approvalWorkflowId) {
+        console.log(`[FormSubmissionsList] [canApproveReject] Trying fallback: checking if user is assignee for workflow ${this.documentType.approvalWorkflowId}`);
+        console.log(`[FormSubmissionsList] [canApproveReject] Stage assignments cache loaded: ${this.stageAssignmentsCacheLoaded}`);
+        console.log(`[FormSubmissionsList] [canApproveReject] Stage assignments cache size: ${this.userStageAssignmentsCache.size}`);
+        console.log(`[FormSubmissionsList] [canApproveReject] Stage assignments cache values:`, Array.from(this.userStageAssignmentsCache.entries()));
+        
+        // Load stage assignments cache if not loaded
+        if (!this.stageAssignmentsCacheLoaded) {
+          console.log(`[FormSubmissionsList] [canApproveReject] Stage assignments cache not loaded, loading...`);
+          this.loadUserStageAssignmentsCache();
+          // Return false for now, will be updated after cache loads
+          return false;
+        }
+        
+        // Check if user is assignee for any stage
+        const isAssigneeForAnyStage = Array.from(this.userStageAssignmentsCache.values()).some(isAssignee => isAssignee);
+        if (isAssigneeForAnyStage) {
+          console.log(`[FormSubmissionsList] [canApproveReject] ✅ User is assignee for at least one stage in workflow (fallback check)`);
+          console.log(`[FormSubmissionsList] [canApproveReject] Assigned stages:`, Array.from(this.userStageAssignmentsCache.entries()).filter(([_, isAssignee]) => isAssignee).map(([stageId, _]) => stageId));
+          // Allow approve/reject - backend will verify the specific stage when action is taken
+          return true;
+        } else {
+          console.log(`[FormSubmissionsList] [canApproveReject] ❌ User is not assignee for any stage in workflow`);
+        }
+      } else {
+        console.log(`[FormSubmissionsList] [canApproveReject] ❌ No workflow ID found in document type`);
+      }
     }
 
     // User is neither admin nor stage assignee for this submission
+    // Note: Even if inbox is empty, backend will check permissions when approve/reject is attempted
+    console.log(`[FormSubmissionsList] [canApproveReject] ❌ Final result: false - User cannot approve/reject submission ${submission.id}`);
     return false;
+  }
+
+  /**
+   * Load user stage assignments cache (fallback if inbox is empty)
+   * This checks if user is assignee for any stage in the workflow
+   */
+  private loadUserStageAssignmentsCache(): void {
+    if (this.stageAssignmentsCacheLoaded || !this.documentType?.approvalWorkflowId) {
+      return;
+    }
+
+    const currentUserId = this.storageService.getUserId()?.toString() || this.authService.userName();
+    const currentUsername = this.storageService.getUsername() || this.authService.userName();
+    
+    if (!currentUserId && !currentUsername) {
+      this.stageAssignmentsCacheLoaded = true;
+      return;
+    }
+
+    console.log('[FormSubmissionsList] Loading user stage assignments cache (fallback)...');
+    console.log('[FormSubmissionsList] Workflow ID:', this.documentType?.approvalWorkflowId);
+    console.log('[FormSubmissionsList] User ID:', currentUserId);
+    console.log('[FormSubmissionsList] Username:', currentUsername);
+    
+    if (!this.documentType?.approvalWorkflowId) {
+      console.error('[FormSubmissionsList] Cannot load stage assignments: No workflow ID');
+      this.stageAssignmentsCacheLoaded = true;
+      return;
+    }
+    
+    // Get all stages for the workflow
+    const workflowId = this.documentType.approvalWorkflowId;
+    this.stageService.getAllByWorkflowId(workflowId).subscribe({
+      next: (stages) => {
+        console.log('[FormSubmissionsList] ===== Loaded stages for workflow =====');
+        console.log('[FormSubmissionsList] Workflow ID:', workflowId);
+        console.log('[FormSubmissionsList] Total stages:', stages.length);
+        console.log('[FormSubmissionsList] Stages:', stages.map(s => ({ id: s.id, name: s.stageName, order: s.stageOrder })));
+        console.log('[FormSubmissionsList] User ID:', currentUserId);
+        console.log('[FormSubmissionsList] Username:', currentUsername);
+        
+        // Check assignees for each stage
+        const assigneeChecks = stages.map(stage => 
+          this.stageAssigneesService.getAssigneesByStageId(stage.id!).pipe(
+            catchError((error) => {
+              console.error(`[FormSubmissionsList] Error loading assignees for stage ${stage.id}:`, error);
+              return of([]);
+            }),
+            map((assignees: ApprovalStageAssigneeDto[]) => {
+              console.log(`[FormSubmissionsList] Stage ${stage.id} (${stage.stageName}) assignees:`, assignees.length);
+              console.log(`[FormSubmissionsList] Assignees for stage ${stage.id}:`, assignees.map(a => ({
+                id: a.id,
+                userId: a.userId,
+                userName: a.userName,
+                isActive: a.isActive
+              })));
+              
+              // Check if current user is in assignees
+              const isAssignee = assignees.some(assignee => 
+                assignee.isActive && (
+                  assignee.userId === currentUserId || 
+                  assignee.userId === currentUsername ||
+                  assignee.userName === currentUsername ||
+                  assignee.userName === currentUserId
+                )
+              );
+              
+              if (isAssignee) {
+                console.log(`[FormSubmissionsList] ✅ User is assignee for stage ${stage.id} (${stage.stageName})`);
+                this.userStageAssignmentsCache.set(stage.id!, true);
+              } else {
+                console.log(`[FormSubmissionsList] ❌ User is NOT assignee for stage ${stage.id} (${stage.stageName})`);
+              }
+              
+              return { stageId: stage.id!, isAssignee };
+            })
+          )
+        );
+        
+        forkJoin(assigneeChecks).subscribe({
+          next: (results) => {
+            const isAssigneeForAnyStage = results.some(r => r.isAssignee);
+            console.log('[FormSubmissionsList] ===== Stage assignments check complete =====');
+            console.log('[FormSubmissionsList] Total stages checked:', results.length);
+            console.log('[FormSubmissionsList] Is assignee for any stage:', isAssigneeForAnyStage);
+            console.log('[FormSubmissionsList] Assigned stages:', results.filter(r => r.isAssignee).map(r => r.stageId));
+            console.log('[FormSubmissionsList] Cache entries:', Array.from(this.userStageAssignmentsCache.entries()));
+            
+            this.stageAssignmentsCacheLoaded = true;
+            // Trigger change detection to update approve/reject buttons
+            this.cdr.detectChanges();
+          },
+          error: (error) => {
+            console.error('[FormSubmissionsList] Error loading stage assignments:', error);
+            this.stageAssignmentsCacheLoaded = true;
+          }
+        });
+      },
+      error: (error) => {
+        console.error('[FormSubmissionsList] Error loading stages:', error);
+        this.stageAssignmentsCacheLoaded = true;
+      }
+    });
   }
 
   /**
@@ -3775,6 +3943,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     }
 
     const currentUserId = this.storageService.getUserId()?.toString() || this.authService.userName();
+    const currentUsername = this.storageService.getUsername() || this.authService.userName();
+    
     if (!currentUserId) {
       console.log('[FormSubmissionsList] No user ID found, skipping inbox cache load');
       this.userInboxCache = [];
@@ -3784,35 +3954,81 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
     console.log('[FormSubmissionsList] ===== Loading user inbox cache for stage assignment check =====');
     console.log('[FormSubmissionsList] User ID:', currentUserId);
+    console.log('[FormSubmissionsList] Username:', currentUsername);
+    console.log('[FormSubmissionsList] Will try userId first, then username if needed');
+    
+    // Try with userId first
     this.approvalWorkflowRuntimeService.getApprovalInboxForUser(currentUserId).subscribe({
       next: (inboxItems: ApprovalInboxItemDto[]) => {
-        console.log('[FormSubmissionsList] Raw inbox items received:', inboxItems?.length || 0);
+        console.log('[FormSubmissionsList] Raw inbox items received (with userId):', inboxItems?.length || 0);
         console.log('[FormSubmissionsList] Inbox items:', inboxItems.map(item => ({
           submissionId: item.submissionId,
           stageId: item.stageId,
           stageName: item.stageName
         })));
         
-        // Filter to only assigned items (stageId > 0)
-        this.userInboxCache = (inboxItems || []).filter(item => item.stageId && item.stageId > 0);
-        this.inboxCacheLoaded = true;
-        console.log(`[FormSubmissionsList] ✅ Loaded ${this.userInboxCache.length} inbox items for user ${currentUserId}`);
-        console.log(`[FormSubmissionsList] Filtered inbox items (stageId > 0):`, this.userInboxCache.map(item => ({
-          submissionId: item.submissionId,
-          stageId: item.stageId
-        })));
-        
-        // Trigger change detection to update approve/reject buttons
-        this.cdr.detectChanges();
+        // If no items with userId, try with username (if different)
+        if ((!inboxItems || inboxItems.length === 0) && currentUsername && currentUsername !== currentUserId) {
+          console.log('[FormSubmissionsList] No items with userId, trying with username:', currentUsername);
+          this.approvalWorkflowRuntimeService.getApprovalInboxForUser(currentUsername).subscribe({
+            next: (inboxItemsWithUsername: ApprovalInboxItemDto[]) => {
+              console.log('[FormSubmissionsList] Raw inbox items received (with username):', inboxItemsWithUsername?.length || 0);
+              this.processInboxItems(inboxItemsWithUsername || [], currentUsername);
+            },
+            error: (error) => {
+              console.error('[FormSubmissionsList] ❌ Error loading inbox cache with username:', error);
+              this.processInboxItems([], currentUserId);
+            }
+          });
+        } else {
+          this.processInboxItems(inboxItems || [], currentUserId);
+        }
       },
       error: (error) => {
-        console.error('[FormSubmissionsList] ❌ Error loading inbox cache:', error);
-        this.userInboxCache = [];
-        this.inboxCacheLoaded = true;
-        // Don't block UI - just mark as loaded with empty cache
-        this.cdr.detectChanges();
+        console.error('[FormSubmissionsList] ❌ Error loading inbox cache with userId:', error);
+        // Try with username if userId failed
+        if (currentUsername && currentUsername !== currentUserId) {
+          console.log('[FormSubmissionsList] Retrying with username:', currentUsername);
+          this.approvalWorkflowRuntimeService.getApprovalInboxForUser(currentUsername).subscribe({
+            next: (inboxItemsWithUsername: ApprovalInboxItemDto[]) => {
+              console.log('[FormSubmissionsList] Raw inbox items received (with username):', inboxItemsWithUsername?.length || 0);
+              this.processInboxItems(inboxItemsWithUsername || [], currentUsername);
+            },
+            error: (error2) => {
+              console.error('[FormSubmissionsList] ❌ Error loading inbox cache with username:', error2);
+              this.processInboxItems([], currentUserId);
+            }
+          });
+        } else {
+          this.processInboxItems([], currentUserId);
+        }
       }
     });
+  }
+
+  /**
+   * Process inbox items and update cache
+   */
+  private processInboxItems(inboxItems: ApprovalInboxItemDto[], userIdentifier: string): void {
+    // Filter to only assigned items (stageId > 0)
+    this.userInboxCache = inboxItems.filter(item => item.stageId && item.stageId > 0);
+    this.inboxCacheLoaded = true;
+    console.log(`[FormSubmissionsList] ✅ Loaded ${this.userInboxCache.length} inbox items for user ${userIdentifier}`);
+    console.log(`[FormSubmissionsList] Filtered inbox items (stageId > 0):`, this.userInboxCache.map(item => ({
+      submissionId: item.submissionId,
+      stageId: item.stageId,
+      stageName: item.stageName
+    })));
+    
+    if (this.userInboxCache.length === 0) {
+      console.warn('[FormSubmissionsList] ⚠️ No inbox items found. This could mean:');
+      console.warn('[FormSubmissionsList] 1. User is not assigned as Stage Assignee');
+      console.warn('[FormSubmissionsList] 2. No submissions are pending in stages where user is assignee');
+      console.warn('[FormSubmissionsList] 3. Backend API issue - check backend logs');
+    }
+    
+    // Trigger change detection to update approve/reject buttons
+    this.cdr.detectChanges();
   }
 }
 

@@ -52,6 +52,10 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
   filteredAssignees: ApprovalStageAssigneeDto[] = [];
   private deletedAssigneeIds: Set<number> = new Set(); // Track deleted assignee IDs to filter them out
 
+  // Minimum Required Assignees
+  minimumRequiredAssignees: number | null = null;
+  activeAssigneesCount: number = 0;
+
   // Users and Roles data
   users: UserDto[] = [];
   userGroups: UserGroupDto[] = [];
@@ -186,12 +190,17 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     this.stageService.getById(this.stageId).subscribe({
       next: (stage: ApprovalStageDto) => {
         this.stage = stage;
+        // Get minimumRequiredAssignees from stage
+        this.minimumRequiredAssignees = stage.minimumRequiredAssignees !== undefined 
+          ? stage.minimumRequiredAssignees 
+          : null;
         this.loading.stage = false;
         this.cdr.detectChanges();
       },
       error: (error: any) => {
         console.error('Error loading stage:', error);
         this.stage = null;
+        this.minimumRequiredAssignees = null;
         this.loading.stage = false;
         this.messageService.add({
           severity: 'error',
@@ -246,6 +255,10 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
         this.assignees = visibleAssignees;
         this.filteredAssignees = [...this.assignees];
         this.totalRecords = this.filteredAssignees.length;
+        
+        // Calculate active assignees count for minimum required validation
+        this.activeAssigneesCount = this.assignees.filter(a => a.isActive === true).length;
+        
         this.loading.assignees = false;
         this.cdr.detectChanges();
       },
@@ -548,7 +561,7 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
             detail: 'Assignee updated successfully' 
           });
           this.closeModal();
-          this.loadAssignees();
+          this.loadAssignees(); // Reload to update active count
         },
         error: (error: any) => {
           this.loading.save = false;
@@ -573,7 +586,7 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
             detail: 'Assignee created successfully' 
           });
           this.closeModal();
-          this.loadAssignees();
+          this.loadAssignees(); // Reload to update active count
         },
         error: (error: any) => {
           // Extract error message
@@ -793,8 +806,154 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Check if delete/deactivate is allowed based on minimum required assignees
+   */
+  canDeleteOrDeactivate(assignee: ApprovalStageAssigneeDto): boolean {
+    // If assignee is already inactive, deletion is always allowed
+    if (!assignee.isActive) {
+      return true;
+    }
+    
+    // If no minimum requirement, deletion is allowed
+    if (this.minimumRequiredAssignees === null || this.minimumRequiredAssignees === undefined) {
+      return true;
+    }
+    
+    // Check if current active count is greater than minimum required
+    return this.activeAssigneesCount > this.minimumRequiredAssignees;
+  }
+
+  /**
+   * Get warning message for minimum required assignees
+   */
+  getWarningMessage(): string {
+    if (this.minimumRequiredAssignees === null || this.minimumRequiredAssignees === undefined) {
+      return '';
+    }
+    
+    if (this.activeAssigneesCount <= this.minimumRequiredAssignees) {
+      return `Warning: Stage requires at least ${this.minimumRequiredAssignees} active assignee(s). Currently has ${this.activeAssigneesCount} active assignee(s).`;
+    }
+    
+    return '';
+  }
+
+  /**
+   * Deactivate an assignee
+   */
+  deactivateAssignee(assignee: ApprovalStageAssigneeDto): void {
+    if (!assignee || !assignee.id) return;
+
+    // Check minimum required before deactivating
+    if (!this.canDeleteOrDeactivate(assignee)) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Cannot Deactivate',
+        detail: `Cannot deactivate. Stage requires at least ${this.minimumRequiredAssignees} active assignee(s). Currently has ${this.activeAssigneesCount} active assignee(s).`,
+        life: 5000
+      });
+      return;
+    }
+
+    this.confirmationService.confirm({
+      message: `Are you sure you want to deactivate this assignee?`,
+      header: 'Confirm Deactivation',
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        this.loading.save = true;
+        const updateDto: UpdateApprovalStageAssigneeDto = {
+          stageId: assignee.stageId,
+          userId: assignee.userId || '',
+          isActive: false
+        };
+
+        this.assigneesService.updateAssignee(assignee.id, updateDto).subscribe({
+          next: () => {
+            this.loading.save = false;
+            this.messageService.add({ 
+              severity: 'success', 
+              summary: 'Success', 
+              detail: 'Assignee deactivated successfully',
+              life: 5000
+            });
+            this.loadAssignees(); // Reload to update count
+          },
+          error: (error: any) => {
+            this.loading.save = false;
+            console.error('Error deactivating assignee:', error);
+            let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to deactivate assignee';
+            
+            // Check if it's a validation error from server
+            if (error?.error?.statusCode === 400 || error?.status === 400) {
+              errorMessage = error?.error?.message || errorMessage;
+            }
+            
+            this.messageService.add({ 
+              severity: 'error', 
+              summary: 'Error', 
+              detail: errorMessage,
+              life: 5000
+            });
+            this.cdr.detectChanges();
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Activate an assignee
+   */
+  activateAssignee(assignee: ApprovalStageAssigneeDto): void {
+    if (!assignee || !assignee.id) return;
+
+    this.loading.save = true;
+    const updateDto: UpdateApprovalStageAssigneeDto = {
+      stageId: assignee.stageId,
+      userId: assignee.userId || '',
+      isActive: true
+    };
+
+    this.assigneesService.updateAssignee(assignee.id, updateDto).subscribe({
+      next: () => {
+        this.loading.save = false;
+        this.messageService.add({ 
+          severity: 'success', 
+          summary: 'Success', 
+          detail: 'Assignee activated successfully',
+          life: 5000
+        });
+        this.loadAssignees(); // Reload to update count
+      },
+      error: (error: any) => {
+        this.loading.save = false;
+        console.error('Error activating assignee:', error);
+        let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to activate assignee';
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: 'Error', 
+          detail: errorMessage,
+          life: 5000
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   deleteAssignee(assignee: ApprovalStageAssigneeDto): void {
     if (!assignee || !assignee.id) return;
+
+    // Check minimum required before deleting (only for active assignees)
+    if (assignee.isActive && !this.canDeleteOrDeactivate(assignee)) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Cannot Delete',
+        detail: `Cannot delete. Stage requires at least ${this.minimumRequiredAssignees} active assignee(s). Currently has ${this.activeAssigneesCount} active assignee(s).`,
+        life: 5000
+      });
+      return;
+    }
 
     this.confirmationService.confirm({
       message: `Are you sure you want to delete this assignee? This action cannot be undone.`,
@@ -820,6 +979,9 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
               this.filteredAssignees.splice(filteredIndex, 1);
             }
             this.totalRecords = this.filteredAssignees.length;
+            
+            // Update active count
+            this.activeAssigneesCount = this.assignees.filter(a => a.isActive === true).length;
 
             this.loading.delete = false;
             this.messageService.add({ 
@@ -834,10 +996,17 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
             this.loading.delete = false;
             console.error('Error deleting assignee:', error);
             let errorMessage = error?.error?.message || error?.error?.errorMessage || error?.message || 'Failed to delete assignee';
+            
+            // Check if it's a validation error from server (400)
+            if (error?.error?.statusCode === 400 || error?.status === 400) {
+              errorMessage = error?.error?.message || errorMessage;
+            }
+            
             this.messageService.add({ 
               severity: 'error', 
               summary: 'Error', 
-              detail: errorMessage 
+              detail: errorMessage,
+              life: 5000
             });
             this.cdr.detectChanges();
           }

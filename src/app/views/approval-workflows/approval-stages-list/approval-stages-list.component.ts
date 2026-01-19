@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { ApprovalStageService, ApprovalStageDto, CreateApprovalStageDto, UpdateApprovalStageDto } from '../../FormBuilder/services/approval-stage.service';
+import { ApprovalStageService, ApprovalStageDto, CreateApprovalStageDto, UpdateApprovalStageDto, FormField } from '../../FormBuilder/services/approval-stage.service';
 import { ApprovalWorkflowService, ApprovalWorkflowDto } from '../../FormBuilder/services/approval-workflow.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { DocumentType } from '../../FormBuilder/form-builder/models/document-types.model';
@@ -51,6 +51,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
   // Data Arrays
   approvalStages: ApprovalStageDto[] = [];
   filteredStages: ApprovalStageDto[] = [];
+  formFields: FormField[] = [];
   private deletedStageIds: Set<number> = new Set(); // Track deleted stage IDs to filter them out
 
   // Loading States
@@ -59,7 +60,8 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     stages: false,
     save: false,
     delete: false,
-    toggle: false
+    toggle: false,
+    formFields: false
   };
 
   // Modal
@@ -93,8 +95,30 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       stageOrder: [1, [Validators.required, Validators.min(1)]],
       minAmount: [null],
       maxAmount: [null],
-      isFinalStage: [false]
+      isFinalStage: [false],
+      isActive: [true],
+      minimumRequiredAssignees: [null, Validators.min(0)],
+      amountFieldCode: [null]
       // Note: isDeleted is not managed via form - it's handled via delete/restore actions
+    });
+
+    // Watch for minAmount/maxAmount changes to load form fields
+    this.stageForm.get('minAmount')?.valueChanges.subscribe(() => {
+      const minAmount = this.stageForm.get('minAmount')?.value;
+      const maxAmount = this.stageForm.get('maxAmount')?.value;
+      if ((minAmount !== null && minAmount !== undefined && minAmount !== '') || 
+          (maxAmount !== null && maxAmount !== undefined && maxAmount !== '')) {
+        this.loadFormFields();
+      }
+    });
+
+    this.stageForm.get('maxAmount')?.valueChanges.subscribe(() => {
+      const minAmount = this.stageForm.get('minAmount')?.value;
+      const maxAmount = this.stageForm.get('maxAmount')?.value;
+      if ((minAmount !== null && minAmount !== undefined && minAmount !== '') || 
+          (maxAmount !== null && maxAmount !== undefined && maxAmount !== '')) {
+        this.loadFormFields();
+      }
     });
   }
 
@@ -116,12 +140,53 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
         this.loadDeletedStageIds();
         this.loadWorkflow();
         this.loadApprovalStages();
+        this.loadFormFields();
       }
     });
   }
 
   ngOnDestroy(): void {
     // Cleanup if needed
+  }
+
+  /**
+   * Load form fields for the workflow
+   */
+  loadFormFields(): void {
+    if (!this.workflowId) {
+      console.warn('[ApprovalStagesList] Cannot load form fields: workflowId is not set');
+      return;
+    }
+
+    // Don't reload if already loading or if fields are already loaded
+    if (this.loading.formFields) {
+      return;
+    }
+
+    this.loading.formFields = true;
+    console.log('[ApprovalStagesList] Loading form fields for workflow:', this.workflowId);
+    
+    this.approvalStageService.getFormFieldsByWorkflowId(this.workflowId).subscribe({
+      next: (response) => {
+        console.log('[ApprovalStagesList] Form fields response:', response);
+        if (response && response.statusCode === 200 && response.data && Array.isArray(response.data)) {
+          this.formFields = response.data;
+          console.log('[ApprovalStagesList] Loaded form fields:', this.formFields.length);
+        } else {
+          console.warn('[ApprovalStagesList] Invalid response format or no data:', response);
+          this.formFields = [];
+        }
+        this.loading.formFields = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('[ApprovalStagesList] Error loading form fields:', error);
+        this.formFields = [];
+        this.loading.formFields = false;
+        // Don't show error message to user, just log it
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   /**
@@ -321,13 +386,18 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       stageOrder: maxOrder + 1,
       minAmount: null,
       maxAmount: null,
-      isFinalStage: false
+      isFinalStage: false,
+      isActive: true,
+      minimumRequiredAssignees: null,
+      amountFieldCode: null
       // Note: isDeleted defaults to false for new stages (handled by backend)
     });
     // Enable workflowId field when creating new stage
     this.stageForm.get('workflowId')?.enable();
     // Enable/disable isFinalStage based on existing final stage
     this.updateFinalStageControlState();
+    // Load form fields when opening modal (in case user sets amount range)
+    this.loadFormFields();
   }
 
   openEditModal(stage: ApprovalStageDto): void {
@@ -339,13 +409,20 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       stageOrder: stage.stageOrder,
       minAmount: stage.minAmount,
       maxAmount: stage.maxAmount,
-      isFinalStage: stage.isFinalStage
+      isFinalStage: stage.isFinalStage,
+      isActive: stage.isActive !== undefined ? stage.isActive : true,
+      minimumRequiredAssignees: stage.minimumRequiredAssignees,
+      amountFieldCode: stage.amountFieldCode
       // Note: isDeleted is not managed via form
     });
     // Disable workflowId field when editing (cannot change after creation)
     this.stageForm.get('workflowId')?.disable();
     // Enable/disable isFinalStage based on existing final stage
     this.updateFinalStageControlState();
+    // Load form fields when opening modal (needed if stage has amount range)
+    if (stage.minAmount || stage.maxAmount) {
+      this.loadFormFields();
+    }
   }
 
   /**
@@ -450,7 +527,12 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
         maxAmount: (formData.maxAmount !== null && formData.maxAmount !== undefined && formData.maxAmount !== '') 
           ? Number(formData.maxAmount) 
           : null,
-        isFinalStage: formData.isFinalStage !== undefined ? formData.isFinalStage : false
+        isFinalStage: formData.isFinalStage !== undefined ? formData.isFinalStage : false,
+        isActive: formData.isActive !== undefined ? formData.isActive : true,
+        minimumRequiredAssignees: (formData.minimumRequiredAssignees !== null && formData.minimumRequiredAssignees !== undefined && formData.minimumRequiredAssignees !== '') 
+          ? Number(formData.minimumRequiredAssignees) 
+          : null,
+        amountFieldCode: formData.amountFieldCode || null
         // Note: isDeleted is not updated via form - it's managed via delete/restore actions
       };
 
@@ -489,7 +571,12 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
         maxAmount: (formData.maxAmount !== null && formData.maxAmount !== undefined && formData.maxAmount !== '') 
           ? Number(formData.maxAmount) 
           : null,
-        isFinalStage: formData.isFinalStage || false
+        isFinalStage: formData.isFinalStage || false,
+        isActive: formData.isActive !== undefined ? formData.isActive : true,
+        minimumRequiredAssignees: (formData.minimumRequiredAssignees !== null && formData.minimumRequiredAssignees !== undefined && formData.minimumRequiredAssignees !== '') 
+          ? Number(formData.minimumRequiredAssignees) 
+          : null,
+        amountFieldCode: formData.amountFieldCode || null
         // Note: isDeleted defaults to false for new stages (handled by backend)
       };
 
@@ -645,6 +732,31 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       const control = formGroup.get(key);
       control?.markAsTouched();
     });
+  }
+
+  /**
+   * Check if amount range fields have values (not null/undefined/empty)
+   * Returns true if either minAmount or maxAmount has a value
+   * Note: p-inputNumber may return 0 or null, so we check for both
+   */
+  hasAmountRange(): boolean {
+    const minAmount = this.stageForm.get('minAmount')?.value;
+    const maxAmount = this.stageForm.get('maxAmount')?.value;
+    
+    // Check if values are not null, undefined, or empty string
+    // p-inputNumber returns null when empty, or a number (including 0) when filled
+    // We want to show the dropdown if user has interacted with the fields (even if value is 0)
+    const hasMinAmount = minAmount !== null && minAmount !== undefined && minAmount !== '';
+    const hasMaxAmount = maxAmount !== null && maxAmount !== undefined && maxAmount !== '';
+    
+    // Also check if the form control has been touched (user interacted with it)
+    const minAmountTouched = this.stageForm.get('minAmount')?.touched || false;
+    const maxAmountTouched = this.stageForm.get('maxAmount')?.touched || false;
+    
+    // Show dropdown if:
+    // 1. Either field has a value (including 0), OR
+    // 2. Either field has been touched (user interacted with it)
+    return (hasMinAmount || hasMaxAmount) || (minAmountTouched || maxAmountTouched);
   }
 
   closeModal(): void {

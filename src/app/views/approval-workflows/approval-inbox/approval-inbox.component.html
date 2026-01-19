@@ -78,15 +78,15 @@
                 <span class="badge badge-info">{{ submission.status }}</span>
               </td>
               <td>
-                <!-- ✅ Only Admin can Approve/Reject -->
-                <div class="action-buttons" *ngIf="isAdmin">
+                <!-- ✅ Show Approve/Reject buttons if user can approve (Admin or assigned as Stage Assignee) -->
+                <div class="action-buttons" *ngIf="canApproveRejectSubmission(submission)">
                   <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" 
                     (click)="openActionModalForSubmission(submission, 'Approved')" pTooltip="Approve"></button>
                   <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" 
                     (click)="openActionModalForSubmission(submission, 'Rejected')" pTooltip="Reject"></button>
                 </div>
-                <!-- ✅ User can only view -->
-                <span *ngIf="!isAdmin" class="view-only-text">View Only</span>
+                <!-- ✅ Show View Only if user cannot approve -->
+                <span *ngIf="!canApproveRejectSubmission(submission)" class="view-only-text">View Only</span>
               </td>
             </tr>
           </ng-template>
@@ -136,14 +136,14 @@
             <td>{{ item.submittedByUserName || item.submittedByUserId || '-' }}</td>
             <td>{{ formatDate(item.submittedDate) }}</td>
             <td>
-              <!-- ✅ Only Admin can Approve/Reject/Return -->
-              <div class="action-buttons" *ngIf="isAdmin">
+              <!-- ✅ Show Approve/Reject/Return buttons if user can approve (Admin or assigned as Stage Assignee) -->
+              <div class="action-buttons" *ngIf="canApproveReject(item)">
                 <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" (click)="openActionModal(item, 'Approved')" pTooltip="Approve"></button>
                 <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" (click)="openActionModal(item, 'Rejected')" pTooltip="Reject"></button>
                 <button pButton label="Return" icon="pi pi-reply" class="p-button-warning p-button-sm" (click)="openActionModal(item, 'Returned')" pTooltip="Return"></button>
               </div>
-              <!-- ✅ User can only view -->
-              <span *ngIf="!isAdmin" class="view-only-text">View Only</span>
+              <!-- ✅ Show View Only if user cannot approve -->
+              <span *ngIf="!canApproveReject(item)" class="view-only-text">View Only</span>
             </td>
           </tr>
         </ng-template>
