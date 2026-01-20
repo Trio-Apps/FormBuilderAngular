@@ -304,7 +304,9 @@
 
       <!-- Amount Field Code (Optional) - يظهر عند تحديد MinAmount أو MaxAmount أو عند وجود workflowId -->
       <div class="form-field-wrapper" *ngIf="hasAmountRange() || workflowId">
-        <label class="field-label" for="amountFieldCode">Amount Field (Optional)</label>
+        <label class="field-label" for="amountFieldCode">
+          Amount Field <span *ngIf="hasAmountRange()" class="required-indicator">*</span>
+        </label>
         <div class="field-input-wrapper">
           <select
             id="amountFieldCode"
@@ -325,6 +327,10 @@
             <i class="pi pi-spin pi-spinner"></i>
             <span>Loading fields...</span>
           </div>
+        </div>
+        <div *ngIf="stageForm.get('amountFieldCode')?.invalid && stageForm.get('amountFieldCode')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>Amount Field is required when Min/Max Amount is set</span>
         </div>
         <div class="field-hint">
           <i class="pi pi-info-circle"></i>

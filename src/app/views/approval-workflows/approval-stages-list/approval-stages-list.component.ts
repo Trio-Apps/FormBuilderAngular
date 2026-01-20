@@ -457,9 +457,29 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     this.loading.save = true;
     const formData = this.stageForm.value;
 
+    // Require amountFieldCode when min/max amount is set
+    const hasMinAmount = formData.minAmount !== null && formData.minAmount !== undefined && formData.minAmount !== '';
+    const hasMaxAmount = formData.maxAmount !== null && formData.maxAmount !== undefined && formData.maxAmount !== '';
+    const hasAmountRange = hasMinAmount || hasMaxAmount;
+    const hasAmountFieldCode = formData.amountFieldCode !== null && formData.amountFieldCode !== undefined && formData.amountFieldCode !== '';
+
+    if (hasAmountRange && !hasAmountFieldCode) {
+      this.loading.save = false;
+      this.stageForm.get('amountFieldCode')?.setErrors({ required: true });
+      this.stageForm.get('amountFieldCode')?.markAsTouched();
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Validation Error',
+        detail: 'Amount Field is required when Min/Max Amount is set'
+      });
+      return;
+    }
+
     // Validate amount range
-    if (formData.minAmount !== null && formData.maxAmount !== null) {
-      if (formData.minAmount >= formData.maxAmount) {
+    if (hasMinAmount && hasMaxAmount) {
+      const min = Number(formData.minAmount);
+      const max = Number(formData.maxAmount);
+      if (!isNaN(min) && !isNaN(max) && min >= max) {
         this.loading.save = false;
         this.messageService.add({
           severity: 'error',

@@ -182,9 +182,15 @@ export class ApprovalWorkflowRuntimeService {
       submissionId: dto.submissionId,
       stageId: dto.stageId,
       actionType: dto.actionType,
-      actionByUserId: dto.actionByUserId.trim(),
-      comments: dto.comments || null
+      actionByUserId: dto.actionByUserId.trim()
     };
+
+    // comments is optional:
+    // - omit it if user didn't provide anything
+    // - allow explicit null / '' if caller intentionally passes it
+    if (dto.comments !== undefined) {
+      processDto.comments = dto.comments;
+    }
 
     console.log('[ApprovalWorkflowRuntimeService] Processing approval action:', processDto);
 
@@ -209,7 +215,7 @@ export class ApprovalWorkflowRuntimeService {
     submissionId: number,
     stageId: number,
     actionByUserId: string,
-    comments?: string
+    comments?: string | null
   ): Observable<void> {
     return this.processApprovalAction({
       submissionId,
@@ -228,7 +234,7 @@ export class ApprovalWorkflowRuntimeService {
     submissionId: number,
     stageId: number,
     actionByUserId: string,
-    comments?: string
+    comments?: string | null
   ): Observable<void> {
     return this.processApprovalAction({
       submissionId,
@@ -247,7 +253,7 @@ export class ApprovalWorkflowRuntimeService {
     submissionId: number,
     stageId: number,
     actionByUserId: string,
-    comments?: string
+    comments?: string | null
   ): Observable<void> {
     return this.processApprovalAction({
       submissionId,

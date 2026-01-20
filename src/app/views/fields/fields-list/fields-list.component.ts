@@ -152,7 +152,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
 
   // Field DataSource Options
-  dataSourceType: 'Static' | 'Api' | 'LookupTable' = 'Static';
+  dataSourceType: 'Static' | 'Api' | 'LookupTable' | 'SqlQuery' = 'Static';
   dataSourceConfig: Partial<CreateFieldDataSourceDto> = {
     sourceType: 'Static',
     apiUrl: null,
@@ -171,6 +171,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       table: '',
       valueColumn: 'Id',
       textColumn: 'Name'
+    };
+  // SQL Query Configuration
+  sqlQueryConfig: {
+    sqlQuery: string;
+    valuePath: string;
+    textPath: string;
+  } = {
+      sqlQuery: '',
+      valuePath: 'Id',
+      textPath: 'Name'
     };
   availableLookupTables: string[] = [];
   availableColumns: string[] = []; // Available columns from selected table
@@ -2860,7 +2870,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           // Use the first active DataSource
           const dataSource = dataSources[0];
           this.existingDataSource = dataSource;
-          this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable';
+          this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'SqlQuery';
 
           // Parse LookupTable configuration
           if (dataSource.sourceType === 'LookupTable' && dataSource.apiUrl) {
@@ -2923,6 +2933,22 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             if (this.lookupTableConfig.table) {
               this.loadTableColumns(this.lookupTableConfig.table);
             }
+          } else if (dataSource.sourceType === 'SqlQuery') {
+            // For SqlQuery type, load SQL query from requestBodyJson
+            this.sqlQueryConfig = {
+              sqlQuery: dataSource.requestBodyJson || '',
+              valuePath: dataSource.valuePath || 'Id',
+              textPath: dataSource.textPath || 'Name'
+            };
+            this.dataSourceConfig = {
+              sourceType: dataSource.sourceType,
+              apiUrl: null,
+              httpMethod: null,
+              requestBodyJson: dataSource.requestBodyJson || null,
+              valuePath: dataSource.valuePath || 'Id',
+              textPath: dataSource.textPath || 'Name',
+              isActive: dataSource.isActive
+            };
           } else {
             // For Api and Static types
             this.dataSourceConfig = {
@@ -3000,6 +3026,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       valueColumn: 'Id',
       textColumn: 'Name'
     };
+    this.sqlQueryConfig = {
+      sqlQuery: '',
+      valuePath: 'Id',
+      textPath: 'Name'
+    };
     this.previewOptions = [];
     this.availableLookupTables = [];
     this.availableColumns = [];
@@ -3064,6 +3095,22 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Set default paths for API (id, name)
       this.dataSourceConfig.valuePath = 'id';
       this.dataSourceConfig.textPath = 'name';
+      this.previewOptions = [];
+      // Clear static options when using DataSource
+      this.clearFieldOptions();
+    } else if (this.dataSourceType === 'SqlQuery') {
+      // Set default SQL Query config
+      if (!this.sqlQueryConfig.sqlQuery) {
+        this.sqlQueryConfig = {
+          sqlQuery: '',
+          valuePath: 'Id',
+          textPath: 'Name'
+        };
+      }
+      this.dataSourceConfig.httpMethod = null;
+      this.dataSourceConfig.apiUrl = null;
+      this.dataSourceConfig.valuePath = this.sqlQueryConfig.valuePath;
+      this.dataSourceConfig.textPath = this.sqlQueryConfig.textPath;
       this.previewOptions = [];
       // Clear static options when using DataSource
       this.clearFieldOptions();
@@ -3219,6 +3266,64 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Sync with lookupTableConfig
       this.lookupTableConfig.textColumn = this.dataSourceConfig.textPath.trim();
     }
+  }
+
+  /**
+   * Handle SQL Query Value Path blur
+   */
+  onSqlQueryValuePathBlur(): void {
+    if (!this.sqlQueryConfig.valuePath || !this.sqlQueryConfig.valuePath.trim()) {
+      this.sqlQueryConfig.valuePath = 'Id';
+    }
+    this.dataSourceConfig.valuePath = this.sqlQueryConfig.valuePath.trim();
+  }
+
+  /**
+   * Handle SQL Query Text Path blur
+   */
+  onSqlQueryTextPathBlur(): void {
+    if (!this.sqlQueryConfig.textPath || !this.sqlQueryConfig.textPath.trim()) {
+      this.sqlQueryConfig.textPath = 'Name';
+    }
+    this.dataSourceConfig.textPath = this.sqlQueryConfig.textPath.trim();
+  }
+
+  /**
+   * Run SQL Query - Execute query and show results
+   */
+  runSqlQuery(): void {
+    // Validate inputs
+    if (!this.sqlQueryConfig.sqlQuery || !this.sqlQueryConfig.sqlQuery.trim()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please enter SQL Query'
+      });
+      return;
+    }
+
+    // Set default valuePath and textPath if not set
+    if (!this.sqlQueryConfig.valuePath || !this.sqlQueryConfig.valuePath.trim()) {
+      this.sqlQueryConfig.valuePath = 'Id';
+    }
+    if (!this.sqlQueryConfig.textPath || !this.sqlQueryConfig.textPath.trim()) {
+      this.sqlQueryConfig.textPath = 'Name';
+    }
+
+    // Update dataSourceConfig with current values
+    this.dataSourceConfig.valuePath = this.sqlQueryConfig.valuePath.trim();
+    this.dataSourceConfig.textPath = this.sqlQueryConfig.textPath.trim();
+
+    // Execute query using previewDataSource
+    this.previewDataSource();
+  }
+
+  /**
+   * Preview SQL Query - Same as Run Query but with preview context
+   */
+  previewSqlQuery(): void {
+    // Same functionality as runSqlQuery
+    this.runSqlQuery();
   }
 
   /**
@@ -3760,6 +3865,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Update valuePath and textPath from lookupTableConfig
       this.dataSourceConfig.valuePath = this.lookupTableConfig.valueColumn;
       this.dataSourceConfig.textPath = this.lookupTableConfig.textColumn;
+    } else if (this.dataSourceType === 'SqlQuery') {
+      if (!this.sqlQueryConfig.sqlQuery || !this.sqlQueryConfig.sqlQuery.trim()) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please enter SQL Query'
+        });
+        return;
+      }
+      // Set default valuePath and textPath if not set
+      if (!this.sqlQueryConfig.valuePath || !this.sqlQueryConfig.valuePath.trim()) {
+        this.sqlQueryConfig.valuePath = 'Id';
+      }
+      if (!this.sqlQueryConfig.textPath || !this.sqlQueryConfig.textPath.trim()) {
+        this.sqlQueryConfig.textPath = 'Name';
+      }
+      // Update valuePath and textPath from sqlQueryConfig
+      this.dataSourceConfig.valuePath = this.sqlQueryConfig.valuePath;
+      this.dataSourceConfig.textPath = this.sqlQueryConfig.textPath;
     }
 
     // Ensure valuePath and textPath are set with defaults if empty
@@ -3808,9 +3932,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     // For LookupTable, use table name directly for preview (backend expects table name, not JSON)
     // For Api, use the URL
+    // For SqlQuery, use undefined for apiUrl and SQL query in requestBodyJson
     const apiUrlForPreview = this.dataSourceType === 'LookupTable'
       ? this.lookupTableConfig.table
-      : (this.dataSourceConfig.apiUrl || undefined);
+      : (this.dataSourceType === 'SqlQuery' ? undefined : (this.dataSourceConfig.apiUrl || undefined));
+
+    // For SqlQuery, use SQL query in requestBodyJson
+    const requestBodyJsonForPreview = this.dataSourceType === 'SqlQuery'
+      ? this.sqlQueryConfig.sqlQuery
+      : (this.dataSourceConfig.requestBodyJson || undefined);
 
     // Prepare request payload
     const requestPayload = {
@@ -3818,7 +3948,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       sourceType: this.dataSourceType,
       apiUrl: apiUrlForPreview,
       httpMethod: this.dataSourceConfig.httpMethod || 'GET',
-      requestBodyJson: this.dataSourceConfig.requestBodyJson || undefined,
+      requestBodyJson: requestBodyJsonForPreview,
       valuePath: valuePath,
       textPath: textPath
     };
@@ -3842,6 +3972,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         console.log('[FieldsList] API Response received:', options);
         console.log('[FieldsList] Number of options:', options?.length || 0);
         console.log('[FieldsList] Full response structure:', JSON.stringify(options, null, 2));
+        
+        // Show success message with options count for SqlQuery
+        if (this.dataSourceType === 'SqlQuery' && options && options.length > 0) {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Query Executed Successfully',
+            detail: `${options.length} ${options.length === 1 ? 'option' : 'options'} found and will be available in the public form`,
+            life: 5000
+          });
+        }
 
         // Check if response is empty
         if (!options || options.length === 0) {
@@ -4260,6 +4400,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         apiUrlValue = this.lookupTableConfig.table || null;
         valuePathValue = this.lookupTableConfig.valueColumn || null;
         textPathValue = this.lookupTableConfig.textColumn || null;
+      } else if (this.dataSourceType === 'SqlQuery') {
+        // For SqlQuery, store SQL query in requestBodyJson
+        apiUrlValue = null;
+        valuePathValue = this.sqlQueryConfig.valuePath || null;
+        textPathValue = this.sqlQueryConfig.textPath || null;
       } else {
         // For Api type, use the URL directly
         apiUrlValue = this.dataSourceConfig.apiUrl || null;
@@ -4267,12 +4412,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         textPathValue = this.dataSourceConfig.textPath || null;
       }
 
+      // For SqlQuery, store SQL query in requestBodyJson
+      const requestBodyJsonValue = this.dataSourceType === 'SqlQuery' 
+        ? this.sqlQueryConfig.sqlQuery || null
+        : this.dataSourceConfig.requestBodyJson || null;
+
       const dataSourceDto: CreateFieldDataSourceDto = {
         fieldId: fieldId,
         sourceType: this.dataSourceType,
         apiUrl: apiUrlValue,
         httpMethod: this.dataSourceConfig.httpMethod || null,
-        requestBodyJson: this.dataSourceConfig.requestBodyJson || null,
+        requestBodyJson: requestBodyJsonValue,
         valuePath: valuePathValue,
         textPath: textPathValue,
         isActive: this.dataSourceConfig.isActive !== false

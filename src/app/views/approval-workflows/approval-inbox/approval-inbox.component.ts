@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto, ProcessApprovalActionDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
 import { ApprovalStageAssigneesService } from '../../FormBuilder/services/approval-stage-assignees.service';
-import { FormSubmissionsService, FormSubmissionDto } from '../../form-submissions/services/form-submissions.service';
+import { ApprovalStageService, ApprovalStageDto } from '../../FormBuilder/services/approval-stage.service';
+import { FormSubmissionsService, FormSubmissionDto, FormSubmissionDetailDto } from '../../form-submissions/services/form-submissions.service';
 import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../../form-submissions/models/approve-reject-submission.model';
 import { StorageService } from '../../../auth/storage.service';
 import { AuthService } from '../../../auth/auth.service';
@@ -62,6 +63,12 @@ export class ApprovalInboxComponent implements OnInit {
   selectedSubmission: FormSubmissionDto | null = null; // For submissions table
   actionType: 'Approved' | 'Rejected' | 'Returned' = 'Approved';
   isSubmissionAction = false; // Flag to distinguish between inbox item and submission
+  
+  // Amount validation
+  currentStage: ApprovalStageDto | null = null;
+  submissionDetail: FormSubmissionDetailDto | null = null;
+  amountValidationError: string = '';
+  isAmountValid: boolean = true;
 
   searchTerm = '';
   first = 0;
@@ -71,6 +78,7 @@ export class ApprovalInboxComponent implements OnInit {
   constructor(
     private runtimeService: ApprovalWorkflowRuntimeService,
     private stageAssigneesService: ApprovalStageAssigneesService,
+    private approvalStageService: ApprovalStageService,
     private formSubmissionsService: FormSubmissionsService,
     private storageService: StorageService,
     private authService: AuthService,
@@ -682,6 +690,17 @@ export class ApprovalInboxComponent implements OnInit {
     this.actionType = actionType;
     this.showActionModal = true;
     this.actionForm.reset({ comments: '' });
+    
+    // Reset amount validation
+    this.currentStage = null;
+    this.submissionDetail = null;
+    this.amountValidationError = '';
+    this.isAmountValid = true;
+    
+    // Load stage and submission details for amount validation
+    if (item.stageId > 0) {
+      this.loadStageAndSubmissionForValidation(item.stageId, item.submissionId);
+    }
   }
 
   /**
@@ -958,12 +977,18 @@ export class ApprovalInboxComponent implements OnInit {
       return;
     }
 
+    const rawComments = formData?.comments;
+    const normalizedComments =
+      typeof rawComments === 'string' ? rawComments.trim() : rawComments;
+
     const actionDto: ProcessApprovalActionDto = {
       submissionId: this.selectedItem.submissionId,
       stageId: stageId,
       actionType: this.actionType,
       actionByUserId: this.currentUserId,
-      comments: formData.comments || null
+      ...(normalizedComments !== null && normalizedComments !== undefined && normalizedComments !== ''
+        ? { comments: normalizedComments }
+        : {})
     };
 
     console.log('[ApprovalInbox] Processing action with stageId:', actionDto);
@@ -1018,13 +1043,19 @@ export class ApprovalInboxComponent implements OnInit {
     }
 
     // Use approve/reject endpoints directly (they handle stageId internally)
+    const rawComments = formData?.comments;
+    const normalizedComments =
+      typeof rawComments === 'string' ? rawComments.trim() : rawComments;
+
     if (this.actionType === 'Approved') {
       // Use approveSubmissionDto with default stageId = 1
       const approveDto = {
         submissionId: this.selectedItem.submissionId,
         stageId: 1, // Default stageId
         actionByUserId: this.currentUserId,
-        comments: formData.comments || null
+        ...(normalizedComments !== null && normalizedComments !== undefined && normalizedComments !== ''
+          ? { comments: normalizedComments }
+          : {})
       };
       
       this.formSubmissionsService.approveSubmissionDto(approveDto).subscribe({
@@ -1062,7 +1093,9 @@ export class ApprovalInboxComponent implements OnInit {
         submissionId: this.selectedItem.submissionId,
         stageId: 1, // Default stageId
         actionByUserId: this.currentUserId,
-        comments: formData.comments || null
+        ...(normalizedComments !== null && normalizedComments !== undefined && normalizedComments !== ''
+          ? { comments: normalizedComments }
+          : {})
       };
       
       this.formSubmissionsService.rejectSubmissionDto(rejectDto).subscribe({
@@ -1101,7 +1134,9 @@ export class ApprovalInboxComponent implements OnInit {
         stageId: 1,
         actionType: this.actionType,
         actionByUserId: this.currentUserId,
-        comments: formData.comments || null
+        ...(normalizedComments !== null && normalizedComments !== undefined && normalizedComments !== ''
+          ? { comments: normalizedComments }
+          : {})
       };
       this.processApprovalAction(actionDto, newStatus);
     }
@@ -1165,6 +1200,13 @@ export class ApprovalInboxComponent implements OnInit {
         } else if (error?.message) {
           errorMessage = error.message;
         }
+
+        // Special-case: minimum assignees validation from backend
+        // Example: "Stage requires minimum ..."
+        const lowered = (errorMessage || '').toString().toLowerCase();
+        if (error?.status === 400 && lowered.includes('stage requires minimum')) {
+          errorMessage = `${errorMessage}. Please assign enough active stage assignees then try again.`;
+        }
         
         this.messageService.add({
           severity: 'error',
@@ -1181,6 +1223,140 @@ export class ApprovalInboxComponent implements OnInit {
     if (!date) return '-';
     const d = new Date(date);
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+  }
+  
+  /**
+   * Load stage and submission details for amount validation
+   */
+  private loadStageAndSubmissionForValidation(stageId: number, submissionId: number): void {
+    forkJoin({
+      stage: this.approvalStageService.getById(stageId).pipe(
+        catchError(() => of(null))
+      ),
+      submission: this.formSubmissionsService.getSubmissionById(submissionId).pipe(
+        catchError(() => of(null))
+      )
+    }).subscribe({
+      next: ({ stage, submission }) => {
+        this.currentStage = stage;
+        this.submissionDetail = submission as FormSubmissionDetailDto | null;
+        this.validateAmount();
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('[ApprovalInbox] Error loading stage/submission for validation:', error);
+        this.isAmountValid = true; // Default to valid if we can't check
+        this.amountValidationError = '';
+      }
+    });
+  }
+  
+  /**
+   * Validate amount field against stage min/max requirements
+   */
+  private validateAmount(): void {
+    this.isAmountValid = true;
+    this.amountValidationError = '';
+    
+    // Only validate for Approve action
+    if (this.actionType !== 'Approved') {
+      return;
+    }
+    
+    if (!this.currentStage || !this.submissionDetail) {
+      return;
+    }
+    
+    const minAmount = this.currentStage.minAmount;
+    const maxAmount = this.currentStage.maxAmount;
+    const amountFieldCode = this.currentStage.amountFieldCode;
+    
+    // If no amount restrictions, validation passes
+    if ((minAmount === null || minAmount === undefined) && 
+        (maxAmount === null || maxAmount === undefined)) {
+      return;
+    }
+    
+    // If no amount field code specified, can't validate
+    if (!amountFieldCode) {
+      return;
+    }
+    
+    // Find amount field value in submission
+    const amountFieldValue = this.submissionDetail.fieldValues?.find(
+      fv => fv.fieldCode === amountFieldCode
+    );
+    
+    if (!amountFieldValue) {
+      this.isAmountValid = false;
+      this.amountValidationError = `Amount field (${amountFieldCode}) not found in submission`;
+      return;
+    }
+    
+    // Get numeric value
+    let amount: number | null = null;
+    if (amountFieldValue.valueNumber !== null && amountFieldValue.valueNumber !== undefined) {
+      amount = amountFieldValue.valueNumber;
+    } else if (amountFieldValue.valueString) {
+      const parsed = parseFloat(amountFieldValue.valueString);
+      if (!isNaN(parsed)) {
+        amount = parsed;
+      }
+    }
+    
+    if (amount === null) {
+      this.isAmountValid = false;
+      this.amountValidationError = `Amount field (${amountFieldCode}) has no valid numeric value`;
+      return;
+    }
+    
+    // Validate against min/max
+    const hasMin = minAmount !== null && minAmount !== undefined;
+    const hasMax = maxAmount !== null && maxAmount !== undefined;
+    const lang = this.translationService.getCurrentLanguage();
+    
+    // Check both conditions if both exist
+    if (hasMin && hasMax) {
+      if (amount < minAmount || amount > maxAmount) {
+        this.isAmountValid = false;
+        if (lang === 'ar') {
+          this.amountValidationError = `حقل المبلغ يجب أن يكون أكبر من أو يساوي ${minAmount} وأقل من أو يساوي ${maxAmount}`;
+        } else {
+          this.amountValidationError = `Amount field must be greater than or equal to ${minAmount} and less than or equal to ${maxAmount}`;
+        }
+        return;
+      }
+    } else if (hasMin && amount < minAmount) {
+      this.isAmountValid = false;
+      if (lang === 'ar') {
+        this.amountValidationError = `حقل المبلغ يجب أن يكون أكبر من أو يساوي ${minAmount}`;
+      } else {
+        this.amountValidationError = `Amount field must be greater than or equal to ${minAmount}`;
+      }
+      return;
+    } else if (hasMax && amount > maxAmount) {
+      this.isAmountValid = false;
+      if (lang === 'ar') {
+        this.amountValidationError = `حقل المبلغ يجب أن يكون أقل من أو يساوي ${maxAmount}`;
+      } else {
+        this.amountValidationError = `Amount field must be less than or equal to ${maxAmount}`;
+      }
+      return;
+    }
+    
+    // Validation passed
+    this.isAmountValid = true;
+    this.amountValidationError = '';
+  }
+  
+  /**
+   * Check if approve button should be disabled
+   */
+  isApproveDisabled(): boolean {
+    if (this.actionType !== 'Approved') {
+      return false;
+    }
+    return this.loading.action || !this.isAmountValid;
   }
 
   /**
@@ -1373,6 +1549,10 @@ export class ApprovalInboxComponent implements OnInit {
     this.selectedItem = null;
     this.selectedSubmission = null;
     this.isSubmissionAction = false;
+    this.currentStage = null;
+    this.submissionDetail = null;
+    this.amountValidationError = '';
+    this.isAmountValid = true;
     this.actionForm.reset();
   }
 }

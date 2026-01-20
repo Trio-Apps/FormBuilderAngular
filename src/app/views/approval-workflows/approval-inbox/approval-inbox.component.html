@@ -172,16 +172,25 @@
           <textarea formControlName="comments" rows="4" placeholder="Enter comments..." class="form-input" style="min-height: 100px;"></textarea>
         </div>
       </div>
+      
+      <!-- Amount Validation Error Message -->
+      <div *ngIf="actionType === 'Approved' && amountValidationError" class="form-field-wrapper">
+        <div class="amount-validation-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>{{ amountValidationError }}</span>
+        </div>
+      </div>
     </div>
     <div class="dialog-footer">
-      <button type="button" pButton label="Cancel" class="p-button-secondary" (click)="closeActionModal()" [disabled]="loading.action"></button>
+      <button type="button" pButton label="Cancel" class="p-button-secondary" (click)="closeActionModal()" [attr.disabled]="loading.action ? '' : null"></button>
       <button 
         type="submit" 
         pButton 
         [label]="actionType" 
-        [disabled]="loading.action" 
+        [attr.disabled]="isApproveDisabled() ? '' : (loading.action ? '' : null)" 
         [loading]="loading.action"
         [class]="actionType === 'Approved' ? 'p-button-success' : actionType === 'Rejected' ? 'p-button-danger' : 'p-button-warning'"
+        [pTooltip]="actionType === 'Approved' && !isAmountValid ? amountValidationError : ''"
         (click)="processAction()">
       </button>
     </div>

@@ -15,10 +15,6 @@
         <button class="btn-icon" (click)="loadApprovalWorkflows()" [disabled]="loading.workflows" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-danger" (click)="deleteSpecificWorkflowsAndStages()" [disabled]="loading.delete || loading.workflows" title="Delete Specific Workflows and Stages">
-          <i class="pi pi-trash"></i>
-          <span>Delete Specific Items</span>
-        </button>
         <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.workflows">
           <i class="pi pi-plus"></i>
           <span>New Approval Workflow</span>

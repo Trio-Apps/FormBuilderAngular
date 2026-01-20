@@ -472,13 +472,27 @@ export class FormSubmissionsService {
 
   /**
    * Save form submission data (field values, attachments, grid data)
-   * POST /api/FormSubmissions/save-data
+   * POST /api/FormSubmissions/data/save
    *
    * Saves the form data without changing the submission status.
    * The submission remains in its current status (usually "Draft").
+   * 
+   * Note: Changed from /save-data to /data/save to avoid routing conflict
+   * with /{id} route in backend (save-data was being matched as id parameter)
    */
   saveSubmissionData(dto: SaveFormSubmissionDataDto): Observable<void> {
-    return this.http.post<any>(`${this.baseUrl}/save-data`, dto).pipe(
+    // Try /data/save first (preferred route to avoid routing conflicts)
+    // If backend doesn't support it, fallback to /save-data
+    return this.http.post<any>(`${this.baseUrl}/data/save`, dto).pipe(
+      catchError((error) => {
+        // If 404, try the old route /save-data (in case backend doesn't have /data/save)
+        if (error.status === 404) {
+          console.warn('[FormSubmissionsService] /data/save not found, trying /save-data');
+          return this.http.post<any>(`${this.baseUrl}/save-data`, dto);
+        }
+        console.error('Error saving form submission data:', error);
+        throw error;
+      }),
       map(() => {
         return;
       }),

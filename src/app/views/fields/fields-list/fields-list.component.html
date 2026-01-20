@@ -703,6 +703,25 @@
                     <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceApiDesc') }}</div>
                   </div>
                 </label>
+
+                <!-- Option 4: SQL Query -->
+                <label class="data-source-option" [class.selected]="dataSourceType === 'SqlQuery'"
+                  style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                  [style.border-color]="dataSourceType === 'SqlQuery' ? '#667eea' : '#e5e7eb'"
+                  [style.background]="dataSourceType === 'SqlQuery' ? '#f0ebf8' : '#f9fafb'">
+                  <input type="radio" name="dataSourceType" value="SqlQuery" [(ngModel)]="dataSourceType"
+                    [ngModelOptions]="{standalone: true}" (change)="onDataSourceTypeChange()"
+                    style="width: 20px; height: 20px; cursor: pointer;" />
+                  <i class="pi pi-code" style="font-size: 20px; color: #667eea;"></i>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">
+                      DataSourceSqlQuery
+                    </div>
+                    <div style="font-size: 12px; color: #6b7280;">
+                      {{ translateLabel('fields.dataSourceSqlQueryDesc') || 'Load options from SQL query (e.g., SELECT Id, Name FROM Table)' }}
+                    </div>
+                  </div>
+                </label>
               </div>
             </div>
 
@@ -798,6 +817,55 @@
                     *ngIf="availableColumns.length === 0">
                     <i class="pi pi-info-circle"></i> Select a table above to load available columns automatically
                   </small>
+                </div>
+              </div>
+            </div>
+
+            <!-- SQL Query Configuration -->
+            <div class="form-group" *ngIf="dataSourceType === 'SqlQuery'" style="grid-column: 1 / -1;">
+              <label class="form-label">
+                <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
+                {{ translateLabel('fields.sqlQuery') || 'SQL Query' }} <span class="required">*</span>
+              </label>
+              <textarea 
+                class="form-control" 
+                rows="6" 
+                [(ngModel)]="sqlQueryConfig.sqlQuery"
+                [ngModelOptions]="{standalone: true}"
+                placeholder="Enter SQL query, e.g., SELECT Id, Name FROM Tbl_User WHERE IsActive = 1"
+                style="font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;">
+              </textarea>
+
+              <!-- Run Query Button for SQL Query -->
+              <div style="margin-top: 16px;">
+                <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
+                  <button 
+                    type="button" 
+                    class="btn btn-primary" 
+                    (click)="runSqlQuery()"
+                    [disabled]="!sqlQueryConfig.sqlQuery || loadingPreview"
+                    style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                    <i class="pi pi-play" style="font-size: 14px;"></i>
+                    {{ translateLabel('fields.runQuery') || 'Run Query' }}
+                  </button>
+                  <span *ngIf="loadingPreview" style="margin-left: 12px; color: #667eea; display: flex; align-items: center; gap: 6px;">
+                    <i class="pi pi-spin pi-spinner"></i> 
+                    <span>{{ translateLabel('fields.loading') || 'Loading...' }}</span>
+                  </span>
+                </div>
+                
+                <!-- Options Count Display for SQL Query -->
+                <div *ngIf="dataSourceType === 'SqlQuery' && previewOptions.length > 0 && !loadingPreview" 
+                  style="padding: 12px; background: #d1fae5; border: 1px solid #10b981; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
+                  <i class="pi pi-check-circle" style="color: #10b981; font-size: 18px;"></i>
+                  <div>
+                    <strong style="color: #065f46; font-size: 14px;">
+                      {{ previewOptions.length }} {{ previewOptions.length === 1 ? 'option' : 'options' }} found
+                    </strong>
+                    <div style="color: #047857; font-size: 12px; margin-top: 2px;">
+                      These options will be available in the public form after saving
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

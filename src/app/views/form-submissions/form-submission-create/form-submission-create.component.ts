@@ -3996,6 +3996,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             },
             error: (activateError) => {
               console.warn('[FormSubmissionCreate] Failed to activate workflow stage:', activateError);
+              const msg = (activateError?.message || '').toString();
+              if (msg.toLowerCase().includes('stage requires minimum')) {
+                const currentLang = this.translationService.getCurrentLanguage();
+                this.messageService.add({
+                  severity: 'error',
+                  summary: currentLang === 'ar' ? 'تنبيه' : 'Warning',
+                  detail: currentLang === 'ar'
+                    ? `${msg} - لازم تعمل Assign للـ Stage Assignees علشان الطلب يتقبل.`
+                    : `${msg} - Please assign enough active Stage Assignees so the request can proceed.`,
+                  life: 7000
+                });
+              }
             }
           });
         }
@@ -4040,6 +4052,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             },
             error: (activateErr) => {
               console.error('[FormSubmissionCreate] ❌ Failed to activate stage after already submitted:', activateErr);
+              const msg = (activateErr?.message || '').toString();
+              if (msg.toLowerCase().includes('stage requires minimum')) {
+                const currentLang = this.translationService.getCurrentLanguage();
+                this.messageService.add({
+                  severity: 'error',
+                  summary: currentLang === 'ar' ? 'تنبيه' : 'Warning',
+                  detail: currentLang === 'ar'
+                    ? `${msg} - لازم تعمل Assign للـ Stage Assignees علشان الطلب يتقبل.`
+                    : `${msg} - Please assign enough active Stage Assignees so the request can proceed.`,
+                  life: 7000
+                });
+              }
               this.isSubmitting = false;
               this.loading.create = false;
               this.cdr.detectChanges();

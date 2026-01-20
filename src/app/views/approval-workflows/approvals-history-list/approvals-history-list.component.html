@@ -8,7 +8,7 @@
         </div>
       </div>
       <div class="nav-right">
-        <button class="btn-icon" (click)="refreshData()" [disabled]="loading.history" title="Refresh">
+        <button class="btn-icon" (click)="refreshData()" [attr.disabled]="loading.history ? '' : null" [class.disabled]="loading.history" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
       </div>
@@ -24,7 +24,8 @@
             class="filter-select"
             [(ngModel)]="selectedActionType"
             (change)="onActionTypeChange()"
-            [disabled]="loading.history">
+            [attr.disabled]="loading.history ? '' : null"
+            [class.disabled]="loading.history">
             <option *ngFor="let type of actionTypes" [value]="type.value">
               {{ type.label }}
             </option>
@@ -76,6 +77,7 @@
             <th>Action By</th>
             <th>Action Date</th>
             <th>Comments</th>
+            <th>Fields</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-item let-rowIndex="rowIndex">
@@ -108,6 +110,17 @@
               </span>
               <span *ngIf="!item.comments">-</span>
             </td>
+            <td>
+              <button
+                pButton
+                type="button"
+                class="p-button-text p-button-sm"
+                icon="pi pi-eye"
+                pTooltip="View submission fields"
+                tooltipPosition="top"
+                (click)="openSubmissionFields(item)">
+              </button>
+            </td>
           </tr>
         </ng-template>
       </p-table>
@@ -125,4 +138,168 @@
 </div>
 
 <p-toast></p-toast>
+
+<p-dialog
+  header="Submission Fields"
+  [(visible)]="showSubmissionFieldsModal"
+  [modal]="true"
+  [style]="{ width: '900px', maxWidth: '95vw' }"
+  [draggable]="false"
+  [resizable]="false"
+  (onHide)="closeSubmissionFieldsModal()">
+
+  <div *ngIf="selectedHistoryItem" style="margin-bottom: 12px; color: #555;">
+    <strong>Submission #{{ selectedHistoryItem.submissionId }}</strong>
+    <span *ngIf="selectedHistoryItem.documentNumber"> - {{ selectedHistoryItem.documentNumber }}</span>
+  </div>
+
+  <div *ngIf="loadingSubmissionFields" class="loading-container">
+    <i class="pi pi-spin pi-spinner"></i>
+    <p>Loading submission fields...</p>
+  </div>
+
+  <div *ngIf="!loadingSubmissionFields">
+    <div class="search-box" style="margin-bottom: 12px;">
+      <i class="pi pi-search"></i>
+      <input
+        pInputText
+        type="text"
+        placeholder="Search fields..."
+        class="search-input"
+        [(ngModel)]="submissionFieldsSearchTerm" />
+    </div>
+
+    <p-table
+      [value]="getFilteredSubmissionFieldValues()"
+      [paginator]="true"
+      [rows]="10"
+      [rowsPerPageOptions]="[10, 20, 50]"
+      styleClass="p-datatable-sm document-types-table">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Field</th>
+          <th>Code</th>
+          <th>Value</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-v>
+        <tr>
+          <td>{{ v.fieldName || ('Field #' + v.fieldId) }}</td>
+          <td>{{ v.fieldCode || '-' }}</td>
+          <td>
+            <!-- File/Image Field Display -->
+            <div *ngIf="isFileField(v)" class="file-field-display">
+              <div *ngIf="hasAttachments(v.fieldId)" class="attachments-list">
+                <div *ngFor="let attachment of getFieldAttachments(v.fieldId)" class="attachment-item">
+                  <div *ngIf="isImageAttachment(attachment)" class="image-preview">
+                    <img [src]="getImageUrl(attachment)" 
+                         [alt]="attachment.fileName"
+                         (error)="handleThumbnailError($event)"
+                         (click)="openImagePreview(attachment)"
+                         class="attachment-thumbnail"
+                         [title]="'Click to preview: ' + attachment.fileName" />
+                    <div class="image-overlay" (click)="openImagePreview(attachment)">
+                      <i class="pi pi-eye"></i>
+                    </div>
+                  </div>
+                  <div *ngIf="!isImageAttachment(attachment)" class="file-icon">
+                    <i class="pi pi-file"></i>
+                  </div>
+                  <div class="file-info">
+                    <span class="file-name">{{ attachment.fileName }}</span>
+                    <span class="file-size">{{ (attachment.fileSize / 1024).toFixed(2) }} KB</span>
+                  </div>
+                  <div class="file-actions">
+                    <button type="button" 
+                            class="download-btn" 
+                            (click)="downloadAttachment(attachment)"
+                            [title]="'Download ' + attachment.fileName">
+                      <i class="pi pi-download"></i>
+                    </button>
+                    <button *ngIf="isImageAttachment(attachment)"
+                            type="button" 
+                            class="preview-btn" 
+                            (click)="openImagePreview(attachment)"
+                            [title]="'Preview ' + attachment.fileName">
+                      <i class="pi pi-eye"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div *ngIf="!hasAttachments(v.fieldId)" class="no-attachments">
+                No files attached
+              </div>
+            </div>
+            
+            <!-- Grid Field Display -->
+            <div *ngIf="isGridField(v) && !isFileField(v)" class="grid-field-display">
+              <div *ngFor="let gridRow of getFieldGridData(v.fieldId)" class="grid-row-section">
+                <div class="grid-row-header">
+                  <strong>Row {{ gridRow.rowIndex + 1 }}</strong> - {{ gridRow.gridName }}
+                </div>
+                <div *ngIf="gridRow.cells && gridRow.cells.length > 0" class="grid-cells-table">
+                  <table class="grid-cells">
+                    <thead>
+                      <tr>
+                        <th>Column</th>
+                        <th>Code</th>
+                        <th>Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let cell of gridRow.cells">
+                        <td>{{ cell.columnName || ('Column #' + cell.columnId) }}</td>
+                        <td>{{ cell.columnCode || '-' }}</td>
+                        <td>{{ formatGridCellValue(cell) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div *ngIf="!gridRow.cells || gridRow.cells.length === 0" class="no-grid-cells">
+                  No cells in this row
+                </div>
+              </div>
+            </div>
+            
+            <!-- Regular Field Display -->
+            <div *ngIf="!isFileField(v) && !isGridField(v)" class="regular-field-value">
+              {{ formatSubmissionFieldValue(v) }}
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="Close" class="p-button-secondary" (click)="closeSubmissionFieldsModal()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- Image Preview Modal -->
+<div class="image-preview-modal-overlay" *ngIf="showImagePreviewModal && previewImage" (click)="closeImagePreview()">
+  <div class="image-preview-modal-content" (click)="$event.stopPropagation()">
+    <button type="button" class="close-preview-btn" (click)="closeImagePreview()">
+      <i class="pi pi-times"></i>
+    </button>
+    <div class="preview-image-container">
+      <img *ngIf="!previewImageError && previewImage" 
+           [src]="getImageUrl(previewImage)" 
+           [alt]="previewImage.fileName"
+           (error)="handlePreviewImageError($event, previewImage)"
+           class="preview-image" />
+      <div *ngIf="previewImageError" class="preview-error">
+        <i class="pi pi-image" style="font-size: 48px; color: #94a3b8;"></i>
+        <p>Failed to load image</p>
+        <button pButton type="button" label="Download Instead" icon="pi pi-download" class="p-button-secondary" (click)="downloadAttachment(previewImage!)"></button>
+      </div>
+    </div>
+    <div class="preview-footer">
+      <span class="preview-file-name">{{ previewImage?.fileName }}</span>
+      <div class="preview-actions">
+        <button pButton type="button" label="Download" icon="pi pi-download" class="p-button-primary" (click)="downloadAttachment(previewImage!)"></button>
+      </div>
+    </div>
+  </div>
+</div>
 
