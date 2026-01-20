@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, timeout } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../models/approve-reject-submission.model';
 
@@ -169,6 +169,8 @@ export class FormSubmissionsService {
    */
   getSubmissionsByDocumentTypeId(documentTypeId: number): Observable<FormSubmissionDto[]> {
     return this.http.get<any>(`${this.baseUrl}/document-type/${documentTypeId}`).pipe(
+      // Prevent infinite loading if backend/network hangs
+      timeout(15000),
       map((response: any) => {
         if (response && typeof response === 'object' && !Array.isArray(response)) {
           return response.data || response.items || response.result || [];
@@ -389,9 +391,17 @@ export class FormSubmissionsService {
    * Update form submission
    */
   updateSubmission(id: number, dto: UpdateFormSubmissionDto): Observable<void> {
-    console.log('[FormSubmissionsService] updateSubmission called:', { id, dto });
-    console.log('[FormSubmissionsService] DTO JSON:', JSON.stringify(dto));
-    return this.http.put<any>(`${this.baseUrl}/${id}`, dto).pipe(
+    // Some backends bind PascalCase DTOs (StageId) while others bind camelCase (stageId).
+    // To be resilient, when stageId is present we send BOTH keys.
+    const payload: any = { ...dto };
+    if (dto && (dto as any).stageId !== undefined) {
+      payload.stageId = (dto as any).stageId;
+      payload.StageId = (dto as any).stageId;
+    }
+
+    console.log('[FormSubmissionsService] updateSubmission called:', { id, dto: payload });
+    console.log('[FormSubmissionsService] DTO JSON:', JSON.stringify(payload));
+    return this.http.put<any>(`${this.baseUrl}/${id}`, payload).pipe(
       map((response) => {
         console.log('[FormSubmissionsService] ✅ Update response:', response);
         return;

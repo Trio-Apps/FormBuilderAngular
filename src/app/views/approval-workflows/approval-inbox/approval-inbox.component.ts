@@ -306,14 +306,15 @@ export class ApprovalInboxComponent implements OnInit {
           console.warn('1. User is assigned in Stage Assignees');
           console.warn('2. userId/username in Stage Assignees matches logged-in user');
           console.warn('3. Stage Assignees are active (IsActive = true)');
+          console.warn('4. There are submissions with Status = "Submitted" in the assigned stages');
           console.warn('========================================');
           
           // Show warning message - user is not assigned as Stage Assignee
           this.messageService.add({
             severity: 'warn',
             summary: 'لا توجد موافقات مخصصة لك',
-            detail: `You are not assigned as Stage Assignee for any stage. Please check Stage Assignees configuration.`,
-            life: 10000
+            detail: `You are not assigned as Stage Assignee for any stage. User ID tried: ${userIdentifier}. Please verify Stage Assignees configuration.`,
+            life: 12000
           });
         } else if (assignedItems.length > 0) {
           console.log('[ApprovalInbox] ✅ Successfully loaded', assignedItems.length, 'assigned items');
@@ -326,12 +327,19 @@ export class ApprovalInboxComponent implements OnInit {
             });
           }
         } else if (allItems.length === 0) {
-          console.log('[ApprovalInbox] No items found in inbox');
+          console.log('[ApprovalInbox] ⚠️ Backend returned empty inbox array');
+          console.log('[ApprovalInbox] This could mean:');
+          console.log('  1. User is not assigned as Stage Assignee in any stage');
+          console.log('  2. No submissions exist with Status = "Submitted"');
+          console.log('  3. userId/username mismatch between login and Stage Assignees');
+          console.log('  4. Stage Assignees exist but IsActive = false');
+          console.log('[ApprovalInbox] User identifier used:', userIdentifier);
+          
           this.messageService.add({
             severity: 'info',
             summary: 'No Pending Approvals',
-            detail: 'You have no pending approvals at this time.',
-            life: 5000
+            detail: `No inbox items found for user ${userIdentifier}. Please verify: 1) You are assigned as Stage Assignee, 2) Stage Assignees are active, 3) There are submissions awaiting approval.`,
+            life: 10000
           });
         }
         
@@ -342,10 +350,23 @@ export class ApprovalInboxComponent implements OnInit {
         this.inboxItems = [];
         this.filteredItems = [];
         this.loading.inbox = false;
+        
+        let errorMessage = 'Failed to load approval inbox.';
+        if (error?.error) {
+          if (typeof error.error === 'string') {
+            errorMessage = error.error;
+          } else if (error.error.message) {
+            errorMessage = error.error.message;
+          } else if (error.error.errorMessage) {
+            errorMessage = error.error.errorMessage;
+          }
+        }
+        
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to load approval inbox. Only items assigned to you will be shown.'
+          detail: errorMessage + ' Please verify that you are assigned as Stage Assignee for at least one stage.',
+          life: 8000
         });
         this.cdr.detectChanges();
       }
@@ -555,17 +576,68 @@ export class ApprovalInboxComponent implements OnInit {
       return true;
     }
     
-    // Non-admin users can only approve if item is in inboxItems (assigned to them)
-    // Items in inboxItems have stageId > 0, meaning user is assigned as Stage Assignee
-    const isAssigned = item.stageId !== null && item.stageId !== undefined && item.stageId > 0;
+    // For non-admin users: Check if they are assigned as Stage Assignee
+    // Items in inboxItems array have stageId > 0, meaning user IS assigned
+    // If item has stageId > 0, it means backend recognized user as Stage Assignee
     
-    // Also verify item is actually in inboxItems
-    const isInInbox = this.inboxItems.some(inboxItem => 
-      inboxItem.submissionId === item.submissionId && 
-      inboxItem.stageId === item.stageId
-    );
+    // Verify item has valid stageId (stageId > 0 means assigned)
+    const hasValidStageId = item.stageId !== null && item.stageId !== undefined && item.stageId > 0;
     
-    return isAssigned && isInInbox;
+    // Verify item exists in inboxItems (defensive check - items in table should be in inboxItems)
+    // Use flexible comparison to handle type mismatches
+    const isInInbox = this.inboxItems.some(inboxItem => {
+      const submissionMatch = 
+        inboxItem.submissionId === item.submissionId ||
+        Number(inboxItem.submissionId) === Number(item.submissionId) ||
+        String(inboxItem.submissionId) === String(item.submissionId);
+      
+      const stageMatch = 
+        inboxItem.stageId === item.stageId ||
+        Number(inboxItem.stageId) === Number(item.stageId);
+      
+      return submissionMatch && stageMatch;
+    });
+    
+    // Non-admin users can approve if:
+    // 1. Item has valid stageId > 0 (assigned as Stage Assignee), AND
+    // 2. Item is in inboxItems (exists in user's inbox)
+    // Note: If item is shown in inbox table, it should be in inboxItems, but we verify for safety
+    const canApprove = hasValidStageId && isInInbox;
+    
+    // Enhanced debug logging
+    if (!canApprove) {
+      console.warn('[ApprovalInbox] ⚠️ Permission check failed for non-admin user:', {
+        itemSubmissionId: item.submissionId,
+        itemStageId: item.stageId,
+        hasValidStageId: hasValidStageId,
+        isInInbox: isInInbox,
+        isAdmin: this.isAdmin,
+        inboxItemsCount: this.inboxItems.length,
+        currentUserId: this.currentUserId,
+        inboxItemDetails: this.inboxItems.map(i => ({ 
+          submissionId: i.submissionId, 
+          stageId: i.stageId,
+          submissionIdType: typeof i.submissionId,
+          stageIdType: typeof i.stageId
+        }))
+      });
+      
+      // Also log the item types for debugging
+      console.log('[ApprovalInbox] Item details:', {
+        submissionId: item.submissionId,
+        submissionIdType: typeof item.submissionId,
+        stageId: item.stageId,
+        stageIdType: typeof item.stageId
+      });
+    } else {
+      console.log('[ApprovalInbox] ✅ Permission granted:', {
+        submissionId: item.submissionId,
+        stageId: item.stageId,
+        isAdmin: this.isAdmin
+      });
+    }
+    
+    return canApprove;
   }
 
   /**
@@ -582,9 +654,23 @@ export class ApprovalInboxComponent implements OnInit {
     
     // Non-admin users can only approve if there's a corresponding inbox item
     // This means user is assigned as Stage Assignee for this submission's stage
-    const hasInboxItem = this.inboxItems.some(item => 
-      item.submissionId === submission.id
-    );
+    // Match by submissionId (as a number or string comparison)
+    const hasInboxItem = this.inboxItems.some(item => {
+      // Compare both as numbers and strings to handle type mismatches
+      const itemSubId = Number(item.submissionId);
+      const subId = Number(submission.id);
+      return itemSubId === subId || String(item.submissionId) === String(submission.id);
+    });
+    
+    // Debug logging
+    if (!hasInboxItem && this.inboxItems.length > 0) {
+      console.log('[ApprovalInbox] Submission not found in inboxItems:', {
+        submissionId: submission.id,
+        submissionStatus: submission.status,
+        inboxItemsCount: this.inboxItems.length,
+        inboxSubmissionIds: this.inboxItems.map(i => i.submissionId)
+      });
+    }
     
     return hasInboxItem;
   }

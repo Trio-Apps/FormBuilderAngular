@@ -5416,11 +5416,34 @@ export class FormViewComponent implements OnInit {
         console.log('[FormView] Document Type ID from submission:', submittedSubmission.documentTypeId);
         console.log('[FormView] Final Document Number:', submittedSubmission.documentNumber);
 
-        // Always set stageId (status will be Submitted after update above)
-        // We'll handle both cases: if status is already Submitted or if we just updated it
-        const finalStatus = submittedSubmission.status === 'Submitted' ? 'Submitted' : 'Submitted'; // Always Submitted now
-        if (finalStatus === 'Submitted') {
-          console.log('[FormView] ✅ Status is Submitted, setting stageId...');
+        // Always activate stage after submit, then re-fetch submission to reflect stageId.
+        // This matches backend behavior (activate-stage sets stageId on the submission).
+        if (submittedSubmission.status === 'Submitted') {
+          console.log('[FormView] ✅ Status is Submitted, calling activate-stage then re-fetching submission...');
+          this.approvalWorkflowRuntimeService.activateStage(currentSubmissionId).subscribe({
+            next: () => {
+              console.log('[FormView] ✅ activate-stage succeeded, re-fetching submission to get stageId...');
+              this.formSubmissionsService.getSubmissionById(currentSubmissionId).subscribe({
+                next: (refetched: any) => {
+                  this.currentSubmission = refetched;
+                  // If backend didn't set stageId (unexpected), keep existing fallback behavior.
+                  if (!refetched?.stageId) {
+                    console.warn('[FormView] stageId still null after activate-stage; falling back to stage lookup by workflow.');
+                    // Existing logic below will try to resolve documentTypeId -> workflowId -> stage list.
+                  }
+                },
+                error: (refetchErr) => {
+                  console.warn('[FormView] Failed to re-fetch submission after activate-stage:', refetchErr);
+                }
+              });
+            },
+            error: (activateErr) => {
+              console.warn('[FormView] Failed to activate stage:', activateErr);
+            }
+          });
+
+          // Continue with existing stageId resolution flow (fallback)
+          console.log('[FormView] Proceeding with stageId resolution fallback (if needed)...');
           
           // Get documentTypeId from multiple sources (priority order):
           // 1. From submission object (most reliable)
@@ -5743,44 +5766,60 @@ export class FormViewComponent implements OnInit {
    * Set stageId for submission
    */
   private setStageIdForSubmission(approvalWorkflowId: number, submissionId: number): void {
-    // Get the first stage from workflow and update submission with stageId immediately
-    this.approvalStageService.getAllByWorkflowId(approvalWorkflowId).subscribe({
-      next: (stages) => {
-        if (stages && stages.length > 0) {
-          // Get the first stage (lowest stageOrder)
-          const firstStage = stages
-            .filter(s => !s.isDeleted)
-            .sort((a, b) => a.stageOrder - b.stageOrder)[0];
-          
-          if (firstStage && firstStage.id) {
-            console.log('[FormView] Found first stage:', firstStage.id, 'updating submission stageId immediately');
-            // Update submission with stageId immediately
-            this.formSubmissionsService.updateSubmission(submissionId, { stageId: firstStage.id }).subscribe({
-              next: () => {
-                console.log('[FormView] ✅ Submission stageId updated successfully to:', firstStage.id);
-              },
-              error: (updateError) => {
-                console.error('[FormView] ❌ Failed to update submission stageId:', updateError);
-                console.error('[FormView] Update error details:', JSON.stringify(updateError, null, 2));
-              }
-            });
-          } else {
-            console.warn('[FormView] No valid stage found in workflow');
-          }
-        } else {
-          console.warn('[FormView] No stages found in workflow');
-        }
-      },
-      error: (stagesError) => {
-        console.error('[FormView] Failed to get workflow stages:', stagesError);
-      }
-    });
+    // Backend may create default stage asynchronously; retry briefly if no stages are returned yet.
+    this.tryUpdateSubmissionStageIdWithRetry(submissionId, approvalWorkflowId);
     
     // Note: activateStage is NOT called from public form because:
     // 1. It requires authentication (which public forms don't have)
     // 2. Stage activation is an admin action, not a public user action
     // The stageId is set above, and stage activation should happen through admin dashboard
     console.log('[FormView] Stage activation skipped for public form (requires admin authentication)');
+  }
+
+  private tryUpdateSubmissionStageIdWithRetry(
+    submissionId: number,
+    approvalWorkflowId: number,
+    attempt: number = 1,
+    maxAttempts: number = 5,
+    delayMs: number = 500
+  ): void {
+    this.approvalStageService.getAllByWorkflowId(approvalWorkflowId).subscribe({
+      next: (stages) => {
+        const validStages = (stages || []).filter(s => !s.isDeleted);
+        if (validStages.length === 0) {
+          if (attempt < maxAttempts) {
+            console.warn(`[FormView] No stages found for workflow ${approvalWorkflowId} (attempt ${attempt}/${maxAttempts}). Retrying in ${delayMs}ms...`);
+            setTimeout(() => this.tryUpdateSubmissionStageIdWithRetry(submissionId, approvalWorkflowId, attempt + 1, maxAttempts, delayMs), delayMs);
+          } else {
+            console.warn(`[FormView] No stages found for workflow ${approvalWorkflowId} after ${maxAttempts} attempts. stageId will remain null.`);
+          }
+          return;
+        }
+
+        const firstStage = validStages.sort((a, b) => a.stageOrder - b.stageOrder)[0];
+        if (!firstStage?.id) {
+          console.warn('[FormView] No valid first stage found (missing id).');
+          return;
+        }
+
+        console.log('[FormView] Found first stage:', firstStage.id, 'updating submission stageId...');
+        this.formSubmissionsService.updateSubmission(submissionId, { stageId: firstStage.id }).subscribe({
+          next: () => {
+            console.log('[FormView] ✅ Submission stageId updated successfully to:', firstStage.id);
+          },
+          error: (updateError) => {
+            console.error('[FormView] ❌ Failed to update submission stageId:', updateError);
+            console.error('[FormView] Update error details:', JSON.stringify(updateError, null, 2));
+          }
+        });
+      },
+      error: (stagesError) => {
+        console.error('[FormView] Failed to get workflow stages:', stagesError);
+        if (attempt < maxAttempts) {
+          setTimeout(() => this.tryUpdateSubmissionStageIdWithRetry(submissionId, approvalWorkflowId, attempt + 1, maxAttempts, delayMs), delayMs);
+        }
+      }
+    });
   }
 
   /**

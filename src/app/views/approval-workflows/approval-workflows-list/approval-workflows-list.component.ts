@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApprovalWorkflowService, ApprovalWorkflowDto, CreateApprovalWorkflowDto, UpdateApprovalWorkflowDto } from '../../FormBuilder/services/approval-workflow.service';
+import { ApprovalStageService } from '../../FormBuilder/services/approval-stage.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { DocumentType } from '../../FormBuilder/form-builder/models/document-types.model';
 import { MessageService, ConfirmationService } from 'primeng/api';
@@ -17,6 +18,7 @@ import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
+import { deleteSpecificWorkflowsAndStages } from '../../../utils/delete-workflows-stages';
 
 @Component({
   selector: 'app-approval-workflows-list',
@@ -71,6 +73,7 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
 
   constructor(
     private approvalWorkflowService: ApprovalWorkflowService,
+    private approvalStageService: ApprovalStageService,
     private documentTypesService: DocumentTypesService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
@@ -451,6 +454,78 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
     });
     // Ensure documentTypeId is enabled when closing modal
     this.workflowForm.get('documentTypeId')?.enable();
+  }
+
+  /**
+   * Delete specific workflows and stages
+   * حذف workflows و stages محددة
+   */
+  deleteSpecificWorkflowsAndStages(): void {
+    this.confirmationService.confirm({
+      message: 'Are you sure you want to delete the following workflows and stages?\n\nWorkflows: "Approval"\nStages: "stage1", "المرحلة الأولى"\n\nThis action cannot be undone.',
+      header: 'Confirm Deletion',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.loading.delete = true;
+        
+        deleteSpecificWorkflowsAndStages(this.approvalWorkflowService, this.approvalStageService).subscribe({
+          next: (result) => {
+            this.loading.delete = false;
+            
+            let message = 'Deletion completed.\n';
+            if (result.deletedWorkflows.length > 0) {
+              message += `Deleted workflows: ${result.deletedWorkflows.join(', ')}\n`;
+            }
+            if (result.deletedStages.length > 0) {
+              message += `Deleted stages: ${result.deletedStages.join(', ')}\n`;
+            }
+            if (result.errors.length > 0) {
+              message += `Errors: ${result.errors.join(', ')}`;
+            }
+            
+            if (result.deletedWorkflows.length > 0 || result.deletedStages.length > 0) {
+              this.messageService.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: message,
+                life: 8000
+              });
+              // Reload workflows list
+              this.loadApprovalWorkflows();
+            } else if (result.errors.length > 0) {
+              this.messageService.add({
+                severity: 'warn',
+                summary: 'Warning',
+                detail: message,
+                life: 8000
+              });
+            } else {
+              this.messageService.add({
+                severity: 'info',
+                summary: 'Info',
+                detail: 'No workflows or stages found to delete.',
+                life: 5000
+              });
+            }
+            
+            this.cdr.detectChanges();
+          },
+          error: (error: any) => {
+            this.loading.delete = false;
+            console.error('Error deleting workflows and stages:', error);
+            const errorMessage = error?.error?.message || error?.message || 'Failed to delete workflows and stages';
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: errorMessage,
+              life: 8000
+            });
+            this.cdr.detectChanges();
+          }
+        });
+      }
+    });
   }
 
 }

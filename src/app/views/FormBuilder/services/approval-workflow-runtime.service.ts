@@ -74,7 +74,8 @@ export class ApprovalWorkflowRuntimeService {
 
     console.log('[ApprovalWorkflowRuntimeService] Activating stage for submission:', submissionIdNum);
 
-    return this.http.post<any>(`${this.baseUrl}/activate-stage`, submissionIdNum).pipe(
+    // Backend expects an object body: { submissionId: <id> }
+    return this.http.post<any>(`${this.baseUrl}/activate-stage`, { submissionId: submissionIdNum }).pipe(
       map(() => {
         console.log('[ApprovalWorkflowRuntimeService] Stage activated successfully');
         return;

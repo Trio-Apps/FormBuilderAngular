@@ -3647,29 +3647,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   /**
    * Determine submission status based on approval workflow configuration
-   * According to Task 2: Workflow & Approval Configuration
-   * - If DocumentType has no ApprovalWorkflow → Auto-approve (status = "Approved")
-   * - If DocumentType has Active ApprovalWorkflow → Submit (status = "Submitted")
-   * - If DocumentType has Inactive ApprovalWorkflow → Auto-approve (status = "Approved")
+   * NOTE (Requested behavior):
+   * In "Create New Submission", always start with status = "Submitted".
+   * Drafts are handled separately via saveSubmissionAsDraft() / createDraftIfNeeded().
    */
-  private determineSubmissionStatus(): 'Submitted' | 'Approved' {
-    // Check if documentType has approvalWorkflowId
-    if (!this.documentType) {
-      console.warn('[FormSubmissionCreate] No documentType loaded, defaulting to Submitted');
-      return 'Submitted';
-    }
-
-    const approvalWorkflowId = this.documentType.approvalWorkflowId;
-    
-    // If no workflow assigned → Auto-approve
-    if (!approvalWorkflowId || approvalWorkflowId === null) {
-      console.log('[FormSubmissionCreate] No approval workflow assigned to document type. Status: Approved (auto-approved)');
-      return 'Approved';
-    }
-
-    // If workflow assigned → Submitted (workflow will be triggered by backend)
-    // Note: Backend should check if workflow is active, but for now we assume if workflowId exists, it's active
-    console.log(`[FormSubmissionCreate] Approval workflow assigned (ID: ${approvalWorkflowId}). Status: Submitted`);
+  private determineSubmissionStatus(): 'Submitted' {
+    // Always start as "Submitted" for Create New Submission.
+    // Backend/workflow can still process approvals based on configured workflow/stages.
     return 'Submitted';
   }
 
@@ -3979,146 +3963,41 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           life: 5000
         });
 
-        // If submission status is "Submitted", activate workflow stage and set stageId
+        // If submission status is "Submitted", activate workflow stage and refresh submission to reflect stageId.
         if (submittedSubmission.status === 'Submitted') {
-          console.log('[FormSubmissionCreate] Submission status is Submitted, setting stageId');
-          console.log('[FormSubmissionCreate] Document Type ID from submission:', submittedSubmission.documentTypeId);
-          
-          // Get documentTypeId from submission (more reliable than this.documentType)
-          const docTypeId = submittedSubmission.documentTypeId || this.documentTypeId;
-          
-          if (docTypeId) {
-            // Load document type to get approvalWorkflowId if not already loaded
-            const loadDocumentTypeAndSetStageId = () => {
-              let approvalWorkflowId: number | null | undefined = null;
-              
-              if (this.documentType?.approvalWorkflowId && this.documentType.approvalWorkflowId > 0) {
-                approvalWorkflowId = this.documentType.approvalWorkflowId;
-                console.log('[FormSubmissionCreate] Using approvalWorkflowId from loaded documentType:', approvalWorkflowId);
-                setStageId(approvalWorkflowId);
-              } else {
-                // Load document type to get approvalWorkflowId
-                console.log('[FormSubmissionCreate] Loading document type to get approvalWorkflowId...', 'docTypeId:', docTypeId);
-                
-                // Try to get active document type by ID first, or by formBuilderId if available
-                const loadDocumentType = (): Observable<any> => {
-                  if (this.documentType?.formBuilderId) {
-                    // Try to get by formBuilderId first (more reliable for active document types)
-                    return this.documentTypesService.getDocumentTypeByFormBuilderId(this.documentType.formBuilderId).pipe(
-                      catchError(() => {
-                        // Fallback to getActiveDocumentTypeById
-                        return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
-                      })
-                    );
-                  } else {
-                    // Use getActiveDocumentTypeById
-                    return this.documentTypesService.getActiveDocumentTypeById(docTypeId);
-                  }
-                };
-
-                loadDocumentType().subscribe({
-                  next: (documentType) => {
-                    if (!documentType) {
-                      console.warn('[FormSubmissionCreate] Document type not found or is deleted. docTypeId:', docTypeId);
-                      return;
+          this.approvalWorkflowRuntimeService.activateStage(submittedSubmission.id).subscribe({
+            next: () => {
+              console.log('[FormSubmissionCreate] ✅ activate-stage succeeded, re-fetching submission to get stageId...');
+              this.formSubmissionsService.getSubmissionById(submittedSubmission.id).subscribe({
+                next: (refetched: any) => {
+                  this.currentSubmission = refetched;
+                  // Keep the old UI behavior (stageId update attempt) as a fallback.
+                  // If backend didn't set stageId, we still try client-side stage lookup.
+                  const docTypeId = submittedSubmission.documentTypeId || this.documentTypeId;
+                  if (docTypeId) {
+                    // load document type & stage list flow already exists further down the file via setSubmissionStageId().
+                    // Here we only need to set it if backend didn't.
+                    if (!refetched?.stageId) {
+                      console.warn('[FormSubmissionCreate] stageId still null after activate-stage; falling back to stage lookup by workflow.');
+                      // Try to resolve workflowId and set stageId via stages list (existing logic)
+                      // (This uses cached documentType when available)
+                      const approvalWorkflowId = this.documentType?.approvalWorkflowId;
+                      if (approvalWorkflowId) {
+                        this.tryUpdateSubmissionStageIdWithRetry(submittedSubmission.id, approvalWorkflowId);
+                      }
                     }
-                    
-                    console.log('[FormSubmissionCreate] Loaded document type:', {
-                      id: documentType?.id,
-                      name: documentType?.name,
-                      approvalWorkflowId: documentType?.approvalWorkflowId,
-                      approvalWorkflowName: documentType?.approvalWorkflowName,
-                      hasWorkflow: !!documentType?.approvalWorkflowId
-                    });
-                    
-                    if (documentType?.approvalWorkflowId && documentType.approvalWorkflowId > 0) {
-                      console.log('[FormSubmissionCreate] Found approvalWorkflowId:', documentType.approvalWorkflowId, 'setting stageId...');
-                      this.documentType = documentType; // Cache it
-                      setStageId(documentType.approvalWorkflowId);
-                    } else {
-                      console.warn('[FormSubmissionCreate] No approval workflow ID found in document type. Creating workflow automatically...');
-                      console.log('[FormSubmissionCreate] DocumentType:', {
-                        id: documentType?.id,
-                        name: documentType?.name,
-                        approvalWorkflowId: documentType?.approvalWorkflowId,
-                        approvalWorkflowName: documentType?.approvalWorkflowName
-                      });
-                      
-                      // Create workflow automatically and assign it to document type
-                      this.createAndAssignWorkflow(documentType.id, documentType, (workflowId: number) => {
-                        this.documentType = documentType; // Cache it
-                        setStageId(workflowId);
-                      });
-                    }
-                  },
-                  error: (docTypeError) => {
-                    console.error('[FormSubmissionCreate] Failed to load document type:', docTypeError);
-                    console.error('[FormSubmissionCreate] Error details:', {
-                      status: docTypeError?.status,
-                      statusText: docTypeError?.statusText,
-                      message: docTypeError?.message,
-                      error: docTypeError?.error
-                    });
                   }
-                });
-              }
-            };
-            
-            const setStageId = (approvalWorkflowId: number | null | undefined) => {
-              if (!approvalWorkflowId) {
-                console.warn('[FormSubmissionCreate] No approval workflow ID available');
-                return;
-              }
-              
-              // Get the first stage from workflow and update submission with stageId directly
-              this.approvalStageService.getAllByWorkflowId(approvalWorkflowId).subscribe({
-                next: (stages) => {
-                  if (stages && stages.length > 0) {
-                    // Get the first stage (lowest stageOrder)
-                    const firstStage = stages
-                      .filter(s => !s.isDeleted)
-                      .sort((a, b) => a.stageOrder - b.stageOrder)[0];
-                    
-                    if (firstStage && firstStage.id) {
-                      console.log('[FormSubmissionCreate] Found first stage:', firstStage.id, 'updating submission stageId immediately');
-                      // Update submission with stageId immediately
-                      this.formSubmissionsService.updateSubmission(submittedSubmission.id, { stageId: firstStage.id }).subscribe({
-                        next: () => {
-                          console.log('[FormSubmissionCreate] ✅ Submission stageId updated successfully to:', firstStage.id);
-                        },
-                        error: (updateError) => {
-                          console.error('[FormSubmissionCreate] ❌ Failed to update submission stageId:', updateError);
-                          console.error('[FormSubmissionCreate] Update error details:', JSON.stringify(updateError, null, 2));
-                        }
-                      });
-                    } else {
-                      console.warn('[FormSubmissionCreate] No valid stage found in workflow');
-                    }
-                  } else {
-                    console.warn('[FormSubmissionCreate] No stages found in workflow');
-                  }
+                  this.cdr.detectChanges();
                 },
-                error: (stagesError) => {
-                  console.error('[FormSubmissionCreate] Failed to get workflow stages:', stagesError);
+                error: (refetchErr) => {
+                  console.warn('[FormSubmissionCreate] Failed to re-fetch submission after activate-stage:', refetchErr);
                 }
               });
-              
-              // Also try to activate the workflow stage (this might set stageId automatically in backend)
-              this.approvalWorkflowRuntimeService.activateStage(submittedSubmission.id).subscribe({
-                next: () => {
-                  console.log('[FormSubmissionCreate] Workflow stage activated successfully');
-                },
-                error: (activateError) => {
-                  console.warn('[FormSubmissionCreate] Failed to activate workflow stage:', activateError);
-                  // Don't block user flow, but log the error
-                }
-              });
-            };
-            
-            loadDocumentTypeAndSetStageId();
-          } else {
-            console.warn('[FormSubmissionCreate] No documentTypeId found in submission or component');
-          }
+            },
+            error: (activateError) => {
+              console.warn('[FormSubmissionCreate] Failed to activate workflow stage:', activateError);
+            }
+          });
         }
         
         // Note: Status is already updated to "Submitted" above, so we don't need to handle "Approved" case separately
@@ -4133,6 +4012,42 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       },
       error: (error) => {
+        // If backend says it's already submitted, don't stop the flow; just activate stage directly.
+        const backendMsg: string = (error?.error?.message || error?.message || '').toString();
+        const isAlreadySubmitted = backendMsg.toLowerCase().includes('already submitted');
+
+        if (isAlreadySubmitted && this.submissionId) {
+          console.warn('[FormSubmissionCreate] Submit returned "already submitted". Activating stage anyway...', backendMsg);
+          this.approvalWorkflowRuntimeService.activateStage(this.submissionId).subscribe({
+            next: () => {
+              console.log('[FormSubmissionCreate] ✅ Stage activated successfully after already submitted');
+              // Re-fetch submission to update UI (stageId should be set by backend)
+              this.formSubmissionsService.getSubmissionById(this.submissionId!).subscribe({
+                next: (refetched: any) => {
+                  this.currentSubmission = refetched;
+                  this.isSubmitting = false;
+                  this.loading.create = false;
+                  this.cdr.detectChanges();
+                  this.router.navigate(['/form-submissions', this.submissionId!]);
+                },
+                error: () => {
+                  this.isSubmitting = false;
+                  this.loading.create = false;
+                  this.cdr.detectChanges();
+                  this.router.navigate(['/form-submissions', this.submissionId!]);
+                }
+              });
+            },
+            error: (activateErr) => {
+              console.error('[FormSubmissionCreate] ❌ Failed to activate stage after already submitted:', activateErr);
+              this.isSubmitting = false;
+              this.loading.create = false;
+              this.cdr.detectChanges();
+            }
+          });
+          return;
+        }
+
         this.isSubmitting = false;
         this.loading.create = false;
 
@@ -4217,31 +4132,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     if (!approvalWorkflowId) {
       return;
     }
-    
+
     // Get the first stage from workflow and update submission with stageId
-    this.approvalStageService.getAllByWorkflowId(approvalWorkflowId).subscribe({
-      next: (stages) => {
-        if (stages && stages.length > 0) {
-          const firstStage = stages
-            .filter(s => !s.isDeleted)
-            .sort((a, b) => a.stageOrder - b.stageOrder)[0];
-          
-          if (firstStage && firstStage.id) {
-            this.formSubmissionsService.updateSubmission(submissionId, { stageId: firstStage.id }).subscribe({
-              next: () => {
-                console.log('[FormSubmissionCreate] ✅ Submission stageId updated successfully to:', firstStage.id);
-              },
-              error: (updateError) => {
-                console.error('[FormSubmissionCreate] ❌ Failed to update submission stageId:', updateError);
-              }
-            });
-          }
-        }
-      },
-      error: (stagesError) => {
-        console.error('[FormSubmissionCreate] Failed to get workflow stages:', stagesError);
-      }
-    });
+    // NOTE: Backend may create default stage asynchronously; retry briefly if no stages are returned yet.
+    this.tryUpdateSubmissionStageIdWithRetry(submissionId, approvalWorkflowId);
     
     // Also try to activate the workflow stage
     this.approvalWorkflowRuntimeService.activateStage(submissionId).subscribe({
@@ -4250,6 +4144,52 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       },
       error: (activateError) => {
         console.warn('[FormSubmissionCreate] Failed to activate workflow stage:', activateError);
+      }
+    });
+  }
+
+  private tryUpdateSubmissionStageIdWithRetry(
+    submissionId: number,
+    approvalWorkflowId: number,
+    attempt: number = 1,
+    maxAttempts: number = 5,
+    delayMs: number = 500
+  ): void {
+    this.approvalStageService.getAllByWorkflowId(approvalWorkflowId).subscribe({
+      next: (stages) => {
+        const validStages = (stages || []).filter(s => !s.isDeleted);
+        if (validStages.length === 0) {
+          if (attempt < maxAttempts) {
+            console.warn(`[FormSubmissionCreate] No stages found for workflow ${approvalWorkflowId} (attempt ${attempt}/${maxAttempts}). Retrying in ${delayMs}ms...`);
+            setTimeout(() => this.tryUpdateSubmissionStageIdWithRetry(submissionId, approvalWorkflowId, attempt + 1, maxAttempts, delayMs), delayMs);
+          } else {
+            console.warn(`[FormSubmissionCreate] No stages found for workflow ${approvalWorkflowId} after ${maxAttempts} attempts. stageId will remain null.`);
+          }
+          return;
+        }
+
+        const firstStage = validStages.sort((a, b) => a.stageOrder - b.stageOrder)[0];
+        if (!firstStage?.id) {
+          console.warn('[FormSubmissionCreate] No valid first stage found (missing id).');
+          return;
+        }
+
+        console.log('[FormSubmissionCreate] Found first stage:', firstStage.id, 'updating submission stageId...');
+        this.formSubmissionsService.updateSubmission(submissionId, { stageId: firstStage.id }).subscribe({
+          next: () => {
+            console.log('[FormSubmissionCreate] ✅ Submission stageId updated successfully to:', firstStage.id);
+          },
+          error: (updateError) => {
+            console.error('[FormSubmissionCreate] ❌ Failed to update submission stageId:', updateError);
+            console.error('[FormSubmissionCreate] Update error details:', JSON.stringify(updateError, null, 2));
+          }
+        });
+      },
+      error: (stagesError) => {
+        console.error('[FormSubmissionCreate] Failed to get workflow stages:', stagesError);
+        if (attempt < maxAttempts) {
+          setTimeout(() => this.tryUpdateSubmissionStageIdWithRetry(submissionId, approvalWorkflowId, attempt + 1, maxAttempts, delayMs), delayMs);
+        }
       }
     });
   }
