@@ -107,7 +107,7 @@ export class LoginComponent implements OnInit {
     // Otherwise (like "Administration"), go to dashboard
     if (userRole === 'user' || userRole === 'User') {
       // Navigate to document-types main page only, not to any specific document type submissions
-      this.router.navigate(['/document-types/7/submissions'], { replaceUrl: true }).catch(err => {
+      this.router.navigate(['/document-types/1/submissions'], { replaceUrl: true }).catch(err => {
         console.error('Navigation error:', err);
         // Fallback to form-builder if document-types fails
         this.router.navigate(['/form-builder'], { replaceUrl: true });
