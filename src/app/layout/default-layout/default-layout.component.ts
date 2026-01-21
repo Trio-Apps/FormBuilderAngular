@@ -135,9 +135,15 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         continue;
       }
 
-      // Hide Dashboard for User role
+      // Hide Dashboard for User role, but show Dashboard Menus
       if (item.name === 'Dashboard') {
         continue; // Skip Dashboard
+      }
+      
+      // Show Dashboard Menus for all users
+      if (item.name === 'Dashboard Menus') {
+        filteredItems.push(item);
+        continue;
       }
 
       // Hide Form Builder section
@@ -158,6 +164,11 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
 
       // Show Document Types dropdown with dynamic children
       if (item.name === 'Document Types') {
+        // Start with static children from navItems (only "Manage Document Types" now)
+        const staticChildren: any[] = item.children?.filter((child: any) => 
+          child.name === 'Manage Document Types'
+        ) || [];
+        
         // Create dynamic children from document types
         const documentTypeChildren: any[] = this.documentTypes
           .filter(dt => dt.isActive !== false) // Only show active document types
@@ -173,20 +184,31 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
             } : {})
           }));
 
-        // If no document types, show default "Manage Document Types"
-        if (documentTypeChildren.length === 0) {
-          documentTypeChildren.push({
+        // Combine static and dynamic children
+        const allChildren = [...staticChildren, ...documentTypeChildren];
+
+        // If no document types and no static children, show default "Manage Document Types"
+        if (allChildren.length === 0) {
+          allChildren.push({
             name: 'Manage Document Types',
             url: '/document-types',
             iconComponent: { name: 'cil-list' }
           });
         }
 
-        // Create Document Types dropdown item with dynamic children
+        // Create Document Types dropdown item with combined children
         filteredItems.push({
           ...item,
-          children: documentTypeChildren
+          children: allChildren
         });
+        continue;
+      }
+
+      // Show Manage Table Menus for admin only
+      if (item.name === 'Manage Table Menus') {
+        if (isAdmin) {
+          filteredItems.push(item);
+        }
         continue;
       }
 

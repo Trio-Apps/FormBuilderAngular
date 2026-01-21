@@ -101,25 +101,17 @@ export class LoginComponent implements OnInit {
   }
 
   private redirectBasedOnRole(): void {
-    const userRole = this.authService.role();
-    
-    // If role is "user", go to document-types (main page only, NOT submissions)
-    // Otherwise (like "Administration"), go to dashboard
-    if (userRole === 'user' || userRole === 'User') {
-      // Navigate to document-types main page only, not to any specific document type submissions
-      this.router.navigate(['/document-types/1/submissions'], { replaceUrl: true }).catch(err => {
-        console.error('Navigation error:', err);
-        // Fallback to form-builder if document-types fails
-        this.router.navigate(['/form-builder'], { replaceUrl: true });
-      });
-    } else {
-      // Non-user roles (like Administration) go to dashboard
-      this.router.navigate(['/dashboard'], { replaceUrl: true }).catch(err => {
-        console.error('Navigation error:', err);
-        // Fallback to document-types if dashboard fails
+    // All users go to Dashboard Menus after login
+    this.router.navigate(['/dashboard-menus'], { replaceUrl: true }).catch(err => {
+      console.error('Navigation error:', err);
+      // Fallback to dashboard if dashboard-menus fails
+      const userRole = this.authService.role();
+      if (userRole === 'user' || userRole === 'User') {
         this.router.navigate(['/document-types'], { replaceUrl: true });
-      });
-    }
+      } else {
+        this.router.navigate(['/dashboard'], { replaceUrl: true });
+      }
+    });
   }
 
   clearForm() {

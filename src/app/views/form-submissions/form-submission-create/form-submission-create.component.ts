@@ -1450,17 +1450,27 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         return 'radio';
       }
 
+      // Check if FieldType is explicitly "Select" or "Dropdown" - these should be dropdown, not radio
+      // IMPORTANT: Check ft?.typeName to see if the FieldType itself is "Select" or "Dropdown"
+      const ftTypeName = (ft?.typeName || '').toLowerCase();
+      const isSelectFieldType = ftTypeName === 'select' || ftTypeName === 'dropdown' || ftTypeName.includes('select') || ftTypeName.includes('dropdown');
+      
       // إذا كان allowMultiple = false و hasOptions = true وليس select/combobox صراحة
       // (Radio buttons تسمح باختيار واحد فقط، بينما Select قد يكون single أو multiple)
       // Check allowMultiple - use ft?.allowMultiple if available, otherwise default to false (single selection = radio)
       const allowMultiple = ft?.allowMultiple ?? false;
       
-      // Default to select if allowMultiple is true, otherwise radio
+      // Default to select if allowMultiple is true, otherwise check FieldType name
       if (allowMultiple === true) {
         return 'select';
       }
       
-      // If allowMultiple = false and not explicitly select/combobox, default to radio
+      // If FieldType is explicitly "Select" or "Dropdown", use dropdown (select) instead of radio
+      if (isSelectFieldType) {
+        return 'select';
+      }
+      
+      // If allowMultiple = false and not explicitly select/combobox/dropdown, default to radio
       // BUT: Only if we're sure it's not a dropdown (ComboBox/Select should be detected above)
       return 'radio';
 
@@ -1697,9 +1707,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     
     // Check if DataSource failed or returned no options
     const dataSource = field.fieldDataSource;
+    const isSqlQuery = dataSource?.sourceType === 'SqlQuery' || dataSource?.sourceType === 'DataSourceSqlQuery';
     const hasExternalDataSource = dataSource && 
                                  dataSource.isActive && 
-                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable');
+                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery);
     const dataSourceFailed = hasExternalDataSource && 
                             (!this.fieldDataSourceOptions[field.id] || this.fieldDataSourceOptions[field.id].length === 0);
 

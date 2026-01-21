@@ -30,7 +30,8 @@
     "columns": "Columns",
     "yes": "Yes",
     "no": "No",
-    "back": "Back"
+    "back": "Back",
+    "retry": "Retry"
   },
   "forms": {
     "title": "Form Builder",
@@ -360,5 +361,15 @@
       "previewOptions": "Preview Options",
       "testDataSource": "Test Data Source"
     }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Select a document to view or create",
+    "totalMenus": "Total Menus",
+    "totalSubMenus": "Total Sub Menus",
+    "totalDocuments": "Total Documents",
+    "noDocuments": "No documents available in this menu",
+    "noMenus": "No Menus Available",
+    "noMenusDescription": "There are no menus configured for your account."
   }
 }

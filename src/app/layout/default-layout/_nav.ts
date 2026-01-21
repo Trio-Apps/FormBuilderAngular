@@ -7,6 +7,11 @@ export const navItems: INavData[] = [
     iconComponent: { name: 'cil-speedometer' }
   },
   {
+    name: 'Dashboard Menus',
+    url: '/dashboard-menus',
+    iconComponent: { name: 'cil-applications' }
+  },
+  {
     title: true,
     name: 'Form Builder'
   },
@@ -37,6 +42,12 @@ export const navItems: INavData[] = [
         iconComponent: { name: 'cil-list' }
       }
     ]
+  },
+  {
+    name: 'Manage Table Menus',
+    url: '/table-menus',
+    iconComponent: { name: 'cil-menu' },
+    attributes: { roles: ['Administration'] } // Admin only
   },
   {
     name: 'Approval Workflows',

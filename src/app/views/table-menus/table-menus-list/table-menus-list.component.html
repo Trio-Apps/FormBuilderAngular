@@ -1,0 +1,1098 @@
+<div class="table-menus-page-container">
+  <!-- Language Toggle Buttons -->
+  <div class="admin-language-toggle">
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'en'"
+      (click)="switchLanguage('en')">
+      English
+    </button>
+    <button
+      type="button"
+      class="admin-lang-btn"
+      [class.active]="translationService.getCurrentLanguage() === 'ar'"
+      (click)="switchLanguage('ar')">
+      العربية
+    </button>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/dashboard" [title]="'common.back' | translate">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Table Menus Management</h1>
+          <p class="page-subtitle">Organize documents in a structured dashboard without code changes</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadMenus()" [disabled]="loading.menus" [title]="'common.refresh' | translate">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openMenuModal()" [disabled]="loading.menus">
+          <i class="pi pi-plus"></i>
+          <span>New Menu</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-menu"></i>
+        <span>Table Menus</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading.menus">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-th-large"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ menus.length }}</div>
+          <div class="stat-label">Total Menus</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveMenusCount() }}</div>
+          <div class="stat-label">Active Menus</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-info">
+          <i class="pi pi-list"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getTotalSubMenusCount() }}</div>
+          <div class="stat-label">Total Sub Menus</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-warning">
+          <i class="pi pi-file"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getTotalDocumentsCount() }}</div>
+          <div class="stat-label">Total Documents</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search and Actions -->
+    <div class="toolbar">
+      <div class="search-container">
+        <i class="pi pi-search search-icon"></i>
+        <input
+          type="text"
+          pInputText
+          [(ngModel)]="searchTerm"
+          (input)="filterMenus()"
+          placeholder="Search menus..."
+          class="search-input">
+        <span *ngIf="filteredMenus.length > 0" class="search-results">{{ filteredMenus.length }} menu(s) found</span>
+      </div>
+    </div>
+
+    <!-- Menus Table -->
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-table"></i>
+          Menus List
+        </h3>
+        <button
+          pButton
+          icon="pi pi-plus"
+          label="New Menu"
+          class="p-button-success"
+          (click)="openMenuModal()"
+          [disabled]="loading.menus">
+        </button>
+      </div>
+      <p-table
+        [value]="filteredMenus"
+        [loading]="loading.menus"
+        [paginator]="true"
+        [rows]="rows"
+        [first]="first"
+        [totalRecords]="totalRecords"
+        (onPage)="onPageChange($event)"
+        [rowsPerPageOptions]="[10, 20, 50]"
+        styleClass="p-datatable-striped">
+        
+        <ng-template pTemplate="header">
+          <tr>
+            <th style="width: 100px">Order</th>
+            <th>Menu Name</th>
+            <th style="width: 150px">Menu Code</th>
+            <th style="width: 100px">Icon</th>
+            <th style="width: 100px">Status</th>
+            <th style="width: 200px">Permissions</th>
+            <th style="width: 180px">Actions</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-menu>
+          <tr>
+            <td>
+              <span class="order-badge">{{ menu.displayOrder }}</span>
+            </td>
+            <td>
+              <div class="menu-name-cell">
+                <strong>{{ menu.name }}</strong>
+                <span *ngIf="menu.foreignName" class="foreign-name">{{ menu.foreignName }}</span>
+              </div>
+            </td>
+            <td>
+              <code class="menu-code">{{ menu.menuCode }}</code>
+            </td>
+            <td>
+              <div class="icon-cell" *ngIf="menu.icon">
+                <i [class]="menu.icon"></i>
+              </div>
+              <span *ngIf="!menu.icon" class="text-muted">-</span>
+            </td>
+            <td>
+              <span [class]="menu.isActive ? 'status-badge active' : 'status-badge inactive'">
+                <i [class]="menu.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
+                {{ menu.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            <td>
+              <div class="permissions-cell" *ngIf="menu.permissions && menu.permissions.length > 0">
+                <span 
+                  *ngFor="let perm of menu.permissions.slice(0, 2)" 
+                  class="permission-tag">
+                  {{ perm }}
+                </span>
+                <span 
+                  *ngIf="menu.permissions.length > 2" 
+                  class="permission-more"
+                  [pTooltip]="getPermissionsTooltip(menu.permissions)"
+                  tooltipPosition="top">
+                  +{{ menu.permissions.length - 2 }} more
+                </span>
+              </div>
+              <span *ngIf="!menu.permissions || menu.permissions.length === 0" class="text-muted">All Users</span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button
+                  pButton
+                  icon="pi pi-list"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="loadSubMenus(menu.id)"
+                  pTooltip="View Sub Menus"
+                  tooltipPosition="top">
+                </button>
+                <button
+                  pButton
+                  icon="pi pi-file"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="loadMenuDocuments(menu.id)"
+                  pTooltip="View Documents"
+                  tooltipPosition="top">
+                </button>
+                <button
+                  pButton
+                  icon="pi pi-pencil"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="openMenuModal(menu)"
+                  pTooltip="Edit"
+                  tooltipPosition="top">
+                </button>
+                <button
+                  pButton
+                  icon="pi pi-trash"
+                  class="p-button-text p-button-sm action-btn action-btn-danger"
+                  (click)="deleteMenu(menu)"
+                  [disabled]="loading.delete"
+                  pTooltip="Delete"
+                  tooltipPosition="top">
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="7" class="empty-message">
+              <div class="empty-state">
+                <i class="pi pi-inbox"></i>
+                <p>No menus found. Create your first menu to get started.</p>
+                <button
+                  pButton
+                  icon="pi pi-plus"
+                  label="Create New Menu"
+                  class="p-button-success p-button-lg"
+                  (click)="openMenuModal()"
+                  [disabled]="loading.menus">
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <!-- Sub Menus Section (when a menu is selected) -->
+    <div *ngIf="currentMenuForSubMenu" class="sub-menus-section">
+      <div class="section-header">
+        <div>
+          <h3>
+            <i class="pi pi-list"></i>
+            Sub Menus
+            <span class="menu-context" *ngIf="currentMenuForSubMenu">
+              - {{ currentMenuForSubMenu.name }}
+            </span>
+          </h3>
+          <p class="section-subtitle" *ngIf="subMenus.length === 0 && !loading.subMenus">
+            No sub menus found. Click "New Sub Menu" to create one.
+          </p>
+        </div>
+        <div class="section-actions">
+          <button
+            pButton
+            icon="pi pi-times"
+            class="p-button-text p-button-sm"
+            (click)="closeSubMenusSection()"
+            pTooltip="Close"
+            tooltipPosition="top">
+          </button>
+          <button
+            pButton
+            icon="pi pi-plus"
+            label="New Sub Menu"
+            class="p-button-success p-button-sm"
+            (click)="openSubMenuModal(currentMenuForSubMenu)"
+            [disabled]="!currentMenuForSubMenu || loading.subMenus">
+          </button>
+        </div>
+      </div>
+      
+      <div *ngIf="loading.subMenus" class="loading-state">
+        <i class="pi pi-spin pi-spinner"></i>
+        <span>Loading sub menus...</span>
+      </div>
+      <p-table 
+        *ngIf="!loading.subMenus && subMenus.length > 0"
+        [value]="subMenus" 
+        styleClass="p-datatable-striped">
+        <ng-template pTemplate="header">
+          <tr>
+            <th style="width: 100px">Order</th>
+            <th>Sub Menu Name</th>
+            <th style="width: 100px">Status</th>
+            <th style="width: 200px">Permissions</th>
+            <th style="width: 150px">Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-subMenu>
+          <tr>
+            <td>
+              <span class="order-badge">{{ subMenu.displayOrder }}</span>
+            </td>
+            <td>
+              <div class="menu-name-cell">
+                <strong>{{ subMenu.name }}</strong>
+                <span *ngIf="subMenu.foreignName" class="foreign-name">{{ subMenu.foreignName }}</span>
+              </div>
+            </td>
+            <td>
+              <span [class]="subMenu.isActive ? 'status-badge active' : 'status-badge inactive'">
+                <i [class]="subMenu.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
+                {{ subMenu.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            <td>
+              <div class="permissions-cell" *ngIf="subMenu.permissions && subMenu.permissions.length > 0">
+                <span 
+                  *ngFor="let perm of subMenu.permissions.slice(0, 2)" 
+                  class="permission-tag">
+                  {{ perm }}
+                </span>
+                <span 
+                  *ngIf="subMenu.permissions.length > 2" 
+                  class="permission-more"
+                  [pTooltip]="getPermissionsTooltip(subMenu.permissions)"
+                  tooltipPosition="top">
+                  +{{ subMenu.permissions.length - 2 }} more
+                </span>
+              </div>
+              <span *ngIf="!subMenu.permissions || subMenu.permissions.length === 0" class="text-muted">All Users</span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button
+                  pButton
+                  icon="pi pi-file"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="loadMenuDocuments(currentMenuForSubMenu.id, subMenu.id)"
+                  pTooltip="View Documents"
+                  tooltipPosition="top">
+                </button>
+                <button
+                  pButton
+                  icon="pi pi-pencil"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="openSubMenuModal(currentMenuForSubMenu, subMenu)"
+                  pTooltip="Edit"
+                  tooltipPosition="top">
+                </button>
+                <button
+                  pButton
+                  icon="pi pi-trash"
+                  class="p-button-text p-button-sm action-btn action-btn-danger"
+                  (click)="deleteSubMenu(subMenu)"
+                  [disabled]="loading.delete"
+                  pTooltip="Delete"
+                  tooltipPosition="top">
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="5" class="empty-message">
+              <div class="empty-state">
+                <i class="pi pi-inbox"></i>
+                <p>No sub menus found for this menu.</p>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <!-- Menu Documents Section -->
+    <div *ngIf="currentMenuForDocument || currentSubMenuForDocument" class="menu-documents-section">
+      <div class="section-header">
+        <div>
+          <h3>
+            <i class="pi pi-file"></i>
+            Menu Documents
+            <span class="menu-context" *ngIf="currentMenuForDocument">
+              - {{ currentMenuForDocument.name }}
+            </span>
+            <span class="menu-context" *ngIf="currentSubMenuForDocument">
+              / {{ currentSubMenuForDocument.name }}
+            </span>
+          </h3>
+          <p class="section-subtitle" *ngIf="menuDocuments.length === 0 && !loading.documents">
+            No documents assigned. Click "Assign Document" to add one.
+          </p>
+        </div>
+        <div class="section-actions">
+          <button
+            pButton
+            icon="pi pi-times"
+            class="p-button-text p-button-sm"
+            (click)="closeMenuDocumentsSection()"
+            pTooltip="Close"
+            tooltipPosition="top">
+          </button>
+          <button
+            pButton
+            icon="pi pi-plus"
+            label="Assign Document"
+            class="p-button-success p-button-sm"
+            (click)="openMenuDocumentModal(currentMenuForDocument || undefined, currentSubMenuForDocument || undefined)"
+            [disabled]="(!currentMenuForDocument && !currentSubMenuForDocument) || loading.documents">
+          </button>
+        </div>
+      </div>
+      
+      <div *ngIf="loading.documents" class="loading-state">
+        <i class="pi pi-spin pi-spinner"></i>
+        <span>Loading documents...</span>
+      </div>
+      <p-table 
+        *ngIf="!loading.documents && menuDocuments.length > 0"
+        [value]="menuDocuments" 
+        styleClass="p-datatable-striped">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Document Type</th>
+            <th>Menu</th>
+            <th>Sub Menu</th>
+            <th style="width: 100px">Order</th>
+            <th style="width: 100px">Status</th>
+            <th style="width: 200px">Permissions</th>
+            <th style="width: 120px">Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-document>
+          <tr>
+            <td>{{ getDocumentTypeName(document.documentTypeId) }}</td>
+            <td>{{ document.menuName || '-' }}</td>
+            <td>{{ document.subMenuName || '-' }}</td>
+            <td>
+              <span class="order-badge">{{ document.displayOrder }}</span>
+            </td>
+            <td>
+              <span [class]="document.isActive ? 'status-badge active' : 'status-badge inactive'">
+                <i [class]="document.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
+                {{ document.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            <td>
+              <div class="permissions-cell" *ngIf="document.permissions && document.permissions.length > 0">
+                <span 
+                  *ngFor="let perm of document.permissions.slice(0, 2)" 
+                  class="permission-tag">
+                  {{ perm }}
+                </span>
+                <span 
+                  *ngIf="document.permissions.length > 2" 
+                  class="permission-more"
+                  [pTooltip]="getPermissionsTooltip(document.permissions)"
+                  tooltipPosition="top">
+                  +{{ document.permissions.length - 2 }} more
+                </span>
+              </div>
+              <span *ngIf="!document.permissions || document.permissions.length === 0" class="text-muted">All Users</span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button
+                  pButton
+                  icon="pi pi-pencil"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="openMenuDocumentModal(currentMenuForDocument || undefined, currentSubMenuForDocument || undefined, document)"
+                  pTooltip="Edit"
+                  tooltipPosition="top">
+                </button>
+                <button
+                  pButton
+                  icon="pi pi-trash"
+                  class="p-button-text p-button-sm action-btn action-btn-danger"
+                  (click)="deleteMenuDocument(document)"
+                  [disabled]="loading.delete"
+                  pTooltip="Remove"
+                  tooltipPosition="top">
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="7" class="empty-message">
+              <div class="empty-state">
+                <i class="pi pi-inbox"></i>
+                <p>No documents found for this menu.</p>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+  </div>
+</div>
+
+<!-- Menu Modal -->
+<p-dialog
+  [(visible)]="showMenuModal"
+  [header]="(editingMenu ? 'Edit' : 'New') + ' Menu'"
+  [modal]="true"
+  [style]="{ width: '700px' }"
+  [closable]="true"
+  (onHide)="closeMenuModal()">
+  
+  <form [formGroup]="menuForm" class="menu-form">
+    <!-- Language Toggle Tabs -->
+    <div class="language-tabs-container">
+      <button
+        type="button"
+        class="language-tab"
+        [class.language-tab-active]="currentInputLanguage === 'en'"
+        (click)="setInputLanguage('en')">
+        English
+      </button>
+      <button
+        type="button"
+        class="language-tab"
+        [class.language-tab-active]="currentInputLanguage === 'ar'"
+        (click)="setInputLanguage('ar')">
+        العربية
+      </button>
+    </div>
+
+    <!-- Basic Information Section -->
+    <div class="form-section">
+      <div class="section-title">
+        <i class="pi pi-info-circle"></i>
+        <span>Basic Information</span>
+      </div>
+      
+      <!-- English Menu Name -->
+      <div class="form-group" *ngIf="currentInputLanguage === 'en'">
+        <label for="name" class="form-label">
+          <i class="pi pi-tag"></i>
+          Menu Name <span class="required">*</span>
+        </label>
+        <span class="p-input-icon-left" style="width: 100%;">
+          <i class="pi pi-pencil"></i>
+          <input
+            id="name"
+            type="text"
+            pInputText
+            formControlName="name"
+            placeholder="e.g., Sales Management"
+            [class.ng-invalid]="menuForm.get('name')?.invalid && menuForm.get('name')?.touched"
+            style="width: 100%;">
+        </span>
+        <small *ngIf="menuForm.get('name')?.invalid && menuForm.get('name')?.touched" class="error-text">
+          <i class="pi pi-exclamation-circle"></i>
+          Menu name is required (2-200 characters)
+        </small>
+      </div>
+
+      <!-- Arabic Menu Name -->
+      <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
+        <label for="foreignName" class="form-label">
+          <i class="pi pi-language"></i>
+          Foreign Name (Arabic)
+        </label>
+        <span class="p-input-icon-left" style="width: 100%;">
+          <i class="pi pi-pencil"></i>
+          <input
+            id="foreignName"
+            type="text"
+            pInputText
+            formControlName="foreignName"
+            placeholder="e.g., إدارة المبيعات"
+            style="width: 100%;">
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label for="menuCode" class="form-label">
+          <i class="pi pi-code"></i>
+          Menu Code <span class="required">*</span>
+        </label>
+        <span class="p-input-icon-left" style="width: 100%;">
+          <i class="pi pi-key"></i>
+          <input
+            id="menuCode"
+            type="text"
+            pInputText
+            formControlName="menuCode"
+            placeholder="e.g., SALES_MGMT"
+            [disabled]="!!editingMenu"
+            [class.ng-invalid]="menuForm.get('menuCode')?.invalid && menuForm.get('menuCode')?.touched"
+            style="width: 100%;">
+        </span>
+        <small *ngIf="menuForm.get('menuCode')?.invalid && menuForm.get('menuCode')?.touched" class="error-text">
+          <i class="pi pi-exclamation-circle"></i>
+          Menu code is required (uppercase letters, numbers, and underscores only)
+        </small>
+        <small *ngIf="!menuForm.get('menuCode')?.invalid && !editingMenu" class="help-text">
+          <i class="pi pi-info-circle"></i>
+          Uppercase letters, numbers, and underscores only. Cannot be changed after creation.
+        </small>
+        <small *ngIf="editingMenu" class="help-text">
+          <i class="pi pi-lock"></i>
+          Menu code cannot be changed after creation.
+        </small>
+      </div>
+    </div>
+
+    <!-- Display Settings Section -->
+    <div class="form-section">
+      <div class="section-title">
+        <i class="pi pi-sliders-h"></i>
+        <span>Display Settings</span>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="icon" class="form-label">
+            <i class="pi pi-image"></i>
+            Icon Class
+          </label>
+          <span class="p-input-icon-left" style="width: 100%;">
+            <i class="pi pi-palette"></i>
+            <input
+              id="icon"
+              type="text"
+              pInputText
+              formControlName="icon"
+              placeholder="e.g., pi pi-shopping-cart"
+              style="width: 100%;">
+          </span>
+          <small class="help-text">
+            <i class="pi pi-info-circle"></i>
+            PrimeNG icon class (e.g., pi pi-shopping-cart)
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="displayOrder" class="form-label">
+            <i class="pi pi-sort"></i>
+            Display Order <span class="required">*</span>
+          </label>
+          <p-inputNumber
+            id="displayOrder"
+            formControlName="displayOrder"
+            [min]="1"
+            [showButtons]="true"
+            styleClass="w-full">
+          </p-inputNumber>
+          <small class="help-text">
+            <i class="pi pi-info-circle"></i>
+            Lower numbers appear first
+          </small>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="checkbox-wrapper">
+          <p-checkbox
+            formControlName="isActive"
+            [binary]="true"
+            inputId="isActive">
+          </p-checkbox>
+          <label for="isActive" class="checkbox-label">
+            <i class="pi pi-check-circle"></i>
+            <span>Active Menu</span>
+            <small class="checkbox-help">Only active menus will be visible to users</small>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Permissions Section -->
+    <div class="form-section">
+      <div class="section-title">
+        <i class="pi pi-shield"></i>
+        <span>Access Permissions</span>
+      </div>
+
+      <div class="form-group">
+        <label for="permissions" class="form-label">
+          <i class="pi pi-users"></i>
+          Required Permissions
+        </label>
+        <p-multiSelect
+          id="permissions"
+          formControlName="permissions"
+          [options]="availablePermissions"
+          placeholder="Select permissions (leave empty for all users)"
+          [displaySelectedLabel]="true"
+          [maxSelectedLabels]="3"
+          selectedItemsLabel="{0} permissions selected"
+          [showClear]="true"
+          styleClass="w-full">
+        </p-multiSelect>
+        <small class="help-text">
+          <i class="pi pi-info-circle"></i>
+          Select roles/permissions required to view this menu. Leave empty to allow all authenticated users.
+        </small>
+        <div *ngIf="menuForm.get('permissions')?.value && menuForm.get('permissions')?.value.length > 0" class="selected-permissions">
+          <div class="permissions-header">
+            <i class="pi pi-check"></i>
+            <span>Selected Permissions ({{ menuForm.get('permissions')?.value.length }})</span>
+          </div>
+          <div class="permissions-tags">
+            <span *ngFor="let perm of menuForm.get('permissions')?.value" class="permission-tag">
+              <i class="pi pi-tag"></i>
+              {{ perm }}
+            </span>
+          </div>
+        </div>
+        <div *ngIf="!menuForm.get('permissions')?.value || menuForm.get('permissions')?.value.length === 0" class="no-permissions">
+          <i class="pi pi-globe"></i>
+          <span>All authenticated users can access this menu</span>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <ng-template pTemplate="footer">
+    <div class="dialog-footer">
+      <button
+        pButton
+        label="Cancel"
+        icon="pi pi-times"
+        class="p-button-text p-button-lg"
+        (click)="closeMenuModal()">
+      </button>
+      <button
+        pButton
+        [label]="editingMenu ? 'Update Menu' : 'Create Menu'"
+        [icon]="editingMenu ? 'pi pi-save' : 'pi pi-plus'"
+        class="p-button-success p-button-lg"
+        (click)="saveMenu()"
+        [disabled]="loading.save || menuForm.invalid"
+        [loading]="loading.save">
+      </button>
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- Sub Menu Modal -->
+<p-dialog
+  [(visible)]="showSubMenuModal"
+  [header]="(editingSubMenu ? 'Edit' : 'New') + ' Sub Menu'"
+  [modal]="true"
+  [style]="{ width: '700px' }"
+  [closable]="true"
+  (onHide)="closeSubMenuModal()">
+  
+  <form [formGroup]="subMenuForm" class="menu-form">
+    <!-- Language Toggle Tabs -->
+    <div class="language-tabs-container">
+      <button
+        type="button"
+        class="language-tab"
+        [class.language-tab-active]="currentInputLanguage === 'en'"
+        (click)="setInputLanguage('en')">
+        English
+      </button>
+      <button
+        type="button"
+        class="language-tab"
+        [class.language-tab-active]="currentInputLanguage === 'ar'"
+        (click)="setInputLanguage('ar')">
+        العربية
+      </button>
+    </div>
+
+    <!-- Basic Information Section -->
+    <div class="form-section">
+      <div class="section-title">
+        <i class="pi pi-info-circle"></i>
+        <span>Basic Information</span>
+      </div>
+
+      <!-- English Sub Menu Name -->
+      <div class="form-group" *ngIf="currentInputLanguage === 'en'">
+        <label for="subMenuName" class="form-label">
+          <i class="pi pi-tag"></i>
+          Sub Menu Name <span class="required">*</span>
+        </label>
+        <span class="p-input-icon-left" style="width: 100%;">
+          <i class="pi pi-pencil"></i>
+          <input
+            id="subMenuName"
+            type="text"
+            pInputText
+            formControlName="name"
+            placeholder="e.g., Customer Orders"
+            [class.ng-invalid]="subMenuForm.get('name')?.invalid && subMenuForm.get('name')?.touched"
+            style="width: 100%;">
+        </span>
+        <small *ngIf="subMenuForm.get('name')?.invalid && subMenuForm.get('name')?.touched" class="error-text">
+          <i class="pi pi-exclamation-circle"></i>
+          Sub menu name is required (2-200 characters)
+        </small>
+      </div>
+
+      <!-- Arabic Sub Menu Name -->
+      <div class="form-group" *ngIf="currentInputLanguage === 'ar'">
+        <label for="subMenuForeignName" class="form-label">
+          <i class="pi pi-language"></i>
+          Foreign Name (Arabic)
+        </label>
+        <span class="p-input-icon-left" style="width: 100%;">
+          <i class="pi pi-pencil"></i>
+          <input
+            id="subMenuForeignName"
+            type="text"
+            pInputText
+            formControlName="foreignName"
+            placeholder="e.g., طلبات العملاء"
+            style="width: 100%;">
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label for="subMenuParent" class="form-label">
+          <i class="pi pi-sitemap"></i>
+          Parent Menu
+        </label>
+        <select
+          id="subMenuParent"
+          pInputText
+          formControlName="menuId"
+          class="p-inputtext w-full"
+          [disabled]="!!currentMenuForSubMenu"
+          style="width: 100%;">
+          <option [ngValue]="null" disabled>Select parent menu</option>
+          <option *ngFor="let menu of menus" [ngValue]="menu.id">
+            {{ menu.name }}
+          </option>
+        </select>
+        <small class="help-text" *ngIf="currentMenuForSubMenu">
+          <i class="pi pi-info-circle"></i>
+          Parent menu: <strong>{{ currentMenuForSubMenu.name }}</strong>
+        </small>
+      </div>
+    </div>
+
+    <!-- Display Settings Section -->
+    <div class="form-section">
+      <div class="section-title">
+        <i class="pi pi-sliders-h"></i>
+        <span>Display Settings</span>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="subMenuDisplayOrder" class="form-label">
+            <i class="pi pi-sort"></i>
+            Display Order <span class="required">*</span>
+          </label>
+          <p-inputNumber
+            id="subMenuDisplayOrder"
+            formControlName="displayOrder"
+            [min]="1"
+            [showButtons]="true"
+            styleClass="w-full">
+          </p-inputNumber>
+          <small class="help-text">
+            <i class="pi pi-info-circle"></i>
+            Lower numbers appear first
+          </small>
+        </div>
+
+        <div class="form-group">
+          <div class="checkbox-wrapper">
+            <p-checkbox
+              formControlName="isActive"
+              [binary]="true"
+              inputId="subMenuIsActive">
+            </p-checkbox>
+            <label for="subMenuIsActive" class="checkbox-label">
+              <i class="pi pi-check-circle"></i>
+              <span>Active Sub Menu</span>
+              <small class="checkbox-help">Only active sub menus will be visible</small>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Permissions Section -->
+    <div class="form-section">
+      <div class="section-title">
+        <i class="pi pi-shield"></i>
+        <span>Access Permissions</span>
+      </div>
+
+      <div class="form-group">
+        <label for="subMenuPermissions" class="form-label">
+          <i class="pi pi-users"></i>
+          Required Permissions
+        </label>
+        <p-multiSelect
+          id="subMenuPermissions"
+          formControlName="permissions"
+          [options]="availablePermissions"
+          placeholder="Select permissions (leave empty for all users)"
+          [displaySelectedLabel]="true"
+          [maxSelectedLabels]="3"
+          selectedItemsLabel="{0} permissions selected"
+          [showClear]="true"
+          styleClass="w-full">
+        </p-multiSelect>
+        <small class="help-text">
+          <i class="pi pi-info-circle"></i>
+          Select roles/permissions required to view this sub menu. Leave empty to allow all authenticated users.
+        </small>
+        <div *ngIf="subMenuForm.get('permissions')?.value && subMenuForm.get('permissions')?.value.length > 0" class="selected-permissions">
+          <div class="permissions-header">
+            <i class="pi pi-check"></i>
+            <span>Selected Permissions ({{ subMenuForm.get('permissions')?.value.length }})</span>
+          </div>
+          <div class="permissions-tags">
+            <span *ngFor="let perm of subMenuForm.get('permissions')?.value" class="permission-tag">
+              <i class="pi pi-tag"></i>
+              {{ perm }}
+            </span>
+          </div>
+        </div>
+        <div *ngIf="!subMenuForm.get('permissions')?.value || subMenuForm.get('permissions')?.value.length === 0" class="no-permissions">
+          <i class="pi pi-globe"></i>
+          <span>All authenticated users can access this sub menu</span>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <ng-template pTemplate="footer">
+    <button
+      pButton
+      label="Cancel"
+      icon="pi pi-times"
+      class="p-button-text"
+      (click)="closeSubMenuModal()">
+    </button>
+    <button
+      pButton
+      [label]="editingSubMenu ? 'Update' : 'Create'"
+      icon="pi pi-check"
+      class="p-button-success"
+      (click)="saveSubMenu()"
+      [disabled]="loading.save || subMenuForm.invalid">
+    </button>
+  </ng-template>
+</p-dialog>
+
+<!-- Menu Document Modal -->
+<p-dialog
+  [(visible)]="showMenuDocumentModal"
+  [header]="(editingMenuDocument ? 'Edit' : 'Assign') + ' Document'"
+  [modal]="true"
+  [style]="{ width: '700px' }"
+  [closable]="true"
+  (onHide)="closeMenuDocumentModal()">
+  
+  <form [formGroup]="menuDocumentForm" class="menu-form">
+    <div class="form-group">
+      <label for="documentType">Document Type *</label>
+      <select
+        id="documentType"
+        pInputText
+        formControlName="documentTypeId"
+        class="p-inputtext w-full"
+        [disabled]="!!editingMenuDocument">
+        <option [ngValue]="null" disabled>Select document type</option>
+        <option *ngFor="let docType of documentTypes" [ngValue]="docType.id">
+          {{ docType.menuCaption || docType.name }}
+        </option>
+      </select>
+      <small *ngIf="menuDocumentForm.get('documentTypeId')?.invalid && menuDocumentForm.get('documentTypeId')?.touched" class="error-text">
+        Document type is required
+      </small>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="menu">Menu</label>
+        <select
+          id="menu"
+          pInputText
+          formControlName="menuId"
+          class="p-inputtext w-full"
+          [disabled]="!!currentMenuForDocument || !!editingMenuDocument">
+          <option [ngValue]="null">Select menu (optional if sub menu selected)</option>
+          <option *ngFor="let menu of menus" [ngValue]="menu.id">
+            {{ menu.name }}
+          </option>
+        </select>
+        <small class="help-text" *ngIf="currentMenuForDocument">
+          Menu: <strong>{{ currentMenuForDocument.name }}</strong>
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="subMenu">Sub Menu</label>
+        <select
+          id="subMenu"
+          pInputText
+          formControlName="subMenuId"
+          class="p-inputtext w-full"
+          [disabled]="!!currentSubMenuForDocument || !!editingMenuDocument">
+          <option [ngValue]="null">Select sub menu (optional if menu selected)</option>
+          <option *ngFor="let subMenu of subMenus" [ngValue]="subMenu.id">
+            {{ subMenu.name }}
+          </option>
+        </select>
+        <small class="help-text" *ngIf="currentSubMenuForDocument">
+          Sub Menu: <strong>{{ currentSubMenuForDocument.name }}</strong>
+        </small>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="documentDisplayOrder">Display Order *</label>
+        <p-inputNumber
+          id="documentDisplayOrder"
+          formControlName="displayOrder"
+          [min]="1"
+          [showButtons]="true"
+          styleClass="w-full">
+        </p-inputNumber>
+      </div>
+
+      <div class="form-group">
+        <p-checkbox
+          formControlName="isActive"
+          label="Active"
+          [binary]="true"
+          inputId="documentIsActive">
+        </p-checkbox>
+        <small class="help-text">Only active documents will be visible</small>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="documentPermissions">Permissions</label>
+      <p-multiSelect
+        id="documentPermissions"
+        formControlName="permissions"
+        [options]="availablePermissions"
+        placeholder="Select permissions (leave empty for all users)"
+        [displaySelectedLabel]="true"
+        [maxSelectedLabels]="3"
+        selectedItemsLabel="{0} permissions selected"
+        [showClear]="true"
+        styleClass="w-full">
+      </p-multiSelect>
+      <small class="help-text">
+        Select roles/permissions required to view this document. Leave empty to allow all authenticated users.
+      </small>
+      <div *ngIf="menuDocumentForm.get('permissions')?.value && menuDocumentForm.get('permissions')?.value.length > 0" class="selected-permissions">
+        <span *ngFor="let perm of menuDocumentForm.get('permissions')?.value" class="permission-tag">
+          {{ perm }}
+        </span>
+      </div>
+    </div>
+  </form>
+
+  <ng-template pTemplate="footer">
+    <button
+      pButton
+      label="Cancel"
+      icon="pi pi-times"
+      class="p-button-text"
+      (click)="closeMenuDocumentModal()">
+    </button>
+    <button
+      pButton
+      [label]="editingMenuDocument ? 'Update' : 'Assign'"
+      icon="pi pi-check"
+      class="p-button-success"
+      (click)="saveMenuDocument()"
+      [disabled]="loading.save || menuDocumentForm.invalid">
+    </button>
+  </ng-template>
+</p-dialog>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>

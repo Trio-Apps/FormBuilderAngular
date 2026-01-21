@@ -49,6 +49,22 @@ export const routes: Routes = [
         canActivate: [dashboardGuard] // Only Administration role can access
       },
 
+      // ===== Dashboard Menus View (User) =====
+      {
+        path: 'dashboard-menus',
+        loadComponent: () => import('./views/table-menus/dashboard-menus-view/dashboard-menus-view.component')
+          .then(m => m.DashboardMenusViewComponent),
+        canActivate: [authGuard] // All authenticated users can access
+      },
+
+      // ===== Table Menus Management (Admin) =====
+      {
+        path: 'table-menus',
+        loadComponent: () => import('./views/table-menus/table-menus-list/table-menus-list.component')
+          .then(m => m.TableMenusListComponent),
+        canActivate: [authGuard, adminGuard] // Admin only
+      },
+
       // ===== Projects =====
       {
         path: 'projects',
