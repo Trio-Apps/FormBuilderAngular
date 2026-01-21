@@ -111,10 +111,11 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   }
 
   private filterNavItemsByRole(): void {
-    const userRole = this.authService.role();
+    const userRole = this.authService.role() || 'User';
+    const isAdmin = ['administration', 'admin'].includes(userRole.toLowerCase());
     
     // If role is "Administration", show all items
-    if (userRole === 'Administration') {
+    if (isAdmin) {
       this.navItems = [...navItems];
       return;
     }
@@ -192,7 +193,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
       // Show Approval Workflows with children (for all users)
       if (item.name === 'Approval Workflows') {
         // For User role, only show Approval Inbox (not Manage Workflows or Approvals History)
-        if (userRole !== 'Administration') {
+        if (!isAdmin) {
           filteredItems.push({
             ...item,
             children: item.children?.filter((child: any) => 

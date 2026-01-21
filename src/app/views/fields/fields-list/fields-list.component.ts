@@ -162,25 +162,29 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     textPath: null,
     isDeleted: false
   };
-  // LookupTable JSON Configuration (stored separately, then serialized to JSON in apiUrl)
+  // LookupTable Configuration (table & database)
   lookupTableConfig: {
     table: string;
     valueColumn: string;
     textColumn: string;
+    database: 'FormBuilder' | 'AkhmanageIt';
   } = {
       table: '',
       valueColumn: 'Id',
-      textColumn: 'Name'
+      textColumn: 'Name',
+      database: 'FormBuilder'
     };
   // SQL Query Configuration
   sqlQueryConfig: {
     sqlQuery: string;
     valuePath: string;
     textPath: string;
+    database: 'FormBuilder' | 'AkhmanageIt';
   } = {
       sqlQuery: '',
       valuePath: 'Id',
-      textPath: 'Name'
+      textPath: 'Name',
+      database: 'FormBuilder'
     };
   availableLookupTables: string[] = [];
   availableColumns: string[] = []; // Available columns from selected table
@@ -761,9 +765,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Initialize DataSource config with Static as default while loading
       this.dataSourceType = 'Static';
       this.loadDataSourceForField(field.id, () => {
-        // Load field options AFTER DataSource is loaded
-        // This ensures we know the DataSource type before loading options
-        this.loadFieldOptions(field.id);
+        // After DataSource is loaded we know where options come from:
+        // - Static: load stored options from DB
+        // - Api/LookupTable/SqlQuery: load preview options dynamically
+        if (this.dataSourceType === 'Static') {
+          this.loadFieldOptions(field.id);
+        } else {
+          // Ensure any Static options UI won't show stale values
+          // and immediately fetch preview so user sees options again when reopening edit
+          this.previewDataSource();
+        }
       });
     } else {
       this.resetDataSourceConfig();
@@ -2224,11 +2235,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    */
   loadFieldOptions(fieldId: number): void {
     const optionsArray = this.fieldOptionsFormArray;
-    // Clear existing options
-    while (optionsArray.length !== 0) {
-      optionsArray.removeAt(0);
-    }
-
     // IMPORTANT: Only load options from database if DataSource is Static
     // For Api/LookupTable, options come from external source and should NOT be loaded from database
     if (this.dataSourceType && this.dataSourceType !== 'Static') {
@@ -2236,6 +2242,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Options will be loaded from external source (API/Database) when form is displayed
       console.log(`[FieldsList] Skipping loading options from database for field ${fieldId}. DataSource type is ${this.dataSourceType}. Options will be loaded from external source.`);
       return;
+    }
+
+    // Clear existing options ONLY for Static (since we're about to repopulate from DB)
+    while (optionsArray.length !== 0) {
+      optionsArray.removeAt(0);
     }
 
     // Load options from API only for Static DataSource
@@ -2882,7 +2893,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 this.lookupTableConfig = {
                   table: configJson.table,
                   valueColumn: configJson.valueColumn,
-                  textColumn: configJson.textColumn
+                  textColumn: configJson.textColumn,
+                  database: 'FormBuilder'
                 };
                 this.dataSourceConfig = {
                   sourceType: dataSource.sourceType,
@@ -2898,7 +2910,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 this.lookupTableConfig = {
                   table: dataSource.apiUrl,
                   valueColumn: dataSource.valuePath || 'Id',
-                  textColumn: dataSource.textPath || 'Name'
+                  textColumn: dataSource.textPath || 'Name',
+                  database: 'FormBuilder'
                 };
                 this.dataSourceConfig = {
                   sourceType: dataSource.sourceType,
@@ -2915,7 +2928,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               this.lookupTableConfig = {
                 table: dataSource.apiUrl,
                 valueColumn: dataSource.valuePath || 'Id',
-                textColumn: dataSource.textPath || 'Name'
+                textColumn: dataSource.textPath || 'Name',
+                database: 'FormBuilder'
               };
               this.dataSourceConfig = {
                 sourceType: dataSource.sourceType,
@@ -2934,12 +2948,112 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               this.loadTableColumns(this.lookupTableConfig.table);
             }
           } else if (dataSource.sourceType === 'SqlQuery') {
-            // For SqlQuery type, load SQL query from requestBodyJson
-            this.sqlQueryConfig = {
-              sqlQuery: dataSource.requestBodyJson || '',
+            // For SqlQuery type, load SQL query and database from requestBodyJson
+            let sqlQuery = '';
+            let database: 'FormBuilder' | 'AkhmanageIt' = 'FormBuilder';
+            
+            if (dataSource.requestBodyJson) {
+              try {
+                // Try to parse as JSON object (new format with database)
+                const parsed = JSON.parse(dataSource.requestBodyJson);
+                if (parsed.query) {
+                  sqlQuery = parsed.query;
+                  // Convert old "Auto" values to "FormBuilder"
+                  database = (parsed.database === 'Auto' || !parsed.database) ? 'FormBuilder' : parsed.database;
+                } else {
+                  // Fallback: treat as plain SQL query string (old format)
+                  sqlQuery = dataSource.requestBodyJson;
+                }
+              } catch {
+                // If parsing fails, treat as plain SQL query string (old format)
+                sqlQuery = dataSource.requestBodyJson;
+              }
+            }
+            
+            // Also check ConfigurationJson if it exists (for backwards compatibility)
+            if ((dataSource as any).configurationJson) {
+              try {
+                const configParsed = JSON.parse((dataSource as any).configurationJson);
+                if (configParsed.database) {
+                  // Convert old "Auto" values to "FormBuilder"
+                  const configDb = String(configParsed.database);
+                  if (configDb === 'Auto') {
+                    database = 'FormBuilder';
+                    console.log('[FieldsList] Converted "Auto" from ConfigurationJson to "FormBuilder"');
+                  } else {
+                    database = configParsed.database as 'FormBuilder' | 'AkhmanageIt';
+                  }
+                }
+              } catch {
+                // Ignore parsing errors
+              }
+            }
+            
+            // Final safety check: ensure database is never "Auto"
+            const finalDb = String(database || 'FormBuilder');
+            if (finalDb === 'Auto') {
+              database = 'FormBuilder';
+              console.log('[FieldsList] Final safety check: Converted "Auto" to "FormBuilder"');
+            }
+            
+            console.log('[FieldsList] Loaded SqlQuery config:', {
+              sqlQuery: sqlQuery.substring(0, 50) + '...',
+              database: database,
               valuePath: dataSource.valuePath || 'Id',
               textPath: dataSource.textPath || 'Name'
+            });
+            
+            // Auto-migration: If requestBodyJson is still in old JSON format, migrate it automatically
+            const isOldJsonFormat = dataSource.requestBodyJson && 
+              dataSource.requestBodyJson.trim().startsWith('{') && 
+              dataSource.requestBodyJson.includes('"query"');
+            
+            if (isOldJsonFormat && dataSource.id) {
+              console.warn('[FieldsList] ⚠️ Detected old JSON format in DataSource. Auto-migrating to new format...');
+              // Auto-update the DataSource to new format (raw SQL) in background
+              this.fieldDataSourceService.updateDataSource(dataSource.id, {
+                sourceType: dataSource.sourceType,
+                apiUrl: dataSource.apiUrl,
+                httpMethod: dataSource.httpMethod,
+                requestBodyJson: sqlQuery.trim(), // Save as raw SQL, not JSON
+                valuePath: dataSource.valuePath || 'Id',
+                textPath: dataSource.textPath || 'Name',
+                isActive: dataSource.isActive !== false,
+                isDeleted: dataSource.isDeleted !== undefined ? dataSource.isDeleted : false
+              }).subscribe({
+                next: () => {
+                  console.log('[FieldsList] ✅ Auto-migration successful: DataSource updated to new format');
+                  // Update the existingDataSource reference to reflect the change
+                  if (this.existingDataSource) {
+                    this.existingDataSource = {
+                      ...this.existingDataSource,
+                      requestBodyJson: sqlQuery.trim()
+                    };
+                  }
+                },
+                error: (error) => {
+                  console.error('[FieldsList] ❌ Auto-migration failed:', error);
+                  // Continue anyway with the parsed values - user can manually update later
+                }
+              });
+            }
+            
+            this.sqlQueryConfig = {
+              sqlQuery: sqlQuery,
+              valuePath: dataSource.valuePath || 'Id',
+              textPath: dataSource.textPath || 'Name',
+              database: database as 'FormBuilder' | 'AkhmanageIt'
             };
+            
+            // Force update after a short delay to ensure UI reflects the change
+            setTimeout(() => {
+              const dbValue = String(this.sqlQueryConfig.database || '');
+              if (dbValue === 'Auto' || !this.sqlQueryConfig.database) {
+                console.warn('[FieldsList] Database was still "Auto" after initialization, forcing to "FormBuilder"');
+                this.sqlQueryConfig.database = 'FormBuilder';
+                this.cdr.detectChanges();
+              }
+            }, 100);
             this.dataSourceConfig = {
               sourceType: dataSource.sourceType,
               apiUrl: null,
@@ -3024,12 +3138,14 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.lookupTableConfig = {
       table: '',
       valueColumn: 'Id',
-      textColumn: 'Name'
+      textColumn: 'Name',
+      database: 'FormBuilder'
     };
     this.sqlQueryConfig = {
       sqlQuery: '',
       valuePath: 'Id',
-      textPath: 'Name'
+      textPath: 'Name',
+      database: 'FormBuilder'
     };
     this.previewOptions = [];
     this.availableLookupTables = [];
@@ -3072,6 +3188,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       }
     } else if (this.dataSourceType === 'LookupTable') {
       // Load lookup tables when LookupTable is selected
+      if (!this.lookupTableConfig.database) {
+        this.lookupTableConfig.database = 'FormBuilder';
+      }
       this.loadLookupTables();
       this.dataSourceConfig.httpMethod = null;
       this.dataSourceConfig.requestBodyJson = null;
@@ -3080,7 +3199,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.lookupTableConfig = {
           table: '',
           valueColumn: 'Id',
-          textColumn: 'Name'
+          textColumn: 'Name',
+          database: this.lookupTableConfig.database || 'FormBuilder'
         };
       }
       this.dataSourceConfig.valuePath = this.lookupTableConfig.valueColumn;
@@ -3099,13 +3219,24 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Clear static options when using DataSource
       this.clearFieldOptions();
     } else if (this.dataSourceType === 'SqlQuery') {
-      // Set default SQL Query config
+      // Set default SQL Query config - preserve existing database if set
       if (!this.sqlQueryConfig.sqlQuery) {
+        const existingDatabase = this.sqlQueryConfig.database || 'FormBuilder';
+        // Ensure database is valid (handle old "Auto" values from database)
+        const dbValue = String(existingDatabase);
+        const safeDatabase = (dbValue === 'Auto' || !existingDatabase) ? 'FormBuilder' : existingDatabase;
         this.sqlQueryConfig = {
           sqlQuery: '',
           valuePath: 'Id',
-          textPath: 'Name'
+          textPath: 'Name',
+          database: safeDatabase as 'FormBuilder' | 'AkhmanageIt'
         };
+      } else {
+        // If SQL query exists, ensure database is valid (handle old "Auto" values)
+        const dbValue = String(this.sqlQueryConfig.database || '');
+        if (dbValue === 'Auto' || !this.sqlQueryConfig.database) {
+          this.sqlQueryConfig.database = 'FormBuilder';
+        }
       }
       this.dataSourceConfig.httpMethod = null;
       this.dataSourceConfig.apiUrl = null;
@@ -3160,10 +3291,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    console.log(`[FieldsList] Loading columns for table: "${tableName}"`);
+    console.log(`[FieldsList] Loading columns for table: "${tableName}" from database: "${this.lookupTableConfig.database}"`);
 
     // First try the dedicated columns endpoint
-    this.fieldDataSourceService.getTableColumns(tableName).subscribe({
+    const database = this.lookupTableConfig.database || 'FormBuilder';
+    this.fieldDataSourceService.getTableColumns(tableName, database).subscribe({
       next: (columns) => {
         if (columns && columns.length > 0) {
           this.availableColumns = columns.sort();
@@ -3302,17 +3434,95 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Set default valuePath and textPath if not set
-    if (!this.sqlQueryConfig.valuePath || !this.sqlQueryConfig.valuePath.trim()) {
-      this.sqlQueryConfig.valuePath = 'Id';
-    }
-    if (!this.sqlQueryConfig.textPath || !this.sqlQueryConfig.textPath.trim()) {
-      this.sqlQueryConfig.textPath = 'Name';
+    // Try to extract column names from SQL query
+    const sqlQuery = this.sqlQueryConfig.sqlQuery.trim();
+    // Improved regex: match everything between SELECT and FROM (case-insensitive, handles whitespace)
+    // Use word boundary to ensure we match the word "FROM" not just the letters F-R-O-M
+    const selectMatch = sqlQuery.match(/SELECT\s+(.+?)\s+FROM\s+/i);
+    if (selectMatch) {
+      const columnString = selectMatch[1].trim();
+      // Split by comma and handle potential AS aliases
+      const columns = columnString.split(',').map(col => {
+        // Remove AS alias if present (e.g., "Id AS UserId" -> "Id")
+        const aliasMatch = col.match(/\s+AS\s+(\w+)/i);
+        if (aliasMatch) {
+          return aliasMatch[1].trim();
+        }
+        return col.trim();
+      });
+      
+      // Remove table aliases (e.g., "t.Id" -> "Id")
+      const cleanColumns = columns.map(col => {
+        const parts = col.split('.');
+        // Take the last part (column name) and remove any whitespace
+        return parts[parts.length - 1].trim();
+      }).filter(col => col.length > 0); // Remove empty strings
+      
+      console.log('[FieldsList] Extracted columns from SQL:', cleanColumns);
+      
+      // Set valuePath and textPath from query if not already set
+      if (cleanColumns.length > 0 && (!this.sqlQueryConfig.valuePath || !this.sqlQueryConfig.valuePath.trim())) {
+        // Try to find id-like column (case-insensitive)
+        const idColumn = cleanColumns.find(col => 
+          /^id$/i.test(col) || col.toLowerCase().includes('id')
+        ) || cleanColumns[0];
+        this.sqlQueryConfig.valuePath = idColumn;
+        console.log('[FieldsList] Auto-set valuePath to:', idColumn);
+      }
+      
+      // Update textPath: auto-set if empty, or if current value doesn't match any extracted column
+      const currentTextPath = this.sqlQueryConfig.textPath?.trim();
+      const textPathExists = currentTextPath && cleanColumns.some(col => 
+        col.toLowerCase() === currentTextPath.toLowerCase()
+      );
+      
+      if (cleanColumns.length > 1 && (!currentTextPath || !textPathExists)) {
+        // Try to find name-like column (case-insensitive) - prioritize exact matches
+        // Also check for email, description, and other common text fields
+        const nameColumn = cleanColumns.find(col => {
+          const lowerCol = col.toLowerCase();
+          return /^name$/i.test(col) || 
+            /^typename$/i.test(col) ||
+            /^text$/i.test(col) ||
+            /^email$/i.test(col) ||
+            /^description$/i.test(col) ||
+            lowerCol.includes('name') || 
+            lowerCol.includes('text') ||
+            lowerCol.includes('label') ||
+            lowerCol.includes('title') ||
+            lowerCol.includes('email') ||
+            lowerCol.includes('desc');
+        }) || cleanColumns[1] || cleanColumns[0];
+        this.sqlQueryConfig.textPath = nameColumn;
+        console.log('[FieldsList] Auto-set textPath to:', nameColumn, textPathExists ? '(corrected from non-existent column)' : '(initial set)');
+      } else if (cleanColumns.length === 1 && (!currentTextPath || !textPathExists)) {
+        // If only one column, use it for both
+        this.sqlQueryConfig.textPath = cleanColumns[0];
+        console.log('[FieldsList] Auto-set textPath to (single column):', cleanColumns[0]);
+      }
+    } else {
+      // Fallback to defaults if can't parse
+      if (!this.sqlQueryConfig.valuePath || !this.sqlQueryConfig.valuePath.trim()) {
+        this.sqlQueryConfig.valuePath = 'Id';
+      }
+      if (!this.sqlQueryConfig.textPath || !this.sqlQueryConfig.textPath.trim()) {
+        this.sqlQueryConfig.textPath = 'Name';
+      }
+      console.log('[FieldsList] Could not parse SQL, using defaults:', {
+        valuePath: this.sqlQueryConfig.valuePath,
+        textPath: this.sqlQueryConfig.textPath
+      });
     }
 
     // Update dataSourceConfig with current values
     this.dataSourceConfig.valuePath = this.sqlQueryConfig.valuePath.trim();
     this.dataSourceConfig.textPath = this.sqlQueryConfig.textPath.trim();
+
+    console.log('[FieldsList] runSqlQuery - Extracted paths:', {
+      valuePath: this.sqlQueryConfig.valuePath,
+      textPath: this.sqlQueryConfig.textPath,
+      sqlQuery: this.sqlQueryConfig.sqlQuery
+    });
 
     // Execute query using previewDataSource
     this.previewDataSource();
@@ -3782,6 +3992,42 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Handle database change for LookupTable - reload tables and reset selection
+   */
+  /**
+   * Handle SQL Query Database change - prevent "Auto" value
+   */
+  onSqlDatabaseChange(value: any): void {
+    const dbValue = String(value || '');
+    if (dbValue === 'Auto' || !value) {
+      console.warn('[FieldsList] Prevented setting database to "Auto", using "FormBuilder" instead');
+      this.sqlQueryConfig.database = 'FormBuilder';
+      this.cdr.detectChanges();
+    } else {
+      this.sqlQueryConfig.database = value as 'FormBuilder' | 'AkhmanageIt';
+    }
+  }
+
+  onLookupDatabaseChange(): void {
+    if (this.dataSourceType !== 'LookupTable') {
+      return;
+    }
+
+    // Reset table and columns when database changes
+    this.lookupTableConfig.table = '';
+    this.availableLookupTables = [];
+    this.availableColumns = [];
+    this.dataSourceConfig.apiUrl = null;
+    this.dataSourceConfig.valuePath = null;
+    this.dataSourceConfig.textPath = null;
+    this.previewOptions = [];
+
+    // Load tables for the selected database
+    this.loadLookupTables();
+    this.cdr.detectChanges();
+  }
+
+  /**
    * Load available lookup tables
    */
   loadLookupTables(): void {
@@ -3789,8 +4035,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.fieldDataSourceService.getAvailableLookupTables().subscribe({
+    const database = this.lookupTableConfig.database || 'FormBuilder';
+    console.log('[FieldsList] Loading lookup tables for database:', database);
+    console.log('[FieldsList] lookupTableConfig.database:', this.lookupTableConfig.database);
+    this.fieldDataSourceService.getAvailableLookupTables(database).subscribe({
       next: (tables) => {
+        console.log('[FieldsList] Tables received from backend:', tables);
+        console.log('[FieldsList] Selected database was:', database);
         // Backend returns string[], simply assign it
         this.availableLookupTables = tables || [];
 
@@ -3927,8 +4178,29 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.previewOptions = [];
 
     // Use the paths from config (now guaranteed to be set)
-    const valuePath = this.dataSourceConfig.valuePath.trim();
-    const textPath = this.dataSourceConfig.textPath.trim();
+    // For LookupTable, use lookupTableConfig columns; for SqlQuery, use sqlQueryConfig paths; for others, use dataSourceConfig paths
+    let valuePath: string;
+    let textPath: string;
+    
+    if (this.dataSourceType === 'LookupTable') {
+      valuePath = (this.lookupTableConfig.valueColumn || this.dataSourceConfig.valuePath || 'Id').trim();
+      textPath = (this.lookupTableConfig.textColumn || this.dataSourceConfig.textPath || 'Name').trim();
+      // Sync with dataSourceConfig for consistency
+      this.dataSourceConfig.valuePath = valuePath;
+      this.dataSourceConfig.textPath = textPath;
+    } else if (this.dataSourceType === 'SqlQuery') {
+      // For SqlQuery, use sqlQueryConfig paths, fallback to dataSourceConfig, then defaults
+      valuePath = (this.sqlQueryConfig.valuePath || this.dataSourceConfig.valuePath || 'Id').trim();
+      textPath = (this.sqlQueryConfig.textPath || this.dataSourceConfig.textPath || 'Name').trim();
+      // Sync with both configs for consistency
+      this.sqlQueryConfig.valuePath = valuePath;
+      this.sqlQueryConfig.textPath = textPath;
+      this.dataSourceConfig.valuePath = valuePath;
+      this.dataSourceConfig.textPath = textPath;
+    } else {
+      valuePath = (this.dataSourceConfig.valuePath || 'id').trim();
+      textPath = (this.dataSourceConfig.textPath || 'name').trim();
+    }
 
     // For LookupTable, use table name directly for preview (backend expects table name, not JSON)
     // For Api, use the URL
@@ -3937,27 +4209,109 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       ? this.lookupTableConfig.table
       : (this.dataSourceType === 'SqlQuery' ? undefined : (this.dataSourceConfig.apiUrl || undefined));
 
-    // For SqlQuery, use SQL query in requestBodyJson
-    const requestBodyJsonForPreview = this.dataSourceType === 'SqlQuery'
-      ? this.sqlQueryConfig.sqlQuery
-      : (this.dataSourceConfig.requestBodyJson || undefined);
+    // For SqlQuery, use SQL query and database in requestBodyJson as JSON object
+    // For LookupTable, include database in requestBodyJson as JSON object
+    let requestBodyJsonForPreview: string | undefined;
+    let configurationJsonForPreview: string | undefined;
+    if (this.dataSourceType === 'SqlQuery') {
+      // Backend expects RequestBodyJson to be the SQL query string directly (not a JSON object)
+      // Based on the API test: RequestBodyJson should be "SELECT Id, email FROM Tbl_User WHERE IsActive = '1'"
+      requestBodyJsonForPreview = this.sqlQueryConfig.sqlQuery.trim();
+      
+      // Also prepare ConfigurationJson for database specification
+      if (this.sqlQueryConfig.database) {
+        // Ensure database name matches backend expectations
+        let dbName = this.sqlQueryConfig.database.trim();
+        // Normalize database name (FormBuilder or AkhmanageIt)
+        if (dbName === 'AKHManageIT' || dbName === 'AKHManageIT Database') {
+          dbName = 'AkhmanageIt';
+        } else if (dbName === 'FormBuilder Database') {
+          dbName = 'FormBuilder';
+        }
+        const sqlQueryPayload: any = {
+          sqlQuery: this.sqlQueryConfig.sqlQuery,
+          valueColumn: valuePath,
+          textColumn: textPath,
+          database: dbName
+        };
+        configurationJsonForPreview = JSON.stringify(sqlQueryPayload);
+        console.log('[FieldsList] Database normalized:', dbName, 'from:', this.sqlQueryConfig.database);
+        console.log('[FieldsList] ConfigurationJson (with database):', configurationJsonForPreview);
+      }
+      console.log('[FieldsList] SqlQuery RequestBodyJson (SQL string):', requestBodyJsonForPreview);
+    } else if (this.dataSourceType === 'LookupTable') {
+      // For LookupTable, include database in requestBodyJson
+      const lookupTablePayload: any = {};
+      if (this.lookupTableConfig.database && this.lookupTableConfig.database.trim()) {
+        // Ensure database name matches backend expectations (AkhmanageIt, not AKHManageIT)
+        const dbName = this.lookupTableConfig.database.trim();
+        lookupTablePayload.database = dbName === 'AKHManageIT' ? 'AkhmanageIt' : dbName;
+      }
+      requestBodyJsonForPreview = Object.keys(lookupTablePayload).length > 0 
+        ? JSON.stringify(lookupTablePayload) 
+        : undefined;
+      console.log('[FieldsList] LookupTable payload:', lookupTablePayload);
+      console.log('[FieldsList] RequestBodyJson for LookupTable:', requestBodyJsonForPreview);
+    } else {
+      requestBodyJsonForPreview = this.dataSourceConfig.requestBodyJson || undefined;
+    }
 
     // Prepare request payload
-    const requestPayload = {
-      fieldId: fieldId,
-      sourceType: this.dataSourceType,
-      apiUrl: apiUrlForPreview,
-      httpMethod: this.dataSourceConfig.httpMethod || 'GET',
-      requestBodyJson: requestBodyJsonForPreview,
-      valuePath: valuePath,
-      textPath: textPath
+    // For SqlQuery, match the exact format that works in API test tool:
+    // { "SourceType": "DataSourceSqlQuery", "RequestBodyJson": "select id, TypeName from FIELD_TYPES", "ValuePath": "Id", "TextPath": "TypeName" }
+    // Note: fieldId is optional for preview (use 0 if not editing an existing field)
+    const requestPayload: any = {
+      SourceType: this.dataSourceType === 'SqlQuery' ? 'DataSourceSqlQuery' : this.dataSourceType, // Backend expects PascalCase
+      ValuePath: valuePath, // Backend expects PascalCase
+      TextPath: textPath    // Backend expects PascalCase
     };
+    
+    // Only include fieldId if it's a valid field ID (not 0 or undefined)
+    // For preview, fieldId can be 0 or omitted
+    if (fieldId && fieldId > 0) {
+      requestPayload.fieldId = fieldId; // Keep camelCase for fieldId (backend may accept both)
+    }
+    
+    // For SqlQuery, RequestBodyJson should be the SQL query string directly
+    // Based on API test: RequestBodyJson = "select id, TypeName from FIELD_TYPES"
+    if (this.dataSourceType === 'SqlQuery') {
+      requestPayload.RequestBodyJson = requestBodyJsonForPreview; // SQL query string (PascalCase)
+      // Include ConfigurationJson only if database is specified (for database selection)
+      if (configurationJsonForPreview) {
+        requestPayload.ConfigurationJson = configurationJsonForPreview; // PascalCase
+      }
+    } else {
+      // For other types, include apiUrl and httpMethod if needed
+      if (apiUrlForPreview) {
+        requestPayload.ApiUrl = apiUrlForPreview; // PascalCase
+      }
+      if (this.dataSourceConfig.httpMethod && this.dataSourceConfig.httpMethod !== 'GET') {
+        requestPayload.HttpMethod = this.dataSourceConfig.httpMethod; // PascalCase
+      }
+      if (requestBodyJsonForPreview) {
+        requestPayload.RequestBodyJson = requestBodyJsonForPreview; // PascalCase
+      }
+    }
 
+    console.log('[FieldsList] ========== PREVIEW REQUEST START ==========');
+    console.log('[FieldsList] Full request payload:', JSON.stringify(requestPayload, null, 2));
     console.log('[FieldsList] Sending API request to preview DataSource:', requestPayload);
-    if (this.dataSourceType === 'LookupTable') {
+    if (this.dataSourceType === 'SqlQuery') {
+      console.log('[FieldsList] SQL Query:', this.sqlQueryConfig.sqlQuery);
+      console.log('[FieldsList] Database:', this.sqlQueryConfig.database || 'FormBuilder');
+      console.log('[FieldsList] Value Path:', valuePath);
+      console.log('[FieldsList] Text Path:', textPath);
+      console.log('[FieldsList] ConfigurationJson:', configurationJsonForPreview || 'Not set');
+      console.log('[FieldsList] RequestBodyJson (SQL string):', requestBodyJsonForPreview);
+      console.log('[FieldsList] RequestBodyJson type:', typeof requestBodyJsonForPreview);
+      console.log('[FieldsList] SourceType:', requestPayload.sourceType);
+      console.log('[FieldsList] Full request object keys:', Object.keys(requestPayload));
+    } else if (this.dataSourceType === 'LookupTable') {
       console.log('[FieldsList] Table:', this.lookupTableConfig.table);
+      console.log('[FieldsList] Database:', this.lookupTableConfig.database);
       console.log('[FieldsList] Value Column:', this.lookupTableConfig.valueColumn);
       console.log('[FieldsList] Text Column:', this.lookupTableConfig.textColumn);
+      console.log('[FieldsList] Request Body JSON:', requestBodyJsonForPreview);
     } else {
       console.log('[FieldsList] API URL:', this.dataSourceConfig.apiUrl);
       console.log('[FieldsList] HTTP Method:', this.dataSourceConfig.httpMethod || 'GET');
@@ -3966,18 +4320,32 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     console.log('[FieldsList] Value Path:', valuePath);
     console.log('[FieldsList] Text Path:', textPath);
     console.log('[FieldsList] Source Type:', this.dataSourceType);
+    console.log('[FieldsList] ========== PREVIEW REQUEST END ==========');
 
     this.fieldDataSourceService.previewDataSource(requestPayload).subscribe({
       next: (options) => {
-        console.log('[FieldsList] API Response received:', options);
+        console.log('[FieldsList] ========== PREVIEW RESPONSE START ==========');
+        console.log('[FieldsList] Raw options received:', options);
+        console.log('[FieldsList] Options type:', typeof options);
+        console.log('[FieldsList] Is array?', Array.isArray(options));
         console.log('[FieldsList] Number of options:', options?.length || 0);
         console.log('[FieldsList] Full response structure:', JSON.stringify(options, null, 2));
         
-        // Show success message with options count for SqlQuery
-        if (this.dataSourceType === 'SqlQuery' && options && options.length > 0) {
+        // Check if options is wrapped in a data property
+        if (options && typeof options === 'object' && !Array.isArray(options) && (options as any).data) {
+          console.log('[FieldsList] Options wrapped in data property, extracting...');
+          options = (options as any).data;
+        }
+        
+        console.log('[FieldsList] Options after extraction:', options);
+        console.log('[FieldsList] Options length after extraction:', options?.length || 0);
+        console.log('[FieldsList] ========== PREVIEW RESPONSE END ==========');
+        
+        // Show success message with options count for SqlQuery and LookupTable
+        if ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'LookupTable') && options && options.length > 0) {
           this.messageService.add({
             severity: 'success',
-            summary: 'Query Executed Successfully',
+            summary: this.dataSourceType === 'SqlQuery' ? 'Query Executed Successfully' : 'Table Data Loaded Successfully',
             detail: `${options.length} ${options.length === 1 ? 'option' : 'options'} found and will be available in the public form`,
             life: 5000
           });
@@ -3985,11 +4353,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
         // Check if response is empty
         if (!options || options.length === 0) {
-          console.warn('[FieldsList] Empty response received. Possible reasons:');
+          console.warn('[FieldsList] ⚠️ Empty response received. Possible reasons:');
           console.warn('1. The API endpoint returned no data');
           console.warn('2. The fieldId does not exist or has no options');
           console.warn('3. The API URL might be incorrect');
           console.warn('4. The backend preview endpoint might need the actual API to be called first');
+          console.warn('5. The table might not exist in the selected database');
+          console.warn('6. The valuePath or textPath might be incorrect');
+          console.warn('[FieldsList] Request payload was:', requestPayload);
+        } else {
+          console.log('[FieldsList] ✅ Response contains', options.length, 'options');
         }
 
         // Process options to ensure text is a string (not JSON object)
@@ -4094,8 +4467,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           );
         });
 
+        console.log('[FieldsList] Processed options:', processedOptions);
+        console.log('[FieldsList] Filtered options:', filteredOptions);
+        console.log('[FieldsList] Setting previewOptions to:', filteredOptions);
+        
         this.previewOptions = filteredOptions;
         this.loadingPreview = false;
+        
+        console.log('[FieldsList] previewOptions after assignment:', this.previewOptions);
+        console.log('[FieldsList] previewOptions.length:', this.previewOptions.length);
+        this.cdr.detectChanges(); // Force change detection
 
         // For LookupTable, if columns are not already loaded, try to load from endpoint
         if (this.dataSourceType === 'LookupTable') {
@@ -4132,11 +4513,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         }
 
         if (this.previewOptions.length === 0) {
-          this.messageService.add({
-            severity: 'warn',
-            summary: 'Preview',
-            detail: 'No options found. Please check your DataSource configuration.'
-          });
+          console.warn('[FieldsList] ⚠️ No options found after processing. Original options count:', options?.length || 0);
+          console.warn('[FieldsList] Processed options count:', processedOptions?.length || 0);
+          console.warn('[FieldsList] Filtered options count:', filteredOptions?.length || 0);
+          
+          // Show warning message
+          if (this.dataSourceType === 'SqlQuery') {
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'No Results',
+              detail: 'SQL query executed but returned no options. Please check your query and column names (case-insensitive).',
+              life: 5000
+            });
+          } else {
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'Preview',
+              detail: 'No options found. Please check your DataSource configuration.'
+            });
+          }
         } else {
           // this.messageService.add({
           //   severity: 'success',
@@ -4148,6 +4543,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.loadingPreview = false;
+        this.previewOptions = []; // Clear options on error
         console.error('[FieldsList] Error previewing DataSource:', error);
         console.error('[FieldsList] Error details:', {
           status: error.status,
@@ -4167,6 +4563,31 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           } else if (error.error.message) {
             errorMessage = error.error.message;
             errorDetail = error.error.detail || error.error.error || '';
+            
+            // Check for SQL-related errors
+            if (error.error.message.includes('Invalid object name') || error.error.message.includes('SQL query failed')) {
+              // Extract table name from error if possible
+              const tableMatch = error.error.message.match(/Invalid object name '([^']+)'/);
+              if (tableMatch) {
+                const tableName = tableMatch[1];
+                errorDetail = `Table '${tableName}' not found. `;
+                if (this.dataSourceType === 'SqlQuery') {
+                  errorDetail += `\n\nPossible solutions:\n`;
+                  errorDetail += `1. Verify table name is correct (case-insensitive)\n`;
+                  errorDetail += `2. Check if table exists in the selected database\n`;
+                  errorDetail += `3. Verify the table exists in the selected database\n`;
+                  errorDetail += `4. Verify column names in SELECT statement (case-insensitive)\n`;
+                  errorDetail += `\nCurrent SQL Query: ${this.sqlQueryConfig.sqlQuery}\n`;
+                  errorDetail += `Selected Database: ${this.sqlQueryConfig.database || 'FormBuilder'}`;
+                }
+              } else {
+                errorDetail = 'SQL query failed. Please check:\n1. Table name is correct\n2. Column names are correct (case-insensitive)\n3. Database selection is correct';
+                if (this.dataSourceType === 'SqlQuery') {
+                  errorDetail += `\n\nCurrent SQL Query: ${this.sqlQueryConfig.sqlQuery}`;
+                  errorDetail += `\nSelected Database: ${this.sqlQueryConfig.database || 'Auto'}`;
+                }
+              }
+            }
           } else if (error.error.error) {
             errorMessage = error.error.error;
           }
@@ -4216,7 +4637,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               `• Wrapped Object: {"data": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n` +
               `• Results Object: {"results": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n\n` +
               `Please verify:\n` +
-              `1. The property names in your API response match the paths (case-sensitive)\n` +
+              `1. The property names in your API response match the paths\n` +
               `2. Update valuePath/textPath if your API uses different property names\n` +
               `3. For nested properties, use dot notation (e.g., "user.id", "data.items[].name")`;
           } else if (errorMessage.includes('invalid request URI') || errorMessage.includes('absolute URI') || errorMessage.includes('BaseAddress')) {
@@ -4255,7 +4676,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               `• Wrapped: {"data": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n` +
               `• Results: {"results": [{"${valuePath}": 1, "${textPath}": "Item 1"}, ...]}\n\n` +
               `Tips:\n` +
-              `• Property names are case-sensitive (e.g., "Id" vs "id", "Name" vs "name")\n` +
               `• Update the paths to match your actual API response structure\n` +
               `• For nested properties, use dot notation like "user.profile.name"\n` +
               `• For arrays, use bracket notation like "results[].id"`;
@@ -4372,13 +4792,28 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     return new Promise((resolve, reject) => {
       if (this.dataSourceType === 'Static') {
         // If Static, delete existing DataSource and use static options
-        if (this.existingDataSource?.id) {
-          this.fieldDataSourceService.deleteDataSource(this.existingDataSource.id).subscribe({
+        const existingId = this.existingDataSource?.id;
+        if (existingId) {
+          // Try soft delete first (more reliable), fallback to hard delete
+          this.fieldDataSourceService.softDeleteDataSource(existingId).subscribe({
             next: () => {
+              console.log('[FieldsList] DataSource soft deleted successfully');
               resolve();
             },
-            error: () => {
-              reject();
+            error: (error) => {
+              // If soft delete fails, try hard delete
+              console.warn('[FieldsList] Soft delete failed, trying hard delete:', error);
+              this.fieldDataSourceService.deleteDataSource(existingId).subscribe({
+                next: () => {
+                  console.log('[FieldsList] DataSource hard deleted successfully');
+                  resolve();
+                },
+                error: (deleteError) => {
+                  // Even if delete fails, continue (DataSource might already be deleted or not exist)
+                  console.warn('[FieldsList] Both soft and hard delete failed, continuing anyway:', deleteError);
+                  resolve(); // Continue anyway - the DataSource might not exist or already deleted
+                }
+              });
             }
           });
         } else {
@@ -4412,10 +4847,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         textPathValue = this.dataSourceConfig.textPath || null;
       }
 
-      // For SqlQuery, store SQL query in requestBodyJson
-      const requestBodyJsonValue = this.dataSourceType === 'SqlQuery' 
-        ? this.sqlQueryConfig.sqlQuery || null
-        : this.dataSourceConfig.requestBodyJson || null;
+      // For SqlQuery, store the raw SQL query in requestBodyJson
+      let requestBodyJsonValue: string | null = null;
+      if (this.dataSourceType === 'SqlQuery') {
+        // Backend currently executes requestBodyJson directly as SQL,
+        // so we must save the plain SQL string without JSON wrapping.
+        requestBodyJsonValue = (this.sqlQueryConfig.sqlQuery || '').trim();
+        console.log('[FieldsList] Saving raw SqlQuery (no JSON wrapper) for execution:', {
+          length: requestBodyJsonValue.length
+        });
+      } else {
+        requestBodyJsonValue = this.dataSourceConfig.requestBodyJson || null;
+      }
 
       const dataSourceDto: CreateFieldDataSourceDto = {
         fieldId: fieldId,
@@ -4428,14 +4871,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         isActive: this.dataSourceConfig.isActive !== false
       };
 
-      if (this.existingDataSource?.id) {
+      const existingId = this.existingDataSource?.id;
+      if (existingId && this.existingDataSource) {
+        const existingDataSource = this.existingDataSource; // Store reference for type narrowing
         // Check if sourceType is changing - if so, delete old and create new
-        if (this.existingDataSource.sourceType !== this.dataSourceType) {
-          console.log('[FieldsList] SourceType changing from', this.existingDataSource.sourceType, 'to', this.dataSourceType, '- deleting old and creating new');
-          // Delete old DataSource first
-          this.fieldDataSourceService.deleteDataSource(this.existingDataSource.id).subscribe({
+        if (existingDataSource.sourceType !== this.dataSourceType) {
+          console.log('[FieldsList] SourceType changing from', existingDataSource.sourceType, 'to', this.dataSourceType, '- deleting old and creating new');
+          // Try soft delete first (more reliable), fallback to hard delete
+          this.fieldDataSourceService.softDeleteDataSource(existingId).subscribe({
             next: () => {
-              console.log('[FieldsList] Old DataSource deleted, creating new one');
+              console.log('[FieldsList] Old DataSource soft deleted, creating new one');
               // Then create new DataSource
               this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
                 next: (createdDataSource) => {
@@ -4453,19 +4898,61 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 }
               });
             },
-            error: (error) => {
-              console.error('[FieldsList] Error deleting old DataSource:', error);
-              this.messageService.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to delete old DataSource'
+            error: (softDeleteError) => {
+              // If soft delete fails, try hard delete
+              console.warn('[FieldsList] Soft delete failed, trying hard delete:', softDeleteError);
+              this.fieldDataSourceService.deleteDataSource(existingId).subscribe({
+                next: () => {
+                  console.log('[FieldsList] Old DataSource hard deleted, creating new one');
+                  // Then create new DataSource
+                  this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
+                    next: (createdDataSource) => {
+                      this.existingDataSource = createdDataSource;
+                      resolve();
+                    },
+                    error: (error) => {
+                      console.error('[FieldsList] Error creating new DataSource:', error);
+                      this.messageService.add({
+                        severity: 'error',
+                        summary: 'Error',
+                        detail: 'Failed to create new DataSource'
+                      });
+                      reject();
+                    }
+                  });
+                },
+                error: (hardDeleteError) => {
+                  // Even if delete fails, try to create new one anyway (old might already be deleted)
+                  console.warn('[FieldsList] Both soft and hard delete failed, trying to create new DataSource anyway:', hardDeleteError);
+                  this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
+                    next: (createdDataSource) => {
+                      this.existingDataSource = createdDataSource;
+                      console.log('[FieldsList] New DataSource created despite delete failure');
+                      resolve();
+                    },
+                    error: (createError) => {
+                      console.error('[FieldsList] Error creating new DataSource after delete failure:', createError);
+                      this.messageService.add({
+                        severity: 'error',
+                        summary: 'Error',
+                        detail: 'Failed to create new DataSource. The old DataSource may still exist.'
+                      });
+                      reject();
+                    }
+                  });
+                }
               });
-              reject();
             }
           });
         } else {
           // Update existing DataSource (same sourceType)
-          this.fieldDataSourceService.updateDataSource(this.existingDataSource.id, {
+          if (!existingId || !this.existingDataSource) {
+            console.error('[FieldsList] Cannot update DataSource: ID or DataSource is missing');
+            reject();
+            return;
+          }
+          const existingDataSource = this.existingDataSource; // Store reference for type narrowing
+          this.fieldDataSourceService.updateDataSource(existingId, {
             sourceType: dataSourceDto.sourceType,
             apiUrl: dataSourceDto.apiUrl,
             httpMethod: dataSourceDto.httpMethod,
@@ -4473,7 +4960,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             valuePath: dataSourceDto.valuePath,
             textPath: dataSourceDto.textPath,
             isActive: dataSourceDto.isActive!,
-            isDeleted: this.existingDataSource.isDeleted !== undefined ? this.existingDataSource.isDeleted : false
+            isDeleted: existingDataSource.isDeleted !== undefined ? existingDataSource.isDeleted : false
           }).subscribe({
             next: () => {
               resolve();

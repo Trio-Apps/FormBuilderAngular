@@ -403,7 +403,8 @@ export class FormViewComponent implements OnInit {
                     const hasDataSource = dataSource && dataSource.isActive;
                     const hasExternalDataSource = dataSource && 
                                                  dataSource.isActive && 
-                                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || dataSource.sourceType === 'SqlQuery');
+                                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || 
+                                                  dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery');
                     // Only warn if field has NO DataSource at all (neither static nor external)
                     if (!hasDataSource) {
                       console.warn(`[FormView] WARNING: Field ${field.id} (${field.fieldCode || 'no-code'}) has NO static options and NO DataSource!`);
@@ -411,6 +412,16 @@ export class FormViewComponent implements OnInit {
                     // If field has DataSource (even Static), options will be loaded from DataSource, so don't warn
                   }
 
+                  // Log DataSource info for debugging
+                  if (field.fieldDataSource) {
+                    console.log(`[FormView] Field ${field.id} (${field.fieldCode || 'no-code'}) has DataSource:`, {
+                      sourceType: field.fieldDataSource.sourceType,
+                      isActive: field.fieldDataSource.isActive
+                    });
+                  } else {
+                    console.log(`[FormView] Field ${field.id} (${field.fieldCode || 'no-code'}) has NO DataSource in API response`);
+                  }
+                  
                   return {
                     ...field,
                     fieldOptions: filteredOptions
@@ -447,9 +458,29 @@ export class FormViewComponent implements OnInit {
               const hasOptionsFromFieldType = ft?.hasOptions === true;
               const isOptionsField = ['select', 'radio', 'checkbox'].includes(fieldType) || hasOptionsFromFieldType;
               
+              console.log(`[FormView] Field ${field.id} (${field.fieldCode || 'no-code'}):`, {
+                fieldType: fieldType,
+                fieldTypeId: field.fieldTypeId,
+                fieldTypeName: field.fieldTypeName,
+                ftTypeName: ft?.typeName,
+                ftHasOptions: ft?.hasOptions,
+                hasOptionsFromFieldType: hasOptionsFromFieldType,
+                isOptionsField: isOptionsField,
+                hasDataSource: !!field.fieldDataSource,
+                dataSourceType: field.fieldDataSource?.sourceType,
+                dataSourceIsActive: field.fieldDataSource?.isActive
+              });
+              
               if (isOptionsField && field.id) {
                 // Load options from DataSource if field has DataSource configured
+                console.log(`[FormView] ✅ Will load options for field ${field.id} (${field.fieldCode || 'no-code'})`);
                 this.loadFieldOptionsFromDataSource(field);
+              } else {
+                console.log(`[FormView] ⚠️ Skipping options load for field ${field.id} (${field.fieldCode || 'no-code'}):`, {
+                  reason: !isOptionsField ? 'Not an options field type' : 'No field ID',
+                  fieldType: fieldType,
+                  hasOptionsFromFieldType: hasOptionsFromFieldType
+                });
               }
             });
           });
@@ -693,26 +724,59 @@ export class FormViewComponent implements OnInit {
     // Check if field has a DataSource configuration
     let dataSource = field.fieldDataSource;
     
+    console.log(`[FormView] Loading options for field ${field.id} (${field.fieldCode || 'no-code'})`, {
+      hasDataSource: !!dataSource,
+      sourceType: dataSource?.sourceType,
+      isActive: dataSource?.isActive,
+      fieldType: fieldType
+    });
+    
     // If DataSource is not loaded with field, try to load it from API
     if (!dataSource && field.id) {
-      // Try to load field details to get DataSource
-      this.fieldsService.getFieldById(field.id).subscribe({
-        next: (loadedField) => {
-          if (loadedField && loadedField.fieldDataSource) {
+      console.log(`[FormView] ⚠️ DataSource not found in field ${field.id}, loading from API...`);
+      // Try to load DataSource directly from FieldDataSourceService
+      this.fieldDataSourceService.getActiveDataSourcesByFieldId(field.id).subscribe({
+        next: (dataSources) => {
+          console.log(`[FormView] Loaded DataSources for field ${field.id} from API:`, {
+            count: dataSources?.length || 0,
+            dataSources: dataSources
+          });
+          
+          // Use the first active DataSource (should be only one active)
+          const activeDataSource = dataSources && dataSources.length > 0 ? dataSources[0] : null;
+          
+          if (activeDataSource && activeDataSource.isActive) {
             // Update field with loaded DataSource
-            field.fieldDataSource = loadedField.fieldDataSource;
-            dataSource = loadedField.fieldDataSource;
+            field.fieldDataSource = activeDataSource;
+            dataSource = activeDataSource;
+            console.log(`[FormView] ✅ DataSource loaded for field ${field.id}:`, {
+              sourceType: activeDataSource.sourceType,
+              isActive: activeDataSource.isActive,
+              requestBodyJson: activeDataSource.requestBodyJson,
+              valuePath: activeDataSource.valuePath,
+              textPath: activeDataSource.textPath,
+              apiUrl: activeDataSource.apiUrl,
+              httpMethod: activeDataSource.httpMethod,
+              fullDataSource: activeDataSource
+            });
             // Retry loading options with the loaded DataSource
             this.loadFieldOptionsFromDataSource(field, context);
           } else {
             // No DataSource found - use static options from field.fieldOptions
+            console.warn(`[FormView] ⚠️ No active DataSource found for field ${field.id} after API load`);
             this.fieldDataSourceOptions[field.id] = [];
             this.loadingFieldOptions[field.id] = false;
           }
         },
         error: (error) => {
-          // Failed to load field - use static options from field.fieldOptions
-          console.warn(`[FormView] Failed to load DataSource for field ${field.id}:`, error);
+          // Failed to load DataSource - use static options from field.fieldOptions
+          console.error(`[FormView] ❌ Failed to load DataSource for field ${field.id}:`, {
+            error: error,
+            status: error?.status,
+            statusText: error?.statusText,
+            message: error?.message,
+            errorDetails: error?.error
+          });
           this.fieldDataSourceOptions[field.id] = [];
           this.loadingFieldOptions[field.id] = false;
         }
@@ -736,7 +800,29 @@ export class FormViewComponent implements OnInit {
     }
 
     // For Api, LookupTable, or SqlQuery, load options dynamically
-    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || dataSource.sourceType === 'SqlQuery') {
+    // Note: Backend stores SqlQuery as "DataSourceSqlQuery", so check for both
+    const isSqlQuery = dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery';
+    console.log(`[FormView] Checking DataSource type for field ${field.id}:`, {
+      sourceType: dataSource.sourceType,
+      isSqlQuery: isSqlQuery,
+      isApi: dataSource.sourceType === 'Api',
+      isLookupTable: dataSource.sourceType === 'LookupTable',
+      willLoad: dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery
+    });
+    
+    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery) {
+      console.log(`[FormView] ✅ Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`, {
+        sourceType: dataSource.sourceType,
+        requestBodyJson: dataSource.requestBodyJson,
+        valuePath: dataSource.valuePath,
+        textPath: dataSource.textPath,
+        apiUrl: dataSource.apiUrl,
+        httpMethod: dataSource.httpMethod
+      });
+      // Snapshot any DataSource properties needed in async callbacks.
+      // `dataSource` is a mutable variable (`let`) and can be reassigned, so TS can't safely
+      // narrow it inside the subscribe handlers.
+      const dataSourceSourceType = dataSource.sourceType;
       // Set loading state
       this.loadingFieldOptions[field.id] = true;
 
@@ -760,20 +846,42 @@ export class FormViewComponent implements OnInit {
         }
       }, 5000);
       
+      console.log(`[FormView] Calling getFieldOptions for field ${field.id}`, {
+        fieldId: field.id,
+        context: finalContext,
+        sourceType: dataSourceSourceType
+      });
+      
       this.fieldDataSourceService.getFieldOptions(field.id, finalContext).subscribe({
         next: (options: FieldOptionResponse[]) => {
           clearTimeout(dataSourceTimeoutId);
           
+          console.log(`[FormView] ✅ Received options for field ${field.id}:`, {
+            optionsCount: options?.length || 0,
+            sourceType: dataSourceSourceType,
+            firstOption: options?.[0]
+          });
+          
           if (options && options.length > 0) {
             this.fieldDataSourceOptions[field.id] = options;
+            console.log(`[FormView] Set fieldDataSourceOptions[${field.id}] to ${options.length} options`);
           } else {
             // If no options from DataSource, fallback to static options from database
+            console.warn(`[FormView] ⚠️ No options received for field ${field.id}, will use static options`);
             this.fieldDataSourceOptions[field.id] = [];
           }
           this.loadingFieldOptions[field.id] = false;
         },
         error: (error) => {
           clearTimeout(dataSourceTimeoutId);
+          console.error(`[FormView] ❌ Error loading options for field ${field.id}:`, {
+            error: error,
+            status: error?.status,
+            statusText: error?.statusText,
+            message: error?.message,
+            errorDetails: error?.error,
+            url: error?.url
+          });
           // Fallback to static options on error
           this.fieldDataSourceOptions[field.id] = [];
           this.loadingFieldOptions[field.id] = false;

@@ -170,7 +170,10 @@
     "selectTextFieldHint": "Select text field from available properties",
     "selectTableFirstHint": "Select a table above to load available columns automatically",
     "testApiFirstHint": "Click 'Test API' first to load available properties",
-    "noOptionsFound": "No options found. Click Refresh to load."
+    "noOptionsFound": "No options found. Click Refresh to load.",
+    "database": "Database",
+    "sqlQuery": "SQL Query",
+    "runQuery": "Run Query"
   },
   "fieldTypes": {
     "title": "Field Types Management",

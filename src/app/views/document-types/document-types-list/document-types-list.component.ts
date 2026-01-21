@@ -23,6 +23,7 @@ import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { AuthService } from '../../../auth/auth.service';
 
 @Component({
   selector: 'app-document-types-list',
@@ -48,6 +49,9 @@ import { catchError, map } from 'rxjs/operators';
   providers: [MessageService, ConfirmationService]
 })
 export class DocumentTypesListComponent implements OnInit, OnDestroy {
+  /** Role-based UI: Admin can manage document types; User can only create submissions */
+  isAdmin = false;
+
   // Data Arrays
   documentTypes: DocumentType[] = [];
   filteredDocumentTypes: DocumentType[] = [];
@@ -105,6 +109,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     private formsService: FormsService,
     private projectsService: ProjectsService,
     private approvalWorkflowService: ApprovalWorkflowService,
+    private authService: AuthService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
@@ -134,6 +139,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    const role = this.authService.role() || 'User';
+    this.isAdmin = ['administration', 'admin'].includes(role.toLowerCase());
+
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
       this.translationService.setLanguage(adminLanguagePreference as 'en' | 'ar');
@@ -148,7 +156,10 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     // Load all forms, document types, and projects
     this.loadForms();
     this.loadDocumentTypes();
-    this.loadProjects();
+    // Projects / workflows are admin-only features (series/workflow management)
+    if (this.isAdmin) {
+      this.loadProjects();
+    }
     
     // No need to get formId from route anymore
   }

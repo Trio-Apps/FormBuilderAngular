@@ -8,8 +8,9 @@ export const routes: Routes = [
   // ===== المسارات العامة =====
   { 
     path: '', 
-    redirectTo: 'document-types', 
-    pathMatch: 'full' 
+    loadComponent: () => import('./views/pages/home-redirect/home-redirect.component')
+      .then(m => m.HomeRedirectComponent),
+    pathMatch: 'full'
   },
   
   // ===== صفحة عرض الفورم العامة (بدون تسجيل دخول) =====

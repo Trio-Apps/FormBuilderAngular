@@ -1,6 +1,6 @@
 <c-container [fluid]="true" class="border-bottom px-4">
-  <!-- Main nav -->
-  <c-header-nav class="d-none d-md-flex">
+  <!-- Main nav (Admin only) -->
+  <c-header-nav class="d-none d-md-flex" *ngIf="(authService.role() || '').toLowerCase() === 'administration' || (authService.role() || '').toLowerCase() === 'admin'">
     <c-nav-item><a cNavLink routerLink="/dashboard" routerLinkActive="active">Dashboard</a></c-nav-item>
     <c-nav-item><a cNavLink routerLink="/users" routerLinkActive="active">Users</a></c-nav-item>
     <c-nav-item><a cNavLink routerLink="/settings" routerLinkActive="active">Settings</a></c-nav-item>

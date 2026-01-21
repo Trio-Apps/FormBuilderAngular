@@ -189,12 +189,16 @@ export class FieldDataSourceService {
    * @returns Observable<void>
    */
   deleteDataSource(id: number): Observable<void> {
-    return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/${id}`).pipe(
+    const url = `${this.baseUrl}/${id}`;
+    console.log(`[FieldDataSourceService] Hard delete URL: ${url}`);
+    return this.http.delete<ApiResponse<void>>(url).pipe(
       map(() => {
         // Success
+        console.log(`[FieldDataSourceService] Hard delete successful for ID: ${id}`);
       }),
       catchError((error) => {
-        console.error(`Error deleting data source ${id}:`, error);
+        console.error(`[FieldDataSourceService] Error deleting data source ${id}:`, error);
+        console.error(`[FieldDataSourceService] Request URL was: ${url}`);
         throw error;
       })
     );
@@ -212,12 +216,16 @@ export class FieldDataSourceService {
    * @returns Observable<void>
    */
   softDeleteDataSource(id: number): Observable<void> {
-    return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/soft-delete/${id}`).pipe(
+    const url = `${this.baseUrl}/soft-delete/${id}`;
+    console.log(`[FieldDataSourceService] Soft delete URL: ${url}`);
+    return this.http.delete<ApiResponse<void>>(url).pipe(
       map(() => {
         // Success
+        console.log(`[FieldDataSourceService] Soft delete successful for ID: ${id}`);
       }),
       catchError((error) => {
-        console.error(`Error soft deleting data source ${id}:`, error);
+        console.error(`[FieldDataSourceService] Error soft deleting data source ${id}:`, error);
+        console.error(`[FieldDataSourceService] Request URL was: ${url}`);
         throw error;
       })
     );
@@ -341,14 +349,19 @@ export class FieldDataSourceService {
    * Authorization: Required (Administration)
    * Endpoint: GET /api/FieldDataSources/lookup-tables/{tableName}/columns
    */
-  getTableColumns(tableName: string): Observable<string[]> {
+  getTableColumns(tableName: string, database?: string): Observable<string[]> {
     if (!tableName || !tableName.trim()) {
       return of([]);
     }
 
     const url = `${this.baseUrl}/lookup-tables/${encodeURIComponent(tableName)}/columns`;
 
-    return this.http.get<ApiResponse<string[]>>(url).pipe(
+    let params = new HttpParams();
+    if (database) {
+      params = params.set('database', database);
+    }
+
+    return this.http.get<ApiResponse<string[]>>(url, { params }).pipe(
       map((response: any) => {
         // Backend returns ApiResponse<string[]> or potentially objects
         const data = response.data || [];
@@ -372,13 +385,27 @@ export class FieldDataSourceService {
    * GET - جلب قائمة الجداول المتاحة للـ LookupTable
    * Authorization: Required (Administration)
    */
-  getAvailableLookupTables(): Observable<string[]> {
-    return this.http.get<ApiResponse<string[]>>(`${this.baseUrl}/lookup-tables`).pipe(
+  getAvailableLookupTables(database?: string): Observable<string[]> {
+    let params = new HttpParams();
+    if (database) {
+      params = params.set('database', database);
+      console.log('[FieldDataSourceService] Requesting lookup tables with database parameter:', database);
+    } else {
+      console.log('[FieldDataSourceService] Requesting lookup tables without database parameter');
+    }
+
+    const url = `${this.baseUrl}/lookup-tables`;
+    console.log('[FieldDataSourceService] Request URL:', url);
+    console.log('[FieldDataSourceService] Request params:', params.toString());
+
+    return this.http.get<ApiResponse<string[]>>(url, { params }).pipe(
       map((response: any) => {
+        console.log('[FieldDataSourceService] Response received:', response);
         // Backend returns ApiResponse<string[]> or potentially ApiResponse<any[]>
         const data = response.data || [];
+        console.log('[FieldDataSourceService] Tables received:', data);
         // Handle case where backend returns objects instead of strings
-        return data.map((item: any) => {
+        const mappedData = data.map((item: any) => {
           if (typeof item === 'string') return item;
           if (typeof item === 'object' && item !== null) {
             // Try common name properties
@@ -386,6 +413,8 @@ export class FieldDataSourceService {
           }
           return String(item);
         });
+        console.log('[FieldDataSourceService] Mapped tables:', mappedData);
+        return mappedData;
       }),
       catchError((error) => {
         console.error('[FieldDataSourceService] Error fetching lookup tables:', error);

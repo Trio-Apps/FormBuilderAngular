@@ -8,14 +8,15 @@
         </button>
         <div class="nav-title-section">
           <h1 class="page-title">Document Types</h1>
-          <p class="page-subtitle">Manage document types and their configurations</p>
+          <p class="page-subtitle" *ngIf="isAdmin">Manage document types and their configurations</p>
+          <p class="page-subtitle" *ngIf="!isAdmin">Choose a document type to create a submission</p>
         </div>
       </div>
       <div class="nav-right">
         <button class="btn-icon" (click)="loadDocumentTypes()" [disabled]="loading.documentTypes" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.documentTypes">
+        <button class="btn-primary" *ngIf="isAdmin" (click)="openAddModal()" [disabled]="loading.documentTypes">
           <i class="pi pi-plus"></i>
           <span>New Document Type</span>
         </button>
@@ -68,8 +69,9 @@
           <i class="pi pi-file"></i>
         </div>
         <h4>No Document Types Configured</h4>
-        <p>There are no document types yet. Click "Add Document Type" to create one.</p>
-        <button pButton label="Add Document Type" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
+        <p *ngIf="isAdmin">There are no document types yet. Click "Add Document Type" to create one.</p>
+        <p *ngIf="!isAdmin">There are no document types available for submission.</p>
+        <button *ngIf="isAdmin" pButton label="Add Document Type" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
       </div>
 
       <p-table *ngIf="!loading.documentTypes && documentTypes.length > 0" 
@@ -115,31 +117,45 @@
             </td>
             <td>
               <div class="action-buttons">
-                <button pButton 
-                  icon="pi pi-list" 
-                  class="p-button-text p-button-sm action-btn" 
-                  (click)="openManageSeriesModal(documentType)"
-                  pTooltip="Manage Series"
-                  tooltipPosition="top"></button>
-                <button pButton 
-                  icon="pi pi-sitemap" 
-                  class="p-button-text p-button-sm action-btn" 
-                  [routerLink]="['/approval-workflows']"
-                  [queryParams]="{ documentTypeId: documentType.id }"
-                  pTooltip="Manage Approval Workflow"
-                  tooltipPosition="top"></button>
-                <button pButton 
-                  icon="pi pi-pencil" 
-                  class="p-button-text p-button-sm action-btn" 
-                  (click)="openEditModal(documentType)"
-                  pTooltip="Edit"
-                  tooltipPosition="top"></button>
-                <button pButton 
-                  icon="pi pi-trash" 
-                  class="p-button-text p-button-sm action-btn action-btn-danger" 
-                  (click)="deleteDocumentType(documentType)"
-                  pTooltip="Delete"
-                  tooltipPosition="top"></button>
+                <!-- User mode: only allow creating a submission -->
+                <button *ngIf="!isAdmin"
+                  pButton
+                  icon="pi pi-plus"
+                  class="p-button-sm p-button-success"
+                  [routerLink]="['/document-types', documentType.id, 'submissions', 'new']"
+                  pTooltip="Create Submission"
+                  tooltipPosition="top">
+                  Create Submission
+                </button>
+
+                <!-- Admin mode: full management -->
+                <ng-container *ngIf="isAdmin">
+                  <button pButton 
+                    icon="pi pi-list" 
+                    class="p-button-text p-button-sm action-btn" 
+                    (click)="openManageSeriesModal(documentType)"
+                    pTooltip="Manage Series"
+                    tooltipPosition="top"></button>
+                  <button pButton 
+                    icon="pi pi-sitemap" 
+                    class="p-button-text p-button-sm action-btn" 
+                    [routerLink]="['/approval-workflows']"
+                    [queryParams]="{ documentTypeId: documentType.id }"
+                    pTooltip="Manage Approval Workflow"
+                    tooltipPosition="top"></button>
+                  <button pButton 
+                    icon="pi pi-pencil" 
+                    class="p-button-text p-button-sm action-btn" 
+                    (click)="openEditModal(documentType)"
+                    pTooltip="Edit"
+                    tooltipPosition="top"></button>
+                  <button pButton 
+                    icon="pi pi-trash" 
+                    class="p-button-text p-button-sm action-btn action-btn-danger" 
+                    (click)="deleteDocumentType(documentType)"
+                    pTooltip="Delete"
+                    tooltipPosition="top"></button>
+                </ng-container>
               </div>
             </td>
           </tr>
@@ -160,7 +176,7 @@
 </div>
 
 <!-- Document Type Modal -->
-<p-dialog
+<p-dialog *ngIf="isAdmin"
   [(visible)]="showModal"
   [modal]="true"
   [header]="(editingDocumentType ? 'Edit Document Type' : 'Create Document Type')"
@@ -295,7 +311,7 @@
 </p-dialog>
 
 <!-- Document Series Management Modal -->
-<p-dialog
+<p-dialog *ngIf="isAdmin"
   [(visible)]="showSeriesModal"
   [header]="'Manage Document Series - ' + (currentDocumentTypeForSeries?.name || '')"
   [modal]="true"
@@ -403,7 +419,7 @@
 </p-dialog>
 
 <!-- Series Form Modal -->
-<p-dialog
+<p-dialog *ngIf="isAdmin"
   [(visible)]="showSeriesFormModal"
   [header]="(editingSeries ? 'Edit' : 'New') + ' Document Series'"
   [modal]="true"
@@ -503,7 +519,7 @@
 </p-dialog>
 
 <!-- Approval Workflow Management Modal -->
-<p-dialog
+<p-dialog *ngIf="isAdmin"
   [(visible)]="showApprovalWorkflowModal"
   [header]="'Manage Approval Workflow - ' + (currentDocumentTypeForWorkflow?.name || '')"
   [modal]="true"

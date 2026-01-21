@@ -2382,8 +2382,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // For Api or LookupTable, load options dynamically
-    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable') {
+    // For Api, LookupTable, or SqlQuery, load options dynamically
+    // Note: Backend stores SqlQuery as "DataSourceSqlQuery", so check for both
+    const isSqlQuery = dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery';
+    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery) {
       console.log(`[FormSubmissionCreate] Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`);
       this.loadingFieldOptions[field.id] = true;
       

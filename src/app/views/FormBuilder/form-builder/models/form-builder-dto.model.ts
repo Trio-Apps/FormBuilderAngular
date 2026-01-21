@@ -312,10 +312,11 @@ export interface GetFieldOptionsRequestDto {
 
 export interface PreviewDataSourceRequestDto {
   fieldId: number;
-  sourceType: string; // 'Api' | 'LookupTable' | 'Custom'
+  sourceType: string; // 'Api' | 'LookupTable' | 'SqlQuery' | 'DataSourceSqlQuery' | 'Custom'
   apiUrl?: string;
   httpMethod?: string;
   requestBodyJson?: string;
+  configurationJson?: string; // For SqlQuery/DataSourceSqlQuery: contains {sqlQuery, valueColumn, textColumn, database}
   valuePath?: string;
   textPath?: string;
 }

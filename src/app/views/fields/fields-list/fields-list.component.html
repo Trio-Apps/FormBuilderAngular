@@ -718,7 +718,7 @@
                       DataSourceSqlQuery
                     </div>
                     <div style="font-size: 12px; color: #6b7280;">
-                      {{ translateLabel('fields.dataSourceSqlQueryDesc') || 'Load options from SQL query (e.g., SELECT Id, Name FROM Table)' }}
+                      Load options from SQL query. Column names are case-insensitive (Email, email, EMAIL all work). Please select the database to execute the query against.
                     </div>
                   </div>
                 </label>
@@ -727,6 +727,20 @@
 
             <!-- Database Table Selection -->
             <div class="form-group" *ngIf="dataSourceType === 'LookupTable'" style="grid-column: 1 / -1;">
+              <!-- Database Selection for LookupTable -->
+              <label class="form-label" style="margin-bottom: 8px;">
+                <i class="pi pi-database" style="margin-right: 6px; color: #667eea;"></i>
+                {{ translateLabel('fields.database') || 'Database' }}
+              </label>
+              <select class="form-control"
+                [(ngModel)]="lookupTableConfig.database"
+                [ngModelOptions]="{standalone: true}"
+                (change)="onLookupDatabaseChange()"
+                style="margin-bottom: 12px; font-size: 14px;">
+                <option value="FormBuilder">FormBuilder Database</option>
+                <option value="AkhmanageIt">AKHManageIT Database</option>
+              </select>
+
               <label class="form-label">
                 <i class="pi pi-table" style="margin-right: 6px; color: #667eea;"></i>
                 {{ translateLabel('fields.selectTable') || 'Select Table' }} <span class="required">*</span>
@@ -739,6 +753,11 @@
               <small class="form-text text-muted" *ngIf="availableLookupTables.length === 0"
                 style="color: #f59e0b; margin-top: 6px; display: block;">
                 <i class="pi pi-exclamation-triangle"></i> No tables available. Loading...
+              </small>
+              <small class="form-text text-muted" *ngIf="availableLookupTables.length > 0"
+                style="color: #059669; margin-top: 6px; display: block;">
+                <i class="pi pi-info-circle"></i>
+                Tables from {{ lookupTableConfig.database === 'AkhmanageIt' ? 'AKHManageIT' : 'FormBuilder' }} database
               </small>
 
               <!-- Available Columns Display (similar to Available Properties for API) -->
@@ -823,6 +842,24 @@
 
             <!-- SQL Query Configuration -->
             <div class="form-group" *ngIf="dataSourceType === 'SqlQuery'" style="grid-column: 1 / -1;">
+              <!-- Database Selection -->
+              <label class="form-label" style="margin-bottom: 8px;">
+                <i class="pi pi-database" style="margin-right: 6px; color: #667eea;"></i>
+                {{ translateLabel('fields.database') || 'Database' }}
+              </label>
+              <select 
+                class="form-control" 
+                [(ngModel)]="sqlQueryConfig.database"
+                [ngModelOptions]="{standalone: true}"
+                (ngModelChange)="onSqlDatabaseChange($event)"
+                style="margin-bottom: 16px; font-size: 14px;">
+                <option value="FormBuilder">FormBuilder Database</option>
+                <option value="AkhmanageIt">AKHManageIT Database</option>
+              </select>
+              <small class="form-text text-muted" style="margin-top: -12px; margin-bottom: 12px; display: block; color: #6b7280; font-size: 12px;">
+                <i class="pi pi-info-circle"></i> Choose the database to execute the query against.
+              </small>
+
               <label class="form-label">
                 <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
                 {{ translateLabel('fields.sqlQuery') || 'SQL Query' }} <span class="required">*</span>
@@ -835,6 +872,9 @@
                 placeholder="Enter SQL query, e.g., SELECT Id, Name FROM Tbl_User WHERE IsActive = 1"
                 style="font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;">
               </textarea>
+              <small class="form-text text-muted" style="margin-top: 6px; display: block; color: #059669;">
+                <i class="pi pi-info-circle"></i> Column names are case-insensitive (Email, email, EMAIL all work).
+              </small>
 
               <!-- Run Query Button for SQL Query -->
               <div style="margin-top: 16px;">
