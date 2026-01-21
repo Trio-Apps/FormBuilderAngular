@@ -860,6 +860,39 @@
                 <i class="pi pi-info-circle"></i> Choose the database to execute the query against.
               </small>
 
+              <!-- Saved Queries Selection -->
+              <div style="margin-bottom: 16px;">
+                <label class="form-label" style="margin-bottom: 8px;">
+                  <i class="pi pi-bookmark" style="margin-right: 6px; color: #667eea;"></i>
+                  Saved Queries (Optional)
+                </label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <select 
+                    class="form-control" 
+                    [(ngModel)]="selectedSavedQueryId"
+                    [ngModelOptions]="{standalone: true}"
+                    (ngModelChange)="onSavedQuerySelect()"
+                    style="flex: 1; font-size: 14px;">
+                    <option [ngValue]="null">Select a saved query...</option>
+                    <option *ngFor="let query of savedQueries" [ngValue]="query.id" [title]="query.query">
+                      {{ query.queryName }}
+                    </option>
+                  </select>
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-success"
+                    (click)="openSaveQueryDialog()"
+                    [disabled]="!sqlQueryConfig.sqlQuery || !sqlQueryConfig.sqlQuery.trim()"
+                    style="padding: 8px 16px; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                    <i class="pi pi-save"></i>
+                    Save Query
+                  </button>
+                </div>
+                <small class="form-text text-muted" style="margin-top: 4px; display: block; color: #6b7280; font-size: 12px;">
+                  <i class="pi pi-info-circle"></i> Select a previously saved query or save the current query for future use.
+                </small>
+              </div>
+
               <label class="form-label">
                 <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
                 {{ translateLabel('fields.sqlQuery') || 'SQL Query' }} <span class="required">*</span>
@@ -1285,6 +1318,72 @@
         </button>
       </div>
     </form>
+  </p-dialog>
+
+  <!-- Save Query Dialog -->
+  <p-dialog
+    [(visible)]="showSaveQueryDialog"
+    [modal]="true"
+    header="Save SQL Query"
+    [style]="{ width: '500px' }"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="cancelSaveQuery()"
+  >
+    <div class="form-group">
+      <label class="form-label">
+        Query Name <span class="required">*</span>
+      </label>
+      <input
+        type="text"
+        class="form-control"
+        [(ngModel)]="queryNameToSave"
+        [ngModelOptions]="{standalone: true}"
+        placeholder="Enter a name for this query"
+        (keyup.enter)="saveCurrentQuery()"
+        maxlength="200"
+        style="margin-bottom: 12px;"
+      />
+      <small class="form-text text-muted" style="font-size: 12px;">
+        <i class="pi pi-info-circle"></i> Choose a descriptive name to easily identify this query later.
+      </small>
+    </div>
+
+    <div class="form-group" style="margin-top: 16px;">
+      <label class="form-label" style="font-weight: 600; margin-bottom: 8px;">Database:</label>
+      <span style="color: #667eea; font-weight: 500;">{{ sqlQueryConfig.database }}</span>
+    </div>
+
+    <div class="form-group" style="margin-top: 12px;">
+      <label class="form-label" style="font-weight: 600; margin-bottom: 8px;">SQL Query:</label>
+      <div style="background: #f9fafb; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; max-height: 150px; overflow-y: auto;">
+        <code style="font-family: 'Courier New', monospace; font-size: 12px; color: #374151; white-space: pre-wrap; word-break: break-all;">
+          {{ sqlQueryConfig.sqlQuery }}
+        </code>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        (click)="cancelSaveQuery()"
+        [disabled]="savingQuery"
+        style="padding: 8px 20px;">
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="saveCurrentQuery()"
+        [disabled]="savingQuery || !queryNameToSave || !queryNameToSave.trim()"
+        style="padding: 8px 20px; background: #10b981;">
+        <i class="pi" [class.pi-spin]="savingQuery" [class.pi-spinner]="savingQuery" [class.pi-save]="!savingQuery"></i>
+        <span style="margin-left: 6px;">
+          {{ savingQuery ? 'Saving...' : 'Save' }}
+        </span>
+      </button>
+    </div>
   </p-dialog>
 </div>
 

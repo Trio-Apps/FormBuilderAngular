@@ -24,6 +24,8 @@ import { navItems } from './_nav';
 import { AuthService } from '../../auth/auth.service';
 import { DocumentTypesService } from '../../views/FormBuilder/services/document-types.service';
 import { DocumentType } from '../../views/FormBuilder/form-builder/models/document-types.model';
+import { UsersService, UserGroupDto } from '../../views/FormBuilder/services/users.service';
+import { TableMenusService, TableMenuDto } from '../../services/table-menus.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -53,16 +55,21 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   private roleSubscription?: Subscription;
   private routerSubscription?: Subscription;
   documentTypes: DocumentType[] = [];
+  userGroups: UserGroupDto[] = [];
+  currentUserGroup: UserGroupDto | null = null;
+  tableMenus: TableMenuDto[] = [];
 
   constructor(
     private authService: AuthService,
     private router: Router,
-    private documentTypesService: DocumentTypesService
+    private documentTypesService: DocumentTypesService,
+    private usersService: UsersService,
+    private tableMenusService: TableMenusService
   ) {}
 
   ngOnInit(): void {
-    // Load document types first, then filter nav items
-    this.loadDocumentTypes();
+    // Load user groups first, then table menus, then filter nav items
+    this.loadUserGroups();
     
     // Redirect to dashboard if Admin and on root/document-types
     this.routerSubscription = this.router.events
@@ -71,30 +78,146 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         const userRole = this.authService.role();
         const currentPath = event.urlAfterRedirects || event.url;
         
-        // Only redirect root path to dashboard, allow /document-types for admin
-        if (userRole === 'Administration' && currentPath === '/') {
+        // Check if user is admin based on user groups
+        const isAdmin = this.isUserAdmin();
+        if (isAdmin && currentPath === '/') {
           this.router.navigate(['/dashboard']);
         }
       });
   }
 
-  loadDocumentTypes(): void {
+  loadUserGroups(): void {
+    this.usersService.getActiveUserGroups().subscribe({
+      next: (groups: UserGroupDto[]) => {
+        this.userGroups = groups || [];
+        // Find current user's group based on role name
+        const userRole = this.authService.role();
+        if (userRole && this.userGroups.length > 0) {
+          this.currentUserGroup = this.userGroups.find(g => 
+            g.name?.toLowerCase() === userRole.toLowerCase() ||
+            g.foreignName?.toLowerCase() === userRole.toLowerCase()
+          ) || null;
+        }
+        // Load table menus after user groups are loaded
+        this.loadTableMenus();
+      },
+      error: (error) => {
+        console.error('Error loading user groups:', error);
+        this.userGroups = [];
+        // Still load table menus even if user groups fail
+        this.loadTableMenus();
+      }
+    });
+  }
+
+  loadTableMenus(): void {
     // Use setTimeout to ensure this runs after component initialization
     setTimeout(() => {
-      this.documentTypesService.getAllDocumentTypes().subscribe({
-        next: (types: DocumentType[]) => {
+      this.tableMenusService.getAllMenus().subscribe({
+        next: (menus: TableMenuDto[]) => {
           try {
-            this.documentTypes = Array.isArray(types) ? types : [];
-            this.filterNavItemsByRole();
+            // Filter active menus and sort by displayOrder
+            const activeMenus = (Array.isArray(menus) ? menus : [])
+              .filter(menu => menu.isActive)
+              .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+
+            // Load sub menus and documents for each menu
+            if (activeMenus.length === 0) {
+              this.tableMenus = [];
+              this.filterNavItemsByRole();
+              return;
+            }
+
+            // Load sub menus and documents for all menus
+            const loadPromises = activeMenus.map(menu => {
+              return new Promise<TableMenuDto>((resolve) => {
+                // Load sub menus for this menu
+                this.tableMenusService.getSubMenusByMenuId(menu.id).subscribe({
+                  next: (subMenus) => {
+                    menu.subMenus = (subMenus || []).filter(sm => sm.isActive);
+                    
+                    // Load documents for each sub menu
+                    if (menu.subMenus && menu.subMenus.length > 0) {
+                      const subMenuPromises = menu.subMenus.map(subMenu => {
+                        return new Promise<void>((subResolve) => {
+                          this.tableMenusService.getMenuDocumentsBySubMenuId(subMenu.id).subscribe({
+                            next: (docs) => {
+                              subMenu.menuDocuments = (docs || []).filter(doc => doc.isActive);
+                              subResolve();
+                            },
+                            error: () => {
+                              subMenu.menuDocuments = [];
+                              subResolve();
+                            }
+                          });
+                        });
+                      });
+
+                      Promise.all(subMenuPromises).then(() => {
+                        // Load menu documents directly (not under sub menu)
+                        this.tableMenusService.getMenuDocumentsByMenuId(menu.id).subscribe({
+                          next: (docs) => {
+                            menu.menuDocuments = (docs || []).filter(doc => 
+                              doc.isActive && (!doc.subMenuId || doc.subMenuId === 0)
+                            );
+                            resolve(menu);
+                          },
+                          error: () => {
+                            menu.menuDocuments = [];
+                            resolve(menu);
+                          }
+                        });
+                      });
+                    } else {
+                      // No sub menus, just load menu documents
+                      this.tableMenusService.getMenuDocumentsByMenuId(menu.id).subscribe({
+                        next: (docs) => {
+                          menu.menuDocuments = (docs || []).filter(doc => 
+                            doc.isActive && (!doc.subMenuId || doc.subMenuId === 0)
+                          );
+                          resolve(menu);
+                        },
+                        error: () => {
+                          menu.menuDocuments = [];
+                          resolve(menu);
+                        }
+                      });
+                    }
+                  },
+                  error: () => {
+                    menu.subMenus = [];
+                    // Load menu documents even if sub menus fail
+                    this.tableMenusService.getMenuDocumentsByMenuId(menu.id).subscribe({
+                      next: (docs) => {
+                        menu.menuDocuments = (docs || []).filter(doc => 
+                          doc.isActive && (!doc.subMenuId || doc.subMenuId === 0)
+                        );
+                        resolve(menu);
+                      },
+                      error: () => {
+                        menu.menuDocuments = [];
+                        resolve(menu);
+                      }
+                    });
+                  }
+                });
+              });
+            });
+
+            Promise.all(loadPromises).then((loadedMenus) => {
+              this.tableMenus = loadedMenus;
+              console.log('[DefaultLayout] Loaded table menus with sub menus and documents:', this.tableMenus);
+              this.filterNavItemsByRole();
+            });
           } catch (error) {
-            console.error('Error processing document types:', error);
-            this.documentTypes = [];
+            console.error('Error processing table menus:', error);
+            this.tableMenus = [];
             this.filterNavItemsByRole();
           }
         },
         error: (error) => {
-          console.error('Error loading document types for navigation:', error);
-          this.documentTypes = [];
+          console.error('Error loading table menus for navigation:', error);
+          this.tableMenus = [];
           this.filterNavItemsByRole();
         }
       });
@@ -110,11 +233,75 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     }
   }
 
-  private filterNavItemsByRole(): void {
-    const userRole = this.authService.role() || 'User';
-    const isAdmin = ['administration', 'admin'].includes(userRole.toLowerCase());
+  private isUserAdmin(): boolean {
+    // Update current user group if not set
+    if (!this.currentUserGroup && this.userGroups.length > 0) {
+      const userRole = this.authService.role();
+      if (userRole) {
+        this.currentUserGroup = this.userGroups.find(g => 
+          g.name?.toLowerCase() === userRole.toLowerCase() ||
+          g.foreignName?.toLowerCase() === userRole.toLowerCase()
+        ) || null;
+      }
+    }
     
-    // If role is "Administration", show all items
+    // Check if current user group is Administration (from UserGroups table in database)
+    if (this.currentUserGroup) {
+      const adminGroupNames = ['administration', 'admin'];
+      return adminGroupNames.includes(this.currentUserGroup.name?.toLowerCase() || '') ||
+             adminGroupNames.includes(this.currentUserGroup.foreignName?.toLowerCase() || '');
+    }
+    
+    // Fallback to role name check if user groups not loaded yet
+    const userRole = this.authService.role() || 'User';
+    return ['administration', 'admin'].includes(userRole.toLowerCase());
+  }
+
+  /**
+   * Check if current user has access based on required roles from UserGroups table
+   * @param requiredRoles Array of role names that are allowed (from attributes.roles)
+   * @returns true if user's group matches any required role
+   */
+  private hasRoleAccess(requiredRoles: string[] | undefined): boolean {
+    if (!requiredRoles || requiredRoles.length === 0) {
+      return true; // No restrictions, allow all
+    }
+
+    // Update current user group if not set
+    if (!this.currentUserGroup && this.userGroups.length > 0) {
+      const userRole = this.authService.role();
+      if (userRole) {
+        this.currentUserGroup = this.userGroups.find(g => 
+          g.name?.toLowerCase() === userRole.toLowerCase() ||
+          g.foreignName?.toLowerCase() === userRole.toLowerCase()
+        ) || null;
+      }
+    }
+
+    // Check if current user group matches any required role (from UserGroups table)
+    if (this.currentUserGroup) {
+      return requiredRoles.some(role => {
+        const roleLower = role.toLowerCase();
+        return roleLower === this.currentUserGroup?.name?.toLowerCase() ||
+               roleLower === this.currentUserGroup?.foreignName?.toLowerCase();
+      });
+    }
+
+    // Fallback: check role name if user groups not loaded yet
+    const userRole = this.authService.role();
+    if (userRole) {
+      return requiredRoles.some(role => 
+        role.toLowerCase() === userRole.toLowerCase()
+      );
+    }
+
+    return false;
+  }
+
+  private filterNavItemsByRole(): void {
+    const isAdmin = this.isUserAdmin();
+    
+    // If role is "Administration" (from UserGroups table), show all items
     if (isAdmin) {
       this.navItems = [...navItems];
       return;
@@ -159,54 +346,22 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
       // Show Documents Setup title
       if (item.title === true && item.name === 'Documents Setup') {
         filteredItems.push(item);
+        // Add dynamic menus from table menus after Documents Setup title
+        this.addTableMenusToSidebar(filteredItems);
         continue;
       }
 
-      // Show Document Types dropdown with dynamic children
+      // Skip Document Types - replaced with table menus
       if (item.name === 'Document Types') {
-        // Start with static children from navItems (only "Manage Document Types" now)
-        const staticChildren: any[] = item.children?.filter((child: any) => 
-          child.name === 'Manage Document Types'
-        ) || [];
-        
-        // Create dynamic children from document types
-        const documentTypeChildren: any[] = this.documentTypes
-          .filter(dt => dt.isActive !== false) // Only show active document types
-          .map(dt => ({
-            name: dt.name || `Document Type #${dt.id}`,
-            url: `/document-types/${dt.id}/submissions`, // Route to submissions page for this document type
-            iconComponent: { name: 'cil-file' },
-            ...(dt.code ? {
-              badge: {
-                color: 'info',
-                text: dt.code
-              }
-            } : {})
-          }));
-
-        // Combine static and dynamic children
-        const allChildren = [...staticChildren, ...documentTypeChildren];
-
-        // If no document types and no static children, show default "Manage Document Types"
-        if (allChildren.length === 0) {
-          allChildren.push({
-            name: 'Manage Document Types',
-            url: '/document-types',
-            iconComponent: { name: 'cil-list' }
-          });
-        }
-
-        // Create Document Types dropdown item with combined children
-        filteredItems.push({
-          ...item,
-          children: allChildren
-        });
-        continue;
+        continue; // Skip Document Types
       }
 
-      // Show Manage Table Menus for admin only
+      // Show Manage Table Menus based on roles from UserGroups table
       if (item.name === 'Manage Table Menus') {
-        if (isAdmin) {
+        // Check if item has attributes with roles requirement
+        const requiredRoles = item.attributes?.['roles'] as string[] | undefined;
+        // Use UserGroups table to check permissions instead of static values
+        if (this.hasRoleAccess(requiredRoles) || isAdmin) {
           filteredItems.push(item);
         }
         continue;
@@ -245,5 +400,128 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     }
 
     this.navItems = filteredItems;
+  }
+
+  /**
+   * Add table menus to sidebar navigation
+   */
+  private addTableMenusToSidebar(filteredItems: INavData[]): void {
+    const userRole = this.authService.role();
+    const userRoleLower = userRole?.toLowerCase() || '';
+
+    console.log('[DefaultLayout] Adding table menus to sidebar:', this.tableMenus.length, 'menus');
+
+    this.tableMenus.forEach(menu => {
+      // Check if user has permission to view this menu
+      const hasPermission = !menu.permissions || menu.permissions.length === 0 || 
+        (this.currentUserGroup && menu.permissions.some(perm => 
+          perm.toLowerCase() === this.currentUserGroup?.name?.toLowerCase() ||
+          perm.toLowerCase() === this.currentUserGroup?.foreignName?.toLowerCase() ||
+          perm.toLowerCase() === userRoleLower
+        ));
+
+      if (hasPermission) {
+        const menuChildren: any[] = [];
+
+        // Add sub menus if available
+        if (menu.subMenus && menu.subMenus.length > 0) {
+          menu.subMenus
+            .filter(subMenu => subMenu.isActive)
+            .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+            .forEach(subMenu => {
+              // Check sub menu permissions
+              const subMenuHasPermission = !subMenu.permissions || subMenu.permissions.length === 0 ||
+                (this.currentUserGroup && subMenu.permissions.some(perm =>
+                  perm.toLowerCase() === this.currentUserGroup?.name?.toLowerCase() ||
+                  perm.toLowerCase() === this.currentUserGroup?.foreignName?.toLowerCase() ||
+                  perm.toLowerCase() === userRoleLower
+                ));
+
+              if (subMenuHasPermission) {
+                const subMenuChildren: any[] = [];
+
+                // Add menu documents under sub menu (documents that belong to this sub menu)
+                if (subMenu.menuDocuments && subMenu.menuDocuments.length > 0) {
+                  subMenu.menuDocuments
+                    .filter(doc => doc.isActive)
+                    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+                    .forEach(doc => {
+                      // Check document permissions
+                      const docHasPermission = !doc.permissions || doc.permissions.length === 0 ||
+                        (this.currentUserGroup && doc.permissions.some(perm =>
+                          perm.toLowerCase() === this.currentUserGroup?.name?.toLowerCase() ||
+                          perm.toLowerCase() === this.currentUserGroup?.foreignName?.toLowerCase() ||
+                          perm.toLowerCase() === userRoleLower
+                        ));
+
+                      if (docHasPermission && doc.documentTypeId) {
+                        subMenuChildren.push({
+                          name: doc.documentTypeName || doc.documentTypeCode || `Document ${doc.documentTypeId}`,
+                          url: `/document-types/${doc.documentTypeId}/submissions`,
+                          iconComponent: { name: 'cil-file' }
+                        });
+                      }
+                    });
+                }
+
+                // Always add sub menu, even if it has no documents
+                // If it has documents, show them as children; otherwise, make it a link
+                if (subMenuChildren.length > 0) {
+                  // Sub menu with documents as children
+                  console.log(`[DefaultLayout] Adding sub menu "${subMenu.name}" with ${subMenuChildren.length} documents`);
+                  menuChildren.push({
+                    name: subMenu.name || subMenu.foreignName || `Sub Menu ${subMenu.id}`,
+                    iconComponent: { name: 'cil-list' },
+                    children: subMenuChildren
+                  });
+                } else {
+                  // Sub menu without documents - make it a link
+                  console.log(`[DefaultLayout] Adding sub menu "${subMenu.name}" without documents`);
+                  menuChildren.push({
+                    name: subMenu.name || subMenu.foreignName || `Sub Menu ${subMenu.id}`,
+                    url: `/dashboard-menus?menuId=${menu.id}&subMenuId=${subMenu.id}`,
+                    iconComponent: { name: 'cil-list' }
+                  });
+                }
+              }
+            });
+        }
+
+        // Add menu documents directly if no sub menus or as fallback
+        if (menu.menuDocuments && menu.menuDocuments.length > 0) {
+          menu.menuDocuments
+            .filter(doc => doc.isActive && (!doc.subMenuId || doc.subMenuId === 0))
+            .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+            .forEach(doc => {
+              const docHasPermission = !doc.permissions || doc.permissions.length === 0 ||
+                (this.currentUserGroup && doc.permissions.some(perm =>
+                  perm.toLowerCase() === this.currentUserGroup?.name?.toLowerCase() ||
+                  perm.toLowerCase() === this.currentUserGroup?.foreignName?.toLowerCase() ||
+                  perm.toLowerCase() === userRoleLower
+                ));
+
+              if (docHasPermission && doc.documentTypeId) {
+                menuChildren.push({
+                  name: doc.documentTypeName || `Document ${doc.documentTypeId}`,
+                  url: `/document-types/${doc.documentTypeId}/submissions`,
+                  iconComponent: { name: 'cil-file' }
+                });
+              }
+            });
+        }
+
+        // Add menu to sidebar
+        const menuItem: INavData = {
+          name: menu.name || menu.foreignName || `Menu ${menu.id}`,
+          iconComponent: { name: menu.icon || 'cil-folder' },
+          ...(menuChildren.length > 0 ? { children: menuChildren } : {
+            url: `/dashboard-menus?menuId=${menu.id}`
+          })
+        };
+
+        console.log(`[DefaultLayout] Adding menu "${menu.name}" with ${menuChildren.length} children to sidebar`);
+        filteredItems.push(menuItem);
+      }
+    });
   }
 }

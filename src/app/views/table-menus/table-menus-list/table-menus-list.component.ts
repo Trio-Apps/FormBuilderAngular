@@ -4,6 +4,7 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
 import { TableMenusService, TableMenuDto, CreateTableMenuDto, UpdateTableMenuDto, TableSubMenuDto, CreateTableSubMenuDto, UpdateTableSubMenuDto, TableMenuDocumentDto, CreateTableMenuDocumentDto, UpdateTableMenuDocumentDto } from '../../../services/table-menus.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { DocumentType } from '../../FormBuilder/form-builder/models/document-types.model';
+import { UsersService, UserGroupDto } from '../../FormBuilder/services/users.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -90,21 +91,15 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   rows = 10;
   totalRecords = 0;
 
-  // Available permissions (you can load these from a service)
-  availablePermissions: string[] = [
-    'Admin',
-    'Sales Manager',
-    'Sales Representative',
-    'Accountant',
-    'HR Manager',
-    'User'
-  ];
+  // Available permissions loaded from UserGroups table in database
+  availablePermissions: string[] = [];
 
   private subscriptions = new Subscription();
 
   constructor(
     private tableMenusService: TableMenusService,
     private documentTypesService: DocumentTypesService,
+    private usersService: UsersService,
     private fb: FormBuilder,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
@@ -115,8 +110,33 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.loadUserGroups(); // Load permissions from UserGroups table first
     this.loadMenus();
     this.loadDocumentTypes();
+  }
+
+  /**
+   * Load available permissions from UserGroups table in database
+   */
+  loadUserGroups(): void {
+    this.usersService.getActiveUserGroups().subscribe({
+      next: (groups: UserGroupDto[]) => {
+        // Extract permission names from UserGroups (use name or foreignName)
+        this.availablePermissions = groups
+          .filter(g => g.isActive) // Only active groups
+          .map(g => g.name) // Use name field from UserGroups table
+          .filter((name): name is string => !!name); // Remove any null/undefined values
+        
+        console.log('[TableMenusList] Loaded permissions from UserGroups:', this.availablePermissions);
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Error loading user groups for permissions:', error);
+        // Fallback to empty array if loading fails
+        this.availablePermissions = [];
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   ngOnDestroy(): void {

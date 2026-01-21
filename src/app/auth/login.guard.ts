@@ -9,8 +9,8 @@ export const loginGuard: CanActivateFn = (route, state) => {
   
   if (authService.isAuthenticated()) {
     // إذا كان مسجلاً، امنعه من الوصول إلى Login
-    // Redirect all users to dashboard-menus
-    return router.createUrlTree(['/dashboard-menus']);
+    // Redirect authenticated users to Forms
+    return router.createUrlTree(['/form-builder/forms']);
   }
   
   // إذا لم يكن مسجلاً، اسمح له بالوصول

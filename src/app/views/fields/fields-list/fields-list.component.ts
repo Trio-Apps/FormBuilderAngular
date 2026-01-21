@@ -28,6 +28,8 @@ import { ValidationService } from '../../angular-validation/services/validation.
 import { FormSubmissionService } from '../../angular-form-submission/services/form-submission.service';
 import { ValidationErrorDisplayComponent } from '../../angular-validation/components/validation-error-display.component';
 import { ValidationErrorCollection } from '../../angular-validation/models/validation-error.model';
+import { UserQueriesService } from '../../FormBuilder/services/user-queries.service';
+import { UserQueryDto, CreateUserQueryDto } from '../../FormBuilder/form-builder/models/user-query-dto.model';
 
 @Component({
   selector: 'app-fields-list',
@@ -198,6 +200,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   availableProperties: string[] = []; // Available properties from API response
   hasSuggestedPaths: boolean = false; // Flag to indicate if suggested paths are available
 
+  // Saved SQL Queries
+  savedQueries: UserQueryDto[] = [];
+  selectedSavedQueryId: number | null = null;
+  savingQuery: boolean = false;
+  queryNameToSave: string = '';
+  showSaveQueryDialog: boolean = false;
+
   // Expose Array, Object, and Math to template
   Array = Array;
   Object = Object;
@@ -222,7 +231,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     private confirmationService: ConfirmationService,
     public translationService: TranslationService,
     private validationService: ValidationService,
-    private formSubmissionService: FormSubmissionService
+    private formSubmissionService: FormSubmissionService,
+    private userQueriesService: UserQueriesService
   ) {
     // Initialize the form
     this.fieldForm = this.fb.group({
@@ -3245,6 +3255,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.previewOptions = [];
       // Clear static options when using DataSource
       this.clearFieldOptions();
+      
+      // Load saved queries for the current database
+      this.loadSavedQueries();
     }
 
     this.cdr.detectChanges();
@@ -3534,6 +3547,205 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   previewSqlQuery(): void {
     // Same functionality as runSqlQuery
     this.runSqlQuery();
+  }
+
+  /**
+   * Load saved SQL queries for the current database
+   */
+  loadSavedQueries(): void {
+    if (!this.sqlQueryConfig.database) {
+      this.savedQueries = [];
+      return;
+    }
+
+    this.userQueriesService.getUserQueriesByDatabase(this.sqlQueryConfig.database).subscribe({
+      next: (queries) => {
+        // Ensure queries is an array
+        if (!Array.isArray(queries)) {
+          console.warn('[FieldsList] Response is not an array:', queries);
+          this.savedQueries = [];
+          return;
+        }
+        
+        // Filter only active queries
+        this.savedQueries = queries.filter(q => q && q.isActive);
+        console.log('[FieldsList] Loaded saved queries:', this.savedQueries.length);
+        
+        if (this.savedQueries.length > 0) {
+          console.log('[FieldsList] Saved queries details:', this.savedQueries.map(q => ({
+            id: q.id,
+            queryName: q.queryName,
+            databaseName: q.databaseName,
+            query: q.query ? q.query.substring(0, 50) + '...' : 'N/A'
+          })));
+        }
+      },
+      error: (error) => {
+        console.error('[FieldsList] Error loading saved queries:', error);
+        this.savedQueries = [];
+      }
+    });
+  }
+
+  /**
+   * Load selected saved query into SQL input
+   */
+  onSavedQuerySelect(): void {
+    // Convert to number if it's a string (from HTML select)
+    const queryId = this.selectedSavedQueryId ? Number(this.selectedSavedQueryId) : null;
+    
+    if (!queryId) {
+      // If no query selected, clear the textarea
+      this.sqlQueryConfig.sqlQuery = '';
+      this.selectedSavedQueryId = null;
+      return;
+    }
+
+    console.log('[FieldsList] Looking for query with ID:', queryId);
+    console.log('[FieldsList] Available queries:', this.savedQueries.map(q => ({ id: q.id, name: q.queryName })));
+
+    // Find query by ID (compare as numbers)
+    const selectedQuery = this.savedQueries.find(q => Number(q.id) === queryId);
+    
+    if (selectedQuery) {
+      console.log('[FieldsList] Loading saved query:', {
+        id: selectedQuery.id,
+        queryName: selectedQuery.queryName,
+        query: selectedQuery.query,
+        database: selectedQuery.databaseName
+      });
+      
+      // Set the SQL query in textarea
+      this.sqlQueryConfig.sqlQuery = selectedQuery.query || '';
+      
+      // Set the database
+      this.sqlQueryConfig.database = selectedQuery.databaseName as 'FormBuilder' | 'AkhmanageIt';
+      
+      // Force change detection to update the textarea
+      this.cdr.detectChanges();
+      
+      // Show success message
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Query Loaded',
+        detail: `Query "${selectedQuery.queryName}" loaded successfully`,
+        life: 3000
+      });
+      
+      // Note: We don't auto-run the query - user can click "Run Query" button manually
+      // If you want to auto-run, uncomment the line below:
+      // this.runSqlQuery();
+    } else {
+      console.warn('[FieldsList] Selected query not found:', {
+        requestedId: queryId,
+        requestedIdType: typeof queryId,
+        availableIds: this.savedQueries.map(q => ({ id: q.id, idType: typeof q.id, name: q.queryName })),
+        savedQueriesCount: this.savedQueries.length
+      });
+      
+      // Reset selection if query not found
+      this.selectedSavedQueryId = null;
+      this.cdr.detectChanges();
+      
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Query Not Found',
+        detail: 'Selected query could not be loaded. Please select again.',
+        life: 3000
+      });
+    }
+  }
+
+  /**
+   * Open dialog to save current query
+   */
+  openSaveQueryDialog(): void {
+    if (!this.sqlQueryConfig.sqlQuery || !this.sqlQueryConfig.sqlQuery.trim()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please enter SQL Query before saving'
+      });
+      return;
+    }
+
+    this.queryNameToSave = '';
+    this.showSaveQueryDialog = true;
+  }
+
+  /**
+   * Save current SQL query
+   */
+  saveCurrentQuery(): void {
+    if (!this.queryNameToSave || !this.queryNameToSave.trim()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please enter a query name'
+      });
+      return;
+    }
+
+    if (!this.sqlQueryConfig.sqlQuery || !this.sqlQueryConfig.sqlQuery.trim()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please enter SQL Query before saving'
+      });
+      return;
+    }
+
+    if (!this.sqlQueryConfig.database) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please select a database'
+      });
+      return;
+    }
+
+    this.savingQuery = true;
+
+    const createDto: CreateUserQueryDto = {
+      queryName: this.queryNameToSave.trim(),
+      databaseName: this.sqlQueryConfig.database,
+      query: this.sqlQueryConfig.sqlQuery.trim()
+    };
+
+    this.userQueriesService.createUserQuery(createDto).subscribe({
+      next: (savedQuery) => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Query Saved',
+          detail: `Query "${savedQuery.queryName}" saved successfully`
+        });
+        
+        // Reload saved queries
+        this.loadSavedQueries();
+        
+        // Close dialog
+        this.showSaveQueryDialog = false;
+        this.queryNameToSave = '';
+        this.savingQuery = false;
+      },
+      error: (error) => {
+        console.error('[FieldsList] Error saving query:', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: error.error?.message || 'Failed to save query'
+        });
+        this.savingQuery = false;
+      }
+    });
+  }
+
+  /**
+   * Cancel saving query
+   */
+  cancelSaveQuery(): void {
+    this.showSaveQueryDialog = false;
+    this.queryNameToSave = '';
   }
 
   /**
@@ -4003,8 +4215,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       console.warn('[FieldsList] Prevented setting database to "Auto", using "FormBuilder" instead');
       this.sqlQueryConfig.database = 'FormBuilder';
       this.cdr.detectChanges();
+      // Load saved queries for FormBuilder
+      this.loadSavedQueries();
     } else {
       this.sqlQueryConfig.database = value as 'FormBuilder' | 'AkhmanageIt';
+      // Load saved queries for the selected database
+      this.loadSavedQueries();
     }
   }
 

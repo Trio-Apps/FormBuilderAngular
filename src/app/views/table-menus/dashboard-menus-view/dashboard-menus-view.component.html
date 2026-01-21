@@ -1,22 +1,4 @@
 <div class="dashboard-menus-page-container">
-  <!-- Language Toggle Buttons -->
-  <div class="admin-language-toggle">
-    <button
-      type="button"
-      class="admin-lang-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'en'"
-      (click)="switchLanguage('en')">
-      English
-    </button>
-    <button
-      type="button"
-      class="admin-lang-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'ar'"
-      (click)="switchLanguage('ar')">
-      العربية
-    </button>
-  </div>
-
   <!-- Top Navigation Bar -->
   <div class="top-navbar">
     <div class="nav-content">
@@ -59,69 +41,13 @@
       <button pButton [label]="'common.retry' | translate" icon="pi pi-refresh" (click)="loadDashboardMenus()"></button>
     </div>
 
-    <!-- Menus List -->
-    <div *ngIf="!loading && !error" class="menus-list">
-      <ng-container *ngFor="let menu of menus">
-        <div *ngIf="hasVisibleContent(menu)" class="menu-section">
-          <!-- Menu Header -->
-          <div class="menu-section-header">
-            <div class="menu-icon-wrapper" *ngIf="menu.icon">
-              <i [class]="menu.icon"></i>
-            </div>
-            <div class="menu-header-content">
-              <h2 class="menu-name">{{ menu.foreignName || menu.name }}</h2>
-              <span *ngIf="menu.foreignName && menu.name !== menu.foreignName" class="menu-name-en">
-                {{ menu.name }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Sub Menus -->
-          <div *ngIf="menu.subMenus && menu.subMenus.length > 0" class="sub-menus-list">
-            <div *ngFor="let subMenu of menu.subMenus" class="sub-menu-section">
-              <h3 class="sub-menu-title">{{ subMenu.foreignName || subMenu.name }}</h3>
-              
-              <!-- Documents in Sub Menu -->
-              <div *ngIf="hasSubMenuDocuments(subMenu)" class="documents-list">
-                <div
-                  *ngFor="let doc of subMenu.documents"
-                  class="document-item"
-                  (click)="openDocument(doc)">
-                  <div class="document-icon-wrapper">
-                    <i class="pi pi-file"></i>
-                  </div>
-                  <div class="document-details">
-                    <span class="document-name">{{ doc.documentTypeName }}</span>
-                    <span *ngIf="doc.documentTypeCode" class="document-code">{{ doc.documentTypeCode }}</span>
-                  </div>
-                  <div class="document-action">
-                    <i class="pi pi-arrow-right"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Documents directly in Menu (no sub menu) -->
-          <div *ngIf="menu.documents && menu.documents.length > 0 && (!menu.subMenus || menu.subMenus.length === 0)" class="documents-list direct-documents">
-            <div
-              *ngFor="let doc of menu.documents"
-              class="document-item"
-              (click)="openDocument(doc)">
-              <div class="document-icon-wrapper">
-                <i class="pi pi-file"></i>
-              </div>
-              <div class="document-details">
-                <span class="document-name">{{ doc.documentTypeName }}</span>
-                <span *ngIf="doc.documentTypeCode" class="document-code">{{ doc.documentTypeCode }}</span>
-              </div>
-              <div class="document-action">
-                <i class="pi pi-arrow-right"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-      </ng-container>
+    <!-- Empty content - menus and documents are shown in sidebar only -->
+    <div *ngIf="!loading && !error" class="empty-dashboard">
+      <div class="empty-icon">
+        <i class="pi pi-th-large"></i>
+      </div>
+      <h3>{{ ('dashboard.selectFromSidebar' | translate) || 'Select a menu from the sidebar' }}</h3>
+      <p>{{ ('dashboard.selectFromSidebarDescription' | translate) || 'Use the sidebar navigation to browse menus and documents' }}</p>
     </div>
 
     <!-- Empty State -->

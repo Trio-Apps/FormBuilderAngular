@@ -7,55 +7,6 @@
   position: relative;
 }
 
-// Admin Language Toggle
-.admin-language-toggle {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  display: flex;
-  gap: 8px;
-  z-index: 1000;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 4px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.admin-lang-btn {
-  padding: 8px 16px;
-  border: 1px solid #e0e0e0;
-  background: #ffffff;
-  color: #5f6368;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 80px;
-
-  &:hover {
-    background: #f8f9fa;
-    border-color: #dadce0;
-  }
-
-  &.active {
-    background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
-    color: #ffffff;
-    border-color: #667eea;
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
-
-    &:hover {
-      background: linear-gradient(135deg, #5568d3 0%, #653a8f 100%);
-      box-shadow: 0 3px 6px rgba(102, 126, 234, 0.4);
-    }
-  }
-
-  &:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
-  }
-}
-
 .top-navbar {
   background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
   color: white;

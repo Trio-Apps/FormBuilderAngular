@@ -101,16 +101,11 @@ export class LoginComponent implements OnInit {
   }
 
   private redirectBasedOnRole(): void {
-    // All users go to Dashboard Menus after login
-    this.router.navigate(['/dashboard-menus'], { replaceUrl: true }).catch(err => {
+    // After login, go to Forms
+    this.router.navigate(['/form-builder/forms'], { replaceUrl: true }).catch(err => {
       console.error('Navigation error:', err);
-      // Fallback to dashboard if dashboard-menus fails
-      const userRole = this.authService.role();
-      if (userRole === 'user' || userRole === 'User') {
-        this.router.navigate(['/document-types'], { replaceUrl: true });
-      } else {
-        this.router.navigate(['/dashboard'], { replaceUrl: true });
-      }
+      // Fallback to dashboard-menus if forms route fails for any reason
+      this.router.navigate(['/dashboard-menus'], { replaceUrl: true });
     });
   }
 
