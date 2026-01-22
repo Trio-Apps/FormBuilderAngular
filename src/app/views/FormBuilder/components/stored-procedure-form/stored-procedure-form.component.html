@@ -26,13 +26,6 @@
         (click)="activeTab = 'code'">
         <i class="pi pi-code"></i> Procedure Code
       </button>
-      <button 
-        type="button"
-        class="tab-button"
-        [class.active]="activeTab === 'mapping'"
-        (click)="activeTab = 'mapping'">
-        <i class="pi pi-sitemap"></i> Mapping & Settings
-      </button>
     </div>
 
     <div class="form-content">
@@ -227,90 +220,6 @@
           <small class="text-muted" *ngIf="!spForm.get('procedureCode')?.invalid || !spForm.get('procedureCode')?.touched">
             <i class="pi pi-info-circle"></i> Enter the complete stored procedure SQL code
           </small>
-        </div>
-      </div>
-
-      <!-- Mapping & Settings Tab -->
-      <div class="tab-content" *ngIf="activeTab === 'mapping'">
-        <!-- Default Parameter Mapping -->
-        <div class="form-group">
-          <div class="code-header">
-            <label for="defaultParameterMapping">
-              Default Parameter Mapping (JSON)
-              <i class="pi pi-info-circle info-icon" 
-                 pTooltip="Map stored procedure parameters to form field codes. Example: {'@FormId': 'formId', '@UserId': 'userId'}"
-                 tooltipPosition="right"></i>
-            </label>
-            <button 
-              type="button"
-              class="btn-icon-small"
-              (click)="formatJSON('defaultParameterMapping')"
-              title="Format JSON">
-              <i class="pi pi-code"></i> Format
-            </button>
-          </div>
-          <textarea 
-            id="defaultParameterMapping"
-            formControlName="defaultParameterMapping" 
-            class="form-control code-textarea"
-            [class.is-invalid]="isInvalidJSON('defaultParameterMapping')"
-            rows="6"
-            placeholder='{"@FormId": "formId", "@UserId": "userId", "@FieldTypeId": "fieldTypeId"}'></textarea>
-          <small class="text-danger" *ngIf="isInvalidJSON('defaultParameterMapping')">
-            <i class="pi pi-exclamation-circle"></i> Invalid JSON format
-          </small>
-          <small class="text-muted" *ngIf="!isInvalidJSON('defaultParameterMapping')">
-            <i class="pi pi-info-circle"></i> JSON object mapping parameter names (with @) to form field codes
-          </small>
-        </div>
-
-        <!-- Default Result Mapping -->
-        <div class="form-group">
-          <div class="code-header">
-            <label for="defaultResultMapping">
-              Default Result Mapping (JSON)
-              <i class="pi pi-info-circle info-icon" 
-                 pTooltip="Define how to interpret stored procedure results. Required for Rule type procedures."
-                 tooltipPosition="right"></i>
-            </label>
-            <button 
-              type="button"
-              class="btn-icon-small"
-              (click)="formatJSON('defaultResultMapping')"
-              title="Format JSON">
-              <i class="pi pi-code"></i> Format
-            </button>
-          </div>
-          <textarea 
-            id="defaultResultMapping"
-            formControlName="defaultResultMapping" 
-            class="form-control code-textarea"
-            [class.is-invalid]="isInvalidJSON('defaultResultMapping')"
-            rows="6"
-            placeholder='{"resultColumn": "IsValid", "trueValue": 1, "falseValue": 0}'></textarea>
-          <small class="text-danger" *ngIf="isInvalidJSON('defaultResultMapping')">
-            <i class="pi pi-exclamation-circle"></i> Invalid JSON format
-          </small>
-          <small class="text-muted" *ngIf="!isInvalidJSON('defaultResultMapping')">
-            <i class="pi pi-info-circle"></i> JSON object defining result column name and true/false values (required for Rule type)
-          </small>
-        </div>
-
-        <!-- Example Mappings -->
-        <div class="examples-section">
-          <h4><i class="pi pi-lightbulb"></i> Examples</h4>
-          <div class="example-cards">
-            <div class="example-card">
-              <strong>Parameter Mapping Example:</strong>
-              <pre>{{ '{\n  "@FormId": "formId",\n  "@UserId": "userId",\n  "@FieldTypeId": "fieldTypeId"\n}' }}</pre>
-              <button type="button" class="btn-link" (click)="loadExample('parameter')">Use This</button>
-            </div>
-            <div class="example-card">
-              <strong>Result Mapping Example:</strong>
-              <pre>{{ '{\n  "resultColumn": "IsValid",\n  "trueValue": 1,\n  "falseValue": 0\n}' }}</pre>
-              <button type="button" class="btn-link" (click)="loadExample('result')">Use This</button>
-            </div>
-          </div>
         </div>
       </div>
 

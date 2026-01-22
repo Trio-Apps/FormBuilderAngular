@@ -39,7 +39,7 @@ export class StoredProcedureFormComponent implements OnInit {
 
   spForm!: FormGroup;
   loading = false;
-  activeTab: 'basic' | 'code' | 'mapping' = 'basic';
+  activeTab: 'basic' | 'code' = 'basic';
 
   // Available options
   databases: string[] = ['FormBuilder', 'AKHManageIT'];
@@ -69,8 +69,6 @@ export class StoredProcedureFormComponent implements OnInit {
       procedureCode: ['', Validators.required],
       usageType: ['Rule'],
       isReadOnly: [false],
-      defaultParameterMapping: [''],
-      defaultResultMapping: [''],
       executionOrder: [1, [Validators.min(0)]],
       isActive: [true]
     });
@@ -88,8 +86,6 @@ export class StoredProcedureFormComponent implements OnInit {
       procedureCode: this.storedProcedure.procedureCode || '',
       usageType: this.storedProcedure.usageType || 'Rule',
       isReadOnly: this.storedProcedure.isReadOnly || false,
-      defaultParameterMapping: this.storedProcedure.defaultParameterMapping || '',
-      defaultResultMapping: this.storedProcedure.defaultResultMapping || '',
       executionOrder: this.storedProcedure.executionOrder || 1,
       isActive: this.storedProcedure.isActive !== undefined ? this.storedProcedure.isActive : true
     });
@@ -119,8 +115,6 @@ export class StoredProcedureFormComponent implements OnInit {
         procedureCode: formValue.procedureCode,
         usageType: formValue.usageType,
         isReadOnly: formValue.isReadOnly,
-        defaultParameterMapping: formValue.defaultParameterMapping,
-        defaultResultMapping: formValue.defaultResultMapping,
         executionOrder: formValue.executionOrder,
         isActive: formValue.isActive
       };
@@ -156,8 +150,6 @@ export class StoredProcedureFormComponent implements OnInit {
         procedureCode: formValue.procedureCode,
         usageType: formValue.usageType,
         isReadOnly: formValue.isReadOnly,
-        defaultParameterMapping: formValue.defaultParameterMapping,
-        defaultResultMapping: formValue.defaultResultMapping,
         executionOrder: formValue.executionOrder
       };
 
@@ -260,70 +252,5 @@ export class StoredProcedureFormComponent implements OnInit {
     });
   }
 
-  formatJSON(fieldName: string): void {
-    const value = this.spForm.get(fieldName)?.value || '';
-    if (!value.trim()) {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(value);
-      const formatted = JSON.stringify(parsed, null, 2);
-      this.spForm.patchValue({ [fieldName]: formatted });
-      this.messageService.add({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'JSON formatted successfully'
-      });
-    } catch (error) {
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Invalid JSON format'
-      });
-    }
-  }
-
-  isInvalidJSON(fieldName: string): boolean {
-    const value = this.spForm.get(fieldName)?.value || '';
-    if (!value.trim()) {
-      return false;
-    }
-
-    try {
-      JSON.parse(value);
-      return false;
-    } catch {
-      return true;
-    }
-  }
-
-  loadExample(type: 'parameter' | 'result'): void {
-    if (type === 'parameter') {
-      const example = {
-        '@FormId': 'formId',
-        '@UserId': 'userId',
-        '@FieldTypeId': 'fieldTypeId'
-      };
-      this.spForm.patchValue({ 
-        defaultParameterMapping: JSON.stringify(example, null, 2) 
-      });
-    } else {
-      const example = {
-        resultColumn: 'IsValid',
-        trueValue: 1,
-        falseValue: 0
-      };
-      this.spForm.patchValue({ 
-        defaultResultMapping: JSON.stringify(example, null, 2) 
-      });
-    }
-    
-    this.messageService.add({
-      severity: 'info',
-      summary: 'Example Loaded',
-      detail: `${type === 'parameter' ? 'Parameter' : 'Result'} mapping example loaded`
-    });
-  }
 }
 
