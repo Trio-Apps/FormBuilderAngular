@@ -113,6 +113,21 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.loadUserGroups(); // Load permissions from UserGroups table first
     this.loadMenus();
     this.loadDocumentTypes();
+    
+    // Watch for menuId changes in menuDocumentForm to reload sub menus
+    this.menuDocumentForm.get('menuId')?.valueChanges.subscribe(menuId => {
+      if (this.showMenuDocumentModal) {
+        if (menuId) {
+          // Clear subMenuId when menu changes (sub menu might belong to different menu)
+          this.menuDocumentForm.patchValue({ subMenuId: null }, { emitEvent: false });
+          // Load sub menus for the selected menu (replace existing)
+          this.loadSubMenusForDocumentModal(menuId, true);
+        } else {
+          // If no menu selected, load all sub menus
+          this.loadAllSubMenusForDocumentModal();
+        }
+      }
+    });
   }
 
   /**
@@ -628,6 +643,18 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.currentSubMenuForDocument = subMenu || null;
     this.editingMenuDocument = document || null;
     
+    // If editing a document, load sub menus for the menu that contains it (if menuId exists)
+    // This allows the user to change the subMenuId when editing
+    if (document && document.menuId) {
+      this.loadSubMenusForDocumentModal(document.menuId);
+    } else if (menu) {
+      // If creating a new document with a menu selected, load its sub menus
+      this.loadSubMenusForDocumentModal(menu.id);
+    } else {
+      // If no menu context, load all sub menus from all menus
+      this.loadAllSubMenusForDocumentModal();
+    }
+    
     if (document) {
       this.menuDocumentForm.patchValue({
         documentTypeId: document.documentTypeId,
@@ -650,12 +677,67 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.showMenuDocumentModal = true;
   }
 
+  /**
+   * Load sub menus for a specific menu (for document modal)
+   * This doesn't set currentMenuForSubMenu to avoid interfering with the UI
+   * @param menuId The menu ID to load sub menus for
+   * @param replaceExisting If true, replace existing sub menus; if false, merge them
+   */
+  private loadSubMenusForDocumentModal(menuId: number, replaceExisting: boolean = false): void {
+    const sub = this.tableMenusService.getSubMenusByMenuId(menuId).subscribe({
+      next: (subMenus: TableSubMenuDto[]) => {
+        if (replaceExisting) {
+          // Replace existing sub menus with new ones
+          this.subMenus = subMenus || [];
+        } else {
+          // Merge with existing sub menus to show all available options
+          const existingSubMenuIds = this.subMenus.map(sm => sm.id);
+          const newSubMenus = (subMenus || []).filter(sm => !existingSubMenuIds.includes(sm.id));
+          this.subMenus = [...this.subMenus, ...newSubMenus];
+        }
+      },
+      error: (error: any) => {
+        console.error('Error loading sub menus for document modal:', error);
+        // Don't show error to user, just log it
+      }
+    });
+    this.subscriptions.add(sub);
+  }
+
+  /**
+   * Load all sub menus from all menus (for document modal when no menu context)
+   */
+  private loadAllSubMenusForDocumentModal(): void {
+    this.subMenus = [];
+    const loadPromises = this.menus.map(menu => {
+      return new Promise<void>((resolve) => {
+        this.tableMenusService.getSubMenusByMenuId(menu.id).subscribe({
+          next: (subMenus: TableSubMenuDto[]) => {
+            const existingSubMenuIds = this.subMenus.map(sm => sm.id);
+            const newSubMenus = (subMenus || []).filter(sm => !existingSubMenuIds.includes(sm.id));
+            this.subMenus = [...this.subMenus, ...newSubMenus];
+            resolve();
+          },
+          error: () => {
+            resolve(); // Continue even if one fails
+          }
+        });
+      });
+    });
+    Promise.all(loadPromises);
+  }
+
   closeMenuDocumentModal(): void {
     this.showMenuDocumentModal = false;
     this.editingMenuDocument = null;
     this.currentMenuForDocument = null;
     this.currentSubMenuForDocument = null;
     this.menuDocumentForm.reset();
+    // Don't clear subMenus here - they might be needed for the sub menus section
+    // Only clear if we're not viewing sub menus
+    if (!this.currentMenuForSubMenu) {
+      // Keep subMenus loaded for potential future use
+    }
   }
 
   saveMenuDocument(): void {

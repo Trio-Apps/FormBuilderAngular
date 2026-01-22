@@ -367,7 +367,14 @@ export interface FormRuleData {
 export interface FormRule {
   id?: number;
   ruleName: string;
-  condition: Condition;
+  ruleType?: 'Condition' | 'StoredProcedure'; // Rule type
+  condition?: Condition; // For Condition type rules
+  // For StoredProcedure type
+  storedProcedureId?: number;
+  storedProcedureName?: string; // Legacy
+  storedProcedureDatabase?: string; // Legacy
+  parameterMapping?: string; // JSON string
+  resultMapping?: string; // JSON string
   actions: Action[];
   elseActions?: Action[];
   isActive: boolean;
@@ -382,10 +389,16 @@ export interface FormRule {
 export interface CreateFormRuleDto {
   formBuilderId: number;
   ruleName: string;
+  ruleType?: 'Condition' | 'StoredProcedure'; // Rule type
+  // For Condition type
   conditionField?: string;
   conditionOperator?: string;
   conditionValue?: string;
   conditionValueType?: string;
+  // For StoredProcedure type
+  storedProcedureId?: number;
+  parameterMapping?: string; // JSON string
+  resultMapping?: string; // JSON string
   actions?: Action[]; // ✅ Array directly (not JSON string)
   elseActions?: Action[]; // ✅ Array directly (not JSON string)
   isActive?: boolean;
@@ -399,10 +412,16 @@ export interface CreateFormRuleDto {
 export interface UpdateFormRuleDto {
   formBuilderId: number;
   ruleName?: string;
+  ruleType?: 'Condition' | 'StoredProcedure'; // Rule type
+  // For Condition type
   conditionField?: string;
   conditionOperator?: string;
   conditionValue?: string;
   conditionValueType?: string;
+  // For StoredProcedure type
+  storedProcedureId?: number;
+  parameterMapping?: string; // JSON string
+  resultMapping?: string; // JSON string
   actions?: Action[]; // ✅ Array directly (not JSON string)
   elseActions?: Action[]; // ✅ Array directly (not JSON string)
   isActive?: boolean;
@@ -417,10 +436,18 @@ export interface FormRuleDto {
   id: number;
   formBuilderId: number;
   ruleName: string;
+  ruleType?: 'Condition' | 'StoredProcedure'; // Rule type
+  // For Condition type
   conditionField?: string;
   conditionOperator?: string;
   conditionValue?: string;
   conditionValueType?: string;
+  // For StoredProcedure type
+  storedProcedureId?: number;
+  storedProcedureName?: string; // Legacy
+  storedProcedureDatabase?: string; // Legacy
+  parameterMapping?: string; // JSON string
+  resultMapping?: string; // JSON string
   actions?: Action[]; // ✅ Array directly (not JSON string)
   elseActions?: Action[]; // ✅ Array directly (not JSON string)
   isActive: boolean;
@@ -494,15 +521,20 @@ export type RuleActionType = 'SetVisible' | 'SetReadOnly' | 'SetMandatory' | 'Se
  * Updated: Now sends Actions and ElseActions as Arrays directly (not JSON strings)
  */
 export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number): CreateFormRuleDto {
-  // Clean condition - remove empty values
-  const cleanCondition: Condition = {
-    field: formRule.condition.field || '',
-    operator: formRule.condition.operator || '',
-    value: formRule.condition.value !== null && formRule.condition.value !== undefined 
-      ? formRule.condition.value 
-      : '',
-    valueType: formRule.condition.valueType || 'constant'
-  };
+  const ruleType = formRule.ruleType || 'Condition';
+  
+  // Clean condition - only for Condition type
+  let cleanCondition: Condition | undefined = undefined;
+  if (ruleType === 'Condition' && formRule.condition) {
+    cleanCondition = {
+      field: formRule.condition.field || '',
+      operator: formRule.condition.operator || '',
+      value: formRule.condition.value !== null && formRule.condition.value !== undefined 
+        ? formRule.condition.value 
+        : '',
+      valueType: formRule.condition.valueType || 'constant'
+    };
+  }
 
   // Clean actions - remove undefined/null values and any 'id' property
   // ✅ Fixed: Allow boolean false and 0 values (they are valid)
@@ -546,29 +578,43 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     return cleanAction;
   });
 
-  // Convert condition value to string (handle null/undefined/empty)
-  let conditionValueStr: string | undefined = undefined;
-  if (cleanCondition.value !== null && cleanCondition.value !== undefined && cleanCondition.value !== '') {
-    conditionValueStr = cleanCondition.value.toString();
-  }
-
   // Validate required fields before creating DTO
-  if (!cleanCondition.field || !cleanCondition.operator) {
-    throw new Error('Condition field and operator are required');
+  if (ruleType === 'Condition') {
+    if (!cleanCondition || !cleanCondition.field || !cleanCondition.operator) {
+      throw new Error('Condition field and operator are required');
+    }
+  } else if (ruleType === 'StoredProcedure') {
+    if (!formRule.storedProcedureId) {
+      throw new Error('Stored procedure ID is required');
+    }
   }
 
   if (cleanActions.length === 0) {
     throw new Error('At least one action is required');
   }
 
+  // Convert condition value to string (handle null/undefined/empty) - only for Condition type
+  // After validation above, we know cleanCondition exists for Condition type
+  let conditionValueStr: string | undefined = undefined;
+  if (ruleType === 'Condition' && cleanCondition) {
+    if (cleanCondition.value !== null && cleanCondition.value !== undefined && cleanCondition.value !== '') {
+      conditionValueStr = cleanCondition.value.toString();
+    }
+  }
+
   // Return DTO with Arrays directly (no JSON serialization needed)
+  // After validation, cleanCondition is guaranteed to exist for Condition type
   return {
     formBuilderId: formBuilderId,
     ruleName: formRule.ruleName,
-    conditionField: cleanCondition.field,
-    conditionOperator: cleanCondition.operator,
-    conditionValue: conditionValueStr,
-    conditionValueType: cleanCondition.valueType,
+    ruleType: ruleType,
+    conditionField: ruleType === 'Condition' && cleanCondition ? cleanCondition.field : undefined,
+    conditionOperator: ruleType === 'Condition' && cleanCondition ? cleanCondition.operator : undefined,
+    conditionValue: ruleType === 'Condition' ? conditionValueStr : undefined,
+    conditionValueType: ruleType === 'Condition' && cleanCondition ? cleanCondition.valueType : undefined,
+    storedProcedureId: ruleType === 'StoredProcedure' ? formRule.storedProcedureId : undefined,
+    parameterMapping: ruleType === 'StoredProcedure' ? formRule.parameterMapping : undefined,
+    resultMapping: ruleType === 'StoredProcedure' ? formRule.resultMapping : undefined,
     actions: cleanActions.length > 0 ? cleanActions : undefined,      // ✅ Array directly
     elseActions: cleanElseActions.length > 0 ? cleanElseActions : undefined,  // ✅ Array directly
     isActive: formRule.isActive !== undefined ? formRule.isActive : true,
@@ -581,13 +627,18 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
  * ✅ Updated: Now reads Actions and ElseActions as Arrays directly (not JSON strings)
  */
 export function convertFormRuleDtoToFormRule(dto: FormRuleDto): FormRule {
-  // Build condition from DTO fields
-  let condition: Condition = {
-    field: dto.conditionField || '',
-    operator: dto.conditionOperator || '',
-    value: dto.conditionValue || '',
-    valueType: (dto.conditionValueType as 'constant' | 'field') || 'constant'
-  };
+  const ruleType = dto.ruleType || 'Condition';
+  
+  // Build condition from DTO fields - only for Condition type
+  let condition: Condition | undefined = undefined;
+  if (ruleType === 'Condition') {
+    condition = {
+      field: dto.conditionField || '',
+      operator: dto.conditionOperator || '',
+      value: dto.conditionValue || '',
+      valueType: (dto.conditionValueType as 'constant' | 'field') || 'constant'
+    };
+  }
 
   // ✅ Use Actions and ElseActions Arrays directly from DTO
   let actions: Action[] = dto.actions || [];
@@ -643,7 +694,13 @@ export function convertFormRuleDtoToFormRule(dto: FormRuleDto): FormRule {
   return {
     id: dto.id,
     ruleName: dto.ruleName,
+    ruleType: ruleType,
     condition: condition,
+    storedProcedureId: dto.storedProcedureId,
+    storedProcedureName: dto.storedProcedureName,
+    storedProcedureDatabase: dto.storedProcedureDatabase,
+    parameterMapping: dto.parameterMapping,
+    resultMapping: dto.resultMapping,
     actions: actions,
     elseActions: elseActions.length > 0 ? elseActions : undefined,
     isActive: dto.isActive,

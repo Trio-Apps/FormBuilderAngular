@@ -203,6 +203,12 @@ export const routes: Routes = [
               .then(m => m.FormRulesListComponent) 
           },
           
+          // إدارة Stored Procedures (مثال: form-builder/stored-procedures)
+          { 
+            path: 'stored-procedures', 
+            loadComponent: () => import('./views/FormBuilder/components/stored-procedures-list/stored-procedures-list.component')
+              .then(m => m.StoredProceduresListComponent) 
+          },
           
           // حقول تبويب معين (مثال: form-builder/fields/10)
           { 

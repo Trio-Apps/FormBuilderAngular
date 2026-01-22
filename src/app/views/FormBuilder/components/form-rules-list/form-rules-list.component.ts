@@ -6,6 +6,8 @@ import { FormRulesService } from '../../services/form-rules.service';
 import { FormsService } from '../../services/forms.service';
 import { FieldsService } from '../../services/fields.service';
 import { TabsService } from '../../services/tabs.service';
+import { StoredProceduresService } from '../../services/stored-procedures.service';
+import { StoredProcedure, ParameterMapping, ResultMapping } from '../../form-builder/models/stored-procedure.model';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import {
   FormRule,
@@ -66,6 +68,17 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
   ruleForm!: FormGroup;
   editingRule: FormRule | null = null;
   formFields: FormFieldDto[] = [];
+  
+  // Stored Procedures
+  storedProcedures: StoredProcedure[] = [];
+  selectedSp: StoredProcedure | null = null;
+  ruleType: 'Condition' | 'StoredProcedure' = 'Condition';
+  parameterMapping: ParameterMapping = {};
+  resultMapping: ResultMapping = {
+    resultColumn: 'IsValid',
+    trueValue: 1,
+    falseValue: 0
+  };
 
   // Available options
   conditionOperators: { label: string; value: string }[] = [
@@ -101,6 +114,7 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     private formsService: FormsService,
     private fieldsService: FieldsService,
     private tabsService: TabsService,
+    private storedProceduresService: StoredProceduresService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private fb: FormBuilder,
@@ -125,11 +139,13 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         this.loadForm();
         this.loadRules();
         this.loadFormFields();
+        this.loadStoredProcedures();
       } else if (newFormId && !this.formId) {
         this.formId = newFormId;
         this.loadForm();
         this.loadRules();
         this.loadFormFields();
+        this.loadStoredProcedures();
       }
     });
 
@@ -162,16 +178,39 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
   initRuleForm(): void {
     this.ruleForm = this.fb.group({
       ruleName: ['', Validators.required],
+      ruleType: ['Condition', Validators.required],
+      storedProcedureId: [null],
       isActive: [true],
       executionOrder: [1, [Validators.required, Validators.min(0)]],
       condition: this.fb.group({
-        field: ['', Validators.required],
+        field: [''],
         operator: ['Equals', Validators.required],
         value: [''],
         valueType: ['constant', Validators.required]
       }),
       actions: this.fb.array([]),
       elseActions: this.fb.array([])
+    });
+
+    // Watch rule type changes
+    this.ruleForm.get('ruleType')?.valueChanges.subscribe(type => {
+      this.ruleType = type;
+      if (type === 'StoredProcedure') {
+        this.ruleForm.get('storedProcedureId')?.setValidators(Validators.required);
+        this.ruleForm.get('condition')?.get('field')?.clearValidators();
+      } else {
+        this.ruleForm.get('storedProcedureId')?.clearValidators();
+        this.ruleForm.get('condition')?.get('field')?.setValidators(Validators.required);
+      }
+      this.ruleForm.get('storedProcedureId')?.updateValueAndValidity();
+      this.ruleForm.get('condition')?.get('field')?.updateValueAndValidity();
+    });
+
+    // Watch stored procedure selection
+    this.ruleForm.get('storedProcedureId')?.valueChanges.subscribe(spId => {
+      if (spId) {
+        this.onStoredProcedureSelected(spId);
+      }
     });
   }
 
@@ -189,6 +228,67 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         });
       }
     });
+  }
+
+  loadStoredProcedures(): void {
+    this.storedProceduresService.getByUsageType('Rule').subscribe({
+      next: (data) => {
+        this.storedProcedures = data;
+      },
+      error: (error) => {
+        console.error('[FormRulesList] Error loading stored procedures:', error);
+      }
+    });
+  }
+
+  onStoredProcedureSelected(spId: number): void {
+    const sp = this.storedProcedures.find(s => s.id === spId);
+    if (sp) {
+      this.selectedSp = sp;
+      
+      // Load default mappings if available
+      if (sp.defaultParameterMapping) {
+        try {
+          this.parameterMapping = JSON.parse(sp.defaultParameterMapping);
+        } catch (e) {
+          console.error('[FormRulesList] Error parsing default parameter mapping:', e);
+          this.parameterMapping = {};
+        }
+      } else {
+        this.parameterMapping = {};
+      }
+
+      if (sp.defaultResultMapping) {
+        try {
+          this.resultMapping = JSON.parse(sp.defaultResultMapping);
+        } catch (e) {
+          console.error('[FormRulesList] Error parsing default result mapping:', e);
+          this.resultMapping = {
+            resultColumn: 'IsValid',
+            trueValue: 1,
+            falseValue: 0
+          };
+        }
+      } else {
+        this.resultMapping = {
+          resultColumn: 'IsValid',
+          trueValue: 1,
+          falseValue: 0
+        };
+      }
+    }
+  }
+
+  addParameterMapping(): void {
+    this.parameterMapping['@NewParam'] = '';
+  }
+
+  removeParameterMapping(key: string): void {
+    delete this.parameterMapping[key];
+  }
+
+  getParameterKeys(): string[] {
+    return Object.keys(this.parameterMapping);
   }
 
   loadFormFields(): void {
@@ -307,15 +407,44 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     }
     
     this.editingRule = rule || null;
+    this.selectedSp = null;
+    this.parameterMapping = {};
+    this.resultMapping = {
+      resultColumn: 'IsValid',
+      trueValue: 1,
+      falseValue: 0
+    };
     this.initRuleForm();
 
     if (rule) {
       // Edit mode
+      this.ruleType = rule.ruleType || 'Condition';
       this.ruleForm.patchValue({
         ruleName: rule.ruleName,
+        ruleType: rule.ruleType || 'Condition',
+        storedProcedureId: rule.storedProcedureId || null,
         isActive: rule.isActive,
         executionOrder: rule.executionOrder || 1
       });
+
+      // Load stored procedure data if it's a StoredProcedure type
+      if (rule.ruleType === 'StoredProcedure' && rule.storedProcedureId) {
+        this.onStoredProcedureSelected(rule.storedProcedureId);
+        if (rule.parameterMapping) {
+          try {
+            this.parameterMapping = JSON.parse(rule.parameterMapping);
+          } catch (e) {
+            console.error('[FormRulesList] Error parsing parameter mapping:', e);
+          }
+        }
+        if (rule.resultMapping) {
+          try {
+            this.resultMapping = JSON.parse(rule.resultMapping);
+          } catch (e) {
+            console.error('[FormRulesList] Error parsing result mapping:', e);
+          }
+        }
+      }
 
       // Load condition
       if (rule.condition) {
@@ -471,15 +600,29 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     }
 
     const formValue = this.ruleForm.value;
+    const ruleType = formValue.ruleType || 'Condition';
 
-    // Validate that condition field is selected
-    if (!formValue.condition.field || !formValue.condition.operator) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Validation',
-        detail: 'Please select condition field and operator'
-      });
-      return;
+    // Validate based on rule type
+    if (ruleType === 'Condition') {
+      // Validate that condition field is selected
+      if (!formValue.condition.field || !formValue.condition.operator) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please select condition field and operator'
+        });
+        return;
+      }
+    } else if (ruleType === 'StoredProcedure') {
+      // Validate that stored procedure is selected
+      if (!formValue.storedProcedureId) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please select a stored procedure'
+        });
+        return;
+      }
     }
 
     // Validate that at least one action exists
@@ -496,14 +639,18 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     const formRule: FormRule = {
       id: this.editingRule?.id,
       ruleName: formValue.ruleName.trim(),
-      condition: {
+      ruleType: ruleType,
+      condition: ruleType === 'Condition' ? {
         field: formValue.condition.field.trim(),
         operator: formValue.condition.operator,
         value: formValue.condition.value && formValue.condition.value.toString().trim() !== ''
           ? formValue.condition.value.toString().trim()
           : '',
         valueType: formValue.condition.valueType || 'constant'
-      },
+      } : undefined,
+      storedProcedureId: ruleType === 'StoredProcedure' ? formValue.storedProcedureId : undefined,
+      parameterMapping: ruleType === 'StoredProcedure' ? JSON.stringify(this.parameterMapping) : undefined,
+      resultMapping: ruleType === 'StoredProcedure' ? JSON.stringify(this.resultMapping) : undefined,
       actions: formValue.actions
         .filter((a: any) => a.fieldCode && a.type) // Filter out incomplete actions
         .map((a: any) => {
@@ -589,10 +736,14 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
       const updateDto: UpdateFormRuleDto = {
         formBuilderId: ruleDto.formBuilderId,
         ruleName: ruleDto.ruleName,
+        ruleType: ruleDto.ruleType,
         conditionField: ruleDto.conditionField,
         conditionOperator: ruleDto.conditionOperator,
         conditionValue: ruleDto.conditionValue,
         conditionValueType: ruleDto.conditionValueType,
+        storedProcedureId: ruleDto.storedProcedureId,
+        parameterMapping: ruleDto.parameterMapping,
+        resultMapping: ruleDto.resultMapping,
         actions: ruleDto.actions,
         elseActions: ruleDto.elseActions,
         isActive: ruleDto.isActive,

@@ -1,0 +1,340 @@
+<p-dialog 
+  [header]="storedProcedure ? 'Edit Stored Procedure' : 'Add Stored Procedure'"
+  [visible]="true"
+  [modal]="true"
+  [style]="{width: '900px', maxWidth: '95vw'}"
+  [closable]="true"
+  (onHide)="onCancel()"
+  [draggable]="false"
+  [resizable]="true"
+  styleClass="sp-form-dialog">
+  
+  <form [formGroup]="spForm" (ngSubmit)="onSubmit()">
+    <!-- Tabs Navigation -->
+    <div class="form-tabs">
+      <button 
+        type="button"
+        class="tab-button"
+        [class.active]="activeTab === 'basic'"
+        (click)="activeTab = 'basic'">
+        <i class="pi pi-info-circle"></i> Basic Information
+      </button>
+      <button 
+        type="button"
+        class="tab-button"
+        [class.active]="activeTab === 'code'"
+        (click)="activeTab = 'code'">
+        <i class="pi pi-code"></i> Procedure Code
+      </button>
+      <button 
+        type="button"
+        class="tab-button"
+        [class.active]="activeTab === 'mapping'"
+        (click)="activeTab = 'mapping'">
+        <i class="pi pi-sitemap"></i> Mapping & Settings
+      </button>
+    </div>
+
+    <div class="form-content">
+      
+      <!-- Basic Information Tab -->
+      <div class="tab-content" *ngIf="activeTab === 'basic'">
+        <!-- Title -->
+        <div class="form-group">
+          <label for="title">
+            Title <span class="required">*</span>
+            <i class="pi pi-info-circle info-icon" 
+               pTooltip="A descriptive name for this stored procedure"
+               tooltipPosition="right"></i>
+          </label>
+          <input 
+            id="title"
+            type="text" 
+            formControlName="title" 
+            class="form-control"
+            [class.is-invalid]="spForm.get('title')?.invalid && spForm.get('title')?.touched"
+            placeholder="e.g., Get Field Types" />
+          <small class="text-danger" *ngIf="spForm.get('title')?.invalid && spForm.get('title')?.touched">
+            <i class="pi pi-exclamation-circle"></i> Title is required
+          </small>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group">
+          <label for="description">
+            Description
+            <i class="pi pi-info-circle info-icon" 
+               pTooltip="Optional description explaining what this stored procedure does"
+               tooltipPosition="right"></i>
+          </label>
+          <textarea 
+            id="description"
+            formControlName="description" 
+            class="form-control"
+            rows="3"
+            placeholder="Enter description (optional)"></textarea>
+        </div>
+
+        <!-- Database & Schema -->
+        <div class="form-row">
+          <div class="form-group">
+            <label for="databaseName">
+              Database <span class="required">*</span>
+            </label>
+            <select 
+              id="databaseName"
+              formControlName="databaseName" 
+              class="form-control"
+              [class.is-invalid]="spForm.get('databaseName')?.invalid && spForm.get('databaseName')?.touched">
+              <option *ngFor="let db of databases" [value]="db">{{ db }}</option>
+            </select>
+            <small class="text-danger" *ngIf="spForm.get('databaseName')?.invalid && spForm.get('databaseName')?.touched">
+              <i class="pi pi-exclamation-circle"></i> Database is required
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="schemaName">
+              Schema <span class="required">*</span>
+            </label>
+            <input 
+              id="schemaName"
+              type="text" 
+              formControlName="schemaName" 
+              class="form-control"
+              [class.is-invalid]="spForm.get('schemaName')?.invalid && spForm.get('schemaName')?.touched"
+              placeholder="e.g., dbo" />
+            <small class="text-danger" *ngIf="spForm.get('schemaName')?.invalid && spForm.get('schemaName')?.touched">
+              <i class="pi pi-exclamation-circle"></i> Schema is required
+            </small>
+          </div>
+        </div>
+
+        <!-- Procedure Name -->
+        <div class="form-group">
+          <label for="procedureName">
+            Procedure Name
+            <i class="pi pi-info-circle info-icon" 
+               pTooltip="The actual stored procedure name in the database (optional, will be extracted from code if not provided)"
+               tooltipPosition="right"></i>
+          </label>
+          <input 
+            id="procedureName"
+            type="text" 
+            formControlName="procedureName" 
+            class="form-control"
+            placeholder="e.g., GetFieldTypes (optional)" />
+        </div>
+
+        <!-- Usage Type & Execution Order -->
+        <div class="form-row">
+          <div class="form-group">
+            <label for="usageType">
+              Usage Type
+              <i class="pi pi-info-circle info-icon" 
+                 pTooltip="Rule: Used in form rules validation | Options: Used to populate dropdown/select fields"
+                 tooltipPosition="right"></i>
+            </label>
+            <select 
+              id="usageType"
+              formControlName="usageType" 
+              class="form-control">
+              <option *ngFor="let type of usageTypes" [value]="type">{{ type }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="executionOrder">
+              Execution Order
+              <i class="pi pi-info-circle info-icon" 
+                 pTooltip="Order of execution when multiple stored procedures are used"
+                 tooltipPosition="right"></i>
+            </label>
+            <p-inputNumber 
+              id="executionOrder"
+              formControlName="executionOrder"
+              [min]="0"
+              [showButtons]="true"
+              [style]="{width: '100%'}">
+            </p-inputNumber>
+          </div>
+        </div>
+
+        <!-- Options -->
+        <div class="form-group checkbox-group">
+          <div class="checkbox-item">
+            <p-checkbox 
+              formControlName="isReadOnly"
+              inputId="isReadOnly"
+              [binary]="true">
+            </p-checkbox>
+            <label for="isReadOnly">
+              Read Only
+              <i class="pi pi-info-circle info-icon" 
+                 pTooltip="Prevent editing this stored procedure"
+                 tooltipPosition="right"></i>
+            </label>
+          </div>
+
+          <div class="checkbox-item" *ngIf="storedProcedure">
+            <p-checkbox 
+              formControlName="isActive"
+              inputId="isActive"
+              [binary]="true">
+            </p-checkbox>
+            <label for="isActive">Active</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Procedure Code Tab -->
+      <div class="tab-content" *ngIf="activeTab === 'code'">
+        <div class="form-group">
+          <div class="code-header">
+            <label for="procedureCode">
+              Procedure Code <span class="required">*</span>
+              <i class="pi pi-info-circle info-icon" 
+                 pTooltip="The complete SQL code for the stored procedure. Must include CREATE OR ALTER PROCEDURE statement."
+                 tooltipPosition="right"></i>
+            </label>
+            <div class="code-actions">
+              <button 
+                type="button"
+                class="btn-icon-small"
+                (click)="formatSQL()"
+                title="Format SQL">
+                <i class="pi pi-code"></i> Format
+              </button>
+              <button 
+                type="button"
+                class="btn-icon-small"
+                (click)="validateSQL()"
+                title="Validate SQL Syntax">
+                <i class="pi pi-check-circle"></i> Validate
+              </button>
+            </div>
+          </div>
+          <textarea 
+            id="procedureCode"
+            formControlName="procedureCode" 
+            class="form-control code-textarea"
+            [class.is-invalid]="spForm.get('procedureCode')?.invalid && spForm.get('procedureCode')?.touched"
+            rows="15"
+            placeholder="CREATE OR ALTER PROCEDURE [dbo].[ProcedureName]&#10;    @Parameter1 INT = NULL&#10;AS&#10;BEGIN&#10;    SET NOCOUNT ON;&#10;    -- Your SQL code here&#10;END"></textarea>
+          <small class="text-danger" *ngIf="spForm.get('procedureCode')?.invalid && spForm.get('procedureCode')?.touched">
+            <i class="pi pi-exclamation-circle"></i> Procedure code is required
+          </small>
+          <small class="text-muted" *ngIf="!spForm.get('procedureCode')?.invalid || !spForm.get('procedureCode')?.touched">
+            <i class="pi pi-info-circle"></i> Enter the complete stored procedure SQL code
+          </small>
+        </div>
+      </div>
+
+      <!-- Mapping & Settings Tab -->
+      <div class="tab-content" *ngIf="activeTab === 'mapping'">
+        <!-- Default Parameter Mapping -->
+        <div class="form-group">
+          <div class="code-header">
+            <label for="defaultParameterMapping">
+              Default Parameter Mapping (JSON)
+              <i class="pi pi-info-circle info-icon" 
+                 pTooltip="Map stored procedure parameters to form field codes. Example: {'@FormId': 'formId', '@UserId': 'userId'}"
+                 tooltipPosition="right"></i>
+            </label>
+            <button 
+              type="button"
+              class="btn-icon-small"
+              (click)="formatJSON('defaultParameterMapping')"
+              title="Format JSON">
+              <i class="pi pi-code"></i> Format
+            </button>
+          </div>
+          <textarea 
+            id="defaultParameterMapping"
+            formControlName="defaultParameterMapping" 
+            class="form-control code-textarea"
+            [class.is-invalid]="isInvalidJSON('defaultParameterMapping')"
+            rows="6"
+            placeholder='{"@FormId": "formId", "@UserId": "userId", "@FieldTypeId": "fieldTypeId"}'></textarea>
+          <small class="text-danger" *ngIf="isInvalidJSON('defaultParameterMapping')">
+            <i class="pi pi-exclamation-circle"></i> Invalid JSON format
+          </small>
+          <small class="text-muted" *ngIf="!isInvalidJSON('defaultParameterMapping')">
+            <i class="pi pi-info-circle"></i> JSON object mapping parameter names (with @) to form field codes
+          </small>
+        </div>
+
+        <!-- Default Result Mapping -->
+        <div class="form-group">
+          <div class="code-header">
+            <label for="defaultResultMapping">
+              Default Result Mapping (JSON)
+              <i class="pi pi-info-circle info-icon" 
+                 pTooltip="Define how to interpret stored procedure results. Required for Rule type procedures."
+                 tooltipPosition="right"></i>
+            </label>
+            <button 
+              type="button"
+              class="btn-icon-small"
+              (click)="formatJSON('defaultResultMapping')"
+              title="Format JSON">
+              <i class="pi pi-code"></i> Format
+            </button>
+          </div>
+          <textarea 
+            id="defaultResultMapping"
+            formControlName="defaultResultMapping" 
+            class="form-control code-textarea"
+            [class.is-invalid]="isInvalidJSON('defaultResultMapping')"
+            rows="6"
+            placeholder='{"resultColumn": "IsValid", "trueValue": 1, "falseValue": 0}'></textarea>
+          <small class="text-danger" *ngIf="isInvalidJSON('defaultResultMapping')">
+            <i class="pi pi-exclamation-circle"></i> Invalid JSON format
+          </small>
+          <small class="text-muted" *ngIf="!isInvalidJSON('defaultResultMapping')">
+            <i class="pi pi-info-circle"></i> JSON object defining result column name and true/false values (required for Rule type)
+          </small>
+        </div>
+
+        <!-- Example Mappings -->
+        <div class="examples-section">
+          <h4><i class="pi pi-lightbulb"></i> Examples</h4>
+          <div class="example-cards">
+            <div class="example-card">
+              <strong>Parameter Mapping Example:</strong>
+              <pre>{{ '{\n  "@FormId": "formId",\n  "@UserId": "userId",\n  "@FieldTypeId": "fieldTypeId"\n}' }}</pre>
+              <button type="button" class="btn-link" (click)="loadExample('parameter')">Use This</button>
+            </div>
+            <div class="example-card">
+              <strong>Result Mapping Example:</strong>
+              <pre>{{ '{\n  "resultColumn": "IsValid",\n  "trueValue": 1,\n  "falseValue": 0\n}' }}</pre>
+              <button type="button" class="btn-link" (click)="loadExample('result')">Use This</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="form-actions">
+      <p-button 
+        label="Cancel" 
+        icon="pi pi-times" 
+        (onClick)="onCancel()" 
+        [disabled]="loading"
+        styleClass="p-button-secondary">
+      </p-button>
+      <p-button 
+        [label]="storedProcedure ? 'Update' : 'Create'" 
+        icon="pi pi-check" 
+        type="submit"
+        [disabled]="spForm.invalid || loading"
+        [loading]="loading"
+        styleClass="p-button-primary">
+      </p-button>
+    </div>
+  </form>
+</p-dialog>
+
+<p-toast></p-toast>
+

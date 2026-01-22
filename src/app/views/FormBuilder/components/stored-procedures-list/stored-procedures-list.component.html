@@ -1,0 +1,242 @@
+<div class="stored-procedures-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/form-builder/forms" title="Back to Forms">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Stored Procedures</h1>
+          <p class="page-subtitle">Manage and configure stored procedures for your forms</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button 
+          class="btn-icon" 
+          (click)="loadStoredProcedures()" 
+          [disabled]="loading" 
+          [class.spinning]="loading"
+          title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openModal()" [disabled]="loading">
+          <i class="pi pi-plus"></i>
+          <span>Add Stored Procedure</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-file"></i>
+        <span>Forms</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-database"></i>
+        <span>Stored Procedures</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Stats Cards -->
+    <div class="stats-row" *ngIf="!loading">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-database"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ storedProcedures.length }}</div>
+          <div class="stat-label">Total Procedures</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveProceduresCount() }}</div>
+          <div class="stat-label">Active Procedures</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-info">
+          <i class="pi pi-code"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getRuleProceduresCount() }}</div>
+          <div class="stat-label">Rule Procedures</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stored Procedures Table Card -->
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">
+          <i class="pi pi-table"></i>
+          Stored Procedures List
+        </h3>
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="pi pi-search"></i>
+            <input 
+              type="text" 
+              [(ngModel)]="searchTerm" 
+              (input)="onSearch()"
+              placeholder="Search by title, procedure name, database..."
+              class="search-input" />
+          </div>
+          <span class="results-count">{{ filteredProcedures.length }} procedure(s) found</span>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="filters-section" *ngIf="selectedDatabase || selectedUsageType">
+        <div class="filters">
+          <div class="filter-group" *ngIf="selectedDatabase">
+            <label>Database:</label>
+            <span class="filter-badge">
+              {{ selectedDatabase }}
+              <button type="button" (click)="selectedDatabase = ''; onDatabaseChange()" class="filter-remove">
+                <i class="pi pi-times"></i>
+              </button>
+            </span>
+          </div>
+          <div class="filter-group" *ngIf="selectedUsageType">
+            <label>Usage Type:</label>
+            <span class="filter-badge">
+              {{ selectedUsageType }}
+              <button type="button" (click)="selectedUsageType = ''; onUsageTypeChange()" class="filter-remove">
+                <i class="pi pi-times"></i>
+              </button>
+            </span>
+          </div>
+          <button class="btn-clear-filters" (click)="clearFilters()">
+            <i class="pi pi-filter-slash"></i> Clear All Filters
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Dropdowns (Hidden when filters are active) -->
+      <div class="filter-dropdowns" *ngIf="!selectedDatabase && !selectedUsageType">
+        <div class="filter-dropdown-group">
+          <label>Database:</label>
+          <select 
+            [(ngModel)]="selectedDatabase" 
+            (change)="onDatabaseChange()"
+            class="filter-select">
+            <option value="">All Databases</option>
+            <option *ngFor="let db of databases" [value]="db">{{ db }}</option>
+          </select>
+        </div>
+        <div class="filter-dropdown-group">
+          <label>Usage Type:</label>
+          <select 
+            [(ngModel)]="selectedUsageType" 
+            (change)="onUsageTypeChange()"
+            class="filter-select">
+            <option value="">All Types</option>
+            <option *ngFor="let type of usageTypes" [value]="type">{{ type }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Loading -->
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <h3>Loading...</h3>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!loading && filteredProcedures.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-database"></i>
+        </div>
+        <h3>No Stored Procedures Found</h3>
+        <p>Get started by creating your first stored procedure.</p>
+        <button class="btn-primary" (click)="openModal()">
+          <i class="pi pi-plus"></i> Add Stored Procedure
+        </button>
+      </div>
+
+      <!-- Table -->
+      <div *ngIf="!loading && filteredProcedures.length > 0" class="table-wrapper">
+        <table class="procedures-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Title</th>
+          <th>Procedure Name</th>
+          <th>Database</th>
+          <th>Schema</th>
+          <th>Usage Type</th>
+          <th>Active</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let sp of filteredProcedures">
+          <td>{{ sp.id }}</td>
+          <td>
+            <div class="title-cell">
+              <strong>{{ sp.title }}</strong>
+              <span class="description" *ngIf="sp.description">{{ sp.description }}</span>
+            </div>
+          </td>
+          <td>{{ sp.procedureName || '-' }}</td>
+          <td>
+            <span class="badge badge-database">{{ sp.databaseName }}</span>
+          </td>
+          <td>{{ sp.schemaName }}</td>
+          <td>
+            <span class="badge badge-usage" *ngIf="sp.usageType">{{ sp.usageType }}</span>
+            <span *ngIf="!sp.usageType">-</span>
+          </td>
+          <td>
+            <span class="status-badge" [class.status-active]="sp.isActive" [class.status-inactive]="!sp.isActive">
+              <i class="pi" [class.pi-check-circle]="sp.isActive" [class.pi-times-circle]="!sp.isActive"></i>
+              {{ sp.isActive ? 'Active' : 'Inactive' }}
+            </span>
+          </td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn action-edit" (click)="editSp(sp.id)" title="Edit">
+                <i class="pi pi-pencil"></i>
+              </button>
+              <button class="action-btn action-delete" (click)="deleteSp(sp.id)" title="Delete">
+                <i class="pi pi-trash"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal for Add/Edit -->
+<app-stored-procedure-form
+  *ngIf="showModal"
+  [storedProcedure]="editingSp"
+  (close)="onModalClose()">
+</app-stored-procedure-form>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+

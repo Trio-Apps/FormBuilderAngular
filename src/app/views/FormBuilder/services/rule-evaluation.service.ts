@@ -170,10 +170,24 @@ export class RuleEvaluationService {
       return;
     }
 
-    const conditionMet = this.evaluateCondition(rule.condition, fieldValues);
+    // Skip StoredProcedure type rules (they don't use condition evaluation)
+    if (rule.ruleType === 'StoredProcedure') {
+      console.log(`[RuleEvaluationService] Rule "${rule.ruleName}" is StoredProcedure type, skipping condition evaluation`);
+      return;
+    }
+
+    // Skip rules without condition
+    if (!rule.condition) {
+      console.log(`[RuleEvaluationService] Rule "${rule.ruleName}" has no condition, skipping condition evaluation`);
+      return;
+    }
+
+    // At this point, TypeScript knows rule.condition is defined
+    const condition = rule.condition;
+    const conditionMet = this.evaluateCondition(condition, fieldValues);
     
-    console.log(`[RuleEvaluationService] Rule "${rule.ruleName}": condition field="${rule.condition.field}", value="${rule.condition.value}", conditionMet=${conditionMet}`);
-    console.log(`[RuleEvaluationService] Field value for "${rule.condition.field}":`, fieldValues[rule.condition.field]);
+    console.log(`[RuleEvaluationService] Rule "${rule.ruleName}": condition field="${condition.field}", value="${condition.value}", conditionMet=${conditionMet}`);
+    console.log(`[RuleEvaluationService] Field value for "${condition.field}":`, fieldValues[condition.field]);
 
     if (conditionMet && rule.actions) {
       console.log(`[RuleEvaluationService] Applying ${rule.actions.length} actions for rule "${rule.ruleName}"`);

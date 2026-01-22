@@ -998,14 +998,14 @@
           pInputText
           formControlName="subMenuId"
           class="p-inputtext w-full"
-          [disabled]="!!currentSubMenuForDocument || !!editingMenuDocument">
+          [disabled]="!!currentSubMenuForDocument">
           <option [ngValue]="null">Select sub menu (optional if menu selected)</option>
           <option *ngFor="let subMenu of subMenus" [ngValue]="subMenu.id">
             {{ subMenu.name }}
           </option>
         </select>
         <small class="help-text" *ngIf="currentSubMenuForDocument">
-          Sub Menu: <strong>{{ currentSubMenuForDocument.name }}</strong>
+          Current Sub Menu: <strong>{{ currentSubMenuForDocument.name }}</strong> (you can change it)
         </small>
       </div>
     </div>

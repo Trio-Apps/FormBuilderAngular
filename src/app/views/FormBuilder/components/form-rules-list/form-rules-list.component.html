@@ -221,6 +221,13 @@
             </small>
           </div>
           <div class="form-group">
+            <label>Rule Type *</label>
+            <select formControlName="ruleType" class="form-control">
+              <option value="Condition">Condition</option>
+              <option value="StoredProcedure">Stored Procedure</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label>Execution Order *</label>
             <input
               type="number"
@@ -251,8 +258,113 @@
         </div>
       </div>
 
-      <!-- Condition -->
-      <div class="form-section">
+      <!-- Stored Procedure Selection (only for StoredProcedure type) -->
+      <div class="form-section" *ngIf="ruleType === 'StoredProcedure'">
+        <h4>Stored Procedure</h4>
+        <div class="form-group">
+          <label>Stored Procedure *</label>
+          <select formControlName="storedProcedureId" class="form-control">
+            <option value="">Select Stored Procedure</option>
+            <option *ngFor="let sp of storedProcedures" [value]="sp.id">
+              {{ sp.title }} ({{ sp.procedureName }})
+            </option>
+          </select>
+          <small class="text-danger" *ngIf="ruleForm.get('storedProcedureId')?.invalid && ruleForm.get('storedProcedureId')?.touched">
+            Stored procedure is required
+          </small>
+        </div>
+
+        <!-- Selected SP Info -->
+        <div *ngIf="selectedSp" class="sp-info-card">
+          <h5>Selected Stored Procedure</h5>
+          <div class="sp-info-grid">
+            <div class="sp-info-item">
+              <strong>Title:</strong> {{ selectedSp.title }}
+            </div>
+            <div class="sp-info-item" *ngIf="selectedSp.description">
+              <strong>Description:</strong> {{ selectedSp.description }}
+            </div>
+            <div class="sp-info-item">
+              <strong>Database:</strong> {{ selectedSp.databaseName }}
+            </div>
+            <div class="sp-info-item" *ngIf="selectedSp.procedureName">
+              <strong>Procedure:</strong> {{ selectedSp.procedureName }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parameter Mapping (only for StoredProcedure type) -->
+      <div class="form-section" *ngIf="ruleType === 'StoredProcedure' && selectedSp">
+        <h4>Parameter Mapping</h4>
+        <p class="section-description">Map Form Fields to Stored Procedure Parameters</p>
+        
+        <div class="mapping-list">
+          <div *ngFor="let key of getParameterKeys()" class="mapping-row">
+            <input 
+              type="text" 
+              [(ngModel)]="parameterMapping[key]" 
+              [ngModelOptions]="{standalone: true}"
+              [value]="key"
+              readonly
+              class="form-control param-name" />
+            <span class="mapping-arrow">→</span>
+            <select 
+              [(ngModel)]="parameterMapping[key]" 
+              [ngModelOptions]="{standalone: true}"
+              class="form-control field-select">
+              <option value="">Select Field</option>
+              <option *ngFor="let field of formFields" [value]="field.fieldCode">
+                {{ field.fieldName }} ({{ field.fieldCode }})
+              </option>
+            </select>
+            <button type="button" class="btn btn-sm btn-danger" (click)="removeParameterMapping(key)">
+              <i class="pi pi-trash"></i>
+            </button>
+          </div>
+        </div>
+        
+        <button type="button" class="btn btn-secondary" (click)="addParameterMapping()">
+          <i class="pi pi-plus"></i> Add Parameter
+        </button>
+      </div>
+
+      <!-- Result Mapping (only for StoredProcedure type) -->
+      <div class="form-section" *ngIf="ruleType === 'StoredProcedure' && selectedSp">
+        <h4>Result Mapping</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Result Column</label>
+            <input 
+              type="text" 
+              [(ngModel)]="resultMapping.resultColumn" 
+              [ngModelOptions]="{standalone: true}"
+              class="form-control"
+              placeholder="e.g., IsValid" />
+          </div>
+          <div class="form-group">
+            <label>True Value</label>
+            <input 
+              type="number" 
+              [(ngModel)]="resultMapping.trueValue" 
+              [ngModelOptions]="{standalone: true}"
+              class="form-control"
+              placeholder="1" />
+          </div>
+          <div class="form-group">
+            <label>False Value</label>
+            <input 
+              type="number" 
+              [(ngModel)]="resultMapping.falseValue" 
+              [ngModelOptions]="{standalone: true}"
+              class="form-control"
+              placeholder="0" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Condition (only for Condition type) -->
+      <div class="form-section" *ngIf="ruleType === 'Condition'">
         <h4>Condition (IF)</h4>
         <div formGroupName="condition" class="condition-form">
           <div class="form-row">
@@ -264,7 +376,7 @@
                   {{ field.fieldName }} ({{ field.fieldCode }})
                 </option>
               </select>
-              <small class="text-danger" *ngIf="conditionGroup.get('field')?.invalid && conditionGroup.get('field')?.touched">
+              <small class="text-danger" *ngIf="conditionGroup.get('field')?.invalid && conditionGroup.get('field')?.touched && ruleType === 'Condition'">
                 Field is required
               </small>
             </div>
