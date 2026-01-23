@@ -65,23 +65,17 @@
     </div>
 
     <!-- Attachment Types Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-paperclip"></i>
-          Attachment Types List
-        </h3>
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input
-              type="text"
-              placeholder="Search attachment types..."
-              class="search-input"
-              [(ngModel)]="searchTerm"
-              (input)="filterAttachmentTypes()"
-            />
-          </div>
+    <app-table-shell title="Attachment Types List" icon="pi pi-paperclip">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            placeholder="Search attachment types..."
+            class="search-input"
+            [(ngModel)]="searchTerm"
+            (input)="filterAttachmentTypes()"
+          />
         </div>
       </div>
 
@@ -129,7 +123,7 @@
                 <div class="field-name-wrapper">
                   <div class="field-name-main">{{ attachmentType.name || '-' }}</div>
                 </div>
-              </td>
+</td>
               <td class="col-code">
                 <code class="code-badge">{{ attachmentType.code || '-' }}</code>
               </td>
@@ -148,7 +142,7 @@
                 </span>
               </td>
               <td class="col-actions">
-                <div class="actions-menu">
+                <app-table-actions>
                   <button class="action-btn action-edit" (click)="openEditAttachmentTypeModal(attachmentType)" title="Edit">
                     <i class="pi pi-pencil"></i>
                   </button>
@@ -166,17 +160,17 @@
                   <button class="action-btn action-delete" (click)="deleteAttachmentType(attachmentType.id)" title="Delete">
                     <i class="pi pi-trash"></i>
                   </button>
-                </div>
-              </td>
+                </app-table-actions>
+</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </app-table-shell>
   </div>
 
   <!-- Attachment Type Modal -->
-  <p-dialog
+  <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true"
     [(visible)]="showAttachmentTypeModal"
     [modal]="true"
     [style]="{ width: '600px' }"
@@ -300,9 +294,14 @@
         <span *ngIf="loading.save" class="spinner-small"></span>
       </button>
     </ng-template>
-  </p-dialog>
+  </app-dialog-shell>
 </div>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
 

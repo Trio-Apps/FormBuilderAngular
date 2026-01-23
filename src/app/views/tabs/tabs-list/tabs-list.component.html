@@ -1,23 +1,6 @@
 <div class="fields-page-container">
   <!-- Language Toggle Buttons -->
-  <div class="admin-language-toggle">
-    <button
-      type="button"
-      class="admin-lang-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'en'"
-      (click)="switchLanguage('en')">
-      English
-    </button>
-    <button
-      type="button"
-      class="admin-lang-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'ar'"
-      (click)="switchLanguage('ar')">
-      العربية
-    </button>
-  </div>
-
-  <!-- Top Navigation Bar -->
+<!-- Top Navigation Bar -->
   <div class="top-navbar">
     <div class="nav-content">
       <div class="nav-left">
@@ -44,8 +27,13 @@
   <!-- Breadcrumb -->
   <div class="breadcrumb-section">
     <nav class="breadcrumb-nav">
-      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+      <a routerLink="/dashboard" class="breadcrumb-link">
         <i class="pi pi-home"></i>
+        <span>{{ 'common.dashboard' | translate }}</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-file"></i>
         <span>{{ 'common.forms' | translate }}</span>
       </a>
       <i class="pi pi-angle-right breadcrumb-separator"></i>
@@ -93,30 +81,24 @@
     </div>
 
     <!-- Tabs Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-folder"></i>
-          {{ 'tabs.tabsList' | translate }}
-        </h3>
-        <div class="table-actions">
-          <button
-            *ngIf="deletedTabs.length > 0 || showDeletedTabs"
-            class="btn-secondary btn-sm"
-            (click)="toggleDeletedTabs()"
-            [disabled]="loadingDeleted">
-            <i class="pi" [class.pi-eye]="!showDeletedTabs" [class.pi-eye-slash]="showDeletedTabs"></i>
-            <span>{{ (showDeletedTabs ? 'tabs.hideDeleted' : 'tabs.showDeleted') | translate }}</span>
-          </button>
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input
-              type="text"
-              [placeholder]="'tabs.searchTabs' | translate"
-              class="search-input"
-              [(ngModel)]="searchTerm"
-            />
-          </div>
+    <app-table-shell [title]="'tabs.tabsList' | translate" icon="pi pi-folder">
+      <div table-actions>
+        <button
+          *ngIf="deletedTabs.length > 0 || showDeletedTabs"
+          class="btn-secondary btn-sm"
+          (click)="toggleDeletedTabs()"
+          [disabled]="loadingDeleted">
+          <i class="pi" [class.pi-eye]="!showDeletedTabs" [class.pi-eye-slash]="showDeletedTabs"></i>
+          <span>{{ (showDeletedTabs ? 'tabs.hideDeleted' : 'tabs.showDeleted') | translate }}</span>
+        </button>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            [placeholder]="'tabs.searchTabs' | translate"
+            class="search-input"
+            [(ngModel)]="searchTerm"
+          />
         </div>
       </div>
 
@@ -169,7 +151,7 @@
                     </span>
                   </div>
                 </div>
-              </td>
+</td>
               <td class="col-code">
                 <code class="code-badge">{{ tab.tabCode || '-' }}</code>
               </td>
@@ -194,7 +176,7 @@
                 </span>
               </td>
               <td class="col-actions">
-                <div class="actions-menu">
+                <app-table-actions>
                   <button class="action-btn action-edit" (click)="openTabModal(tab)" [title]="'common.edit' | translate">
                     <i class="pi pi-pencil"></i>
                   </button>
@@ -207,8 +189,8 @@
                   <button class="action-btn action-delete" (click)="deleteTab(tab.id)" [title]="'common.delete' | translate">
                     <i class="pi pi-trash"></i>
                   </button>
-                </div>
-              </td>
+                </app-table-actions>
+</td>
             </tr>
           </tbody>
         </table>
@@ -249,7 +231,7 @@
                     </span>
                   </div>
                 </div>
-              </td>
+</td>
               <td class="col-code">
                 <code class="code-badge">{{ tab.tabCode || '-' }}</code>
               </td>
@@ -274,24 +256,24 @@
                 </span>
               </td>
               <td class="col-actions">
-                <div class="actions-menu">
+                <app-table-actions>
                   <button
                     class="action-btn action-restore"
                     (click)="restoreTab(tab.id)"
                     [title]="'tabs.restore' | translate">
                     <i class="pi pi-refresh"></i>
                   </button>
-                </div>
-              </td>
+                </app-table-actions>
+</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </app-table-shell>
   </div>
 
   <!-- Add/Edit Tab Modal -->
-  <p-dialog
+  <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
     [(visible)]="showTabModal"
     [modal]="true"
     [header]="(editingTab ? 'tabs.editTab' : 'tabs.addTab') | translate"
@@ -391,8 +373,13 @@
         </button>
       </div>
     </form>
-  </p-dialog>
+  </app-dialog-shell>
 </div>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+

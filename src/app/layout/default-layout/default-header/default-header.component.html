@@ -6,30 +6,12 @@
     <c-nav-item><a cNavLink routerLink="/settings" routerLinkActive="active">Settings</a></c-nav-item>
   </c-header-nav>
 
-
-  <!-- Theme picker -->
-  <c-header-nav class="ms-auto ms-md-0">
-    <c-dropdown alignment="end" variant="nav-item">
-      <button [caret]="false" cDropdownToggle aria-label="Open theme picker">
-        <!-- بدل cIcon استخدم صورة أو emoji -->
-        🌗
-      </button>
-      <div cDropdownMenu>
-        <button *ngFor="let mode of colorModes" (click)="colorMode.set(mode.name)" [active]="colorMode() === mode.name" cDropdownItem class="d-flex align-items-center">
-          <!-- بدل cIcon -->
-          <span class="me-2">{{ mode.icon === 'cilSun' ? '☀️' : mode.icon === 'cilMoon' ? '🌙' : '⚙️' }}</span>
-          {{ mode.text }}
-        </button>
-      </div>
-    </c-dropdown>
-  </c-header-nav>
-
   <!-- User dropdown -->
   <c-header-nav class="mx-0">
     <c-dropdown [popperOptions]="{ placement: 'bottom-start' }" variant="nav-item">
       <button [caret]="false" cDropdownToggle class="py-0 pe-0" aria-label="Open user menu">
         <c-avatar shape="rounded-1" size="md" textColor="primary"></c-avatar>
-        <span class="ms-2">{{ authService.userName() || 'User' }} <small class="text-muted">({{ authService.role() || 'User' }})</small></span>
+        <span class="ms-2">{{ authService.userName() || 'User' }}</span>
       </button>
       <ul cDropdownMenu class="pt-0 w-auto">
         <li><h6 cDropdownHeader class="bg-body-secondary text-body-secondary fw-semibold py-2 rounded-top">Account</h6></li>
@@ -38,3 +20,4 @@
     </c-dropdown>
   </c-header-nav>
 </c-container>
+

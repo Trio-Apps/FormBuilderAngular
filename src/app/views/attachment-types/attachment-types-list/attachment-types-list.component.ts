@@ -1,4 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef, OnDestroy } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -15,11 +17,14 @@ import { CheckboxModule } from 'primeng/checkbox';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-attachment-types-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterLink,
     FormsModule,
@@ -32,7 +37,8 @@ import { TranslationService } from '../../../core/services/translation.service';
     InputNumberModule,
     CheckboxModule,
     ButtonModule,
-    DialogModule
+    DialogModule,
+    TableShellComponent
   ],
   templateUrl: './attachment-types-list.component.html',
   styleUrls: ['./attachment-types-list.component.scss'],
@@ -424,4 +430,11 @@ export class AttachmentTypesListComponent implements OnInit, OnDestroy {
     return !!this.editingAttachmentType;
   }
 }
+
+
+
+
+
+
+
 

@@ -58,11 +58,17 @@ export class AuthService {
             }
           }
           
+          const parsedExpiry = response.expiresAt ? Date.parse(response.expiresAt) : NaN;
+          const expiresAtMs = Number.isNaN(parsedExpiry)
+            ? Date.now() + environment.security.tokenExpiry * 1000
+            : parsedExpiry;
+
           this.setSession(
             response.token,
             credentials.username,
             response.role || 'User',
-            userId
+            userId,
+            expiresAtMs
           );
         }
       }),
@@ -92,8 +98,8 @@ export class AuthService {
     return this.storageService.getRole();
   }
 
-  private setSession(token: string, username: string, role: string, userId?: number): void {
-    this.storageService.setToken(token);
+  private setSession(token: string, username: string, role: string, userId?: number, expiresAtMs?: number): void {
+    this.storageService.setToken(token, expiresAtMs);
     this.storageService.setUserInfo(username, role, userId);
     
     console.log('[AuthService] Session set:', {
@@ -109,13 +115,17 @@ export class AuthService {
   }
 
   private isTokenExpired(token: string): boolean {
+    const storedExpiry = this.storageService.getTokenExpiryMs();
+    if (storedExpiry) {
+      return Date.now() >= storedExpiry;
+    }
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const expiry = payload.exp;
       const currentTime = Math.floor(new Date().getTime() / 1000);
       return currentTime >= expiry;
     } catch {
-      return true;
+      return false;
     }
   }
 

@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -18,11 +20,14 @@ import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-stage-assignees-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterLink,
     FormsModule,
@@ -36,7 +41,8 @@ import { TranslationService } from '../../../core/services/translation.service';
     ButtonModule,
     TableModule,
     PaginatorModule,
-    MultiSelectModule
+    MultiSelectModule,
+    TableShellComponent
   ],
   templateUrl: './stage-assignees-list.component.html',
   styleUrls: ['./stage-assignees-list.component.scss'],
@@ -1108,4 +1114,11 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     this.selectedUserIds = [];
   }
 }
+
+
+
+
+
+
+
 

@@ -1,4 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef, OnDestroy } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
@@ -30,11 +32,14 @@ import { ValidationErrorDisplayComponent } from '../../angular-validation/compon
 import { ValidationErrorCollection } from '../../angular-validation/models/validation-error.model';
 import { UserQueriesService } from '../../FormBuilder/services/user-queries.service';
 import { UserQueryDto, CreateUserQueryDto } from '../../FormBuilder/form-builder/models/user-query-dto.model';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-fields-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
@@ -44,6 +49,7 @@ import { UserQueryDto, CreateUserQueryDto } from '../../FormBuilder/form-builder
     DialogModule,
     ButtonModule,
     RouterLink,
+    TableShellComponent,
   ],
   templateUrl: './fields-list.component.html',
   styleUrls: ['./fields-list.component.scss'],
@@ -5301,3 +5307,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     return environment.apiUrl;
   }
 }
+
+
+
+
+
+
+

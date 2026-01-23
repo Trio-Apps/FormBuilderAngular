@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, FormControl, Validators } from '@angular/forms';
@@ -18,6 +20,7 @@ import {
 import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { GridRulesUtils, RowValidationResult } from '../../FormBuilder/utils/grid-rules.utils';
 
 // PrimeNG Modules
@@ -45,6 +48,8 @@ interface RowFormType {
   selector: 'app-grid-rows-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterModule,
     FormsModule,
@@ -55,7 +60,8 @@ interface RowFormType {
     DialogModule,
     ToastModule,
     ConfirmDialogModule,
-    TooltipModule
+    TooltipModule,
+    TableShellComponent
   ],
   templateUrl: './grid-rows-list.component.html',
   styleUrls: ['./grid-rows-list.component.scss'],
@@ -1211,3 +1217,10 @@ export class GridRowsListComponent implements OnInit, OnDestroy {
     return defaultMessage;
   }
 }
+
+
+
+
+
+
+

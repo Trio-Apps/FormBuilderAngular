@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { TableActionsComponent } from '../../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -19,11 +21,14 @@ import { PaginatorModule } from 'primeng/paginator';
 import { CheckboxModule } from 'primeng/checkbox';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { TranslationService } from '../../../../core/services/translation.service';
+import { TableShellComponent } from '../../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-projects-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterModule,
     FormsModule,
@@ -37,7 +42,8 @@ import { TranslationService } from '../../../../core/services/translation.servic
     TooltipModule,
     PaginatorModule,
     CheckboxModule,
-    TranslatePipe
+    TranslatePipe,
+    TableShellComponent
   ],
 
   templateUrl: './projects-list.component.html',
@@ -515,4 +521,11 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
     });
   }
 }
+
+
+
+
+
+
+
 

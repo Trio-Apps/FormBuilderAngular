@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -23,11 +25,14 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { CheckboxModule } from 'primeng/checkbox';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-tabs-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterModule,
     FormsModule,
@@ -40,7 +45,8 @@ import { TranslatePipe } from '../../../core/pipes/translate.pipe';
     ConfirmDialogModule,
     TooltipModule,
     CheckboxModule,
-    TranslatePipe
+    TranslatePipe,
+    TableShellComponent
   ],
   templateUrl: './tabs-list.component.html',
   styleUrls: ['./tabs-list.component.scss'],
@@ -684,3 +690,10 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
 }
+
+
+
+
+
+
+

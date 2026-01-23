@@ -1,4 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApprovalDelegationService, ApprovalDelegationDto, CreateApprovalDelegationDto, UpdateApprovalDelegationDto } from '../../FormBuilder/services/approval-delegation.service';
@@ -15,11 +17,14 @@ import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-approval-delegations-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
@@ -31,7 +36,8 @@ import { TranslationService } from '../../../core/services/translation.service';
     CheckboxModule,
     ButtonModule,
     TableModule,
-    PaginatorModule
+    PaginatorModule,
+    TableShellComponent
   ],
   templateUrl: './approval-delegations-list.component.html',
   styleUrls: ['./approval-delegations-list.component.scss'],
@@ -604,4 +610,11 @@ export class ApprovalDelegationsListComponent implements OnInit {
     this.delegationForm.reset();
   }
 }
+
+
+
+
+
+
+
 

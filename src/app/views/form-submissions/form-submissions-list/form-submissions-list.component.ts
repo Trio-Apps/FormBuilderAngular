@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChildren, QueryList } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -37,11 +39,14 @@ import { ApprovalStageService } from '../../FormBuilder/services/approval-stage.
 import { Subscription, forkJoin, of, Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-form-submissions-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterLink,
     FormsModule,
@@ -57,7 +62,8 @@ import { environment } from '../../../environments/environment';
     PaginatorModule,
     CheckboxModule,
     CalculatedFieldComponent,
-    GridViewComponent
+    GridViewComponent,
+    TableShellComponent
   ],
   templateUrl: './form-submissions-list.component.html',
   styleUrls: ['./form-submissions-list.component.scss'],
@@ -4031,4 +4037,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 }
+
+
+
+
+
+
+
 

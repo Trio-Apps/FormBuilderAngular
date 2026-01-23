@@ -1,8 +1,28 @@
 @use "@coreui/coreui/scss/mixins/transition" as *;
-@use "@coreui/coreui/scss/mixins/color-mode" as *;
 
 body {
-  background-color: var(--cui-tertiary-bg);
+  background-color: #f0f7f5;
+  color-scheme: light;
+  font-family: 'Manrope', 'Tajawal', sans-serif;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: -80px;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(0, 235, 181, 0.06) 0 220px, transparent 221px),
+    radial-gradient(circle at 88% 22%, rgba(0, 235, 181, 0.05) 0 260px, transparent 261px),
+    radial-gradient(circle at 72% 86%, rgba(0, 235, 181, 0.05) 0 240px, transparent 241px);
+}
+
+.wrapper,
+.body {
+  position: relative;
+  z-index: 1;
 }
 
 .wrapper {
@@ -15,6 +35,25 @@ body {
 .header > .container-fluid,
 .sidebar-header {
   min-height: calc(4rem + 1px); // stylelint-disable-line function-disallowed-list
+}
+
+.header {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.header .header-nav .nav-link {
+  color: #475569;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.header .header-nav .nav-link.active,
+.header .header-nav .nav-link:hover {
+  color: #0f766e;
+  background: rgba(0, 184, 148, 0.08);
 }
 
 .sidebar-brand-full {
@@ -53,12 +92,3 @@ body {
   min-height: calc(3rem + 1px); // stylelint-disable-line function-disallowed-list
 }
 
-@include color-mode(dark) {
-  body {
-    background-color: var(--cui-dark-bg-subtle);
-  }
-
-  .footer {
-    --cui-footer-bg: var(--cui-body-bg);
-  }
-}

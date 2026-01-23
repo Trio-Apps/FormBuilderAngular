@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { TableActionsComponent } from '../../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
@@ -24,6 +26,7 @@ import { Subscription, forkJoin } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { TranslationService } from '../../../../core/services/translation.service';
 import { DuplicateValidationHelper } from '../../../../core/utils/duplicate-validation.helper';
+import { TableShellComponent } from '../../../../shared/table-shell/table-shell.component';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -38,6 +41,8 @@ import { TooltipModule } from 'primeng/tooltip';
   selector: 'app-form-rules-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterModule,
     FormsModule,
@@ -48,7 +53,8 @@ import { TooltipModule } from 'primeng/tooltip';
     DialogModule,
     ToastModule,
     ConfirmDialogModule,
-    TooltipModule
+    TooltipModule,
+    TableShellComponent
   ],
   templateUrl: './form-rules-list.component.html',
   styleUrls: ['./form-rules-list.component.scss'],
@@ -983,4 +989,11 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     });
   }
 }
+
+
+
+
+
+
+
 

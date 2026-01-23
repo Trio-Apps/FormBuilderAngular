@@ -42,9 +42,8 @@
   <div class="main-content">
     <!-- Form Submissions Section -->
     <div class="document-types-section">
-      <div class="section-header">
-        <h3>Form Submissions List</h3>
-        <div class="header-actions">
+      <app-table-shell title="Form Submissions List" icon="pi pi-list">
+        <div table-actions class="header-actions">
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input
@@ -68,7 +67,6 @@
           </select>
           
         </div>
-      </div>
 
       <div *ngIf="loading.submissions" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
@@ -115,7 +113,7 @@
                 <i class="pi pi-file"></i>
                 <span>{{ submission.documentNumber || '-' }}</span>
               </div>
-            </td>
+</td>
             <td>
               <div class="document-type-cell">
                 <i class="pi pi-folder"></i>
@@ -125,7 +123,7 @@
                   {{ documentType?.approvalWorkflowName }}
                 </span>
               </div>
-            </td>
+</td>
             <td>{{ submission.formName || '-' }}</td>
             <td><code>{{ submission.seriesCode || '-' }}</code></td>
             <td>{{ submission.submittedByUserName || submission.submittedByUserId || '-' }}</td>
@@ -137,7 +135,7 @@
               </span>
             </td>
             <td>
-              <div class="action-buttons">
+              <app-table-actions>
                 <button pButton 
                   icon="pi pi-eye" 
                   class="p-button-text p-button-sm action-btn" 
@@ -170,8 +168,8 @@
                   (click)="deleteSubmission(submission)"
                   pTooltip="Delete"
                   tooltipPosition="top"></button>
-              </div>
-            </td>
+              </app-table-actions>
+</td>
           </tr>
         </ng-template>
       </p-table>
@@ -185,12 +183,13 @@
         (onPageChange)="onPageChange($event)"
         styleClass="document-types-paginator">
       </p-paginator>
+      </app-table-shell>
     </div>
   </div>
 </div>
 
 <!-- Edit Submission Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
   [(visible)]="showSubmissionModal"
   [header]="isViewMode ? 'View Submission Details' : 'Edit Form Submission'"
   [modal]="true"
@@ -475,10 +474,10 @@
       </button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <!-- Field Value Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
   [(visible)]="showFieldValueModal"
   [header]="editingFieldValue ? 'Edit Field Value' : 'Add Field Value'"
   [modal]="true"
@@ -586,10 +585,10 @@
       </button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <!-- Add New Submission Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
   [(visible)]="showAddSubmissionModal"
   header="Create New Form Submission"
   [modal]="true"
@@ -919,10 +918,10 @@
       </button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <!-- Approve/Reject Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
   [(visible)]="showApproveRejectModal"
   [header]="actionType === 'approve' ? 'Approve Form Submission' : 'Reject Form Submission'"
   [modal]="true"
@@ -984,8 +983,13 @@
       </div>
     </form>
   </div>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
 

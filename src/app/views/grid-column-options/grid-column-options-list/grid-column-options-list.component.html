@@ -84,7 +84,7 @@
                 <i class="fas fa-plus"></i> Add Option
               </button>
             </div>
-          </td>
+</td>
         </tr>
 
         <!-- Grid Column Options List -->
@@ -99,11 +99,11 @@
 
           <td class="option-text-cell">
             <div class="option-text">{{option.optionText || '-'}}</div>
-          </td>
+</td>
 
           <td class="option-text-cell">
             <div class="option-text">{{option.foreignOptionText || '-'}}</div>
-          </td>
+</td>
 
           <td>
             <span class="status-badge" [ngClass]="getGridColumnOptionStatusClass(option)">
@@ -132,114 +132,121 @@
                 *ngIf="option.id"
               ></i>
             </div>
-          </td>
+</td>
         </tr>
       </tbody>
     </table>
-  </div>
+  </div>  <!-- Grid Column Option Modal -->
+  <app-dialog-shell
+    [(visible)]="showGridColumnOptionModal"
+    [modal]="true"
+    [header]="editingGridColumnOption ? 'Edit Grid Column Option' : 'Add New Grid Column Option'"
+    [style]="{ width: '720px', maxWidth: '95vw' }"
+    (onHide)="closeGridColumnOptionModal()"
+  >
+    <form [formGroup]="gridColumnOptionForm" (ngSubmit)="saveGridColumnOption()">
+      <!-- Basic Information -->
+      <div class="form-section">
+        <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
 
-  <!-- Grid Column Option Modal -->
-  <div *ngIf="showGridColumnOptionModal" class="modal-overlay" (click)="closeGridColumnOptionModal()">
-    <div class="modal-content" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h2>
-          <i class="fas" [class.fa-plus]="!editingGridColumnOption" [class.fa-edit]="!!editingGridColumnOption"></i>
-          {{editingGridColumnOption ? 'Edit Grid Column Option' : 'Add New Grid Column Option'}}
-        </h2>
-        <button class="btn-close" (click)="closeGridColumnOptionModal()">
-          <i class="fas fa-times"></i>
-        </button>
+        <div class="form-row">
+          <div class="form-group" [class.invalid]="isFieldInvalid('columnId')">
+            <label for="columnId">
+              Column ID <span class="text-danger">*</span>
+              <span *ngIf="isFieldInvalid('columnId')" class="error-text">
+                {{getFieldErrorMessage('columnId')}}
+              </span>
+            </label>
+            <input type="number" id="columnId" formControlName="columnId" 
+                   [readonly]="!!selectedColumnId" min="1" placeholder="Column ID">
+          </div>
+
+          <div class="form-group" [class.invalid]="isFieldInvalid('optionOrder')">
+            <label for="optionOrder">
+              Order <span class="text-danger">*</span>
+              <span *ngIf="isFieldInvalid('optionOrder')" class="error-text">
+                {{getFieldErrorMessage('optionOrder')}}
+              </span>
+            </label>
+            <input type="number" id="optionOrder" formControlName="optionOrder" min="1" placeholder="Order">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" [class.invalid]="isFieldInvalid('optionValue')">
+            <label for="optionValue">
+              Option Value <span class="text-danger">*</span>
+              <span *ngIf="isFieldInvalid('optionValue')" class="error-text">
+                {{getFieldErrorMessage('optionValue')}}
+              </span>
+            </label>
+            <input type="text" id="optionValue" formControlName="optionValue" 
+                   placeholder="option_value" maxlength="100">
+            <small class="hint">The value stored in the database</small>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" [class.invalid]="isFieldInvalid('optionText')">
+            <label for="optionText">
+              Option Text <span class="text-danger">*</span>
+              <span *ngIf="isFieldInvalid('optionText')" class="error-text">
+                {{getFieldErrorMessage('optionText')}}
+              </span>
+            </label>
+            <input type="text" id="optionText" formControlName="optionText" 
+                   placeholder="Display Text" maxlength="200">
+            <small class="hint">The text displayed to users</small>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" [class.invalid]="isFieldInvalid('foreignOptionText')">
+            <label for="foreignOptionText">
+              Foreign Option Text (Arabic)
+              <span *ngIf="isFieldInvalid('foreignOptionText')" class="error-text">
+                {{getFieldErrorMessage('foreignOptionText')}}
+              </span>
+            </label>
+            <input type="text" id="foreignOptionText" formControlName="foreignOptionText" 
+                   placeholder="النص العربي" maxlength="200">
+            <small class="hint">Arabic text displayed to users</small>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group active-status-group">
+            <label class="active-status-label">ACTIVE STATUS</label>
+            <div class="checkbox-wrapper">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  formControlName="isActive"
+                  id="isActive"
+                  class="status-checkbox"
+                  [checked]="gridColumnOptionForm.get('isActive')?.value"
+                />
+                <span class="checkbox-custom"></span>
+                <span class="status-text">{{ gridColumnOptionForm.get('isActive')?.value === true ? 'Active' : 'Inactive' }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <form [formGroup]="gridColumnOptionForm" (ngSubmit)="saveGridColumnOption()">
-        <div class="modal-body">
-          <!-- Basic Information -->
-          <div class="form-section">
-            <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeGridColumnOptionModal()" [disabled]="loading.save">
+          Cancel
+        </button>
 
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('columnId')">
-                <label for="columnId">
-                  Column ID <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('columnId')" class="error-text">
-                    {{getFieldErrorMessage('columnId')}}
-                  </span>
-                </label>
-                <input type="number" id="columnId" formControlName="columnId" 
-                       [readonly]="!!selectedColumnId" min="1" placeholder="Column ID">
-              </div>
-
-              <div class="form-group" [class.invalid]="isFieldInvalid('optionOrder')">
-                <label for="optionOrder">
-                  Order <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('optionOrder')" class="error-text">
-                    {{getFieldErrorMessage('optionOrder')}}
-                  </span>
-                </label>
-                <input type="number" id="optionOrder" formControlName="optionOrder" min="1" placeholder="Order">
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('optionValue')">
-                <label for="optionValue">
-                  Option Value <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('optionValue')" class="error-text">
-                    {{getFieldErrorMessage('optionValue')}}
-                  </span>
-                </label>
-                <input type="text" id="optionValue" formControlName="optionValue" 
-                       placeholder="option_value" maxlength="100">
-                <small class="hint">The value stored in the database</small>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('optionText')">
-                <label for="optionText">
-                  Option Text <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('optionText')" class="error-text">
-                    {{getFieldErrorMessage('optionText')}}
-                  </span>
-                </label>
-                <input type="text" id="optionText" formControlName="optionText" 
-                       placeholder="Display Text" maxlength="200">
-                <small class="hint">The text displayed to users</small>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('foreignOptionText')">
-                <label for="foreignOptionText">
-                  Foreign Option Text (Arabic)
-                  <span *ngIf="isFieldInvalid('foreignOptionText')" class="error-text">
-                    {{getFieldErrorMessage('foreignOptionText')}}
-                  </span>
-                </label>
-                <input type="text" id="foreignOptionText" formControlName="foreignOptionText" 
-                       placeholder="النص العربي" maxlength="200">
-                <small class="hint">Arabic text displayed to users</small>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group active-status-group">
-                <label class="active-status-label">ACTIVE STATUS</label>
-                <div class="checkbox-wrapper">
-                  <label class="checkbox-label">
-                    <input
-                      type="checkbox"
-                      formControlName="isActive"
-                      id="isActive"
-                      class="status-checkbox"
-                      [checked]="gridColumnOptionForm.get('isActive')?.value"
-                    />
-                    <span class="checkbox-custom"></span>
-                    <span class="status-text">{{ gridColumnOptionForm.get('isActive')?.value === true ? 'Active' : 'Inactive' }}</span>
-                  </label>
-                </div>
-              </div>
-            </div>
+        <button type="submit" class="btn btn-primary" [disabled]="gridColumnOptionForm.invalid || loading.save">
+          <i class="fas" [class.fa-save]="editingGridColumnOption" [class.fa-plus]="!editingGridColumnOption"></i>
+          {{editingGridColumnOption ? 'Update Option' : 'Create Option'}}
+          <span *ngIf="loading.save" class="spinner-small"></span>
+        </button>
+      </div>
+    </form>
+  </app-dialog-shell>
           </div>
         </div>
 
@@ -260,4 +267,7 @@
 </div>
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
 

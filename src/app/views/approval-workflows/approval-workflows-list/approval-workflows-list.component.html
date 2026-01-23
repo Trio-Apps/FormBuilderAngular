@@ -42,9 +42,8 @@
   <div class="main-content">
     <!-- Approval Workflows Section -->
     <div class="document-types-section">
-      <div class="section-header">
-        <h3>Approval Workflows List</h3>
-        <div class="header-actions">
+      <app-table-shell title="Approval Workflows List" icon="pi pi-sitemap">
+        <div table-actions class="header-actions">
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input
@@ -58,18 +57,7 @@
               autocomplete="off"
             />
           </div>
-          <button pButton 
-            icon="pi pi-filter" 
-            class="p-button-text p-button-sm header-icon-btn" 
-            pTooltip="Filter"
-            tooltipPosition="top"></button>
-          <button pButton 
-            icon="pi pi-download" 
-            class="p-button-text p-button-sm header-icon-btn" 
-            pTooltip="Download"
-            tooltipPosition="top"></button>
         </div>
-      </div>
 
       <div *ngIf="loading.workflows" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
@@ -85,90 +73,88 @@
         <button pButton label="New Approval Workflow" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
       </div>
 
-      <p-table *ngIf="!loading.workflows && approvalWorkflows.length > 0" 
-        [value]="getPaginatedWorkflows()" 
-        [paginator]="false"
-        styleClass="p-datatable-sm document-types-table">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>#</th>
-            <th>Workflow Name</th>
-            <th>Document Type</th>
-            <th>Status</th>
-            <th>Created Date</th>
-            <th>Actions</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-workflow let-rowIndex="rowIndex">
-          <tr>
-            <td>{{ first + rowIndex + 1 }}</td>
-            <td>
-              <div class="document-name-cell">
-                <i class="pi pi-sitemap"></i>
-                <span>{{ workflow.name }}</span>
-              </div>
-            </td>
-            <td>{{ workflow.documentTypeName || getDocumentTypeName(workflow.documentTypeId) }}</td>
-            <td>
-              <span *ngIf="!workflow.isDeleted" class="badge badge-success">
-                <i class="pi pi-check"></i>
-                Active
-              </span>
-              <span *ngIf="workflow.isDeleted" class="badge badge-danger">
-                <i class="pi pi-trash"></i>
-                Deleted
-              </span>
-            </td>
-            <td>{{ workflow.createdDate ? formatDate(workflow.createdDate) : '-' }}</td>
-            <td>
-              <div class="action-buttons">
-                <button pButton 
-                  icon="pi pi-list" 
-                  class="p-button-text p-button-sm action-btn" 
-                  [routerLink]="['/approval-workflows', workflow.id, 'stages']"
-                  pTooltip="Manage Stages"
-                  tooltipPosition="top"></button>
-                <button *ngIf="workflow.isDeleted" pButton 
-                  icon="pi pi-undo" 
-                  class="p-button-text p-button-sm action-btn" 
-                  (click)="restoreWorkflow(workflow)"
-                  [disabled]="loading.toggle"
-                  pTooltip="Restore"
-                  tooltipPosition="top"></button>
-                <button pButton 
-                  icon="pi pi-pencil" 
-                  class="p-button-text p-button-sm action-btn" 
-                  (click)="openEditModal(workflow)"
-                  pTooltip="Edit"
-                  tooltipPosition="top"></button>
-                <button pButton 
-                  icon="pi pi-trash" 
-                  class="p-button-text p-button-sm action-btn action-btn-danger" 
-                  (click)="deleteWorkflow(workflow)"
-                  [disabled]="loading.delete"
-                  pTooltip="Delete"
-                  tooltipPosition="top"></button>
-              </div>
-            </td>
-          </tr>
-        </ng-template>
-      </p-table>
-
-      <p-paginator 
-        *ngIf="!loading.workflows && approvalWorkflows.length > 0"
-        [first]="first"
-        [rows]="rows"
-        [totalRecords]="totalRecords"
-        [rowsPerPageOptions]="[10, 20, 50]"
-        (onPageChange)="onPageChange($event)"
-        styleClass="document-types-paginator">
-      </p-paginator>
+      <div *ngIf="!loading.workflows && approvalWorkflows.length > 0" class="table-wrapper">
+        <p-table 
+          [value]="getPaginatedWorkflows()" 
+          [paginator]="false"
+          styleClass="p-datatable-sm document-types-table">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>#</th>
+              <th>Workflow Name</th>
+              <th>Document Type</th>
+              <th>Status</th>
+              <th>Created Date</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-workflow let-rowIndex="rowIndex">
+            <tr>
+              <td>{{ first + rowIndex + 1 }}</td>
+              <td>
+                <div class="document-name-cell">
+                  <i class="pi pi-sitemap"></i>
+                  <span>{{ workflow.name }}</span>
+                </div>
+</td>
+              <td>{{ workflow.documentTypeName || getDocumentTypeName(workflow.documentTypeId) }}</td>
+              <td>
+                <span *ngIf="!workflow.isDeleted" class="status-badge status-active">
+                  <i class="pi pi-check"></i>
+                  Active
+                </span>
+                <span *ngIf="workflow.isDeleted" class="status-badge status-inactive">
+                  <i class="pi pi-trash"></i>
+                  Deleted
+                </span>
+              </td>
+              <td>{{ workflow.createdDate ? formatDate(workflow.createdDate) : '-' }}</td>
+              <td class="actions-cell text-end">
+                <app-table-actions>
+                  <button
+                    class="action-btn action-duplicate"
+                    [title]="'Manage Stages'"
+                    [routerLink]="['/approval-workflows', workflow.id, 'stages']"
+                  >
+                    <i class="pi pi-list"></i>
+                  </button>
+                  <button
+                    *ngIf="workflow.isDeleted"
+                    class="action-btn action-reactivate"
+                    [title]="'Restore'"
+                    (click)="restoreWorkflow(workflow)"
+                    [disabled]="loading.toggle"
+                  >
+                    <i class="pi pi-undo"></i>
+                  </button>
+                  <button
+                    class="action-btn action-edit"
+                    [title]="'Edit'"
+                    (click)="openEditModal(workflow)"
+                  >
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button
+                    class="action-btn action-delete"
+                    [title]="'Delete'"
+                    (click)="deleteWorkflow(workflow)"
+                    [disabled]="loading.delete"
+                  >
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </app-table-actions>
+</td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+      </app-table-shell>
     </div>
   </div>
 </div>
 
 <!-- Approval Workflow Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false"
   [(visible)]="showModal"
   [header]="(editingWorkflow ? 'Edit' : 'New') + ' Approval Workflow'"
   [modal]="true"
@@ -244,8 +230,13 @@
         [loading]="loading.save"></button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
 

@@ -80,36 +80,18 @@
       </div>
     </div>
 
-    <!-- Search and Actions -->
-    <div class="toolbar">
-      <div class="search-container">
-        <i class="pi pi-search search-icon"></i>
-        <input
-          type="text"
-          pInputText
-          [(ngModel)]="searchTerm"
-          (input)="filterMenus()"
-          placeholder="Search menus..."
-          class="search-input">
-        <span *ngIf="filteredMenus.length > 0" class="search-results">{{ filteredMenus.length }} menu(s) found</span>
-      </div>
-    </div>
-
     <!-- Menus Table -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-table"></i>
-          Menus List
-        </h3>
-        <button
-          pButton
-          icon="pi pi-plus"
-          label="New Menu"
-          class="p-button-success"
-          (click)="openMenuModal()"
-          [disabled]="loading.menus">
-        </button>
+    <app-table-shell title="Menus List" icon="pi pi-table">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            [(ngModel)]="searchTerm"
+            (input)="filterMenus()"
+            placeholder="Search menus..."
+            class="search-input">
+        </div>
       </div>
       <p-table
         [value]="filteredMenus"
@@ -144,7 +126,7 @@
                 <strong>{{ menu.name }}</strong>
                 <span *ngIf="menu.foreignName" class="foreign-name">{{ menu.foreignName }}</span>
               </div>
-            </td>
+</td>
             <td>
               <code class="menu-code">{{ menu.menuCode }}</code>
             </td>
@@ -178,7 +160,7 @@
               <span *ngIf="!menu.permissions || menu.permissions.length === 0" class="text-muted">All Users</span>
             </td>
             <td>
-              <div class="action-buttons">
+              <app-table-actions>
                 <button
                   pButton
                   icon="pi pi-list"
@@ -212,8 +194,8 @@
                   pTooltip="Delete"
                   tooltipPosition="top">
                 </button>
-              </div>
-            </td>
+              </app-table-actions>
+</td>
           </tr>
         </ng-template>
 
@@ -232,11 +214,11 @@
                   [disabled]="loading.menus">
                 </button>
               </div>
-            </td>
+</td>
           </tr>
         </ng-template>
       </p-table>
-    </div>
+    </app-table-shell>
 
     <!-- Sub Menus Section (when a menu is selected) -->
     <div *ngIf="currentMenuForSubMenu" class="sub-menus-section">
@@ -300,7 +282,7 @@
                 <strong>{{ subMenu.name }}</strong>
                 <span *ngIf="subMenu.foreignName" class="foreign-name">{{ subMenu.foreignName }}</span>
               </div>
-            </td>
+</td>
             <td>
               <span [class]="subMenu.isActive ? 'status-badge active' : 'status-badge inactive'">
                 <i [class]="subMenu.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
@@ -325,7 +307,7 @@
               <span *ngIf="!subMenu.permissions || subMenu.permissions.length === 0" class="text-muted">All Users</span>
             </td>
             <td>
-              <div class="action-buttons">
+              <app-table-actions>
                 <button
                   pButton
                   icon="pi pi-file"
@@ -351,8 +333,8 @@
                   pTooltip="Delete"
                   tooltipPosition="top">
                 </button>
-              </div>
-            </td>
+              </app-table-actions>
+</td>
           </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">
@@ -362,7 +344,7 @@
                 <i class="pi pi-inbox"></i>
                 <p>No sub menus found for this menu.</p>
               </div>
-            </td>
+</td>
           </tr>
         </ng-template>
       </p-table>
@@ -457,7 +439,7 @@
               <span *ngIf="!document.permissions || document.permissions.length === 0" class="text-muted">All Users</span>
             </td>
             <td>
-              <div class="action-buttons">
+              <app-table-actions>
                 <button
                   pButton
                   icon="pi pi-pencil"
@@ -475,8 +457,8 @@
                   pTooltip="Remove"
                   tooltipPosition="top">
                 </button>
-              </div>
-            </td>
+              </app-table-actions>
+</td>
           </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">
@@ -486,7 +468,7 @@
                 <i class="pi pi-inbox"></i>
                 <p>No documents found for this menu.</p>
               </div>
-            </td>
+</td>
           </tr>
         </ng-template>
       </p-table>
@@ -495,7 +477,7 @@
 </div>
 
 <!-- Menu Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false"
   [(visible)]="showMenuModal"
   [header]="(editingMenu ? 'Edit' : 'New') + ' Menu'"
   [modal]="true"
@@ -733,10 +715,10 @@
       </button>
     </div>
   </ng-template>
-</p-dialog>
+</app-dialog-shell>
 
 <!-- Sub Menu Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false"
   [(visible)]="showSubMenuModal"
   [header]="(editingSubMenu ? 'Edit' : 'New') + ' Sub Menu'"
   [modal]="true"
@@ -942,10 +924,10 @@
       [disabled]="loading.save || subMenuForm.invalid">
     </button>
   </ng-template>
-</p-dialog>
+</app-dialog-shell>
 
 <!-- Menu Document Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false"
   [(visible)]="showMenuDocumentModal"
   [header]="(editingMenuDocument ? 'Edit' : 'Assign') + ' Document'"
   [modal]="true"
@@ -1074,7 +1056,12 @@
       [disabled]="loading.save || menuDocumentForm.invalid">
     </button>
   </ng-template>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+

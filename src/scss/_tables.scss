@@ -1,0 +1,683 @@
+.table-card,
+.table-wrapper,
+.table-header,
+.table-title,
+.table-actions,
+.fields-table,
+.projects-table,
+.procedures-table,
+.rules-table,
+.grid-column-options-table,
+.field-options-table,
+.submissions-table,
+.grid-table {
+  font-family: inherit;
+}
+
+.table-card {
+  border-radius: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.1rem !important;
+  border: 1px solid rgba(16, 185, 129, 0.18) !important;
+  border-radius: 16px !important;
+  background: linear-gradient(90deg, #ffffff 0%, #f3fffb 100%) !important;
+  margin-bottom: 1rem;
+}
+
+.table-title i {
+  color: #0f766e !important;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.table-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  color: #1f2937 !important;
+  margin: 0 !important;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.table-actions .search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.table-actions .search-box i {
+  position: absolute;
+  left: 12px;
+  color: #94a3b8;
+  font-size: 16px;
+}
+
+.table-actions .search-box .search-input {
+  padding: 9px 12px 9px 36px;
+  border: 1px solid rgba(16, 185, 129, 0.2) !important;
+  border-radius: 999px;
+  font-size: 14px;
+  width: 260px;
+  transition: all 0.2s ease;
+  background: #ffffff;
+  color: #1f2937;
+}
+
+.table-actions .search-box .search-input:focus {
+  outline: none;
+  border-color: #00b894 !important;
+  box-shadow: 0 0 0 3px rgba(0, 235, 181, 0.12);
+}
+
+.table-actions .results-count {
+  display: none;
+}
+
+.table-wrapper {
+  padding: 0.75rem 0 1rem !important;
+}
+
+// Empty state styling for list pages
+.empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  background: #ffffff;
+  border: 1px dashed rgba(15, 23, 42, 0.12);
+  border-radius: 16px;
+}
+
+.empty-state .empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3fffb;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  margin-bottom: 12px;
+}
+
+.empty-state .empty-icon i {
+  font-size: 26px;
+  color: #0f766e;
+}
+
+.empty-state h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px;
+}
+
+.empty-state p {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 16px;
+}
+
+.empty-state .btn-primary {
+  background: #ffffff !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+  border-radius: 12px !important;
+  padding: 8px 16px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+.empty-state .btn-primary i {
+  color: inherit;
+}
+
+// Soften table badges and action buttons
+.table-wrapper .badge-code {
+  background: #f4f7fb !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(15, 118, 110, 0.18) !important;
+  box-shadow: none !important;
+}
+
+// Unified status chips across all tables (match Forms)
+.table-wrapper .badge-pill,
+.table-wrapper .status-badge,
+.table-wrapper .badge,
+.p-datatable .status-badge,
+.p-datatable .badge,
+.p-datatable .badge-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 6px 12px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  background: #ecfdf5 !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(16, 185, 129, 0.28) !important;
+  box-shadow: none !important;
+  text-transform: none !important;
+}
+
+.table-wrapper .status-badge i,
+.table-wrapper .badge i,
+.p-datatable .status-badge i,
+.p-datatable .badge i {
+  font-size: 12px !important;
+}
+
+.table-wrapper .status-badge.status-draft,
+.table-wrapper .badge.badge-draft,
+.p-datatable .status-badge.status-draft,
+.p-datatable .badge.badge-draft {
+  background: #f8fafc !important;
+  color: #64748b !important;
+  border-color: rgba(100, 116, 139, 0.25) !important;
+}
+
+.table-wrapper .status-badge.status-active,
+.table-wrapper .status-badge.status-published,
+.table-wrapper .badge.badge-success,
+.table-wrapper .badge.badge-active,
+.p-datatable .status-badge.status-active,
+.p-datatable .status-badge.status-published,
+.p-datatable .badge.badge-success,
+.p-datatable .badge.badge-active {
+  background: #ecfdf5 !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(16, 185, 129, 0.28) !important;
+}
+
+.table-wrapper .status-badge.status-inactive,
+.table-wrapper .badge.badge-danger,
+.table-wrapper .badge.badge-inactive,
+.p-datatable .status-badge.status-inactive,
+.p-datatable .badge.badge-danger,
+.p-datatable .badge.badge-inactive {
+  background: #f8fafc !important;
+  color: #64748b !important;
+  border: 1px solid rgba(100, 116, 139, 0.25) !important;
+}
+
+.table-wrapper .actions-menu .action-btn,
+.table-wrapper .table-actions-menu .action-btn,
+.table-wrapper app-table-actions .action-btn,
+.table-wrapper app-table-actions .p-button,
+.table-wrapper app-table-actions button,
+.table-wrapper app-table-actions a,
+.p-datatable app-table-actions .action-btn,
+.p-datatable app-table-actions .p-button,
+.p-datatable app-table-actions button,
+.p-datatable app-table-actions a {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+  box-shadow: none !important;
+}
+
+.table-wrapper app-table-actions .p-button .p-button-label {
+  display: none !important;
+}
+
+.table-wrapper app-table-actions .p-button .p-button-icon {
+  margin: 0 !important;
+  font-size: 14px !important;
+}
+
+.table-wrapper app-table-actions .action-btn {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+  box-shadow: none !important;
+}
+
+.table-wrapper .actions-menu .action-btn:hover,
+.table-wrapper .table-actions-menu .action-btn:hover,
+.table-wrapper app-table-actions .action-btn:hover,
+.table-wrapper app-table-actions .p-button:hover,
+.table-wrapper app-table-actions button:hover,
+.table-wrapper app-table-actions a:hover,
+.p-datatable app-table-actions .action-btn:hover,
+.p-datatable app-table-actions .p-button:hover,
+.p-datatable app-table-actions button:hover,
+.p-datatable app-table-actions a:hover {
+  background: #ecfdf5 !important;
+  color: #0f766e !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  box-shadow: none !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-edit,
+.table-wrapper .actions-menu .action-btn.action-copy,
+.table-wrapper .actions-menu .action-btn.action-duplicate,
+.table-wrapper .actions-menu .action-btn.action-rules,
+.table-wrapper .actions-menu .action-btn.action-document-type,
+.table-wrapper .actions-menu .action-btn.action-reactivate,
+.table-wrapper .actions-menu .action-btn.action-delete,
+.table-wrapper .table-actions-menu .action-btn.action-edit,
+.table-wrapper .table-actions-menu .action-btn.action-copy,
+.table-wrapper .table-actions-menu .action-btn.action-duplicate,
+.table-wrapper .table-actions-menu .action-btn.action-rules,
+.table-wrapper .table-actions-menu .action-btn.action-document-type,
+.table-wrapper .table-actions-menu .action-btn.action-reactivate,
+.table-wrapper .table-actions-menu .action-btn.action-delete,
+.table-wrapper app-table-actions .action-btn.action-edit,
+.table-wrapper app-table-actions .action-btn.action-copy,
+.table-wrapper app-table-actions .action-btn.action-duplicate,
+.table-wrapper app-table-actions .action-btn.action-rules,
+.table-wrapper app-table-actions .action-btn.action-document-type,
+.table-wrapper app-table-actions .action-btn.action-reactivate,
+.table-wrapper app-table-actions .action-btn.action-delete,
+.table-wrapper app-table-actions .p-button-success,
+.table-wrapper app-table-actions .p-button-danger,
+.table-wrapper app-table-actions .p-button-warning,
+.table-wrapper app-table-actions .p-button-info,
+.p-datatable app-table-actions .action-btn.action-edit,
+.p-datatable app-table-actions .action-btn.action-copy,
+.p-datatable app-table-actions .action-btn.action-duplicate,
+.p-datatable app-table-actions .action-btn.action-rules,
+.p-datatable app-table-actions .action-btn.action-document-type,
+.p-datatable app-table-actions .action-btn.action-reactivate,
+.p-datatable app-table-actions .action-btn.action-delete,
+.p-datatable app-table-actions .p-button-success,
+.p-datatable app-table-actions .p-button-danger,
+.p-datatable app-table-actions .p-button-warning,
+.p-datatable app-table-actions .p-button-info {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #475569 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-edit,
+.table-wrapper .table-actions-menu .action-btn.action-edit,
+.table-wrapper app-table-actions .action-btn.action-edit {
+  color: #10b981 !important;
+  border-color: #10b981 !important;
+}
+
+.p-datatable app-table-actions .action-btn.action-edit {
+  color: #10b981 !important;
+  border-color: #10b981 !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-copy,
+.table-wrapper .table-actions-menu .action-btn.action-copy,
+.table-wrapper app-table-actions .action-btn.action-copy {
+  color: #06b6d4 !important;
+  border-color: #06b6d4 !important;
+}
+
+.p-datatable app-table-actions .action-btn.action-copy {
+  color: #06b6d4 !important;
+  border-color: #06b6d4 !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-duplicate,
+.table-wrapper .actions-menu .action-btn.action-rules,
+.table-wrapper .table-actions-menu .action-btn.action-duplicate,
+.table-wrapper .table-actions-menu .action-btn.action-rules,
+.table-wrapper app-table-actions .action-btn.action-duplicate,
+.table-wrapper app-table-actions .action-btn.action-rules {
+  color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+
+.p-datatable app-table-actions .action-btn.action-duplicate,
+.p-datatable app-table-actions .action-btn.action-rules {
+  color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-reactivate,
+.table-wrapper .table-actions-menu .action-btn.action-reactivate,
+.table-wrapper app-table-actions .action-btn.action-reactivate {
+  color: #f59e0b !important;
+  border-color: #f59e0b !important;
+}
+
+.p-datatable app-table-actions .action-btn.action-reactivate {
+  color: #f59e0b !important;
+  border-color: #f59e0b !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-delete,
+.table-wrapper .table-actions-menu .action-btn.action-delete,
+.table-wrapper app-table-actions .action-btn.action-delete {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.p-datatable app-table-actions .action-btn.action-delete {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.table-wrapper app-table-actions .p-button-success {
+  color: #10b981 !important;
+  border-color: #10b981 !important;
+}
+
+.p-datatable app-table-actions .p-button-success {
+  color: #10b981 !important;
+  border-color: #10b981 !important;
+}
+
+.table-wrapper app-table-actions .p-button-danger {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.p-datatable app-table-actions .p-button-danger {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.table-wrapper app-table-actions .p-button-warning {
+  color: #f59e0b !important;
+  border-color: #f59e0b !important;
+}
+
+.p-datatable app-table-actions .p-button-warning {
+  color: #f59e0b !important;
+  border-color: #f59e0b !important;
+}
+
+.table-wrapper app-table-actions .p-button-info {
+  color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+
+.p-datatable app-table-actions .p-button-info {
+  color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-edit:hover,
+.table-wrapper .actions-menu .action-btn.action-copy:hover,
+.table-wrapper .actions-menu .action-btn.action-duplicate:hover,
+.table-wrapper .actions-menu .action-btn.action-rules:hover,
+.table-wrapper .actions-menu .action-btn.action-document-type:hover,
+.table-wrapper .actions-menu .action-btn.action-reactivate:hover,
+.table-wrapper .actions-menu .action-btn.action-delete:hover,
+.table-wrapper .table-actions-menu .action-btn.action-edit:hover,
+.table-wrapper .table-actions-menu .action-btn.action-copy:hover,
+.table-wrapper .table-actions-menu .action-btn.action-duplicate:hover,
+.table-wrapper .table-actions-menu .action-btn.action-rules:hover,
+.table-wrapper .table-actions-menu .action-btn.action-document-type:hover,
+.table-wrapper .table-actions-menu .action-btn.action-reactivate:hover,
+.table-wrapper .table-actions-menu .action-btn.action-delete:hover,
+.table-wrapper app-table-actions .action-btn.action-edit:hover,
+.table-wrapper app-table-actions .action-btn.action-copy:hover,
+.table-wrapper app-table-actions .action-btn.action-duplicate:hover,
+.table-wrapper app-table-actions .action-btn.action-rules:hover,
+.table-wrapper app-table-actions .action-btn.action-document-type:hover,
+.table-wrapper app-table-actions .action-btn.action-reactivate:hover,
+.table-wrapper app-table-actions .action-btn.action-delete:hover,
+.table-wrapper app-table-actions .p-button-success:hover,
+.table-wrapper app-table-actions .p-button-danger:hover,
+.table-wrapper app-table-actions .p-button-warning:hover,
+.table-wrapper app-table-actions .p-button-info:hover,
+.p-datatable app-table-actions .action-btn.action-edit:hover,
+.p-datatable app-table-actions .action-btn.action-copy:hover,
+.p-datatable app-table-actions .action-btn.action-duplicate:hover,
+.p-datatable app-table-actions .action-btn.action-rules:hover,
+.p-datatable app-table-actions .action-btn.action-document-type:hover,
+.p-datatable app-table-actions .action-btn.action-reactivate:hover,
+.p-datatable app-table-actions .action-btn.action-delete:hover,
+.p-datatable app-table-actions .p-button-success:hover,
+.p-datatable app-table-actions .p-button-danger:hover,
+.p-datatable app-table-actions .p-button-warning:hover,
+.p-datatable app-table-actions .p-button-info:hover {
+  background: #ecfdf5 !important;
+  color: #0f766e !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-edit:hover {
+  background: #10b981 !important;
+  color: #ffffff !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-copy:hover {
+  background: #06b6d4 !important;
+  color: #ffffff !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-duplicate:hover,
+.table-wrapper .actions-menu .action-btn.action-rules:hover {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-reactivate:hover {
+  background: #f59e0b !important;
+  color: #ffffff !important;
+}
+
+.table-wrapper .actions-menu .action-btn.action-delete:hover {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+}
+
+.table-wrapper app-table-actions .p-button-success:hover {
+  background: #10b981 !important;
+  color: #ffffff !important;
+}
+
+.table-wrapper app-table-actions .p-button-danger:hover {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+}
+
+.table-wrapper app-table-actions .p-button-warning:hover {
+  background: #f59e0b !important;
+  color: #ffffff !important;
+}
+
+.table-wrapper app-table-actions .p-button-info:hover {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+// Ensure no left border accent from page-specific styles
+.table-wrapper .p-datatable-tbody > tr {
+  border-left: none !important;
+}
+
+// Soften table-menus specific chips and actions
+.p-datatable .order-badge,
+.p-datatable .menu-code {
+  background: #f8fafc;
+  color: #0f766e;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  box-shadow: none;
+}
+
+.p-datatable .permission-tag {
+  background: #ecfdf5;
+  color: #0f766e;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  box-shadow: none;
+}
+
+.p-datatable .permission-more {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.p-datatable .status-badge.active {
+  background: #ecfdf5;
+  color: #0f766e;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+}
+
+.p-datatable .status-badge.inactive {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+.p-datatable .action-buttons .action-btn {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  color: #475569;
+  box-shadow: none;
+}
+
+.p-datatable .action-buttons .action-btn:hover {
+  background: #ecfdf5;
+  color: #0f766e;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.table-card table,
+.fields-table,
+.projects-table,
+.procedures-table,
+.rules-table,
+.grid-column-options-table,
+.field-options-table,
+.submissions-table,
+.grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.table-card table thead th,
+.fields-table thead th,
+.projects-table thead th,
+.procedures-table thead th,
+.rules-table thead th,
+.grid-column-options-table thead th,
+.field-options-table thead th,
+.submissions-table thead th,
+.grid-table thead th {
+  background: #f8fafc !important;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  font-weight: 700;
+  padding: 0.85rem 0.75rem !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+
+.table-card table tbody td,
+.fields-table tbody td,
+.projects-table tbody td,
+.procedures-table tbody td,
+.rules-table tbody td,
+.grid-column-options-table tbody td,
+.field-options-table tbody td,
+.submissions-table tbody td,
+.grid-table tbody td {
+  padding: 0.85rem 0.75rem;
+  color: #334155;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06) !important;
+}
+
+.table-card table tbody tr:hover,
+.fields-table tbody tr:hover,
+.projects-table tbody tr:hover,
+.procedures-table tbody tr:hover,
+.rules-table tbody tr:hover,
+.grid-column-options-table tbody tr:hover,
+.field-options-table tbody tr:hover,
+.submissions-table tbody tr:hover,
+.grid-table tbody tr:hover {
+  background: rgba(0, 235, 181, 0.06);
+}
+
+.table-card table tbody tr:last-child td,
+.fields-table tbody tr:last-child td,
+.projects-table tbody tr:last-child td,
+.procedures-table tbody tr:last-child td,
+.rules-table tbody tr:last-child td,
+.grid-column-options-table tbody tr:last-child td,
+.field-options-table tbody tr:last-child td,
+.submissions-table tbody tr:last-child td,
+.grid-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* PrimeNG tables */
+.p-datatable {
+  border-radius: 12px !important;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: none !important;
+  background: #ffffff !important;
+}
+
+.p-datatable .p-datatable-thead > tr > th {
+  background: #f8fafc !important;
+  color: #64748b !important;
+  font-weight: 700 !important;
+  font-size: 0.85rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  padding: 0.85rem 0.75rem !important;
+}
+
+.p-datatable .p-datatable-tbody > tr > td {
+  padding: 0.85rem 0.75rem !important;
+  color: #334155 !important;
+}
+
+.p-datatable .p-datatable-tbody > tr:hover {
+  background: rgba(0, 235, 181, 0.06);
+}
+
+.p-datatable .p-datatable-tbody > tr > td:first-child,
+.p-datatable .p-datatable-thead > tr > th:first-child {
+  padding-left: 1rem;
+}
+
+.p-datatable .p-datatable-tbody > tr > td:last-child,
+.p-datatable .p-datatable-thead > tr > th:last-child {
+  padding-right: 1rem;
+}
+
+.p-datatable .p-sortable-column.p-highlight {
+  color: #0f766e;
+}

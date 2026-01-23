@@ -83,7 +83,7 @@
                 <i class="fas fa-plus"></i> Add Option
               </button>
             </div>
-          </td>
+</td>
         </tr>
 
         <!-- Field Options List -->
@@ -98,7 +98,7 @@
 
           <td class="option-text-cell">
             <div class="option-text">{{option.optionText || '-'}}</div>
-          </td>
+</td>
 
           <td>
             <span class="status-badge" [ngClass]="getFieldOptionStatusClass(option)">
@@ -127,117 +127,111 @@
                 *ngIf="option.id"
               ></i>
             </div>
-          </td>
+</td>
         </tr>
       </tbody>
     </table>
   </div>
 
   <!-- Field Option Modal -->
-  <div *ngIf="showFieldOptionModal" class="modal-overlay" (click)="closeFieldOptionModal()">
-    <div class="modal-content" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h2>
-          <i class="fas" [class.fa-plus]="!editingFieldOption" [class.fa-edit]="!!editingFieldOption"></i>
-          {{editingFieldOption ? 'Edit Field Option' : 'Add New Field Option'}}
-        </h2>
-        <button class="btn-close" (click)="closeFieldOptionModal()">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
+  <app-dialog-shell
+    [(visible)]="showFieldOptionModal"
+    [modal]="true"
+    [header]="editingFieldOption ? 'Edit Field Option' : 'Add New Field Option'"
+    [style]="{ width: '720px', maxWidth: '95vw' }"
+    (onHide)="closeFieldOptionModal()"
+  >
+    <form [formGroup]="fieldOptionForm" (ngSubmit)="saveFieldOption()">
+      <!-- Basic Information -->
+      <div class="form-section">
+        <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
 
-      <form [formGroup]="fieldOptionForm" (ngSubmit)="saveFieldOption()">
-        <div class="modal-body">
-          <!-- Basic Information -->
-          <div class="form-section">
-            <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
+        <div class="form-row">
+          <div class="form-group" [class.invalid]="isFieldInvalid('fieldId')">
+            <label for="fieldId">
+              Field ID <span class="text-danger">*</span>
+              <span *ngIf="isFieldInvalid('fieldId')" class="error-text">
+                {{getFieldErrorMessage('fieldId')}}
+              </span>
+            </label>
+            <input type="number" id="fieldId" formControlName="fieldId" 
+                   [readonly]="!!selectedFieldId" min="1" placeholder="Field ID">
+          </div>
 
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('fieldId')">
-                <label for="fieldId">
-                  Field ID <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('fieldId')" class="error-text">
-                    {{getFieldErrorMessage('fieldId')}}
-                  </span>
-                </label>
-                <input type="number" id="fieldId" formControlName="fieldId" 
-                       [readonly]="!!selectedFieldId" min="1" placeholder="Field ID">
-              </div>
-
-              <div class="form-group" [class.invalid]="isFieldInvalid('optionOrder')">
-                <label for="optionOrder">
-                  Order <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('optionOrder')" class="error-text">
-                    {{getFieldErrorMessage('optionOrder')}}
-                  </span>
-                </label>
-                <input type="number" id="optionOrder" formControlName="optionOrder" min="1" placeholder="Order">
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('optionValue')">
-                <label for="optionValue">
-                  Option Value <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('optionValue')" class="error-text">
-                    {{getFieldErrorMessage('optionValue')}}
-                  </span>
-                </label>
-                <input type="text" id="optionValue" formControlName="optionValue" 
-                       placeholder="option_value" maxlength="100">
-                <small class="hint">The value stored in the database</small>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group" [class.invalid]="isFieldInvalid('optionText')">
-                <label for="optionText">
-                  Option Text <span class="text-danger">*</span>
-                  <span *ngIf="isFieldInvalid('optionText')" class="error-text">
-                    {{getFieldErrorMessage('optionText')}}
-                  </span>
-                </label>
-                <input type="text" id="optionText" formControlName="optionText" 
-                       placeholder="Display Text" maxlength="200">
-                <small class="hint">The text displayed to users</small>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group active-status-group">
-                <label class="active-status-label">ACTIVE STATUS</label>
-                <div class="checkbox-wrapper">
-                  <label class="checkbox-label">
-                    <input
-                      type="checkbox"
-                      formControlName="isActive"
-                      id="isActive"
-                      class="status-checkbox"
-                      [checked]="fieldOptionForm.get('isActive')?.value"
-                    />
-                    <span class="checkbox-custom"></span>
-                    <span class="status-text">{{ fieldOptionForm.get('isActive')?.value === true ? 'Active' : 'Inactive' }}</span>
-                  </label>
-                </div>
-              </div>
-            </div>
+          <div class="form-group" [class.invalid]="isFieldInvalid('optionOrder')">
+            <label for="optionOrder">
+              Order <span class="text-danger">*</span>
+              <span *ngIf="isFieldInvalid('optionOrder')" class="error-text">
+                {{getFieldErrorMessage('optionOrder')}}
+              </span>
+            </label>
+            <input type="number" id="optionOrder" formControlName="optionOrder" min="1" placeholder="Order">
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="closeFieldOptionModal()" [disabled]="loading.save">
-            Cancel
-          </button>
-
-          <button type="submit" class="btn btn-primary" [disabled]="fieldOptionForm.invalid || loading.save">
-            <i class="fas" [class.fa-save]="editingFieldOption" [class.fa-plus]="!editingFieldOption"></i>
-            {{editingFieldOption ? 'Update Option' : 'Create Option'}}
-            <span *ngIf="loading.save" class="spinner-small"></span>
-          </button>
+        <div class="form-row">
+          <div class="form-group" [class.invalid]="isFieldInvalid('optionValue')">
+            <label for="optionValue">
+              Option Value <span class="text-danger">*</span>
+              <span *ngIf="isFieldInvalid('optionValue')" class="error-text">
+                {{getFieldErrorMessage('optionValue')}}
+              </span>
+            </label>
+            <input type="text" id="optionValue" formControlName="optionValue" 
+                   placeholder="option_value" maxlength="100">
+            <small class="hint">The value stored in the database</small>
+          </div>
         </div>
-      </form>
-    </div>
-  </div>
+
+        <div class="form-row">
+          <div class="form-group" [class.invalid]="isFieldInvalid('optionText')">
+            <label for="optionText">
+              Option Text <span class="text-danger">*</span>
+              <span *ngIf="isFieldInvalid('optionText')" class="error-text">
+                {{getFieldErrorMessage('optionText')}}
+              </span>
+            </label>
+            <input type="text" id="optionText" formControlName="optionText" 
+                   placeholder="Display Text" maxlength="200">
+            <small class="hint">The text displayed to users</small>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group active-status-group">
+            <label class="active-status-label">ACTIVE STATUS</label>
+            <div class="checkbox-wrapper">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  formControlName="isActive"
+                  id="isActive"
+                  class="status-checkbox"
+                  [checked]="fieldOptionForm.get('isActive')?.value"
+                />
+                <span class="checkbox-custom"></span>
+                <span class="status-text">{{ fieldOptionForm.get('isActive')?.value === true ? 'Active' : 'Inactive' }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeFieldOptionModal()" [disabled]="loading.save">
+          Cancel
+        </button>
+
+        <button type="submit" class="btn btn-primary" [disabled]="fieldOptionForm.invalid || loading.save">
+          <i class="fas" [class.fa-save]="editingFieldOption" [class.fa-plus]="!editingFieldOption"></i>
+          {{editingFieldOption ? 'Update Option' : 'Create Option'}}
+          <span *ngIf="loading.save" class="spinner-small"></span>
+        </button>
+      </div>
+    </form>
+  </app-dialog-shell>
 </div>
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+

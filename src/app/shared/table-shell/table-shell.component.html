@@ -1,0 +1,12 @@
+<div class="table-card table-shell">
+  <div class="table-header">
+    <h3 class="table-title">
+      <i *ngIf="icon" [class]="icon"></i>
+      <span>{{ title }}</span>
+    </h3>
+    <div class="table-actions">
+      <ng-content select="[table-actions]"></ng-content>
+    </div>
+  </div>
+  <ng-content></ng-content>
+</div>

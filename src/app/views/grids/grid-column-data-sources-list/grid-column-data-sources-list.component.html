@@ -1,23 +1,6 @@
 <div class="fields-page-container">
   <!-- Language Toggle Buttons -->
-  <div class="admin-language-toggle">
-    <button
-      type="button"
-      class="admin-lang-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'en'"
-      (click)="translationService.setLanguage('en'); localStorage.setItem('adminLanguagePreference', 'en')">
-      English
-    </button>
-    <button
-      type="button"
-      class="admin-lang-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'ar'"
-      (click)="translationService.setLanguage('ar'); localStorage.setItem('adminLanguagePreference', 'ar')">
-      العربية
-    </button>
-  </div>
-
-  <!-- Top Navigation Bar -->
+<!-- Top Navigation Bar -->
   <div class="top-navbar">
     <div class="nav-content">
       <div class="nav-left">
@@ -90,26 +73,22 @@
     </div>
 
     <!-- Data Sources Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-table"></i>
-          {{ translateLabel('grids.dataSources.dataSourcesList') || 'Data Sources List' }}
-        </h3>
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input
-              type="text"
-              [placeholder]="translateLabel('grids.dataSources.searchDataSources') || 'Search data sources...'"
-              class="search-input"
-              [(ngModel)]="searchTerm"
-              (input)="filterDataSources()"
-            />
-          </div>
-          <div class="results-count">
-            {{ filteredDataSources.length }} {{ translateLabel('grids.dataSources.dataSourcesFound') || 'data sources found' }}
-          </div>
+    <app-table-shell
+      [title]="translateLabel('grids.dataSources.dataSourcesList') || 'Data Sources List'"
+      icon="pi pi-table">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            [placeholder]="translateLabel('grids.dataSources.searchDataSources') || 'Search data sources...'"
+            class="search-input"
+            [(ngModel)]="searchTerm"
+            (input)="filterDataSources()"
+          />
+        </div>
+        <div class="results-count">
+          {{ filteredDataSources.length }} {{ translateLabel('grids.dataSources.dataSourcesFound') || 'data sources found' }}
         </div>
       </div>
 
@@ -185,7 +164,7 @@
                 </span>
               </td>
               <td class="actions-cell text-end">
-                <div class="actions-menu">
+                <app-table-actions>
                   <button
                     class="action-btn action-edit"
                     [title]="translateLabel('common.edit') || 'Edit'"
@@ -200,8 +179,8 @@
                   >
                     <i class="pi pi-trash"></i>
                   </button>
-                </div>
-              </td>
+                </app-table-actions>
+</td>
             </tr>
           </ng-template>
         </p-table>
@@ -217,11 +196,11 @@
           </p-paginator>
         </div>
       </div>
-    </div>
+    </app-table-shell>
   </div>
 
   <!-- Add/Edit DataSource Modal -->
-  <p-dialog
+  <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
     [(visible)]="showDataSourceModal"
     [modal]="true"
     [header]="editingDataSource ? (translateLabel('grids.dataSources.editDataSource') || 'Edit Data Source') : (translateLabel('grids.dataSources.addDataSource') || 'Add Data Source')"
@@ -522,9 +501,15 @@
         </button>
       </div>
     </form>
-  </p-dialog>
+  </app-dialog-shell>
 </div>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
+
 

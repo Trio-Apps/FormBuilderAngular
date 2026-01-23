@@ -21,15 +21,13 @@
 
   <div class="main-content">
     <div class="document-types-section">
-      <div class="section-header">
-        <h3>Delegations List</h3>
-        <div class="header-actions">
+      <app-table-shell title="Delegations List" icon="pi pi-users">
+        <div table-actions class="header-actions">
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input type="text" placeholder="Search..." class="search-input" [(ngModel)]="searchTerm" (input)="onSearchChange()" />
           </div>
         </div>
-      </div>
 
       <div *ngIf="loading.delegations" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
@@ -63,11 +61,11 @@
               <span *ngIf="!isDelegationActive(delegation)" class="badge badge-danger">Inactive</span>
             </td>
             <td>
-              <div class="action-buttons">
+              <app-table-actions>
                 <button pButton icon="pi pi-pencil" class="p-button-text p-button-sm action-btn" (click)="openEditModal(delegation)" pTooltip="Edit"></button>
                 <button pButton icon="pi pi-trash" class="p-button-text p-button-sm action-btn action-btn-danger" (click)="deleteDelegation(delegation)" pTooltip="Delete"></button>
-              </div>
-            </td>
+              </app-table-actions>
+</td>
           </tr>
         </ng-template>
       </p-table>
@@ -76,11 +74,12 @@
         [first]="first" [rows]="rows" [totalRecords]="totalRecords"
         [rowsPerPageOptions]="[10, 20, 50]" (onPageChange)="onPageChange($event)">
       </p-paginator>
+      </app-table-shell>
     </div>
   </div>
 </div>
 
-<p-dialog [(visible)]="showModal" [header]="(editingDelegation ? 'Edit' : 'New') + ' Delegation'" [modal]="true" [style]="{ width: '600px' }" (onHide)="closeModal()">
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true" [resizable]="false" [draggable]="false" [(visible)]="showModal" [header]="(editingDelegation ? 'Edit' : 'New') + ' Delegation'" [modal]="true" [style]="{ width: '600px' }" (onHide)="closeModal()">
   <form [formGroup]="delegationForm" (ngSubmit)="saveDelegation()">
     <div class="form-display-section">
       <!-- From User Dropdown -->
@@ -156,8 +155,13 @@
       <button type="submit" pButton [label]="(editingDelegation ? 'Update' : 'Create') + ' Delegation'" [disabled]="delegationForm.invalid || loading.save" [loading]="loading.save"></button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
 

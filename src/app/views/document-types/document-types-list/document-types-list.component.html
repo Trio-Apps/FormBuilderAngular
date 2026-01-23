@@ -43,21 +43,9 @@
   <div class="main-content">
     <!-- Document Types Section -->
     <div class="document-types-section">
-      <div class="section-header">
-        <h3>Document Types List</h3>
-        <div class="header-actions">
-          <button pButton 
-            icon="pi pi-filter" 
-            class="p-button-text p-button-sm header-icon-btn" 
-            pTooltip="Filter"
-            tooltipPosition="top"></button>
-          <button pButton 
-            icon="pi pi-download" 
-            class="p-button-text p-button-sm header-icon-btn" 
-            pTooltip="Download"
-            tooltipPosition="top"></button>
+      <app-table-shell title="Document Types List" icon="pi pi-file">
+        <div table-actions class="header-actions">
         </div>
-      </div>
 
       <div *ngIf="loading.documentTypes" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
@@ -74,109 +62,99 @@
         <button *ngIf="isAdmin" pButton label="Add Document Type" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
       </div>
 
-      <p-table *ngIf="!loading.documentTypes && documentTypes.length > 0" 
-        [value]="getPaginatedDocumentTypes()" 
-        [paginator]="false"
-        styleClass="p-datatable-sm document-types-table">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>#</th>
-            <th>Document Name</th>
-            <th>Document Code</th>
-            <th>Menu Caption</th>
-            <th>Form</th>
-            <th>Parent Menu</th>
-            <th>Menu Order</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-documentType let-rowIndex="rowIndex">
-          <tr>
-            <td>{{ first + rowIndex + 1 }}</td>
-            <td>
-              <div class="document-name-cell">
-                <i class="pi pi-file"></i>
-                <span>{{ documentType.name }}</span>
-              </div>
-            </td>
-            <td><code>{{ documentType.code }}</code></td>
-            <td>{{ documentType.menuCaption || '-' }}</td>
-            <td>{{ getFormName(documentType.formBuilderId) }}</td>
-            <td>{{ getParentMenuName(documentType.parentMenuId) }}</td>
-            <td>{{ documentType.menuOrder || 0 }}</td>
-            <td>
-              <span *ngIf="documentType.isActive" class="badge badge-success">
-                <i class="pi pi-check"></i>
-                Active
-              </span>
-              <span *ngIf="!documentType.isActive" class="badge badge-danger">
-                <i class="pi pi-times"></i>
-                Inactive
-              </span>
-            </td>
-            <td>
-              <div class="action-buttons">
-                <!-- User mode: only allow creating a submission -->
-                <button *ngIf="!isAdmin"
-                  pButton
-                  icon="pi pi-plus"
-                  class="p-button-sm p-button-success"
-                  [routerLink]="['/document-types', documentType.id, 'submissions', 'new']"
-                  pTooltip="Create Submission"
-                  tooltipPosition="top">
-                  Create Submission
-                </button>
+      <div *ngIf="!loading.documentTypes && documentTypes.length > 0" class="table-wrapper">
+        <p-table 
+          [value]="getPaginatedDocumentTypes()" 
+          [paginator]="false"
+          styleClass="p-datatable-sm document-types-table">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>#</th>
+              <th>Document Name</th>
+              <th>Document Code</th>
+              <th>Menu Caption</th>
+              <th>Form</th>
+              <th>Parent Menu</th>
+              <th>Menu Order</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-documentType let-rowIndex="rowIndex">
+            <tr>
+              <td>{{ first + rowIndex + 1 }}</td>
+              <td>
+                <div class="document-name-cell">
+                  <i class="pi pi-file"></i>
+                  <span>{{ documentType.name }}</span>
+                </div>
+              </td>
+              <td><code>{{ documentType.code }}</code></td>
+              <td>{{ documentType.menuCaption || '-' }}</td>
+              <td>{{ getFormName(documentType.formBuilderId) }}</td>
+              <td>{{ getParentMenuName(documentType.parentMenuId) }}</td>
+              <td>{{ documentType.menuOrder || 0 }}</td>
+              <td>
+                <span *ngIf="documentType.isActive" class="status-badge status-active">
+                  <i class="pi pi-check"></i>
+                  Active
+                </span>
+                <span *ngIf="!documentType.isActive" class="status-badge status-inactive">
+                  <i class="pi pi-times"></i>
+                  Inactive
+                </span>
+              </td>
+              <td class="actions-cell text-end">
+                <app-table-actions>
+                  <!-- User mode: only allow creating a submission -->
+                  <button *ngIf="!isAdmin"
+                    class="action-btn action-edit"
+                    [routerLink]="['/document-types', documentType.id, 'submissions', 'new']"
+                    [title]="'Create Submission'">
+                    <i class="pi pi-plus"></i>
+                  </button>
 
-                <!-- Admin mode: full management -->
-                <ng-container *ngIf="isAdmin">
-                  <button pButton 
-                    icon="pi pi-list" 
-                    class="p-button-text p-button-sm action-btn" 
-                    (click)="openManageSeriesModal(documentType)"
-                    pTooltip="Manage Series"
-                    tooltipPosition="top"></button>
-                  <button pButton 
-                    icon="pi pi-sitemap" 
-                    class="p-button-text p-button-sm action-btn" 
-                    [routerLink]="['/approval-workflows']"
-                    [queryParams]="{ documentTypeId: documentType.id }"
-                    pTooltip="Manage Approval Workflow"
-                    tooltipPosition="top"></button>
-                  <button pButton 
-                    icon="pi pi-pencil" 
-                    class="p-button-text p-button-sm action-btn" 
-                    (click)="openEditModal(documentType)"
-                    pTooltip="Edit"
-                    tooltipPosition="top"></button>
-                  <button pButton 
-                    icon="pi pi-trash" 
-                    class="p-button-text p-button-sm action-btn action-btn-danger" 
-                    (click)="deleteDocumentType(documentType)"
-                    pTooltip="Delete"
-                    tooltipPosition="top"></button>
-                </ng-container>
-              </div>
-            </td>
-          </tr>
-        </ng-template>
-      </p-table>
-
-      <p-paginator 
-        *ngIf="!loading.documentTypes && documentTypes.length > 0"
-        [first]="first"
-        [rows]="rows"
-        [totalRecords]="totalRecords"
-        [rowsPerPageOptions]="[10, 20, 50]"
-        (onPageChange)="onPageChange($event)"
-        styleClass="document-types-paginator">
-      </p-paginator>
+                  <!-- Admin mode: full management -->
+                  <ng-container *ngIf="isAdmin">
+                    <button 
+                      class="action-btn action-duplicate"
+                      (click)="openManageSeriesModal(documentType)"
+                      [title]="'Manage Series'">
+                      <i class="pi pi-list"></i>
+                    </button>
+                    <button 
+                      class="action-btn action-rules"
+                      [routerLink]="['/approval-workflows']"
+                      [queryParams]="{ documentTypeId: documentType.id }"
+                      [title]="'Manage Approval Workflow'">
+                      <i class="pi pi-sitemap"></i>
+                    </button>
+                    <button 
+                      class="action-btn action-edit"
+                      (click)="openEditModal(documentType)"
+                      [title]="'Edit'">
+                      <i class="pi pi-pencil"></i>
+                    </button>
+                    <button 
+                      class="action-btn action-delete"
+                      (click)="deleteDocumentType(documentType)"
+                      [title]="'Delete'">
+                      <i class="pi pi-trash"></i>
+                    </button>
+                  </ng-container>
+                </app-table-actions>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+      </app-table-shell>
     </div>
   </div>
 </div>
 
 <!-- Document Type Modal -->
-<p-dialog *ngIf="isAdmin"
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true" *ngIf="isAdmin"
   [(visible)]="showModal"
   [modal]="true"
   [header]="(editingDocumentType ? 'Edit Document Type' : 'Create Document Type')"
@@ -308,10 +286,10 @@
         [loading]="loading.save"></button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <!-- Document Series Management Modal -->
-<p-dialog *ngIf="isAdmin"
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false" *ngIf="isAdmin"
   [(visible)]="showSeriesModal"
   [header]="'Manage Document Series - ' + (currentDocumentTypeForSeries?.name || '')"
   [modal]="true"
@@ -382,7 +360,7 @@
               </span>
             </td>
             <td>
-              <div class="action-buttons">
+              <app-table-actions>
                 <button pButton 
                   icon="pi pi-star" 
                   class="p-button-text p-button-sm action-btn" 
@@ -408,18 +386,18 @@
                   (click)="deleteDocumentSeries(series)"
                   pTooltip="Delete"
                   tooltipPosition="top"></button>
-              </div>
-            </td>
+              </app-table-actions>
+</td>
           </tr>
         </ng-template>
       </p-table>
     </div>
 
   </div>
-</p-dialog>
+</app-dialog-shell>
 
 <!-- Series Form Modal -->
-<p-dialog *ngIf="isAdmin"
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false" *ngIf="isAdmin"
   [(visible)]="showSeriesFormModal"
   [header]="(editingSeries ? 'Edit' : 'New') + ' Document Series'"
   [modal]="true"
@@ -516,10 +494,10 @@
             [loading]="loading.series"></button>
         </div>
       </form>
-</p-dialog>
+</app-dialog-shell>
 
 <!-- Approval Workflow Management Modal -->
-<p-dialog *ngIf="isAdmin"
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false" *ngIf="isAdmin"
   [(visible)]="showApprovalWorkflowModal"
   [header]="'Manage Approval Workflow - ' + (currentDocumentTypeForWorkflow?.name || '')"
   [modal]="true"
@@ -618,8 +596,13 @@
         [loading]="loading.updateWorkflow"></button>
     </div>
   </div>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
 

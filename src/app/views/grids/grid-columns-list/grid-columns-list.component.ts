@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
@@ -23,6 +25,7 @@ import { FieldTypeDto, FieldOptionResponse, PreviewDataSourceRequestDto } from '
 import { Subscription, forkJoin, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -38,6 +41,8 @@ import { TooltipModule } from 'primeng/tooltip';
   selector: 'app-grid-columns-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterModule,
     FormsModule,
@@ -48,7 +53,8 @@ import { TooltipModule } from 'primeng/tooltip';
     DialogModule,
     ToastModule,
     ConfirmDialogModule,
-    TooltipModule
+    TooltipModule,
+    TableShellComponent
   ],
   templateUrl: './grid-columns-list.component.html',
   styleUrls: ['./grid-columns-list.component.scss'],
@@ -2800,4 +2806,11 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   }
 
 }
+
+
+
+
+
+
+
 

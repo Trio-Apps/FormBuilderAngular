@@ -17,15 +17,13 @@
 
   <div class="main-content">
     <div class="document-types-section">
-      <div class="section-header">
-        <h3>Approval History</h3>
-        <div class="header-actions">
+      <app-table-shell title="Approval History" icon="pi pi-history">
+        <div table-actions class="header-actions">
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input type="text" placeholder="Search..." class="search-input" [(ngModel)]="searchTerm" (input)="onSearchChange()" />
           </div>
         </div>
-      </div>
 
       <div *ngIf="loading.history" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
@@ -88,6 +86,7 @@
         [first]="first" [rows]="rows" [totalRecords]="totalRecords"
         [rowsPerPageOptions]="[10, 20, 50]" (onPageChange)="onPageChange($event)">
       </p-paginator>
+      </app-table-shell>
     </div>
   </div>
 </div>

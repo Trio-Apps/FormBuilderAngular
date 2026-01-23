@@ -1,12 +1,11 @@
 import { Component, computed, inject } from '@angular/core';
-import { CommonModule, NgTemplateOutlet } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import {
   AvatarComponent,
   BadgeComponent,
   BreadcrumbRouterComponent,
-  ColorModeService,
   ContainerComponent,
   DropdownComponent,
   DropdownDividerDirective,
@@ -46,14 +45,6 @@ import { TranslationService } from '../../../core/services/translation.service';
 export class DefaultHeaderComponent extends HeaderComponent {
   readonly authService = inject(AuthService);
   readonly translationService = inject(TranslationService);
-  readonly colorModeService = inject(ColorModeService);
-  readonly colorMode = this.colorModeService.colorMode;
-
-  readonly colorModes = [
-    { name: 'light', text: 'Light', icon: 'cilSun' },
-    { name: 'dark', text: 'Dark', icon: 'cilMoon' },
-    { name: 'auto', text: 'Auto', icon: 'cilContrast' }
-  ];
 
   readonly languages = [
     { code: 'en', name: 'English', flag: '🇬🇧' },
@@ -67,11 +58,6 @@ export class DefaultHeaderComponent extends HeaderComponent {
   readonly currentLanguageFlag = computed(() => {
     const lang = this.languages.find(l => l.code === this.currentLanguage());
     return lang?.flag || '🌐';
-  });
-
-  readonly icons = computed(() => {
-    const currentMode = this.colorMode();
-    return this.colorModes.find(mode => mode.name === currentMode)?.icon ?? 'cilSun';
   });
 
   isCurrentLanguage(langCode: string): boolean {

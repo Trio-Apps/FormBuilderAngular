@@ -79,22 +79,16 @@
     </div>
 
     <!-- Grids Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-table"></i>
-          {{ translateLabel('grids.gridsList') || 'Grids List' }}
-        </h3>
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input
-              type="text"
-              [placeholder]="translateLabel('grids.searchGrids') || 'Search grids...'"
-              class="search-input"
-              [(ngModel)]="searchTerm"
-            />
-          </div>
+    <app-table-shell [title]="translateLabel('grids.gridsList') || 'Grids List'" icon="pi pi-table">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            [placeholder]="translateLabel('grids.searchGrids') || 'Search grids...'"
+            class="search-input"
+            [(ngModel)]="searchTerm"
+          />
         </div>
       </div>
 
@@ -147,7 +141,7 @@
                     </span>
                   </div>
                 </div>
-              </td>
+</td>
               <td class="col-code">
                 <code class="code-badge">{{ grid.gridCode || '-' }}</code>
               </td>
@@ -172,7 +166,7 @@
                 </span>
               </td>
               <td class="col-actions">
-                <div class="actions-menu">
+                <app-table-actions>
                   <button class="action-btn action-edit" (click)="openGridModal(grid)" [title]="translateLabel('common.edit') || 'Edit'">
                     <i class="pi pi-pencil"></i>
                   </button>
@@ -185,17 +179,17 @@
                   <button *ngIf="!grid.isDeleted" class="action-btn action-delete" (click)="deleteGrid(grid.id)" [title]="translateLabel('common.delete') || 'Delete'">
                     <i class="pi pi-trash"></i>
                   </button>
-                </div>
-              </td>
+                </app-table-actions>
+</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </app-table-shell>
   </div>
 
   <!-- Add/Edit Grid Modal -->
-  <p-dialog
+  <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
     [(visible)]="showGridModal"
     [modal]="true"
     [header]="editingGrid ? (translateLabel('grids.editGrid') || 'Edit Grid') : (translateLabel('grids.addGrid') || 'Add Grid')"
@@ -322,9 +316,14 @@
         </button>
       </div>
     </form>
-  </p-dialog>
+  </app-dialog-shell>
 </div>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
 

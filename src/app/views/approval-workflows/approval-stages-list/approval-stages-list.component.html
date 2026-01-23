@@ -63,9 +63,8 @@
 
     <!-- Approval Stages Section -->
     <div class="document-types-section">
-      <div class="section-header">
-        <h3>Approval Stages List</h3>
-        <div class="header-actions">
+      <app-table-shell title="Approval Stages List" icon="pi pi-list">
+        <div table-actions class="header-actions">
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input
@@ -90,7 +89,6 @@
             pTooltip="Download"
             tooltipPosition="top"></button>
         </div>
-      </div>
 
       <div *ngIf="loading.stages" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
@@ -132,7 +130,7 @@
                 <i class="pi pi-list"></i>
                 <span>{{ stage.stageName }}</span>
               </div>
-            </td>
+</td>
             <td>
               <span *ngIf="(stage.minAmount !== null && stage.minAmount !== undefined) || (stage.maxAmount !== null && stage.maxAmount !== undefined)">
                 {{ formatAmount(stage.minAmount) }} - {{ formatAmount(stage.maxAmount) }}
@@ -157,7 +155,7 @@
               </span>
             </td>
             <td>
-              <div class="action-buttons">
+              <app-table-actions>
                 <button pButton 
                   icon="pi pi-users" 
                   class="p-button-text p-button-sm action-btn" 
@@ -185,8 +183,8 @@
                   [disabled]="loading.delete"
                   pTooltip="Delete"
                   tooltipPosition="top"></button>
-              </div>
-            </td>
+              </app-table-actions>
+</td>
           </tr>
         </ng-template>
       </p-table>
@@ -200,12 +198,13 @@
         (onPageChange)="onPageChange($event)"
         styleClass="document-types-paginator">
       </p-paginator>
+      </app-table-shell>
     </div>
   </div>
 </div>
 
 <!-- Approval Stage Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false"
   [(visible)]="showModal"
   [header]="(editingStage ? 'Edit' : 'New') + ' Approval Stage'"
   [modal]="true"
@@ -415,8 +414,13 @@
         [loading]="loading.save"></button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
 

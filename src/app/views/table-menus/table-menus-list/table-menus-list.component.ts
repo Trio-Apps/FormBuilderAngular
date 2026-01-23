@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { TableMenusService, TableMenuDto, CreateTableMenuDto, UpdateTableMenuDto, TableSubMenuDto, CreateTableSubMenuDto, UpdateTableSubMenuDto, TableMenuDocumentDto, CreateTableMenuDocumentDto, UpdateTableMenuDocumentDto } from '../../../services/table-menus.service';
@@ -20,12 +22,15 @@ import { MultiSelectModule } from 'primeng/multiselect';
 import { RouterModule } from '@angular/router';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-table-menus-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
@@ -41,7 +46,8 @@ import { Subscription } from 'rxjs';
     TableModule,
     PaginatorModule,
     MultiSelectModule,
-    TranslatePipe
+    TranslatePipe,
+    TableShellComponent
   ],
   templateUrl: './table-menus-list.component.html',
   styleUrls: ['./table-menus-list.component.scss'],
@@ -926,4 +932,11 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.translationService.setLanguage(lang);
   }
 }
+
+
+
+
+
+
+
 

@@ -12,6 +12,7 @@ export const navItems: INavData[] = [
   },
   {
     name: 'Form Builder',
+    url: '/form-builder',
     iconComponent: { name: 'cil-puzzle' },
     children: [
       {
@@ -34,6 +35,7 @@ export const navItems: INavData[] = [
   },
   {
     name: 'Document Types',
+    url: '/document-types',
     iconComponent: { name: 'cil-file' },
     children: [
       {
@@ -51,6 +53,7 @@ export const navItems: INavData[] = [
   },
   {
     name: 'Approval Workflows',
+    url: '/approval-workflows',
     iconComponent: { name: 'cil-sitemap' },
     children: [
       {

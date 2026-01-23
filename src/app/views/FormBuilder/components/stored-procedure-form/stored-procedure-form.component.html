@@ -1,12 +1,12 @@
-<p-dialog 
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" 
   [header]="storedProcedure ? 'Edit Stored Procedure' : 'Add Stored Procedure'"
-  [visible]="true"
+  [(visible)]="visible"
   [modal]="true"
   [style]="{width: '900px', maxWidth: '95vw'}"
   [closable]="true"
   (onHide)="onCancel()"
   [draggable]="false"
-  [resizable]="true"
+  [resizable]="false"
   styleClass="sp-form-dialog">
   
   <form [formGroup]="spForm" (ngSubmit)="onSubmit()">
@@ -243,7 +243,9 @@
       </p-button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
+
+
 

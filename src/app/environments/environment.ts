@@ -44,7 +44,7 @@ export const environment = {
     enableAnalytics: false,
     enableLogging: true,
     logLevel: 'debug', // 'error', 'warn', 'info', 'debug'
-    sessionTimeout: 3600000, // 1 ساعة
+    sessionTimeout: 86400000, // 24 hours
   },
   
   // إعدادات التحقق والصلاحيات

@@ -9,10 +9,6 @@
         </div>
       </div>
       <div class="nav-right">
-        <!-- ✅ Show role badge -->
-        <span class="role-badge" [class.admin-badge]="isAdmin" [class.user-badge]="!isAdmin">
-          {{ isAdmin ? 'Admin' : 'User' }}
-        </span>
         <button class="btn-icon" (click)="refreshData()" [disabled]="loading.inbox" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
@@ -22,26 +18,16 @@
 
   <div class="main-content">
     <div class="document-types-section">
-      <div class="section-header">
-        <h3>{{ isAdmin ? 'Pending Approvals' : 'My Submissions' }}</h3>
-        <div class="header-actions">
+      <app-table-shell
+        [title]="isAdmin ? 'Pending Approvals' : 'My Submissions'"
+        icon="pi pi-inbox">
+        <div table-actions class="header-actions">
           <!-- ✅ Only Admin can toggle between views -->
-          <button 
-            *ngIf="isAdmin"
-            pButton 
-            [label]="showAllSubmissions ? 'Show Inbox Only' : 'Show All Submissions'" 
-            [icon]="showAllSubmissions ? 'pi pi-filter' : 'pi pi-list'" 
-            class="p-button-secondary p-button-sm" 
-            (click)="toggleView()"
-            [disabled]="loading.inbox"
-            style="margin-right: 10px;">
-          </button>
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input type="text" placeholder="Search..." class="search-input" [(ngModel)]="searchTerm" (input)="onSearchChange()" />
           </div>
         </div>
-      </div>
 
       <div *ngIf="loading.inbox" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
@@ -79,12 +65,12 @@
               </td>
               <td>
                 <!-- ✅ Show Approve/Reject buttons if user can approve (Admin or assigned as Stage Assignee) -->
-                <div class="action-buttons" *ngIf="canApproveRejectSubmission(submission)">
+                <app-table-actions *ngIf="canApproveRejectSubmission(submission)">
                   <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" 
                     (click)="openActionModalForSubmission(submission, 'Approved')" pTooltip="Approve"></button>
                   <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" 
                     (click)="openActionModalForSubmission(submission, 'Rejected')" pTooltip="Reject"></button>
-                </div>
+                </app-table-actions>
                 <!-- ✅ Show View Only if user cannot approve -->
                 <span *ngIf="!canApproveRejectSubmission(submission)" class="view-only-text">View Only</span>
               </td>
@@ -137,11 +123,11 @@
             <td>{{ formatDate(item.submittedDate) }}</td>
             <td>
               <!-- ✅ Show Approve/Reject/Return buttons if user can approve (Admin or assigned as Stage Assignee) -->
-              <div class="action-buttons" *ngIf="canApproveReject(item)">
+              <app-table-actions *ngIf="canApproveReject(item)">
                 <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" (click)="openActionModal(item, 'Approved')" pTooltip="Approve"></button>
                 <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" (click)="openActionModal(item, 'Rejected')" pTooltip="Reject"></button>
                 <button pButton label="Return" icon="pi pi-reply" class="p-button-warning p-button-sm" (click)="openActionModal(item, 'Returned')" pTooltip="Return"></button>
-              </div>
+              </app-table-actions>
               <!-- ✅ Show View Only if user cannot approve -->
               <span *ngIf="!canApproveReject(item)" class="view-only-text">View Only</span>
             </td>
@@ -153,11 +139,12 @@
         [first]="first" [rows]="rows" [totalRecords]="totalRecords"
         [rowsPerPageOptions]="[10, 20, 50]" (onPageChange)="onPageChange($event)">
       </p-paginator>
+      </app-table-shell>
     </div>
   </div>
 </div>
 
-<p-dialog [(visible)]="showActionModal" [header]="actionType + ' Document'" [modal]="true" [style]="{ width: '600px' }" (onHide)="closeActionModal()">
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true" [resizable]="false" [draggable]="false" [(visible)]="showActionModal" [header]="actionType + ' Document'" [modal]="true" [style]="{ width: '600px' }" (onHide)="closeActionModal()">
   <form [formGroup]="actionForm" (ngSubmit)="processAction()">
       <div class="form-display-section">
         <div class="form-field-wrapper" *ngIf="selectedItem || selectedSubmission">
@@ -195,8 +182,10 @@
       </button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
 

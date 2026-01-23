@@ -1,4 +1,5 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DocumentApprovalHistoryService, DocumentApprovalHistoryDto } from '../../FormBuilder/services/document-approval-history.service';
@@ -11,6 +12,7 @@ import { DialogModule } from 'primeng/dialog';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { FormSubmissionsService, FormSubmissionDetailDto, FormSubmissionValueDto, FormSubmissionGridDto, FormSubmissionGridCellDto } from '../../form-submissions/services/form-submissions.service';
 import { FormSubmissionAttachmentsService, FormSubmissionAttachmentDto } from '../../form-submissions/services/form-submission-attachments.service';
 import { environment } from '../../../environments/environment';
@@ -19,6 +21,7 @@ import { environment } from '../../../environments/environment';
   selector: 'app-approvals-history-list',
   standalone: true,
   imports: [
+    DialogShellComponent,
     CommonModule,
     FormsModule,
     ToastModule,
@@ -27,7 +30,8 @@ import { environment } from '../../../environments/environment';
     TooltipModule,
     DialogModule,
     ButtonModule,
-    InputTextModule
+    InputTextModule,
+    TableShellComponent
   ],
   templateUrl: './approvals-history-list.component.html',
   styleUrls: ['./approvals-history-list.component.scss'],
@@ -597,4 +601,9 @@ export class ApprovalsHistoryListComponent implements OnInit {
     }
   }
 }
+
+
+
+
+
 

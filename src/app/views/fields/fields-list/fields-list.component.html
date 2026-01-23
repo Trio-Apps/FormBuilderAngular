@@ -3,7 +3,7 @@
   <div class="top-navbar">
     <div class="nav-content">
       <div class="nav-left">
-        <button class="nav-back-btn" routerLink="/form-builder/forms" title="Back to Forms">
+        <button class="nav-back-btn" [routerLink]="['/form-builder/tabs', formBuilderId]" title="Back to Tabs">
           <i class="pi pi-arrow-left"></i>
         </button>
         <div class="nav-title-section">
@@ -30,8 +30,13 @@
   <!-- Breadcrumb -->
   <div class="breadcrumb-section">
     <nav class="breadcrumb-nav">
-      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+      <a routerLink="/dashboard" class="breadcrumb-link">
         <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-file"></i>
         <span>Forms</span>
       </a>
       <i class="pi pi-angle-right breadcrumb-separator"></i>
@@ -81,17 +86,11 @@
     </div>
 
     <!-- Fields Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-table"></i>
-          Fields List
-        </h3>
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input type="text" placeholder="Search fields..." class="search-input">
-          </div>
+    <app-table-shell title="Fields List" icon="pi pi-table">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input type="text" placeholder="Search fields..." class="search-input">
         </div>
       </div>
 
@@ -151,7 +150,7 @@
                     </span>
                   </div>
                 </div>
-              </td>
+</td>
               <td class="col-code">
                 <code class="code-badge">{{ field.fieldCode || '-' }}</code>
               </td>
@@ -188,7 +187,7 @@
                     Visible
                   </span>
                 </div>
-              </td>
+</td>
               <td class="col-status">
                 <span class="status-badge" [class.status-active]="!field.isDeleted"
                   [class.status-inactive]="field.isDeleted">
@@ -197,7 +196,7 @@
                 </span>
               </td>
               <td class="col-actions">
-                <div class="actions-menu">
+                <app-table-actions>
                   <button class="action-btn action-edit" (click)="openEditFieldModal(field)" title="Edit">
                     <i class="pi pi-pencil"></i>
                   </button>
@@ -215,17 +214,17 @@
                   <button class="action-btn action-delete" (click)="deleteField(field.id!)" title="Delete">
                     <i class="pi pi-trash"></i>
                   </button>
-                </div>
-              </td>
+                </app-table-actions>
+</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </app-table-shell>
   </div>
 
   <!-- Add/Edit Field Modal -->
-  <p-dialog [(visible)]="showFieldModal" [modal]="true"
+  <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [(visible)]="showFieldModal" [modal]="true"
     [header]="editingField ? translateLabel('fields.editField') : translateLabel('fields.addField')"
     [style]="{width: '750px', maxWidth: '90vw'}" [draggable]="false" [resizable]="false" [closable]="true"
     (onHide)="closeFieldModal()" [styleClass]="'field-modal'">
@@ -1318,10 +1317,10 @@
         </button>
       </div>
     </form>
-  </p-dialog>
+  </app-dialog-shell>
 
   <!-- Save Query Dialog -->
-  <p-dialog
+  <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
     [(visible)]="showSaveQueryDialog"
     [modal]="true"
     header="Save SQL Query"
@@ -1384,8 +1383,13 @@
         </span>
       </button>
     </div>
-  </p-dialog>
+  </app-dialog-shell>
 </div>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+

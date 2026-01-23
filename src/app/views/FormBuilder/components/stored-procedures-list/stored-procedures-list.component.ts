@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { TableActionsComponent } from '../../../../shared/table-actions/table-actions.component';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -15,11 +16,13 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { StoredProcedureFormComponent } from '../stored-procedure-form/stored-procedure-form.component';
+import { TableShellComponent } from '../../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-stored-procedures-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
     CommonModule,
     RouterModule,
     FormsModule,
@@ -30,7 +33,8 @@ import { StoredProcedureFormComponent } from '../stored-procedure-form/stored-pr
     ToastModule,
     ConfirmDialogModule,
     TooltipModule,
-    StoredProcedureFormComponent
+    StoredProcedureFormComponent,
+    TableShellComponent
   ],
   templateUrl: './stored-procedures-list.component.html',
   styleUrls: ['./stored-procedures-list.component.scss'],
@@ -196,4 +200,6 @@ export class StoredProceduresListComponent implements OnInit {
     return this.storedProcedures.filter(sp => sp.usageType === 'Rule').length;
   }
 }
+
+
 

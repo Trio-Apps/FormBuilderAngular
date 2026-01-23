@@ -14,6 +14,9 @@
 // Shared Design System
 @use "shared-design";
 
+// Unified table styles
+@use "tables";
+
 // Some temp fixes
 //@use "fixes";
 
@@ -29,154 +32,6 @@
 
 // PrimeIcons (CSS import is OK)
 @import "primeicons/primeicons.css";
-// styles.scss أو dialog-custom.scss
-// إضافة هذا في الملف الرئيسي أو في كل مكون
-
-// تحسين Dialog بشكل عام
-.p-dialog {
-  border-radius: 12px !important;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
-  border: 1px solid #e2e8f0 !important;
-  overflow: hidden;
-  
-  // Header
-  .p-dialog-header {
-    background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%) !important;
-    color: white !important;
-    padding: 1.25rem 1.5rem !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-    
-    .p-dialog-title {
-      font-weight: 600 !important;
-      font-size: 1.125rem !important;
-    }
-    
-    .p-dialog-header-icon {
-      color: white !important;
-      transition: all 0.2s;
-      
-      &:hover {
-        background: rgba(255, 255, 255, 0.2) !important;
-        transform: scale(1.1);
-      }
-    }
-  }
-  
-  // Content
-  .p-dialog-content {
-    padding: 1.5rem !important;
-    background: linear-gradient(to bottom right, #f8fafc, #f1f5f9) !important;
-    
-    // تحسين الفورم داخل الدايلوج
-    form {
-      .form-label {
-        font-weight: 500;
-        color: #475569;
-        margin-bottom: 6px;
-        font-size: 14px;
-        
-        span.text-danger {
-          color: #ef4444;
-        }
-      }
-      
-      .form-control, .form-select {
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 10px 12px;
-        transition: all 0.2s;
-        background: white;
-        
-        &:focus {
-          border-color: #0ea5e9;
-          box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
-          outline: none;
-        }
-        
-        &.ng-invalid.ng-touched {
-          border-color: #ef4444;
-          
-          &:focus {
-            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
-          }
-        }
-      }
-      
-      textarea.form-control {
-        resize: vertical;
-        min-height: 80px;
-      }
-      
-      .form-check {
-        margin-bottom: 8px;
-        
-        .form-check-input {
-          cursor: pointer;
-          
-          &:checked {
-            background-color: #0ea5e9;
-            border-color: #0ea5e9;
-          }
-          
-          &:focus {
-            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
-          }
-        }
-        
-        .form-check-label {
-          cursor: pointer;
-          color: #475569;
-          font-size: 14px;
-          margin-left: 4px;
-        }
-      }
-    }
-  }
-  
-  // Footer
-  .p-dialog-footer {
-    background: #f8fafc !important;
-    padding: 1rem 1.5rem !important;
-    border-top: 1px solid #e2e8f0 !important;
-    
-    .p-button {
-      border-radius: 8px !important;
-      padding: 10px 20px !important;
-      font-weight: 500 !important;
-      transition: all 0.2s !important;
-      
-      &:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      }
-      
-      &.p-button-text {
-        color: #64748b !important;
-        
-        &:hover {
-          background: rgba(100, 116, 139, 0.1) !important;
-        }
-      }
-      
-      &.p-button-primary {
-        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
-        border: none !important;
-        
-        &:hover {
-          background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
-        }
-        
-        &:disabled {
-          background: #cbd5e1 !important;
-          cursor: not-allowed;
-          transform: none;
-          box-shadow: none;
-        }
-      }
-    }
-  }
-}
-
 // تحسين ConfirmDialog
 .p-confirm-dialog {
   border-radius: 12px !important;
@@ -295,3 +150,47 @@
     }
   }
 }
+
+// Normalize custom modal overlays (non-PrimeNG) globally
+.modal-overlay .modal-body {
+  padding: 16px 18px !important;
+  background: #f8fafc !important;
+}
+
+.modal-overlay .form-section {
+  margin-bottom: 16px !important;
+  padding-bottom: 0 !important;
+  border-bottom: none !important;
+}
+
+.modal-overlay .form-group {
+  margin-bottom: 12px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.modal-overlay .form-row,
+.modal-overlay .form-grid {
+  gap: 16px !important;
+}
+
+.modal-overlay .form-label {
+  font-weight: 700 !important;
+  color: #475569 !important;
+  margin-bottom: 6px !important;
+  font-size: 12px !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase !important;
+}
+
+.modal-overlay .form-control,
+.modal-overlay .p-inputtext,
+.modal-overlay textarea,
+.modal-overlay select {
+  border-radius: 8px !important;
+  border: 1px solid #e2e8f0 !important;
+  padding: 9px 12px !important;
+  background: #ffffff !important;
+}
+

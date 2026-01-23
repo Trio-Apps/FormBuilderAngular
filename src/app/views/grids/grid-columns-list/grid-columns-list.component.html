@@ -84,22 +84,16 @@
     </div>
 
     <!-- Columns Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-list"></i>
-          {{ translateLabel('grids.columns.columnsList') || 'Columns List' }}
-        </h3>
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input
-              type="text"
-              [placeholder]="translateLabel('grids.columns.searchColumns') || 'Search columns...'"
-              class="search-input"
-              [(ngModel)]="searchTerm"
-            />
-          </div>
+    <app-table-shell [title]="translateLabel('grids.columns.columnsList') || 'Columns List'" icon="pi pi-list">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            [placeholder]="translateLabel('grids.columns.searchColumns') || 'Search columns...'"
+            class="search-input"
+            [(ngModel)]="searchTerm"
+          />
         </div>
       </div>
 
@@ -153,7 +147,7 @@
                     </span>
                   </div>
                 </div>
-              </td>
+</td>
               <td class="col-code">
                 <code class="code-badge">{{ column.columnCode || '-' }}</code>
               </td>
@@ -180,24 +174,24 @@
                 </span>
               </td>
               <td class="col-actions">
-                <div class="actions-menu">
+                <app-table-actions>
                   <button class="action-btn action-edit" (click)="openColumnModal(column)" [title]="translateLabel('common.edit') || 'Edit'">
                     <i class="pi pi-pencil"></i>
                   </button>
                   <button class="action-btn action-delete" (click)="deleteColumn(column.id)" [title]="translateLabel('common.delete') || 'Delete'">
                     <i class="pi pi-trash"></i>
                   </button>
-                </div>
-              </td>
+                </app-table-actions>
+</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </app-table-shell>
   </div>
 
   <!-- Add/Edit Column Modal -->
-  <p-dialog
+  <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true"
     [(visible)]="showColumnModal"
     [modal]="true"
     [header]="editingColumn ? (translateLabel('grids.columns.editColumn') || 'Edit Column') : (translateLabel('grids.columns.addColumn') || 'Add Column')"
@@ -825,10 +819,10 @@
         </button>
       </div>
     </form>
-  </p-dialog>
+  </app-dialog-shell>
 
   <!-- Data Source Modal -->
-  <p-dialog
+  <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
     [(visible)]="showDataSourceModal"
     [modal]="true"
     [header]="selectedDataSource ? (translateLabel('grids.columns.editDataSource') || 'Edit Data Source') : (translateLabel('grids.columns.addDataSource') || 'Add Data Source')"
@@ -1201,9 +1195,14 @@
         </button>
       </div>
     </form>
-  </p-dialog>
+  </app-dialog-shell>
 </div>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
 

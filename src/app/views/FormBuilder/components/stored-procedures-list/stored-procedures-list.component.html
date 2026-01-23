@@ -31,7 +31,7 @@
   <!-- Breadcrumb -->
   <div class="breadcrumb-section">
     <nav class="breadcrumb-nav">
-      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+      <a routerLink="/dashboard" class="breadcrumb-link">
         <i class="pi pi-home"></i>
         <span>Dashboard</span>
       </a>
@@ -82,24 +82,18 @@
     </div>
 
     <!-- Stored Procedures Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-table"></i>
-          Stored Procedures List
-        </h3>
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input 
-              type="text" 
-              [(ngModel)]="searchTerm" 
-              (input)="onSearch()"
-              placeholder="Search by title, procedure name, database..."
-              class="search-input" />
-          </div>
-          <span class="results-count">{{ filteredProcedures.length }} procedure(s) found</span>
+    <app-table-shell title="Stored Procedures List" icon="pi pi-table">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input 
+            type="text" 
+            [(ngModel)]="searchTerm" 
+            (input)="onSearch()"
+            placeholder="Search by title, procedure name, database..."
+            class="search-input" />
         </div>
+        <span class="results-count">{{ filteredProcedures.length }} procedure(s) found</span>
       </div>
 
       <!-- Filters -->
@@ -196,7 +190,7 @@
               <strong>{{ sp.title }}</strong>
               <span class="description" *ngIf="sp.description">{{ sp.description }}</span>
             </div>
-          </td>
+</td>
           <td>{{ sp.procedureName || '-' }}</td>
           <td>
             <span class="badge badge-database">{{ sp.databaseName }}</span>
@@ -213,20 +207,20 @@
             </span>
           </td>
           <td>
-            <div class="action-buttons">
+            <app-table-actions>
               <button class="action-btn action-edit" (click)="editSp(sp.id)" title="Edit">
                 <i class="pi pi-pencil"></i>
               </button>
               <button class="action-btn action-delete" (click)="deleteSp(sp.id)" title="Delete">
                 <i class="pi pi-trash"></i>
               </button>
-            </div>
-          </td>
+            </app-table-actions>
+</td>
         </tr>
       </tbody>
     </table>
       </div>
-    </div>
+    </app-table-shell>
   </div>
 </div>
 
@@ -239,4 +233,7 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
 

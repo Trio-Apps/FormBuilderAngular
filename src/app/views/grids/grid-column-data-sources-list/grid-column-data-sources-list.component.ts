@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -14,6 +16,7 @@ import { FieldOptionResponse } from '../../FormBuilder/form-builder/models/form-
 import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError, map, filter, distinctUntilChanged } from 'rxjs/operators';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -30,6 +33,8 @@ import { TranslatePipe } from '../../../core/pipes/translate.pipe';
   selector: 'app-grid-column-data-sources-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterModule,
     FormsModule,
@@ -42,7 +47,8 @@ import { TranslatePipe } from '../../../core/pipes/translate.pipe';
     ConfirmDialogModule,
     TooltipModule,
     PaginatorModule,
-    TranslatePipe
+    TranslatePipe,
+    TableShellComponent
   ],
   templateUrl: './grid-column-data-sources-list.component.html',
   styleUrls: ['./grid-column-data-sources-list.component.scss'],
@@ -813,4 +819,11 @@ export class GridColumnDataSourcesListComponent implements OnInit, OnDestroy {
     return 'badge-secondary';
   }
 }
+
+
+
+
+
+
+
 

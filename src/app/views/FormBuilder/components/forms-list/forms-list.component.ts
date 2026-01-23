@@ -1,3 +1,5 @@
+import { DialogShellComponent } from '../../../../shared/dialog-shell/dialog-shell.component';
+import { TableActionsComponent } from '../../../../shared/table-actions/table-actions.component';
 
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -24,11 +26,14 @@ import { PaginatorModule } from 'primeng/paginator';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { TranslationService } from '../../../../core/services/translation.service';
 import { DuplicateValidationHelper } from '../../../../core/utils/duplicate-validation.helper';
+import { TableShellComponent } from '../../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-forms-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterModule,
     FormsModule,
@@ -40,7 +45,8 @@ import { DuplicateValidationHelper } from '../../../../core/utils/duplicate-vali
     ConfirmDialogModule,
     TooltipModule,
     PaginatorModule,
-    TranslatePipe
+    TranslatePipe,
+    TableShellComponent
   ],
   templateUrl: './forms-list.component.html',
   styleUrls: ['./forms-list.component.scss'],
@@ -1321,4 +1327,11 @@ export class FormsListComponent implements OnInit, OnDestroy {
     });
   }
 }
+
+
+
+
+
+
+
 

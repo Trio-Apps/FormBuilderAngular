@@ -8,6 +8,7 @@ import { ToastModule } from 'primeng/toast';
 import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-approval-history',
@@ -17,7 +18,8 @@ import { TranslationService } from '../../../core/services/translation.service';
     FormsModule,
     ToastModule,
     TableModule,
-    PaginatorModule
+    PaginatorModule,
+    TableShellComponent
   ],
   templateUrl: './approval-history.component.html',
   styleUrls: ['./approval-history.component.scss'],

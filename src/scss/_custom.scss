@@ -15,3 +15,915 @@
 .select-week .calendar-row.current {
   cursor: pointer;
 }
+
+.card {
+  border-radius: 24px;
+  border: 1px solid rgba(40, 106, 97, 0.08);
+  box-shadow: 0 16px 40px rgba(40, 106, 97, 0.12);
+  background-color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.card:hover {
+  box-shadow: 0 20px 44px rgba(40, 106, 97, 0.16);
+  transform: translateY(-2px);
+}
+
+.card-header {
+  border-bottom: 1px solid rgba(40, 106, 97, 0.08);
+  background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+}
+
+// Unified page header (top navbar) across all dashboard pages
+.top-navbar {
+  background: #ffffff !important;
+  border: 1px solid rgba(40, 106, 97, 0.12) !important;
+  border-radius: 18px !important;
+  box-shadow: none !important;
+  padding: 14px 18px !important;
+  position: sticky !important;
+  top: 0;
+  overflow: hidden;
+  z-index: 100;
+}
+
+.top-navbar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 8px;
+  background: linear-gradient(90deg, #0f766e 0%, #10b981 45%, #2dd4bf 100%);
+  opacity: 0.95;
+}
+
+
+.top-navbar .nav-content {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  padding: 8px 12px !important;
+}
+
+.top-navbar .nav-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+}
+
+.top-navbar .nav-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: wrap;
+}
+
+.top-navbar .nav-back-btn,
+.top-navbar .btn-icon {
+  background: rgba(0, 235, 181, 0.12) !important;
+  border: 1px solid rgba(40, 106, 97, 0.1) !important;
+  color: #0f766e !important;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.top-navbar .nav-back-btn:hover,
+.top-navbar .btn-icon:hover:not(:disabled):not(.disabled) {
+  background: rgba(0, 235, 181, 0.2) !important;
+  transform: translateY(-1px);
+}
+
+.top-navbar .nav-back-btn:disabled,
+.top-navbar .btn-icon:disabled,
+.top-navbar .btn-icon.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.top-navbar .page-title {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  margin: 0 !important;
+  color: #1f2937 !important;
+}
+
+.top-navbar .page-subtitle {
+  font-size: 13px !important;
+  margin: 4px 0 0 0 !important;
+  color: #64748b !important;
+  opacity: 0.9 !important;
+}
+
+.top-navbar .btn-primary {
+  background: linear-gradient(135deg, #286a61 0%, #00ebb5 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  padding: 10px 18px !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: 0 10px 20px rgba(40, 106, 97, 0.18) !important;
+  transition: all 0.2s ease;
+}
+
+.top-navbar .btn-secondary {
+  background: #ffffff !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(15, 118, 110, 0.35) !important;
+  padding: 10px 18px !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+}
+
+.top-navbar .btn-secondary:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.08) !important;
+  border-color: rgba(15, 118, 110, 0.5) !important;
+}
+
+.top-navbar .btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(40, 106, 97, 0.22) !important;
+}
+
+.top-navbar .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .top-navbar .nav-content {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  .top-navbar .nav-right {
+    width: 100%;
+  }
+}
+
+// Normalize section wrappers used across list pages
+.document-types-section {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+// Remove stats cards row on pages with tables
+.stats-row {
+  display: none !important;
+}
+
+// Global spacing tokens for dashboard pages
+:root {
+  --page-pad-x: 24px;
+  --page-pad-y: 20px;
+  --section-gap: 16px;
+}
+
+// One consistent outer padding for dashboard/list pages
+.fields-page-container,
+.page-container,
+.stored-procedures-container,
+.table-menus-page-container,
+.dashboard-menus-page-container,
+.projects-page-container,
+.my-submissions-container,
+.field-options-management-container,
+.grid-column-options-management-container,
+.form-viewer-container {
+  padding: var(--page-pad-y) var(--page-pad-x) !important;
+  background: transparent !important;
+}
+
+// Keep internal sections aligned to the outer padding
+.main-content {
+  padding: 0 !important;
+}
+
+.fields-page-container .main-content,
+.page-container .main-content,
+.stored-procedures-container .main-content,
+.table-menus-page-container .main-content,
+.dashboard-menus-page-container .main-content,
+.projects-page-container .main-content,
+.my-submissions-container .main-content,
+.field-options-management-container .main-content,
+.grid-column-options-management-container .main-content,
+.form-viewer-container .main-content {
+  padding: 0 !important;
+}
+
+// Consistent vertical rhythm
+.top-navbar {
+  margin-bottom: var(--section-gap) !important;
+  width: 100% !important;
+}
+
+.breadcrumb-section {
+  margin-bottom: var(--section-gap) !important;
+  width: 100% !important;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --page-pad-x: 16px;
+    --page-pad-y: 16px;
+    --section-gap: 12px;
+  }
+}
+
+// Unified breadcrumb styling across dashboard pages
+.breadcrumb-section {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  border-radius: 12px !important;
+  padding: 10px 16px !important;
+}
+
+.breadcrumb-nav {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  font-size: 14px !important;
+  flex-wrap: wrap;
+}
+
+.breadcrumb-nav .breadcrumb-link {
+  color: #475569 !important;
+  text-decoration: none !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  transition: color 0.2s ease !important;
+}
+
+.breadcrumb-nav .breadcrumb-link:hover {
+  color: #0f766e !important;
+}
+
+.breadcrumb-nav .breadcrumb-separator {
+  color: #d1d5db !important;
+  font-size: 12px !important;
+}
+
+.breadcrumb-nav .breadcrumb-current {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+// Keep sidebar groups open when a child is active
+.sidebar-nav .nav-group:has(.nav-group-items .nav-link.active) {
+  display: block !important;
+}
+
+.sidebar-nav .nav-group:has(.nav-group-items .nav-link.active) > .nav-group-items {
+  display: block !important;
+  height: auto !important;
+}
+
+// Toast positioning (avoid hidden bar under header)
+.p-toast {
+  top: 72px !important;
+}
+
+// Global dialog styling (PrimeNG) - keep sizes per dialog, unify visuals
+:root {
+  --dialog-radius: 16px;
+  --dialog-header-bg: linear-gradient(135deg, #0f766e 0%, #10b981 100%);
+  --dialog-border: 1px solid rgba(15, 23, 42, 0.08);
+  --dialog-shadow: 0 20px 40px rgba(15, 23, 42, 0.16);
+  --dialog-content-pad-x: 18px;
+  --dialog-content-pad-y: 16px;
+  --dialog-field-gap: 14px;
+  --dialog-row-gap: 16px;
+  --dialog-label-gap: 6px;
+}
+
+.p-dialog-mask {
+  padding: 24px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 9999 !important;
+}
+
+.p-dialog,
+.app-dialog-shell.p-dialog {
+  border-radius: var(--dialog-radius) !important;
+  box-shadow: var(--dialog-shadow) !important;
+  border: var(--dialog-border) !important;
+  overflow: hidden;
+  max-height: calc(100vh - 48px) !important;
+}
+
+.p-dialog .p-dialog-header,
+.app-dialog-shell.p-dialog .p-dialog-header {
+  background: linear-gradient(135deg, #0f766e 0%, #10b981 60%, #2dd4bf 100%) !important;
+  color: #ffffff !important;
+  border-bottom: none !important;
+  padding: 18px 22px !important;
+  cursor: default !important;
+}
+
+.p-dialog .p-dialog-title {
+  font-weight: 700 !important;
+  font-size: 18px !important;
+}
+
+.p-dialog .p-dialog-header-icon {
+  color: #ffffff !important;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  transition: background 0.2s ease;
+  pointer-events: auto;
+}
+
+.p-dialog .p-dialog-header-icon:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+}
+
+.p-dialog .p-dialog-content,
+.app-dialog-shell.p-dialog .p-dialog-content {
+  padding: var(--dialog-content-pad-y) var(--dialog-content-pad-x) !important;
+  max-height: calc(100vh - 190px) !important;
+  overflow: auto;
+  background: #f8fafc !important;
+}
+
+.p-dialog .p-dialog-footer,
+.app-dialog-shell.p-dialog .p-dialog-footer {
+  padding: 12px var(--dialog-content-pad-x) !important;
+  border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+  background: #f8fafc !important;
+}
+
+// Unified popup layout spacing (all dialogs)
+.p-dialog .form-section,
+.app-dialog-shell .form-section {
+  margin-bottom: 16px !important;
+  padding-bottom: 0 !important;
+  border-bottom: none !important;
+}
+
+.p-dialog .form-group,
+.app-dialog-shell .form-group {
+  display: flex !important;
+  flex-direction: column !important;
+  margin: 0 0 var(--dialog-field-gap) 0 !important;
+  gap: var(--dialog-label-gap) !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.p-dialog .form-group:last-child {
+  margin-bottom: 0 !important;
+}
+
+.p-dialog .form-grid,
+.p-dialog .form-row,
+.app-dialog-shell .form-grid,
+.app-dialog-shell .form-row {
+  gap: var(--dialog-row-gap) !important;
+  margin-bottom: var(--dialog-field-gap) !important;
+  align-items: start;
+}
+
+.p-dialog .p-field,
+.p-dialog .field,
+.p-dialog .p-fluid .field,
+.p-dialog .p-fluid .p-field,
+.p-dialog .p-formgrid .field {
+  display: flex !important;
+  flex-direction: column !important;
+  margin: 0 0 var(--dialog-field-gap) 0 !important;
+  gap: var(--dialog-label-gap) !important;
+}
+
+.p-dialog .p-field:last-child,
+.p-dialog .field:last-child {
+  margin-bottom: 0 !important;
+}
+
+.p-dialog .form-row:last-child,
+.p-dialog .form-grid:last-child,
+.app-dialog-shell .form-row:last-child,
+.app-dialog-shell .form-grid:last-child {
+  margin-bottom: 0 !important;
+}
+
+.p-dialog .form-row > .form-group,
+.p-dialog .form-grid > .form-group,
+.app-dialog-shell .form-row > .form-group,
+.app-dialog-shell .form-grid > .form-group {
+  margin-bottom: 0 !important;
+}
+
+.p-dialog .modal-form-content,
+.p-dialog .dialog-body,
+.p-dialog .form-content,
+.p-dialog form,
+.app-dialog-shell .modal-form-content,
+.app-dialog-shell .dialog-body,
+.app-dialog-shell .form-content,
+.app-dialog-shell form {
+  display: block;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.p-dialog .p-tabview-panels,
+.p-dialog .p-tabview-panel,
+.app-dialog-shell .p-tabview-panels,
+.app-dialog-shell .p-tabview-panel {
+  padding: 0 !important;
+}
+
+.p-dialog .form-tabs {
+  margin: 0 0 var(--dialog-field-gap) 0 !important;
+  padding: 12px var(--dialog-content-pad-x) !important;
+}
+
+.p-dialog .p-tabview-nav {
+  margin-bottom: var(--dialog-field-gap) !important;
+}
+
+// Bootstrap row/cols inside dialogs (normalize gutters)
+.p-dialog .row {
+  --bs-gutter-x: var(--dialog-row-gap);
+  --bs-gutter-y: var(--dialog-row-gap);
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.p-dialog .row > [class^="col-"],
+.p-dialog .row > [class*=" col-"] {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.p-dialog .form-hint,
+.p-dialog .form-text,
+.p-dialog small.form-text,
+.app-dialog-shell .form-hint,
+.app-dialog-shell .form-text,
+.app-dialog-shell small.form-text {
+  margin-top: 6px !important;
+}
+
+// Normalize custom modal overlays (non-PrimeNG)
+.modal-overlay .modal-content {
+  border-radius: 16px !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.16) !important;
+}
+
+.modal-overlay .modal-header {
+  padding: 16px 18px !important;
+}
+
+.modal-overlay .modal-body {
+  padding: var(--dialog-content-pad-y) var(--dialog-content-pad-x) !important;
+  background: #f8fafc !important;
+}
+
+.modal-overlay .modal-footer {
+  padding: 12px var(--dialog-content-pad-x) !important;
+  border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+  background: #f8fafc !important;
+}
+
+.modal-overlay .form-section {
+  margin-bottom: 16px !important;
+  padding-bottom: 0 !important;
+  border-bottom: none !important;
+}
+
+.modal-overlay .form-group {
+  display: flex !important;
+  flex-direction: column !important;
+  margin: 0 0 var(--dialog-field-gap) 0 !important;
+  gap: var(--dialog-label-gap) !important;
+}
+
+.modal-overlay .form-grid,
+.modal-overlay .form-row {
+  gap: var(--dialog-row-gap) !important;
+  margin-bottom: var(--dialog-field-gap) !important;
+  align-items: start;
+}
+
+.modal-overlay .form-group > label,
+.modal-overlay label.form-label {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #475569 !important;
+  letter-spacing: 0.02em !important;
+  margin: 0 0 var(--dialog-label-gap) 0 !important;
+  text-transform: uppercase !important;
+}
+
+.modal-overlay .form-row:last-child,
+.modal-overlay .form-grid:last-child,
+.modal-overlay .form-group:last-child {
+  margin-bottom: 0 !important;
+}
+
+.modal-overlay .form-row > .form-group,
+.modal-overlay .form-grid > .form-group {
+  margin-bottom: 0 !important;
+}
+
+.modal-overlay .p-field,
+.modal-overlay .field,
+.modal-overlay .p-fluid .field,
+.modal-overlay .p-fluid .p-field,
+.modal-overlay .p-formgrid .field {
+  display: flex !important;
+  flex-direction: column !important;
+  margin: 0 0 var(--dialog-field-gap) 0 !important;
+  gap: var(--dialog-label-gap) !important;
+}
+
+.modal-overlay .p-field:last-child,
+.modal-overlay .field:last-child {
+  margin-bottom: 0 !important;
+}
+
+// Normalize utility margin helpers inside dialogs
+.p-dialog .mb-1,
+.p-dialog .mb-2,
+.p-dialog .mb-3,
+.p-dialog .mb-4,
+.p-dialog .mb-5,
+.p-dialog .p-mb-1,
+.p-dialog .p-mb-2,
+.p-dialog .p-mb-3,
+.p-dialog .p-mb-4,
+.p-dialog .p-mb-5,
+.modal-overlay .mb-1,
+.modal-overlay .mb-2,
+.modal-overlay .mb-3,
+.modal-overlay .mb-4,
+.modal-overlay .mb-5,
+.modal-overlay .p-mb-1,
+.modal-overlay .p-mb-2,
+.modal-overlay .p-mb-3,
+.modal-overlay .p-mb-4,
+.modal-overlay .p-mb-5 {
+  margin-bottom: var(--dialog-field-gap) !important;
+}
+
+// Stored Procedure dialog aligned with global popup styles
+:host ::ng-deep .sp-form-dialog .p-dialog-content {
+  padding: var(--dialog-content-pad-y) var(--dialog-content-pad-x) !important;
+  background: #f8fafc !important;
+}
+
+// Remove boxed styling for active status blocks (keep content only)
+.active-status-group {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.active-status-group:hover {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+// Compact active status toggle (match documents style)
+.active-status-group .toggle-switch {
+  width: 44px !important;
+  height: 24px !important;
+}
+
+.active-status-group .toggle-slider::before {
+  width: 18px !important;
+  height: 18px !important;
+  left: 3px !important;
+  bottom: 3px !important;
+}
+
+.active-status-group .toggle-input:checked + .toggle-slider::before {
+  transform: translateX(20px) !important;
+}
+
+.active-status-group .toggle-status-text {
+  font-size: 13px !important;
+  color: #475569 !important;
+}
+
+// Form polish inside dialogs
+.p-dialog .form-label {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #475569 !important;
+  letter-spacing: 0.02em !important;
+  margin-bottom: var(--dialog-label-gap) !important;
+  text-transform: uppercase !important;
+}
+
+.p-dialog .form-group > label,
+.p-dialog label.form-label {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #475569 !important;
+  letter-spacing: 0.02em !important;
+  margin: 0 0 var(--dialog-label-gap) 0 !important;
+  text-transform: uppercase !important;
+}
+
+.p-dialog .form-control,
+.p-dialog .p-inputtext,
+.p-dialog textarea {
+  border-radius: 10px !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  background: #ffffff !important;
+  padding: 9px 12px !important;
+  box-shadow: none !important;
+}
+
+.p-dialog .form-control:focus,
+.p-dialog .p-inputtext:focus,
+.p-dialog textarea:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12) !important;
+}
+
+.p-dialog select,
+.p-dialog .p-dropdown,
+.p-dialog .p-multiselect,
+.p-dialog .p-inputnumber,
+.p-dialog .p-calendar,
+.p-dialog .p-calendar .p-inputtext {
+  border-radius: 10px !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.p-dialog .p-dropdown .p-dropdown-label,
+.p-dialog .p-multiselect .p-multiselect-label,
+.p-dialog .p-inputnumber .p-inputnumber-input {
+  padding: 9px 12px !important;
+}
+
+.p-dialog .language-tabs-container {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: var(--dialog-field-gap);
+  padding: 0 !important;
+}
+
+.p-dialog .language-tab {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.app-dialog-shell .language-tabs-container {
+  margin-bottom: var(--dialog-field-gap) !important;
+  padding: 0 !important;
+}
+
+.app-dialog-shell .modal-form-content,
+.app-dialog-shell .form-content {
+  padding: 0 !important;
+  gap: 0 !important;
+}
+
+.app-dialog-shell .form-section > h3 {
+  margin: 0 0 var(--dialog-field-gap) 0 !important;
+}
+
+.p-dialog .p-tabview-nav {
+  margin-bottom: var(--dialog-field-gap) !important;
+}
+
+// Dialog footer buttons (save/cancel)
+.p-dialog .p-dialog-footer .p-button {
+  border-radius: 10px !important;
+  padding: 8px 16px !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.p-dialog .p-dialog-footer button {
+  border-radius: 10px !important;
+  padding: 8px 16px !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.p-dialog .p-dialog-footer .p-button.p-button-text,
+.p-dialog .p-dialog-footer button.p-button-text {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  padding: 8px 16px !important;
+}
+
+.p-dialog .p-dialog-footer .p-button.p-button-text:hover,
+.p-dialog .p-dialog-footer button.p-button-text:hover {
+  background: #f1f5f9 !important;
+}
+
+.p-dialog .p-dialog-footer .p-button-success {
+  background: #10b981 !important;
+  border-color: #0f766e !important;
+  color: #ffffff !important;
+}
+
+.p-dialog .p-dialog-footer .p-button-success:hover:not(:disabled) {
+  background: #0f9f77 !important;
+}
+
+.p-dialog .p-dialog-footer button.p-button-success {
+  background: #10b981 !important;
+  border-color: #0f766e !important;
+  color: #ffffff !important;
+}
+
+.p-dialog .p-dialog-footer button.p-button-text {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+// Dialog footer alignment
+.p-dialog .p-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.p-dialog .p-dialog-footer button,
+.p-dialog .p-dialog-footer .p-button {
+  min-width: 88px;
+}
+
+// Inner dialog footers used inside content (div.dialog-footer)
+.p-dialog .dialog-footer {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  margin-top: var(--dialog-field-gap) !important;
+  padding-top: var(--dialog-field-gap) !important;
+  border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+
+// Common footer patterns inside dialog content
+.p-dialog form > .d-flex.justify-content-end,
+.p-dialog form > .d-flex.align-items-center.justify-content-end,
+.p-dialog form > .d-flex.justify-content-between {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  margin-top: var(--dialog-field-gap) !important;
+  padding-top: var(--dialog-field-gap) !important;
+  border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+
+.p-dialog .modal-body {
+  padding: 0 !important;
+}
+
+.p-dialog .modal-footer {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  margin-top: var(--dialog-field-gap) !important;
+  padding-top: var(--dialog-field-gap) !important;
+  border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+
+// Normalize form-check spacing inside dialogs
+.p-dialog .form-check {
+  padding-left: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+// Unified active-status toggle (document style, compact)
+.active-status-group .toggle-switch {
+  width: 44px !important;
+  height: 24px !important;
+}
+
+.active-status-group .toggle-slider {
+  background: #d1d5db !important;
+  border-radius: 999px !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12) !important;
+}
+
+.active-status-group .toggle-slider::before {
+  width: 18px !important;
+  height: 18px !important;
+  left: 3px !important;
+  bottom: 3px !important;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.18) !important;
+}
+
+.active-status-group .toggle-input:checked + .toggle-slider {
+  background: linear-gradient(135deg, #00ebb5 0%, #10b981 100%) !important;
+  box-shadow: 0 0 0 2px rgba(0, 235, 181, 0.15) !important;
+}
+
+.active-status-group .toggle-input:checked + .toggle-slider::before {
+  transform: translateX(20px) !important;
+}
+
+.active-status-group .toggle-status-text {
+  font-size: 13px !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+// Apply same switch look to bootstrap switches
+.form-check.form-switch .form-check-input {
+  width: 44px !important;
+  height: 24px !important;
+  border-radius: 999px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #d1d5db !important;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  float: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12) !important;
+  background-image: none !important;
+}
+
+.form-check.form-switch .form-check-input::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.18);
+  transition: transform 0.2s ease;
+}
+
+.form-check.form-switch .form-check-input:checked {
+  background: linear-gradient(135deg, #00ebb5 0%, #10b981 100%) !important;
+  border-color: #0f766e !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18) !important;
+}
+
+.form-check.form-switch .form-check-input:checked::before {
+  transform: translateX(20px);
+}
+
+.form-check.form-switch .form-check-input:checked + .form-check-label {
+  color: #0f766e;
+}
+
+// Switch container styling
+.form-check.form-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none;
+  background: transparent;
+}
+
+.form-check.form-switch .form-check-label {
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+}

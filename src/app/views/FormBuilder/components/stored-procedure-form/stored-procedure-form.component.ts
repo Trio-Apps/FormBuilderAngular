@@ -1,4 +1,5 @@
 import { Component, OnInit, Input, Output, EventEmitter } from '@angular/core';
+import { DialogShellComponent } from '../../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { StoredProceduresService } from '../../services/stored-procedures.service';
@@ -18,6 +19,7 @@ import { TooltipModule } from 'primeng/tooltip';
   selector: 'app-stored-procedure-form',
   standalone: true,
   imports: [
+    DialogShellComponent,
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
@@ -38,6 +40,7 @@ export class StoredProcedureFormComponent implements OnInit {
   @Output() close = new EventEmitter<void>();
 
   spForm!: FormGroup;
+  visible = true;
   loading = false;
   activeTab: 'basic' | 'code' = 'basic';
 
@@ -177,6 +180,7 @@ export class StoredProcedureFormComponent implements OnInit {
   }
 
   onCancel(): void {
+    this.visible = false;
     this.close.emit();
   }
 
@@ -253,4 +257,9 @@ export class StoredProcedureFormComponent implements OnInit {
   }
 
 }
+
+
+
+
+
 

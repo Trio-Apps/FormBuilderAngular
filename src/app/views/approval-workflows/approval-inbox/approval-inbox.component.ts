@@ -1,4 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto, ProcessApprovalActionDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
@@ -20,11 +22,14 @@ import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-approval-inbox',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
@@ -35,7 +40,8 @@ import { TranslationService } from '../../../core/services/translation.service';
     InputTextModule,
     ButtonModule,
     TableModule,
-    PaginatorModule
+    PaginatorModule,
+    TableShellComponent
   ],
   templateUrl: './approval-inbox.component.html',
   styleUrls: ['./approval-inbox.component.scss'],
@@ -342,13 +348,6 @@ export class ApprovalInboxComponent implements OnInit {
           console.log('  3. userId/username mismatch between login and Stage Assignees');
           console.log('  4. Stage Assignees exist but IsActive = false');
           console.log('[ApprovalInbox] User identifier used:', userIdentifier);
-          
-          this.messageService.add({
-            severity: 'info',
-            summary: 'No Pending Approvals',
-            detail: `No inbox items found for user ${userIdentifier}. Please verify: 1) You are assigned as Stage Assignee, 2) Stage Assignees are active, 3) There are submissions awaiting approval.`,
-            life: 10000
-          });
         }
         
         this.cdr.detectChanges();
@@ -1556,4 +1555,11 @@ export class ApprovalInboxComponent implements OnInit {
     this.actionForm.reset();
   }
 }
+
+
+
+
+
+
+
 

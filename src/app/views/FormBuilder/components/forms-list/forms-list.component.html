@@ -1,23 +1,5 @@
 <div class="fields-page-container">
-  <!-- Language Toggle Buttons -->
-  <div class="admin-language-toggle">
-    <button
-      type="button"
-      class="admin-lang-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'en'"
-      (click)="switchLanguage('en')">
-      English
-    </button>
-    <button
-      type="button"
-      class="admin-lang-btn"
-      [class.active]="translationService.getCurrentLanguage() === 'ar'"
-      (click)="switchLanguage('ar')">
-      العربية
-    </button>
-  </div>
-
-  <!-- Top Navigation Bar -->
+<!-- Top Navigation Bar -->
   <div class="top-navbar">
     <div class="nav-content">
       <div class="nav-left">
@@ -90,26 +72,20 @@
     </div>
 
     <!-- Forms Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-table"></i>
-          {{ 'forms.formsList' | translate }}
-        </h3>
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input
-              type="text"
-              [placeholder]="'forms.searchForms' | translate"
-              class="search-input"
-              [(ngModel)]="searchTerm"
-              (input)="filterForms()"
-            />
-          </div>
-          <div class="results-count">
-            {{ filteredForms.length }} {{ 'forms.formsFound' | translate }}
-          </div>
+    <app-table-shell [title]="'forms.formsList' | translate" icon="pi pi-table">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            [placeholder]="'forms.searchForms' | translate"
+            class="search-input"
+            [(ngModel)]="searchTerm"
+            (input)="filterForms()"
+          />
+        </div>
+        <div class="results-count">
+          {{ filteredForms.length }} {{ 'forms.formsFound' | translate }}
         </div>
       </div>
 
@@ -157,7 +133,7 @@
                 <div class="form-description">
                   {{ form.description || ('common.noData' | translate) }}
                 </div>
-              </td>
+</td>
               <td class="code-cell">
                 <span class="badge-code">{{ form.formCode }}</span>
               </td>
@@ -173,9 +149,9 @@
                     {{ form.isActive !== false ? ('common.active' | translate) : ('common.inactive' | translate) }}
                   </span>
                 </div>
-              </td>
+</td>
               <td class="actions-cell text-end">
-                <div class="actions-menu">
+                <app-table-actions>
                   <button
                     class="action-btn"
                     [title]="'forms.copyPublicLink' | translate"
@@ -229,8 +205,8 @@
                   >
                     <i class="pi pi-trash"></i>
                   </button>
-                </div>
-              </td>
+                </app-table-actions>
+</td>
             </tr>
           </ng-template>
         </p-table>
@@ -256,10 +232,10 @@
           </nav>
         </div>
       </div>
-    </div>
+    </app-table-shell>
 
     <!-- Add/Edit Form Modal -->
-    <p-dialog
+    <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
       [(visible)]="showFormModal"
       [modal]="true"
       [header]="(editingForm ? 'forms.editForm' : 'forms.addNewForm') | translate"
@@ -401,9 +377,15 @@
           </button>
         </div>
       </form>
-    </p-dialog>
+    </app-dialog-shell>
   </div>
 </div>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
+

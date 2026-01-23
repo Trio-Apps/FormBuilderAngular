@@ -30,8 +30,13 @@
   <!-- Breadcrumb -->
   <div class="breadcrumb-section">
     <nav class="breadcrumb-nav">
-      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+      <a routerLink="/dashboard" class="breadcrumb-link">
         <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a routerLink="/form-builder/forms" class="breadcrumb-link">
+        <i class="pi pi-file"></i>
         <span>Forms</span>
       </a>
       <i class="pi pi-angle-right breadcrumb-separator"></i>
@@ -67,22 +72,16 @@
     </div>
 
     <!-- Rules Table Card -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3 class="table-title">
-          <i class="pi pi-shield"></i>
-          Rules List
-        </h3>
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input
-              type="text"
-              [(ngModel)]="searchTerm"
-              (ngModelChange)="updateFilteredRules()"
-              placeholder="Search rules..."
-              class="search-input" />
-          </div>
+    <app-table-shell title="Rules List" icon="pi pi-shield">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            [(ngModel)]="searchTerm"
+            (ngModelChange)="updateFilteredRules()"
+            placeholder="Search rules..."
+            class="search-input" />
         </div>
       </div>
 
@@ -129,7 +128,7 @@
                 <div class="rule-name-wrapper">
                   <div class="rule-name-main">{{ rule.ruleName || '-' }}</div>
                 </div>
-              </td>
+</td>
               <td class="col-condition">
                 <div class="condition-summary" *ngIf="rule.condition">
                   <div class="condition-text">
@@ -139,7 +138,7 @@
                     <span class="value-type-badge" *ngIf="rule.condition.valueType">({{ rule.condition.valueType }})</span>
                   </div>
                 </div>
-              </td>
+</td>
               <td class="col-actions-summary">
                 <div class="actions-container">
                   <!-- Actions (THEN) -->
@@ -174,7 +173,7 @@
                   
                   <span *ngIf="(!rule.actions || rule.actions.length === 0) && (!rule.elseActions || rule.elseActions.length === 0)" class="text-muted">No actions</span>
                 </div>
-              </td>
+</td>
               <td class="col-status">
                 <span class="status-badge" [class.status-active]="rule.isActive" [class.status-inactive]="!rule.isActive">
                   <i class="pi" [class.pi-check-circle]="rule.isActive" [class.pi-times-circle]="!rule.isActive"></i>
@@ -182,30 +181,30 @@
                 </span>
               </td>
               <td class="col-actions">
-                <div class="actions-menu">
+                <app-table-actions>
                   <button class="action-btn action-edit" (click)="openRuleModal(rule)" title="Edit Rule">
                     <i class="pi pi-pencil"></i>
                   </button>
                   <button class="action-btn action-delete" (click)="deleteRule(rule.id)" title="Delete Rule">
                     <i class="pi pi-trash"></i>
                   </button>
-                </div>
-              </td>
+                </app-table-actions>
+</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </app-table-shell>
   </div>
 
   <!-- Rule Modal -->
-  <p-dialog
+  <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true"
     [(visible)]="showRuleModal"
     [modal]="true"
     [style]="{ width: '90vw', maxWidth: '1200px' }"
     [closable]="true"
     [draggable]="false"
-    [resizable]="true"
+    [resizable]="false"
     [header]="editingRule ? 'Edit Rule' : 'New Rule'"
     styleClass="rule-modal">
     <form [formGroup]="ruleForm" (ngSubmit)="saveRule()">
@@ -572,10 +571,15 @@
         </button>
       </div>
     </form>
-  </p-dialog>
+  </app-dialog-shell>
 
   <!-- Toast Messages -->
   <p-toast></p-toast>
   <p-confirmDialog></p-confirmDialog>
 </div>
+
+
+
+
+
 

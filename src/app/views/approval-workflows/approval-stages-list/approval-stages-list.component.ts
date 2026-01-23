@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -18,11 +20,14 @@ import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-approval-stages-list',
   standalone: true,
   imports: [
+    TableActionsComponent,
+    DialogShellComponent,
     CommonModule,
     RouterLink,
     FormsModule,
@@ -36,7 +41,8 @@ import { TranslationService } from '../../../core/services/translation.service';
     CheckboxModule,
     ButtonModule,
     TableModule,
-    PaginatorModule
+    PaginatorModule,
+    TableShellComponent
   ],
   templateUrl: './approval-stages-list.component.html',
   styleUrls: ['./approval-stages-list.component.scss'],
@@ -790,4 +796,11 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     // isDeleted is not managed via form - it's handled via delete/restore actions
   }
 }
+
+
+
+
+
+
+
 

@@ -8,6 +8,7 @@ import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 
 @Component({
   selector: 'app-grid-column-options-list',
@@ -17,6 +18,7 @@ import { TooltipModule } from 'primeng/tooltip';
     RouterLink,
     FormsModule,
     ReactiveFormsModule,
+    DialogShellComponent,
     ToastModule,
     ConfirmDialogModule,
     TooltipModule

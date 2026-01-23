@@ -79,9 +79,8 @@
 
     <!-- Assignees Section -->
     <div class="document-types-section">
-      <div class="section-header">
-        <h3>Stage Assignees List</h3>
-        <div class="header-actions">
+      <app-table-shell title="Stage Assignees List" icon="pi pi-users">
+        <div table-actions class="header-actions">
           <div class="search-box">
             <i class="pi pi-search"></i>
             <input
@@ -93,7 +92,6 @@
             />
           </div>
         </div>
-      </div>
 
       <div *ngIf="loading.assignees" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
@@ -130,7 +128,7 @@
                 <i class="pi pi-user"></i>
                 <span>{{ assignee.userName || getAssigneeDisplayName(assignee) }}</span>
               </div>
-            </td>
+</td>
             <td>
               <span *ngIf="assignee.roleName" class="badge badge-info">
                 {{ assignee.roleName }}
@@ -148,7 +146,7 @@
               </span>
             </td>
             <td>
-              <div class="action-buttons">
+              <app-table-actions>
                 <button pButton 
                   icon="pi pi-pencil" 
                   class="p-button-text p-button-sm action-btn" 
@@ -184,8 +182,8 @@
                   [disabled]="loading.delete || (assignee.isActive && !canDeleteOrDeactivate(assignee))"
                   pTooltip="Delete Assignee"
                   tooltipPosition="top"></button>
-              </div>
-            </td>
+              </app-table-actions>
+</td>
           </tr>
         </ng-template>
       </p-table>
@@ -199,12 +197,13 @@
         (onPageChange)="onPageChange($event)"
         styleClass="document-types-paginator">
       </p-paginator>
+      </app-table-shell>
     </div>
   </div>
 </div>
 
 <!-- Assignee Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false"
   [(visible)]="showModal"
   [header]="(editingAssignee ? 'Edit' : 'New') + ' Assignee'"
   [modal]="true"
@@ -275,10 +274,10 @@
         [loading]="loading.save"></button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <!-- Bulk Update Modal -->
-<p-dialog
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [resizable]="false" [draggable]="false"
   [(visible)]="showBulkUpdateModal"
   header="Bulk Update Assignees"
   [modal]="true"
@@ -339,8 +338,13 @@
         [loading]="loading.bulkUpdate"></button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
+
+
+
+
+
 
