@@ -83,7 +83,17 @@ export class AuthService {
 
   isAuthenticated(): boolean {
     const token = this.getToken();
-    return !!token && !this.isTokenExpired(token);
+    const isExpired = token ? this.isTokenExpired(token) : true;
+    const result = !!token && !isExpired;
+    
+    console.log('[AuthService] isAuthenticated check:', {
+      hasToken: !!token,
+      isExpired,
+      result,
+      tokenPreview: token ? token.substring(0, 20) + '...' : null
+    });
+    
+    return result;
   }
 
   getToken(): string | null {
@@ -117,14 +127,29 @@ export class AuthService {
   private isTokenExpired(token: string): boolean {
     const storedExpiry = this.storageService.getTokenExpiryMs();
     if (storedExpiry) {
-      return Date.now() >= storedExpiry;
+      const isExpired = Date.now() >= storedExpiry;
+      console.log('[AuthService] Token expiry check (stored):', {
+        storedExpiry,
+        currentTime: Date.now(),
+        isExpired,
+        timeUntilExpiry: storedExpiry - Date.now()
+      });
+      return isExpired;
     }
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const expiry = payload.exp;
       const currentTime = Math.floor(new Date().getTime() / 1000);
-      return currentTime >= expiry;
-    } catch {
+      const isExpired = currentTime >= expiry;
+      console.log('[AuthService] Token expiry check (JWT):', {
+        expiry,
+        currentTime,
+        isExpired,
+        timeUntilExpiry: expiry - currentTime
+      });
+      return isExpired;
+    } catch (error) {
+      console.warn('[AuthService] Error parsing token expiry:', error);
       return false;
     }
   }

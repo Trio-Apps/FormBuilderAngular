@@ -1,3 +1,84 @@
 @use "../../../../scss/shared-design" as *;
 @use '../approval-stages-list/approval-stages-list.component.scss';
 
+// Dialog footer styling
+.dialog-footer {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  padding: 20px 0 0 0 !important;
+  margin: 24px 0 0 0 !important;
+  border-top: 1px solid #e5e7eb !important;
+  width: 100% !important;
+  
+  .p-button {
+    padding: 10px 24px;
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-width: 100px;
+    
+    &.p-button-text {
+      background: white;
+      color: #6b7280;
+      border: 2px solid #e5e7eb;
+      
+      &:hover:not(:disabled) {
+        background: #f3f4f6;
+        border-color: #cbd5e1;
+        color: #374151;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+      }
+    }
+    
+    &.p-button-success {
+      background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+      border: none;
+      color: white;
+      
+      &:hover:not(:disabled) {
+        background: linear-gradient(135deg, #1e4d45 0%, #00c99f 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(40, 106, 97, 0.3);
+      }
+      
+      &:active:not(:disabled) {
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(40, 106, 97, 0.2);
+      }
+      
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+    }
+    
+    i {
+      font-size: 16px;
+    }
+  }
+}
+
+// Force footer visibility
+::ng-deep .p-dialog.p-component,
+::ng-deep .app-dialog-shell.p-dialog {
+  .p-dialog-content {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+  }
+  
+  .p-dialog-footer {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    min-height: 60px !important;
+    max-height: 100px !important;
+    overflow: visible !important;
+  }
+}
+

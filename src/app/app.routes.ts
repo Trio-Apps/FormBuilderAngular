@@ -169,11 +169,12 @@ export const routes: Routes = [
           .then(m => m.FormSubmissionCreateComponent)
       },
 
-      // ===== Form Builder System =====
+      // ===== Form Builder System ===== (Admin only)
       {
         path: 'form-builder',
         loadComponent: () => import('./views/FormBuilder/form-builder/form-builder.component')
           .then(m => m.FormBuilderComponent),
+        canActivate: [authGuard, adminGuard], // Admin only - protect all form-builder routes
         children: [
           // Default route للـ form-builder
           { 

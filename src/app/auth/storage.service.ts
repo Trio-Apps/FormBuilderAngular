@@ -49,10 +49,19 @@ export class StorageService {
   private isTokenExpiredInStorage(storage: Storage): boolean {
     const expiresAt = storage.getItem(this.TOKEN_EXPIRES_AT_KEY);
     if (!expiresAt) {
-      return false;
+      console.log('[StorageService] isTokenExpiredInStorage: No expiry stored, considering token as expired for security');
+      return true; // If no expiry is stored, consider token as expired for security
     }
     const expiryMs = Number(expiresAt);
-    return Number.isNaN(expiryMs) || Date.now() >= expiryMs;
+    const isExpired = Number.isNaN(expiryMs) || Date.now() >= expiryMs;
+    console.log('[StorageService] isTokenExpiredInStorage:', {
+      expiresAt,
+      expiryMs,
+      currentTime: Date.now(),
+      isExpired,
+      timeUntilExpiry: expiryMs - Date.now()
+    });
+    return isExpired;
   }
 
   /**
@@ -94,13 +103,20 @@ export class StorageService {
   getToken(): string | null {
     const storage = this.getStorage();
     if (!storage) {
+      console.log('[StorageService] getToken: No storage available');
       return null;
     }
     if (this.isTokenExpiredInStorage(storage)) {
+      console.log('[StorageService] getToken: Token expired in storage, clearing');
       this.clearStorage(storage);
       return null;
     }
-    return storage.getItem(this.TOKEN_KEY);
+    const token = storage.getItem(this.TOKEN_KEY);
+    console.log('[StorageService] getToken:', {
+      hasToken: !!token,
+      tokenPreview: token ? token.substring(0, 20) + '...' : null
+    });
+    return token;
   }
 
   private getValue(key: string): string | null {

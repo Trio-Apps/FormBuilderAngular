@@ -342,7 +342,11 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   openMenuModal(menu?: TableMenuDto): void {
     this.editingMenu = menu || null;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
+    
+    // Enable/disable menuCode based on editing state
     if (menu) {
+      // Editing: disable menuCode (cannot be changed after creation)
+      this.menuForm.get('menuCode')?.disable();
       this.menuForm.patchValue({
         name: menu.name,
         foreignName: menu.foreignName || '',
@@ -353,6 +357,8 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
         permissions: menu.permissions || []
       });
     } else {
+      // Creating: enable menuCode
+      this.menuForm.get('menuCode')?.enable();
       this.menuForm.reset({
         name: '',
         foreignName: '',
@@ -370,6 +376,8 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.showMenuModal = false;
     this.editingMenu = null;
     this.currentInputLanguage = 'en'; // Reset to English when closing modal
+    // Enable all controls before reset
+    this.menuForm.get('menuCode')?.enable();
     this.menuForm.reset();
   }
 
@@ -388,7 +396,8 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     }
 
     this.loading.save = true;
-    const formValue = this.menuForm.value;
+    // Use getRawValue() to get values from disabled controls
+    const formValue = this.menuForm.getRawValue();
     
     if (this.editingMenu) {
       // Update
@@ -496,6 +505,13 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.editingSubMenu = subMenu || null;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     
+    // Disable menuId when menu is pre-selected (from context)
+    if (menu) {
+      this.subMenuForm.get('menuId')?.disable();
+    } else {
+      this.subMenuForm.get('menuId')?.enable();
+    }
+    
     if (subMenu) {
       this.subMenuForm.patchValue({
         name: subMenu.name,
@@ -523,6 +539,8 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.editingSubMenu = null;
     this.currentMenuForSubMenu = null;
     this.currentInputLanguage = 'en'; // Reset to English when closing modal
+    // Enable all controls before reset
+    this.subMenuForm.get('menuId')?.enable();
     this.subMenuForm.reset();
   }
 
@@ -537,7 +555,8 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     }
 
     this.loading.save = true;
-    const formValue = this.subMenuForm.value;
+    // Use getRawValue() to get values from disabled controls
+    const formValue = this.subMenuForm.getRawValue();
     
     if (this.editingSubMenu) {
       // Update
@@ -649,6 +668,29 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.currentSubMenuForDocument = subMenu || null;
     this.editingMenuDocument = document || null;
     
+    // Enable/disable controls based on context
+    if (document) {
+      // Editing: disable documentTypeId (cannot be changed)
+      this.menuDocumentForm.get('documentTypeId')?.disable();
+    } else {
+      // Creating: enable documentTypeId
+      this.menuDocumentForm.get('documentTypeId')?.enable();
+    }
+    
+    if (menu || document) {
+      // Menu is pre-selected or editing: disable menuId
+      this.menuDocumentForm.get('menuId')?.disable();
+    } else {
+      this.menuDocumentForm.get('menuId')?.enable();
+    }
+    
+    if (subMenu || (document && document.subMenuId)) {
+      // Sub menu is pre-selected or editing: disable subMenuId
+      this.menuDocumentForm.get('subMenuId')?.disable();
+    } else {
+      this.menuDocumentForm.get('subMenuId')?.enable();
+    }
+    
     // If editing a document, load sub menus for the menu that contains it (if menuId exists)
     // This allows the user to change the subMenuId when editing
     if (document && document.menuId) {
@@ -738,6 +780,10 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.editingMenuDocument = null;
     this.currentMenuForDocument = null;
     this.currentSubMenuForDocument = null;
+    // Enable all controls before reset
+    this.menuDocumentForm.get('documentTypeId')?.enable();
+    this.menuDocumentForm.get('menuId')?.enable();
+    this.menuDocumentForm.get('subMenuId')?.enable();
     this.menuDocumentForm.reset();
     // Don't clear subMenus here - they might be needed for the sub menus section
     // Only clear if we're not viewing sub menus
@@ -756,7 +802,8 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const formValue = this.menuDocumentForm.value;
+    // Use getRawValue() to get values from disabled controls
+    const formValue = this.menuDocumentForm.getRawValue();
     
     // Validate that either menuId or subMenuId is provided
     if (!formValue.menuId && !formValue.subMenuId) {

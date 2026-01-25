@@ -149,19 +149,59 @@ export class ApprovalDelegationService {
     }
 
     const encodedUserId = encodeURIComponent(userId);
-    return this.http.get<any>(`${this.baseUrl}/active/${encodedUserId}`).pipe(
+    const url = `${this.baseUrl}/active/${encodedUserId}`;
+    console.log(`[ApprovalDelegationService] Fetching active delegations for user ${userId}`);
+    console.log(`[ApprovalDelegationService] URL: ${url}`);
+    
+    return this.http.get<any>(url).pipe(
       map((response: any) => {
+        console.log(`[ApprovalDelegationService] Raw response for user ${userId}:`, response);
+        console.log(`[ApprovalDelegationService] Response type:`, typeof response);
+        console.log(`[ApprovalDelegationService] Is array:`, Array.isArray(response));
+        
+        let delegations: ApprovalDelegationDto[] = [];
+        
         // Handle ServiceResult<T> or direct array response
         if (response && typeof response === 'object' && !Array.isArray(response)) {
           if (response.success !== undefined) {
-            return response.data || [];
+            delegations = response.data || [];
+            console.log(`[ApprovalDelegationService] ServiceResult format - delegations:`, delegations);
+          } else {
+            delegations = response.data || response.items || response.result || [];
+            console.log(`[ApprovalDelegationService] ApiResponse format - delegations:`, delegations);
           }
-          return response.data || response.items || response.result || [];
+        } else if (Array.isArray(response)) {
+          delegations = response;
+          console.log(`[ApprovalDelegationService] Direct array format - delegations:`, delegations);
+        } else {
+          delegations = [];
+          console.log(`[ApprovalDelegationService] Unknown format - returning empty array`);
         }
-        return Array.isArray(response) ? response : [];
+        
+        console.log(`[ApprovalDelegationService] Final delegations count for user ${userId}:`, delegations.length);
+        if (delegations.length > 0) {
+          console.log(`[ApprovalDelegationService] Delegations details:`, delegations.map(d => ({
+            id: d.id,
+            fromUserId: d.fromUserId,
+            toUserId: d.toUserId,
+            scopeType: d.scopeType,
+            scopeId: d.scopeId,
+            isActive: d.isActive,
+            startDate: d.startDate,
+            endDate: d.endDate
+          })));
+        }
+        
+        return delegations;
       }),
       catchError((error) => {
-        console.error(`Error fetching active delegations for user ${userId}:`, error);
+        console.error(`[ApprovalDelegationService] Error fetching active delegations for user ${userId}:`, error);
+        console.error(`[ApprovalDelegationService] Error details:`, {
+          status: error?.status,
+          statusText: error?.statusText,
+          message: error?.message,
+          error: error?.error
+        });
         return of([]);
       })
     );

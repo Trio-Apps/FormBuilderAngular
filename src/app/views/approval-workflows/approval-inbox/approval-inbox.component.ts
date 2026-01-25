@@ -7,6 +7,7 @@ import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto, ProcessApprovalAc
 import { ApprovalStageAssigneesService } from '../../FormBuilder/services/approval-stage-assignees.service';
 import { ApprovalStageService, ApprovalStageDto } from '../../FormBuilder/services/approval-stage.service';
 import { FormSubmissionsService, FormSubmissionDto, FormSubmissionDetailDto } from '../../form-submissions/services/form-submissions.service';
+import { ApprovalDelegationService, ApprovalDelegationDto } from '../../FormBuilder/services/approval-delegation.service';
 import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../../form-submissions/models/approve-reject-submission.model';
 import { StorageService } from '../../../auth/storage.service';
 import { AuthService } from '../../../auth/auth.service';
@@ -57,6 +58,9 @@ export class ApprovalInboxComponent implements OnInit {
   
   // ✅ Role-based access control
   isAdmin = false; // Only admins can Approve/Reject
+  
+  // Active delegations for current user
+  activeDelegations: ApprovalDelegationDto[] = [];
 
   loading = {
     inbox: false,
@@ -86,6 +90,7 @@ export class ApprovalInboxComponent implements OnInit {
     private stageAssigneesService: ApprovalStageAssigneesService,
     private approvalStageService: ApprovalStageService,
     private formSubmissionsService: FormSubmissionsService,
+    private approvalDelegationService: ApprovalDelegationService,
     private storageService: StorageService,
     private authService: AuthService,
     private fb: FormBuilder,
@@ -192,8 +197,131 @@ export class ApprovalInboxComponent implements OnInit {
 
     this.loading.inbox = true;
     
-    // Try with userId first
-    this.loadInboxWithUserId(this.currentUserId);
+    // First, check for active delegations
+    console.log('[ApprovalInbox] Checking active delegations for user:', this.currentUserId);
+    this.approvalDelegationService.getActiveDelegationsForUser(this.currentUserId).subscribe({
+      next: (delegations: ApprovalDelegationDto[]) => {
+        console.log('[ApprovalInbox] Active delegations response received');
+        console.log('[ApprovalInbox] Delegations type:', typeof delegations);
+        console.log('[ApprovalInbox] Delegations is array:', Array.isArray(delegations));
+        console.log('[ApprovalInbox] Delegations length:', delegations?.length || 0);
+        console.log('[ApprovalInbox] Full delegations object:', delegations);
+        
+        if (delegations && delegations.length > 0) {
+          console.log('[ApprovalInbox] ✅ User has active delegations - loading inbox with delegations');
+          console.log('[ApprovalInbox] Delegations details:', delegations.map(d => ({
+            id: d.id,
+            fromUserId: d.fromUserId,
+            toUserId: d.toUserId,
+            scopeType: d.scopeType,
+            scopeId: d.scopeId,
+            isActive: d.isActive,
+            startDate: d.startDate,
+            endDate: d.endDate
+          })));
+          // User has active delegations - load inbox for both current user and delegated users
+          this.loadInboxWithDelegations(delegations);
+        } else {
+          console.log('[ApprovalInbox] ⚠️ No active delegations found for user:', this.currentUserId);
+          console.log('[ApprovalInbox] This could mean:');
+          console.log('[ApprovalInbox]   1. No delegation exists for this user');
+          console.log('[ApprovalInbox]   2. Delegation exists but isActive = false');
+          console.log('[ApprovalInbox]   3. Delegation exists but current date is outside startDate/endDate range');
+          console.log('[ApprovalInbox]   4. Delegation exists but toUserId does not match current user');
+          // No delegations - clear active delegations and load inbox for current user only
+          this.activeDelegations = [];
+          this.loadInboxWithUserId(this.currentUserId);
+        }
+      },
+      error: (error) => {
+        console.error('[ApprovalInbox] ❌ Error checking delegations:', error);
+        console.error('[ApprovalInbox] Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          message: error?.message,
+          error: error?.error
+        });
+        // Fallback to loading inbox for current user only
+        this.activeDelegations = [];
+        this.loadInboxWithUserId(this.currentUserId);
+      }
+    });
+  }
+  
+  /**
+   * Load inbox with delegations - includes inbox items for delegated users
+   */
+  private loadInboxWithDelegations(delegations: ApprovalDelegationDto[]): void {
+    const now = new Date();
+    const activeDelegations = delegations.filter(d => {
+      if (d.isActive === false) return false;
+      const startDate = new Date(d.startDate);
+      const endDate = new Date(d.endDate);
+      return now >= startDate && now <= endDate;
+    });
+    
+    console.log('[ApprovalInbox] Active delegations (within date range):', activeDelegations.length);
+    
+    // Get unique fromUserIds from active delegations
+    const fromUserIds = [...new Set(activeDelegations.map(d => d.fromUserId).filter(id => id))];
+    console.log('[ApprovalInbox] Delegated from user IDs:', fromUserIds);
+    
+    // Load inbox for current user
+    const currentUserInbox$ = this.runtimeService.getApprovalInboxForUser(this.currentUserId!);
+    
+    // Load inbox for each delegated user
+    const delegatedInboxes$ = fromUserIds.map(fromUserId => 
+      this.runtimeService.getApprovalInboxForUser(fromUserId).pipe(
+        catchError(error => {
+          console.error(`[ApprovalInbox] Error loading inbox for delegated user ${fromUserId}:`, error);
+          return of([]);
+        })
+      )
+    );
+    
+    // Combine all inbox requests
+    const allInboxRequests$ = [currentUserInbox$, ...delegatedInboxes$];
+    
+    forkJoin(allInboxRequests$).subscribe({
+      next: (results: ApprovalInboxItemDto[][]) => {
+        // Merge all inbox items
+        const allItems: ApprovalInboxItemDto[] = [];
+        results.forEach((items, index) => {
+          if (index === 0) {
+            // Current user's inbox
+            console.log(`[ApprovalInbox] Current user inbox items:`, items.length);
+          } else {
+            // Delegated user's inbox
+            console.log(`[ApprovalInbox] Delegated user (${fromUserIds[index - 1]}) inbox items:`, items.length);
+          }
+          allItems.push(...items);
+        });
+        
+        // Filter and process items
+        const assignedItems = allItems.filter(item => {
+          const stageId = item.stageId;
+          return stageId !== null && stageId !== undefined && stageId > 0;
+        });
+        
+        // Remove duplicates based on submissionId and stageId
+        const uniqueItems = assignedItems.filter((item, index, self) =>
+          index === self.findIndex(t => t.submissionId === item.submissionId && t.stageId === item.stageId)
+        );
+        
+        console.log(`[ApprovalInbox] Total unique inbox items (including delegations):`, uniqueItems.length);
+        
+        this.inboxItems = uniqueItems;
+        this.filteredItems = [...this.inboxItems];
+        this.totalRecords = this.filteredItems.length;
+        this.loading.inbox = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('[ApprovalInbox] Error loading inbox with delegations:', error);
+        // Fallback to loading inbox for current user only
+        this.loadInboxWithUserId(this.currentUserId);
+      }
+    });
   }
 
   /**
@@ -237,6 +365,11 @@ export class ApprovalInboxComponent implements OnInit {
         // If Backend returns items with stageId > 0 but user is NOT in Stage Assignees, this is a Backend issue
         this.inboxItems = assignedItems;
         this.filteredItems = [...this.inboxItems];
+        
+        // Clear active delegations if loading inbox without delegations
+        if (!isRetry) {
+          this.activeDelegations = [];
+        }
         this.totalRecords = this.filteredItems.length;
         this.loading.inbox = false;
         
@@ -573,7 +706,8 @@ export class ApprovalInboxComponent implements OnInit {
    * Check if user can approve/reject this item
    * User can approve if:
    * 1. User is admin, OR
-   * 2. Item is in inboxItems (user is assigned as Stage Assignee with stageId > 0)
+   * 2. Item is in inboxItems (user is assigned as Stage Assignee with stageId > 0), OR
+   * 3. User has active delegation and item is from delegated user
    */
   canApproveReject(item: ApprovalInboxItemDto | null): boolean {
     if (!item) return false;
@@ -583,12 +717,12 @@ export class ApprovalInboxComponent implements OnInit {
       return true;
     }
     
-    // For non-admin users: Check if they are assigned as Stage Assignee
-    // Items in inboxItems array have stageId > 0, meaning user IS assigned
-    // If item has stageId > 0, it means backend recognized user as Stage Assignee
-    
     // Verify item has valid stageId (stageId > 0 means assigned)
     const hasValidStageId = item.stageId !== null && item.stageId !== undefined && item.stageId > 0;
+    
+    if (!hasValidStageId) {
+      return false;
+    }
     
     // Verify item exists in inboxItems (defensive check - items in table should be in inboxItems)
     // Use flexible comparison to handle type mismatches
@@ -605,51 +739,55 @@ export class ApprovalInboxComponent implements OnInit {
       return submissionMatch && stageMatch;
     });
     
-    // Non-admin users can approve if:
-    // 1. Item has valid stageId > 0 (assigned as Stage Assignee), AND
-    // 2. Item is in inboxItems (exists in user's inbox)
-    // Note: If item is shown in inbox table, it should be in inboxItems, but we verify for safety
-    const canApprove = hasValidStageId && isInInbox;
-    
-    // Enhanced debug logging
-    if (!canApprove) {
-      console.warn('[ApprovalInbox] ⚠️ Permission check failed for non-admin user:', {
-        itemSubmissionId: item.submissionId,
-        itemStageId: item.stageId,
-        hasValidStageId: hasValidStageId,
-        isInInbox: isInInbox,
-        isAdmin: this.isAdmin,
-        inboxItemsCount: this.inboxItems.length,
-        currentUserId: this.currentUserId,
-        inboxItemDetails: this.inboxItems.map(i => ({ 
-          submissionId: i.submissionId, 
-          stageId: i.stageId,
-          submissionIdType: typeof i.submissionId,
-          stageIdType: typeof i.stageId
-        }))
-      });
-      
-      // Also log the item types for debugging
-      console.log('[ApprovalInbox] Item details:', {
-        submissionId: item.submissionId,
-        submissionIdType: typeof item.submissionId,
-        stageId: item.stageId,
-        stageIdType: typeof item.stageId
-      });
-    } else {
-      console.log('[ApprovalInbox] ✅ Permission granted:', {
-        submissionId: item.submissionId,
-        stageId: item.stageId,
-        isAdmin: this.isAdmin
-      });
+    // If item is in inbox, user can approve (either directly assigned or via delegation)
+    if (isInInbox) {
+      return true;
     }
     
-    return canApprove;
+    // Check if user has active delegation that covers this item
+    if (this.activeDelegations && this.activeDelegations.length > 0) {
+      const now = new Date();
+      const hasActiveDelegation = this.activeDelegations.some(delegation => {
+        // Check if delegation is active and within date range
+        if (delegation.isActive === false) return false;
+        const startDate = new Date(delegation.startDate);
+        const endDate = new Date(delegation.endDate);
+        if (now < startDate || now > endDate) return false;
+        
+        // Check scope type
+        if (delegation.scopeType === 'Global') {
+          // Global delegation - can approve all items
+          return true;
+        } else if (delegation.scopeType === 'Workflow') {
+          // Workflow-specific delegation - check if item's workflow matches
+          // Note: We need workflowId from item to check this
+          // For now, if item is in inbox from delegated user, allow it
+          return true;
+        } else if (delegation.scopeType === 'Document') {
+          // Document-specific delegation - check if item's submissionId matches
+          const delegationScopeId = delegation.scopeId ? Number(delegation.scopeId) : null;
+          const itemSubmissionId = item.submissionId ? Number(item.submissionId) : null;
+          return delegationScopeId !== null && itemSubmissionId !== null && delegationScopeId === itemSubmissionId;
+        }
+        
+        return false;
+      });
+      
+      if (hasActiveDelegation) {
+        console.log('[ApprovalInbox] ✅ Permission granted via delegation:', {
+          submissionId: item.submissionId,
+          stageId: item.stageId
+        });
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   /**
    * Check if user can approve/reject this submission
-   * For submissions table, check if there's a corresponding inbox item
+   * For submissions table, check if there's a corresponding inbox item or active delegation
    */
   canApproveRejectSubmission(submission: FormSubmissionDto | null): boolean {
     if (!submission) return false;
@@ -659,9 +797,11 @@ export class ApprovalInboxComponent implements OnInit {
       return true;
     }
     
-    // Non-admin users can only approve if there's a corresponding inbox item
-    // This means user is assigned as Stage Assignee for this submission's stage
-    // Match by submissionId (as a number or string comparison)
+    // Non-admin users can approve if:
+    // 1. There's a corresponding inbox item, OR
+    // 2. User has active delegation that covers this submission
+    
+    // Check if submission exists in inboxItems
     const hasInboxItem = this.inboxItems.some(item => {
       // Compare both as numbers and strings to handle type mismatches
       const itemSubId = Number(item.submissionId);
@@ -669,17 +809,48 @@ export class ApprovalInboxComponent implements OnInit {
       return itemSubId === subId || String(item.submissionId) === String(submission.id);
     });
     
-    // Debug logging
-    if (!hasInboxItem && this.inboxItems.length > 0) {
-      console.log('[ApprovalInbox] Submission not found in inboxItems:', {
-        submissionId: submission.id,
-        submissionStatus: submission.status,
-        inboxItemsCount: this.inboxItems.length,
-        inboxSubmissionIds: this.inboxItems.map(i => i.submissionId)
-      });
+    if (hasInboxItem) {
+      return true;
     }
     
-    return hasInboxItem;
+    // Check if user has active delegation that covers this submission
+    if (this.activeDelegations && this.activeDelegations.length > 0) {
+      const now = new Date();
+      const hasActiveDelegation = this.activeDelegations.some(delegation => {
+        // Check if delegation is active and within date range
+        if (delegation.isActive === false) return false;
+        const startDate = new Date(delegation.startDate);
+        const endDate = new Date(delegation.endDate);
+        if (now < startDate || now > endDate) return false;
+        
+        // Check scope type
+        if (delegation.scopeType === 'Global') {
+          // Global delegation - can approve all submissions
+          return true;
+        } else if (delegation.scopeType === 'Workflow') {
+          // Workflow-specific delegation - check if submission's workflow matches
+          // Note: We need workflowId from submission to check this
+          // For now, if user has workflow delegation, allow it
+          return true;
+        } else if (delegation.scopeType === 'Document') {
+          // Document-specific delegation - check if submission's id matches
+          const delegationScopeId = delegation.scopeId ? Number(delegation.scopeId) : null;
+          const submissionId = submission.id ? Number(submission.id) : null;
+          return delegationScopeId !== null && submissionId !== null && delegationScopeId === submissionId;
+        }
+        
+        return false;
+      });
+      
+      if (hasActiveDelegation) {
+        console.log('[ApprovalInbox] ✅ Permission granted via delegation for submission:', {
+          submissionId: submission.id
+        });
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   openActionModal(item: ApprovalInboxItemDto, actionType: 'Approved' | 'Rejected' | 'Returned'): void {
@@ -969,6 +1140,12 @@ export class ApprovalInboxComponent implements OnInit {
 
   /**
    * Process action using process-action endpoint with stageId
+   * 
+   * IMPORTANT: Backend should verify delegations automatically when processing the action.
+   * The backend should:
+   * 1. Check if actionByUserId has active delegations
+   * 2. If delegation exists, verify that the action is allowed (scope type, date range, etc.)
+   * 3. If delegation is valid, process the action on behalf of the original approver (fromUserId)
    */
   private processActionWithStageId(stageId: number, formData: any): void {
     if (!this.selectedItem || !this.currentUserId) {
@@ -980,17 +1157,26 @@ export class ApprovalInboxComponent implements OnInit {
     const normalizedComments =
       typeof rawComments === 'string' ? rawComments.trim() : rawComments;
 
+    // Check if user has active delegation for this action
+    const hasDelegation = this.activeDelegations && this.activeDelegations.length > 0;
+    if (hasDelegation) {
+      console.log('[ApprovalInbox] ⚠️ User has active delegations. Backend should verify delegation when processing action.');
+      console.log('[ApprovalInbox] Active delegations:', this.activeDelegations);
+    }
+
     const actionDto: ProcessApprovalActionDto = {
       submissionId: this.selectedItem.submissionId,
       stageId: stageId,
       actionType: this.actionType,
-      actionByUserId: this.currentUserId,
+      actionByUserId: this.currentUserId, // This is the delegated user (toUserId)
+      // NOTE: Backend should resolve the original approver (fromUserId) from delegations
       ...(normalizedComments !== null && normalizedComments !== undefined && normalizedComments !== ''
         ? { comments: normalizedComments }
         : {})
     };
 
     console.log('[ApprovalInbox] Processing action with stageId:', actionDto);
+    console.log('[ApprovalInbox] ⚠️ Backend should check delegations for actionByUserId:', this.currentUserId);
 
     // Determine the new status based on action type
     let newStatus = '';
@@ -1022,6 +1208,12 @@ export class ApprovalInboxComponent implements OnInit {
 
   /**
    * Process action directly using approve/reject endpoints (when stageId is not available)
+   * 
+   * IMPORTANT: Backend should verify delegations automatically when processing the action.
+   * The backend should:
+   * 1. Check if actionByUserId has active delegations
+   * 2. If delegation exists, verify that the action is allowed (scope type, date range, etc.)
+   * 3. If delegation is valid, process the action on behalf of the original approver (fromUserId)
    */
   private processActionDirectly(formData: any): void {
     if (!this.selectedItem || !this.currentUserId) {
@@ -1030,6 +1222,13 @@ export class ApprovalInboxComponent implements OnInit {
     }
 
     console.log('[ApprovalInbox] Processing action directly without stageId');
+    
+    // Check if user has active delegation for this action
+    const hasDelegation = this.activeDelegations && this.activeDelegations.length > 0;
+    if (hasDelegation) {
+      console.log('[ApprovalInbox] ⚠️ User has active delegations. Backend should verify delegation when processing action.');
+      console.log('[ApprovalInbox] Active delegations:', this.activeDelegations);
+    }
 
     // Determine the new status based on action type
     let newStatus = '';
@@ -1051,11 +1250,15 @@ export class ApprovalInboxComponent implements OnInit {
       const approveDto = {
         submissionId: this.selectedItem.submissionId,
         stageId: 1, // Default stageId
-        actionByUserId: this.currentUserId,
+        actionByUserId: this.currentUserId, // This is the delegated user (toUserId)
+        // NOTE: Backend should resolve the original approver (fromUserId) from delegations
         ...(normalizedComments !== null && normalizedComments !== undefined && normalizedComments !== ''
           ? { comments: normalizedComments }
           : {})
       };
+      
+      console.log('[ApprovalInbox] ⚠️ Backend should check delegations for actionByUserId:', this.currentUserId);
+      console.log('[ApprovalInbox] Approve DTO:', approveDto);
       
       this.formSubmissionsService.approveSubmissionDto(approveDto).subscribe({
         next: (response) => {
@@ -1091,11 +1294,15 @@ export class ApprovalInboxComponent implements OnInit {
       const rejectDto = {
         submissionId: this.selectedItem.submissionId,
         stageId: 1, // Default stageId
-        actionByUserId: this.currentUserId,
+        actionByUserId: this.currentUserId, // This is the delegated user (toUserId)
+        // NOTE: Backend should resolve the original approver (fromUserId) from delegations
         ...(normalizedComments !== null && normalizedComments !== undefined && normalizedComments !== ''
           ? { comments: normalizedComments }
           : {})
       };
+      
+      console.log('[ApprovalInbox] ⚠️ Backend should check delegations for actionByUserId:', this.currentUserId);
+      console.log('[ApprovalInbox] Reject DTO:', rejectDto);
       
       this.formSubmissionsService.rejectSubmissionDto(rejectDto).subscribe({
         next: (response) => {
@@ -1143,9 +1350,23 @@ export class ApprovalInboxComponent implements OnInit {
 
   /**
    * Process the approval action after status update
+   * 
+   * IMPORTANT: Backend should verify delegations automatically when processing the action.
+   * The backend should:
+   * 1. Check if actionByUserId has active delegations
+   * 2. If delegation exists, verify that the action is allowed (scope type, date range, etc.)
+   * 3. If delegation is valid, process the action on behalf of the original approver (fromUserId)
    */
   private processApprovalAction(actionDto: ProcessApprovalActionDto, newStatus: string): void {
     console.log('[ApprovalInbox] processApprovalAction called with:', actionDto);
+    console.log('[ApprovalInbox] ⚠️ Backend should check delegations for actionByUserId:', actionDto.actionByUserId);
+    
+    // Check if user has active delegation for this action
+    const hasDelegation = this.activeDelegations && this.activeDelegations.length > 0;
+    if (hasDelegation) {
+      console.log('[ApprovalInbox] ⚠️ User has active delegations. Backend should verify delegation when processing action.');
+      console.log('[ApprovalInbox] Active delegations:', this.activeDelegations);
+    }
     
     this.runtimeService.processApprovalAction(actionDto).subscribe({
       next: (response) => {

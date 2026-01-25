@@ -100,6 +100,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   // Cache for user stage assignments (fallback if inbox is empty)
   userStageAssignmentsCache: Map<number, boolean> = new Map(); // stageId -> isAssignee
   stageAssignmentsCacheLoaded = false;
+  // Cache for canApproveReject results to prevent infinite loops
+  canApproveRejectCache: Map<number, boolean> = new Map(); // submissionId -> canApproveReject
 
   // Loading States
   loading = {
@@ -3759,19 +3761,26 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    * Check if submission can be approved/rejected
    */
   canApproveReject(submission: FormSubmissionDto): boolean {
-    console.log(`[FormSubmissionsList] [canApproveReject] Checking submission ${submission.id}, status: ${submission.status}`);
-    
+    if (!submission || !submission.id) {
+      return false;
+    }
+
+    // Check cache first to prevent infinite loops
+    if (this.canApproveRejectCache.has(submission.id)) {
+      return this.canApproveRejectCache.get(submission.id)!;
+    }
+
     // Allow approve/reject for Submitted and Pending Approval statuses
     if (submission.status !== 'Submitted' && 
         submission.status !== 'Pending Approval' && 
         submission.status !== 'Approved') {
-      console.log(`[FormSubmissionsList] [canApproveReject] ❌ Submission status '${submission.status}' not allowed for approve/reject`);
+      this.canApproveRejectCache.set(submission.id, false);
       return false;
     }
 
     // ✅ Admin can always approve/reject
     if (this.isAdmin) {
-      console.log(`[FormSubmissionsList] [canApproveReject] ✅ User is admin, allowing approve/reject`);
+      this.canApproveRejectCache.set(submission.id, true);
       return true;
     }
 
@@ -3780,10 +3789,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     if (!this.inboxCacheLoaded && this.userInboxCache === null) {
       // Cache not loaded yet - trigger async load but return false for now
       // Will be refreshed after cache is loaded
-      console.log(`[FormSubmissionsList] [canApproveReject] Inbox cache not loaded yet, loading...`);
       if (!this.loading.approveReject) { // Avoid multiple calls
         this.loadUserInboxCache();
       }
+      this.canApproveRejectCache.set(submission.id, false);
       return false;
     }
 
@@ -3791,48 +3800,32 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       // Check if submission exists in user's inbox (user is assignee for this stage)
       const inboxItem = this.userInboxCache.find(item => item.submissionId === submission.id);
       if (inboxItem && inboxItem.stageId && inboxItem.stageId > 0) {
-        console.log(`[FormSubmissionsList] [canApproveReject] ✅ User is assignee for submission ${submission.id}, stageId: ${inboxItem.stageId}`);
+        this.canApproveRejectCache.set(submission.id, true);
         return true;
-      } else {
-        console.log(`[FormSubmissionsList] [canApproveReject] ❌ Submission ${submission.id} not found in user inbox (${this.userInboxCache.length} items checked)`);
       }
     } else {
-      console.log(`[FormSubmissionsList] [canApproveReject] ❌ User inbox cache is empty or not loaded. Cache loaded: ${this.inboxCacheLoaded}, Cache items: ${this.userInboxCache?.length || 0}`);
-      
       // Fallback: Check if user is assignee for any stage in the workflow
       // This is a fallback in case inbox is empty but user is still an assignee
       if (this.documentType?.approvalWorkflowId) {
-        console.log(`[FormSubmissionsList] [canApproveReject] Trying fallback: checking if user is assignee for workflow ${this.documentType.approvalWorkflowId}`);
-        console.log(`[FormSubmissionsList] [canApproveReject] Stage assignments cache loaded: ${this.stageAssignmentsCacheLoaded}`);
-        console.log(`[FormSubmissionsList] [canApproveReject] Stage assignments cache size: ${this.userStageAssignmentsCache.size}`);
-        console.log(`[FormSubmissionsList] [canApproveReject] Stage assignments cache values:`, Array.from(this.userStageAssignmentsCache.entries()));
-        
         // Load stage assignments cache if not loaded
         if (!this.stageAssignmentsCacheLoaded) {
-          console.log(`[FormSubmissionsList] [canApproveReject] Stage assignments cache not loaded, loading...`);
           this.loadUserStageAssignmentsCache();
-          // Return false for now, will be updated after cache loads
+          this.canApproveRejectCache.set(submission.id, false);
           return false;
         }
         
         // Check if user is assignee for any stage
         const isAssigneeForAnyStage = Array.from(this.userStageAssignmentsCache.values()).some(isAssignee => isAssignee);
         if (isAssigneeForAnyStage) {
-          console.log(`[FormSubmissionsList] [canApproveReject] ✅ User is assignee for at least one stage in workflow (fallback check)`);
-          console.log(`[FormSubmissionsList] [canApproveReject] Assigned stages:`, Array.from(this.userStageAssignmentsCache.entries()).filter(([_, isAssignee]) => isAssignee).map(([stageId, _]) => stageId));
           // Allow approve/reject - backend will verify the specific stage when action is taken
+          this.canApproveRejectCache.set(submission.id, true);
           return true;
-        } else {
-          console.log(`[FormSubmissionsList] [canApproveReject] ❌ User is not assignee for any stage in workflow`);
         }
-      } else {
-        console.log(`[FormSubmissionsList] [canApproveReject] ❌ No workflow ID found in document type`);
       }
     }
 
     // User is neither admin nor stage assignee for this submission
-    // Note: Even if inbox is empty, backend will check permissions when approve/reject is attempted
-    console.log(`[FormSubmissionsList] [canApproveReject] ❌ Final result: false - User cannot approve/reject submission ${submission.id}`);
+    this.canApproveRejectCache.set(submission.id, false);
     return false;
   }
 
@@ -3923,6 +3916,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
             console.log('[FormSubmissionsList] Cache entries:', Array.from(this.userStageAssignmentsCache.entries()));
             
             this.stageAssignmentsCacheLoaded = true;
+            // Clear canApproveReject cache to force recalculation with new stage assignments
+            this.canApproveRejectCache.clear();
             // Trigger change detection to update approve/reject buttons
             this.cdr.detectChanges();
           },
@@ -3943,10 +3938,17 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
    * Load user inbox cache to check stage assignments
    */
   loadUserInboxCache(): void {
-    if (this.inboxCacheLoaded || (this.userInboxCache !== null && this.userInboxCache !== undefined)) {
-      console.log('[FormSubmissionsList] Inbox cache already loaded or loading, skipping...');
-      return; // Already loaded or loading
+    if (this.loading.approveReject) {
+      console.log('[FormSubmissionsList] Inbox cache already loading, skipping...');
+      return; // Already loading
     }
+    
+    if (this.inboxCacheLoaded && this.userInboxCache !== null) {
+      console.log('[FormSubmissionsList] Inbox cache already loaded, skipping...');
+      return; // Already loaded
+    }
+    
+    this.loading.approveReject = true;
 
     const currentUserId = this.storageService.getUserId()?.toString() || this.authService.userName();
     const currentUsername = this.storageService.getUsername() || this.authService.userName();
@@ -4019,6 +4021,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     // Filter to only assigned items (stageId > 0)
     this.userInboxCache = inboxItems.filter(item => item.stageId && item.stageId > 0);
     this.inboxCacheLoaded = true;
+    this.loading.approveReject = false;
     console.log(`[FormSubmissionsList] ✅ Loaded ${this.userInboxCache.length} inbox items for user ${userIdentifier}`);
     console.log(`[FormSubmissionsList] Filtered inbox items (stageId > 0):`, this.userInboxCache.map(item => ({
       submissionId: item.submissionId,
@@ -4032,6 +4035,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       console.warn('[FormSubmissionsList] 2. No submissions are pending in stages where user is assignee');
       console.warn('[FormSubmissionsList] 3. Backend API issue - check backend logs');
     }
+    
+    // Clear canApproveReject cache to force recalculation with new inbox data
+    this.canApproveRejectCache.clear();
     
     // Trigger change detection to update approve/reject buttons
     this.cdr.detectChanges();

@@ -2,10 +2,13 @@ import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
 import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApprovalDelegationService, ApprovalDelegationDto, CreateApprovalDelegationDto, UpdateApprovalDelegationDto, ScopeType } from '../../FormBuilder/services/approval-delegation.service';
 import { UsersService, UserDto } from '../../FormBuilder/services/users.service';
 import { ApprovalWorkflowService, ApprovalWorkflowDto } from '../../FormBuilder/services/approval-workflow.service';
+import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
+import { DocumentType } from '../../FormBuilder/form-builder/models/document-types.model';
 import { StorageService } from '../../../auth/storage.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -59,6 +62,9 @@ export class ApprovalDelegationsListComponent implements OnInit {
   // Workflows data for dropdown
   workflows: ApprovalWorkflowDto[] = [];
   
+  // Document types data for dropdown
+  documentTypes: DocumentType[] = [];
+  
   // Scope types
   scopeTypes: ScopeType[] = ['Global', 'Workflow', 'Document'];
 
@@ -67,7 +73,8 @@ export class ApprovalDelegationsListComponent implements OnInit {
     save: false,
     delete: false,
     users: false,
-    workflows: false
+    workflows: false,
+    documentTypes: false
   };
 
   showModal = false;
@@ -83,6 +90,7 @@ export class ApprovalDelegationsListComponent implements OnInit {
     private delegationService: ApprovalDelegationService,
     private usersService: UsersService,
     private workflowService: ApprovalWorkflowService,
+    private documentTypesService: DocumentTypesService,
     private storageService: StorageService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
@@ -151,13 +159,44 @@ export class ApprovalDelegationsListComponent implements OnInit {
       // Global doesn't need scopeId
       scopeIdControl?.clearValidators();
       scopeIdControl?.setValue(null);
-    } else if (scopeType === 'Workflow' || scopeType === 'Document') {
-      // Workflow and Document require scopeId
+    } else if (scopeType === 'Workflow') {
+      // Workflow requires scopeId
       scopeIdControl?.setValidators([Validators.required]);
+      this.loadWorkflows();
+    } else if (scopeType === 'Document') {
+      // Document requires scopeId
+      scopeIdControl?.setValidators([Validators.required]);
+      this.loadDocumentTypes();
     }
     
     scopeIdControl?.updateValueAndValidity();
     this.cdr.detectChanges();
+  }
+  
+  loadDocumentTypes(): void {
+    if (this.loading.documentTypes || this.documentTypes.length > 0) {
+      return; // Already loaded or loading
+    }
+    
+    this.loading.documentTypes = true;
+    this.documentTypesService.getAllDocumentTypes().subscribe({
+      next: (documentTypes: DocumentType[]) => {
+        this.documentTypes = (documentTypes || []).filter(dt => dt.isActive && !dt.isDeleted);
+        this.loading.documentTypes = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Error loading document types:', error);
+        this.documentTypes = [];
+        this.loading.documentTypes = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load document types'
+        });
+        this.cdr.detectChanges();
+      }
+    });
   }
   
   getScopeIdLabel(): string {
@@ -415,16 +454,17 @@ export class ApprovalDelegationsListComponent implements OnInit {
     this.delegationForm.get('toUserId')?.enable();
     this.delegationForm.get('isActive')?.enable(); // Enable isActive checkbox for editing
     
+    const scopeType = delegation.scopeType || 'Global';
     this.delegationForm.patchValue({
       fromUserId: fromUser, // Set user object, not just ID
       toUserId: toUser, // Set user object, not just ID
-      scopeType: delegation.scopeType || 'Global',
+      scopeType: scopeType,
       scopeId: delegation.scopeId,
       startDate: formatDateForInput(delegation.startDate),
       endDate: formatDateForInput(delegation.endDate),
       isActive: delegation.isActive !== false // Use original value from database
     });
-    this.onScopeTypeChange(delegation.scopeType || 'Global');
+    this.onScopeTypeChange(scopeType);
   }
 
   saveDelegation(): void {

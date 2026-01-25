@@ -883,11 +883,65 @@
   }
 }
 
+// Dialog footer styling (also handled in ::ng-deep .p-dialog-footer)
 .dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 0;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  padding: 20px 0 0 0 !important;
+  margin: 24px 0 0 0 !important;
+  border-top: 1px solid #e5e7eb !important;
+  width: 100% !important;
+  
+  .p-button {
+    padding: 10px 24px;
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-width: 100px;
+    
+    &.p-button-text {
+      background: white;
+      color: #6b7280;
+      border: 2px solid #e5e7eb;
+      
+      &:hover:not(:disabled) {
+        background: #f3f4f6;
+        border-color: #cbd5e1;
+        color: #374151;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+      }
+    }
+    
+    &.p-button-success {
+      background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+      border: none;
+      color: white;
+      
+      &:hover:not(:disabled) {
+        background: linear-gradient(135deg, #1e4d45 0%, #00c99f 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(40, 106, 97, 0.3);
+      }
+      
+      &:active:not(:disabled) {
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(40, 106, 97, 0.2);
+      }
+      
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+    }
+    
+    i {
+      font-size: 16px;
+    }
+  }
 }
 
 // Responsive Design
@@ -902,6 +956,28 @@
 
   .toolbar .search-container {
     max-width: 100%;
+  }
+}
+
+// Force footer visibility - must be outside ::ng-deep for higher specificity
+::ng-deep .p-dialog.p-component,
+::ng-deep .app-dialog-shell.p-dialog {
+  .p-dialog-footer {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    min-height: 70px !important;
+    max-height: none !important;
+    position: relative !important;
+    z-index: 100 !important;
+  }
+  
+  // Ensure dialog structure allows footer
+  .p-dialog-content-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    max-height: calc(100vh - 200px) !important;
   }
 }
 
@@ -929,8 +1005,27 @@
 
   .p-dialog {
     border-radius: 16px;
-    overflow: hidden;
+    overflow: visible !important; // Allow footer to be visible
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    display: flex !important;
+    flex-direction: column !important;
+    max-height: calc(100vh - 48px) !important;
+    
+    // Ensure dialog wrapper uses flexbox
+    .p-dialog-wrapper {
+      display: flex !important;
+      flex-direction: column !important;
+      max-height: 100% !important;
+      overflow: visible !important;
+    }
+    
+    // Ensure dialog root uses flexbox
+    .p-dialog-root {
+      display: flex !important;
+      flex-direction: column !important;
+      max-height: calc(100vh - 48px) !important;
+      overflow: visible !important;
+    }
 
     .p-dialog-header {
       background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
@@ -983,8 +1078,11 @@
     .p-dialog-content {
       padding: 28px;
       background: #ffffff;
-      max-height: calc(90vh - 200px);
-      overflow-y: auto;
+      max-height: calc(90vh - 280px) !important; // Leave more space for header and footer
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      flex: 1 1 auto !important; // Allow content to grow but also shrink
+      min-height: 0 !important; // Allow shrinking below content size
 
       &::-webkit-scrollbar {
         width: 8px;
@@ -1006,9 +1104,78 @@
     }
 
     .p-dialog-footer {
-      padding: 20px 28px;
-      border-top: 1px solid #e5e7eb;
-      background: linear-gradient(to bottom, #ffffff 0%, #f9fafb 100%);
+      padding: 20px 28px !important;
+      border-top: 1px solid #e5e7eb !important;
+      background: linear-gradient(to bottom, #ffffff 0%, #f9fafb 100%) !important;
+      display: flex !important;
+      flex-shrink: 0 !important; // Prevent footer from shrinking
+      flex-grow: 0 !important; // Prevent footer from growing
+      position: relative !important;
+      z-index: 10 !important;
+      min-height: 70px !important; // Ensure minimum height
+      max-height: 100px !important; // Prevent footer from taking too much space
+      visibility: visible !important;
+      opacity: 1 !important;
+      overflow: visible !important;
+      
+      .dialog-footer {
+        display: flex !important;
+        justify-content: flex-end !important;
+        gap: 12px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        
+        .p-button {
+          padding: 10px 24px;
+          font-weight: 600;
+          border-radius: 10px;
+          transition: all 0.2s ease;
+          font-size: 14px;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          min-width: 100px;
+          
+          &.p-button-text {
+            background: white;
+            color: #6b7280;
+            border: 2px solid #e5e7eb;
+            
+            &:hover:not(:disabled) {
+              background: #f3f4f6;
+              border-color: #cbd5e1;
+              color: #374151;
+              transform: translateY(-1px);
+              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            }
+          }
+          
+          &.p-button-success {
+            background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%);
+            border: none;
+            color: white;
+            
+            &:hover:not(:disabled) {
+              background: linear-gradient(135deg, #1e4d45 0%, #00c99f 100%);
+              transform: translateY(-2px);
+              box-shadow: 0 6px 12px rgba(40, 106, 97, 0.3);
+            }
+            
+            &:active:not(:disabled) {
+              transform: translateY(0);
+              box-shadow: 0 2px 4px rgba(40, 106, 97, 0.2);
+            }
+            
+            &:disabled {
+              opacity: 0.6;
+              cursor: not-allowed;
+            }
+          }
+          
+          i {
+            font-size: 16px;
+          }
+        }
+      }
     }
   }
 

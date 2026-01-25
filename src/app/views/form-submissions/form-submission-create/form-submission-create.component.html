@@ -180,7 +180,6 @@
                         [id]="getFieldId(field)!"
                         [formControlName]="getFieldId(field)!"
                         [multiple]="field.fieldType?.allowMultiple || false"
-                        [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
                         class="form-select"
                         [class.has-error]="hasFieldError(field)"
                         (change)="clearFieldError(field)">
@@ -458,11 +457,12 @@
             </span>
           </button>
 
-          <!-- Final Submit button - enabled when forms are valid -->
+          <!-- Final Submit button - enabled when submissionForm is valid (tabId is set) -->
           <button
-            type="submit"
+            type="button"
             class="btn-submit"
-            [disabled]="submissionForm.invalid || fieldsForm.invalid || loading.create || isSubmitting">
+            (click)="saveSubmission()"
+            [disabled]="submissionForm.invalid || loading.create || isSubmitting || !selectedTabId">
             <span *ngIf="!isSubmitting">
               <i class="pi pi-send"></i> Submit
             </span>

@@ -1,7 +1,11 @@
-<div class="fields-page-container">
+<div class="table-menus-page-container">
+  <!-- Top Navigation Bar -->
   <div class="top-navbar">
     <div class="nav-content">
       <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/approval-workflows" title="Back">
+          <i class="pi pi-arrow-left"></i>
+        </button>
         <div class="nav-title-section">
           <h1 class="page-title">Approval Delegations</h1>
           <p class="page-subtitle">Manage approval delegations</p>
@@ -11,7 +15,7 @@
         <button class="btn-icon" (click)="loadDelegations()" [disabled]="loading.delegations" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openAddModal()">
+        <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.delegations">
           <i class="pi pi-plus"></i>
           <span>New Delegation</span>
         </button>
@@ -19,6 +23,27 @@
     </div>
   </div>
 
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <a routerLink="/approval-workflows" class="breadcrumb-link">
+        <i class="pi pi-sitemap"></i>
+        <span>Approval Workflows</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-users"></i>
+        <span>Delegations</span>
+      </span>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
   <div class="main-content">
     <div class="document-types-section">
       <app-table-shell title="Delegations List" icon="pi pi-users">
@@ -95,150 +120,235 @@
   </div>
 </div>
 
-<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true" [resizable]="false" [draggable]="false" [(visible)]="showModal" [header]="(editingDelegation ? 'Edit' : 'New') + ' Delegation'" [modal]="true" [style]="{ width: '600px' }" (onHide)="closeModal()">
-  <form [formGroup]="delegationForm" (ngSubmit)="saveDelegation()">
-    <div class="form-display-section">
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true" [resizable]="false" [draggable]="false" [(visible)]="showModal" [header]="(editingDelegation ? 'Edit' : 'New') + ' Delegation'" [modal]="true" [style]="{ width: '700px' }" (onHide)="closeModal()">
+  <form [formGroup]="delegationForm" class="menu-form">
+    <!-- Basic Information Section -->
+    <div class="form-section">
+      <div class="section-title">
+        <i class="pi pi-info-circle"></i>
+        <span>Basic Information</span>
+      </div>
       <!-- From User Dropdown -->
-      <div class="form-field-wrapper">
-        <label class="field-label" for="fromUserId">
-          From User <span class="required-indicator">*</span>
+      <div class="form-group">
+        <label for="fromUserId" class="form-label">
+          <i class="pi pi-user"></i>
+          From User <span class="required">*</span>
         </label>
-        <div class="field-input-wrapper">
-          <select
-            id="fromUserId"
-            formControlName="fromUserId"
-            class="form-input"
-            [class.input-error]="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched"
-            [compareWith]="compareUsers">
-            <option [ngValue]="null">Select from user...</option>
-            <option *ngFor="let user of users" [ngValue]="user">
-              {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
-            </option>
-          </select>
-        </div>
-        <div *ngIf="loading.users" class="field-hint">
+        <select
+          id="fromUserId"
+          pInputText
+          formControlName="fromUserId"
+          class="p-inputtext w-full"
+          [class.ng-invalid]="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched"
+          [compareWith]="compareUsers"
+          style="width: 100%;">
+          <option [ngValue]="null">Select from user...</option>
+          <option *ngFor="let user of users" [ngValue]="user">
+            {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
+          </option>
+        </select>
+        <div *ngIf="loading.users" class="help-text">
           <i class="pi pi-spin pi-spinner"></i>
           <span>Loading users...</span>
         </div>
-        <div *ngIf="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched" class="field-error">
-          <i class="pi pi-exclamation-triangle"></i>
-          <span>From user is required</span>
-        </div>
+        <small *ngIf="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched" class="error-text">
+          <i class="pi pi-exclamation-circle"></i>
+          From user is required
+        </small>
       </div>
 
       <!-- To User Dropdown -->
-      <div class="form-field-wrapper">
-        <label class="field-label" for="toUserId">
-          To User <span class="required-indicator">*</span>
+      <div class="form-group">
+        <label for="toUserId" class="form-label">
+          <i class="pi pi-user-plus"></i>
+          To User <span class="required">*</span>
         </label>
-        <div class="field-input-wrapper">
-          <select
-            id="toUserId"
-            formControlName="toUserId"
-            class="form-input"
-            [class.input-error]="delegationForm.get('toUserId')?.invalid && delegationForm.get('toUserId')?.touched"
-            [compareWith]="compareUsers">
-            <option [ngValue]="null">Select to user...</option>
-            <option *ngFor="let user of users" [ngValue]="user">
-              {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
-            </option>
-          </select>
-        </div>
-        <div *ngIf="loading.users" class="field-hint">
+        <select
+          id="toUserId"
+          pInputText
+          formControlName="toUserId"
+          class="p-inputtext w-full"
+          [class.ng-invalid]="delegationForm.get('toUserId')?.invalid && delegationForm.get('toUserId')?.touched"
+          [compareWith]="compareUsers"
+          style="width: 100%;">
+          <option [ngValue]="null">Select to user...</option>
+          <option *ngFor="let user of users" [ngValue]="user">
+            {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
+          </option>
+        </select>
+        <div *ngIf="loading.users" class="help-text">
           <i class="pi pi-spin pi-spinner"></i>
           <span>Loading users...</span>
         </div>
-        <div *ngIf="delegationForm.get('toUserId')?.invalid && delegationForm.get('toUserId')?.touched" class="field-error">
-          <i class="pi pi-exclamation-triangle"></i>
-          <span>To user is required</span>
-        </div>
+        <small *ngIf="delegationForm.get('toUserId')?.invalid && delegationForm.get('toUserId')?.touched" class="error-text">
+          <i class="pi pi-exclamation-circle"></i>
+          To user is required
+        </small>
       </div>
       
       <!-- Scope Type Dropdown -->
-      <div class="form-field-wrapper">
-        <label class="field-label" for="scopeType">
-          Scope Type <span class="required-indicator">*</span>
+      <div class="form-group">
+        <label for="scopeType" class="form-label">
+          <i class="pi pi-sitemap"></i>
+          Scope Type <span class="required">*</span>
         </label>
-        <div class="field-input-wrapper">
-          <select
-            id="scopeType"
-            formControlName="scopeType"
-            class="form-input"
-            [class.input-error]="delegationForm.get('scopeType')?.invalid && delegationForm.get('scopeType')?.touched">
-            <option value="Global">Global (All Workflows)</option>
-            <option value="Workflow">Workflow (Specific Workflow)</option>
-            <option value="Document">Document (Specific Submission)</option>
-          </select>
-        </div>
-        <div *ngIf="delegationForm.get('scopeType')?.invalid && delegationForm.get('scopeType')?.touched" class="field-error">
-          <i class="pi pi-exclamation-triangle"></i>
-          <span>Scope type is required</span>
-        </div>
+        <select
+          id="scopeType"
+          pInputText
+          formControlName="scopeType"
+          class="p-inputtext w-full"
+          [class.ng-invalid]="delegationForm.get('scopeType')?.invalid && delegationForm.get('scopeType')?.touched"
+          style="width: 100%;">
+          <option value="Global">Global (All Workflows)</option>
+          <option value="Workflow">Workflow (Specific Workflow)</option>
+          <option value="Document">Document (Specific Submission)</option>
+        </select>
+        <small *ngIf="delegationForm.get('scopeType')?.invalid && delegationForm.get('scopeType')?.touched" class="error-text">
+          <i class="pi pi-exclamation-circle"></i>
+          Scope type is required
+        </small>
       </div>
       
       <!-- Scope ID (Workflow or Document) -->
-      <div class="form-field-wrapper" *ngIf="delegationForm.get('scopeType')?.value === 'Workflow'">
-        <label class="field-label" for="scopeId">
-          Workflow <span class="required-indicator">*</span>
+      <div class="form-group" *ngIf="delegationForm.get('scopeType')?.value === 'Workflow'">
+        <label for="scopeId" class="form-label">
+          <i class="pi pi-list"></i>
+          Workflow <span class="required">*</span>
         </label>
-        <div class="field-input-wrapper">
-          <select
-            id="scopeId"
-            formControlName="scopeId"
-            class="form-input"
-            [class.input-error]="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched">
-            <option [ngValue]="null">Select workflow...</option>
-            <option *ngFor="let workflow of workflows" [ngValue]="workflow.id">
-              {{ workflow.name }}
-            </option>
-          </select>
-        </div>
-        <div *ngIf="loading.workflows" class="field-hint">
+        <select
+          id="scopeId"
+          pInputText
+          formControlName="scopeId"
+          class="p-inputtext w-full"
+          [class.ng-invalid]="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched"
+          style="width: 100%;">
+          <option [ngValue]="null">Select workflow...</option>
+          <option *ngFor="let workflow of workflows" [ngValue]="workflow.id">
+            {{ workflow.name }}
+          </option>
+        </select>
+        <div *ngIf="loading.workflows" class="help-text">
           <i class="pi pi-spin pi-spinner"></i>
           <span>Loading workflows...</span>
         </div>
-        <div *ngIf="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched" class="field-error">
-          <i class="pi pi-exclamation-triangle"></i>
-          <span>Workflow is required</span>
-        </div>
+        <small *ngIf="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched" class="error-text">
+          <i class="pi pi-exclamation-circle"></i>
+          Workflow is required
+        </small>
       </div>
       
       <!-- Scope ID (Document/Submission) -->
-      <div class="form-field-wrapper" *ngIf="delegationForm.get('scopeType')?.value === 'Document'">
-        <label class="field-label" for="scopeId">
-          Submission ID <span class="required-indicator">*</span>
+      <div class="form-group" *ngIf="delegationForm.get('scopeType')?.value === 'Document'">
+        <label for="scopeId" class="form-label">
+          <i class="pi pi-file"></i>
+          Document <span class="required">*</span>
         </label>
-        <div class="field-input-wrapper">
-          <input
-            type="number"
-            id="scopeId"
-            formControlName="scopeId"
-            class="form-input"
-            placeholder="Enter submission ID..."
-            [class.input-error]="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched" />
+        <select
+          id="scopeId"
+          pInputText
+          formControlName="scopeId"
+          class="p-inputtext w-full"
+          [class.ng-invalid]="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched"
+          style="width: 100%;">
+          <option [ngValue]="null">Select document...</option>
+          <option *ngFor="let docType of documentTypes" [ngValue]="docType.id">
+            {{ docType.name }} (ID: {{ docType.id }})
+          </option>
+        </select>
+        <div *ngIf="loading.documentTypes" class="help-text">
+          <i class="pi pi-spin pi-spinner"></i>
+          <span>Loading documents...</span>
         </div>
-        <div *ngIf="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched" class="field-error">
-          <i class="pi pi-exclamation-triangle"></i>
-          <span>Submission ID is required</span>
-        </div>
-      </div>
-      
-      <div class="form-field-wrapper">
-        <label class="field-label">Start Date <span class="required-indicator">*</span></label>
-        <input type="datetime-local" class="form-input" formControlName="startDate" />
-      </div>
-      <div class="form-field-wrapper">
-        <label class="field-label">End Date <span class="required-indicator">*</span></label>
-        <input type="datetime-local" class="form-input" formControlName="endDate" />
-      </div>
-      <div class="form-field-wrapper">
-        <p-checkbox formControlName="isActive" [binary]="true" inputId="isActive"></p-checkbox>
-        <label class="checkbox-label" for="isActive">Active</label>
+        <small *ngIf="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched" class="error-text">
+          <i class="pi pi-exclamation-circle"></i>
+          Document is required
+        </small>
       </div>
     </div>
+
+    <!-- Date & Status Section -->
+    <div class="form-section">
+      <div class="section-title">
+        <i class="pi pi-calendar"></i>
+        <span>Date & Status</span>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="startDate" class="form-label">
+            <i class="pi pi-calendar-plus"></i>
+            Start Date <span class="required">*</span>
+          </label>
+          <input
+            type="datetime-local"
+            id="startDate"
+            pInputText
+            formControlName="startDate"
+            class="p-inputtext w-full"
+            [class.ng-invalid]="delegationForm.get('startDate')?.invalid && delegationForm.get('startDate')?.touched"
+            style="width: 100%;" />
+          <small *ngIf="delegationForm.get('startDate')?.invalid && delegationForm.get('startDate')?.touched" class="error-text">
+            <i class="pi pi-exclamation-circle"></i>
+            Start date is required
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="endDate" class="form-label">
+            <i class="pi pi-calendar-minus"></i>
+            End Date <span class="required">*</span>
+          </label>
+          <input
+            type="datetime-local"
+            id="endDate"
+            pInputText
+            formControlName="endDate"
+            class="p-inputtext w-full"
+            [class.ng-invalid]="delegationForm.get('endDate')?.invalid && delegationForm.get('endDate')?.touched"
+            style="width: 100%;" />
+          <small *ngIf="delegationForm.get('endDate')?.invalid && delegationForm.get('endDate')?.touched" class="error-text">
+            <i class="pi pi-exclamation-circle"></i>
+            End date is required
+          </small>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="checkbox-wrapper">
+          <p-checkbox
+            formControlName="isActive"
+            [binary]="true"
+            inputId="isActive">
+          </p-checkbox>
+          <label for="isActive" class="checkbox-label">
+            <i class="pi pi-check-circle"></i>
+            <span>Active Delegation</span>
+            <small class="checkbox-help">Only active delegations will be applied</small>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dialog Footer -->
     <div class="dialog-footer">
-      <button type="button" pButton label="Cancel" class="p-button-secondary" (click)="closeModal()"></button>
-      <button type="submit" pButton [label]="(editingDelegation ? 'Update' : 'Create') + ' Delegation'" [disabled]="delegationForm.invalid || loading.save" [loading]="loading.save"></button>
+      <button
+        type="button"
+        pButton
+        label="Cancel"
+        icon="pi pi-times"
+        class="p-button-text p-button-lg"
+        (click)="closeModal()">
+      </button>
+      <button
+        type="button"
+        pButton
+        [label]="(editingDelegation ? 'Update' : 'Create') + ' Delegation'"
+        [icon]="editingDelegation ? 'pi pi-save' : 'pi pi-plus'"
+        class="p-button-success p-button-lg"
+        (click)="saveDelegation()"
+        [disabled]="loading.save || delegationForm.invalid"
+        [loading]="loading.save">
+      </button>
     </div>
   </form>
 </app-dialog-shell>

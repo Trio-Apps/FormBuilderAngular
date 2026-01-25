@@ -565,7 +565,6 @@
             pInputText
             formControlName="menuCode"
             placeholder="e.g., SALES_MGMT"
-            [disabled]="!!editingMenu"
             [class.ng-invalid]="menuForm.get('menuCode')?.invalid && menuForm.get('menuCode')?.touched"
             style="width: 100%;">
         </span>
@@ -693,12 +692,12 @@
         </div>
       </div>
     </div>
-  </form>
-
-  <ng-template pTemplate="footer">
+    
+    <!-- Footer Buttons -->
     <div class="dialog-footer">
       <button
         pButton
+        type="button"
         label="Cancel"
         icon="pi pi-times"
         class="p-button-text p-button-lg"
@@ -706,6 +705,7 @@
       </button>
       <button
         pButton
+        type="button"
         [label]="editingMenu ? 'Update Menu' : 'Create Menu'"
         [icon]="editingMenu ? 'pi pi-save' : 'pi pi-plus'"
         class="p-button-success p-button-lg"
@@ -714,7 +714,7 @@
         [loading]="loading.save">
       </button>
     </div>
-  </ng-template>
+  </form>
 </app-dialog-shell>
 
 <!-- Sub Menu Modal -->
@@ -803,7 +803,6 @@
           pInputText
           formControlName="menuId"
           class="p-inputtext w-full"
-          [disabled]="!!currentMenuForSubMenu"
           style="width: 100%;">
           <option [ngValue]="null" disabled>Select parent menu</option>
           <option *ngFor="let menu of menus" [ngValue]="menu.id">
@@ -905,25 +904,28 @@
         </div>
       </div>
     </div>
+    
+    <!-- Footer Buttons -->
+    <div class="dialog-footer">
+      <button
+        pButton
+        type="button"
+        label="Cancel"
+        icon="pi pi-times"
+        class="p-button-text"
+        (click)="closeSubMenuModal()">
+      </button>
+      <button
+        pButton
+        type="button"
+        [label]="editingSubMenu ? 'Update' : 'Create'"
+        icon="pi pi-check"
+        class="p-button-success"
+        (click)="saveSubMenu()"
+        [disabled]="loading.save || subMenuForm.invalid">
+      </button>
+    </div>
   </form>
-
-  <ng-template pTemplate="footer">
-    <button
-      pButton
-      label="Cancel"
-      icon="pi pi-times"
-      class="p-button-text"
-      (click)="closeSubMenuModal()">
-    </button>
-    <button
-      pButton
-      [label]="editingSubMenu ? 'Update' : 'Create'"
-      icon="pi pi-check"
-      class="p-button-success"
-      (click)="saveSubMenu()"
-      [disabled]="loading.save || subMenuForm.invalid">
-    </button>
-  </ng-template>
 </app-dialog-shell>
 
 <!-- Menu Document Modal -->
@@ -942,8 +944,7 @@
         id="documentType"
         pInputText
         formControlName="documentTypeId"
-        class="p-inputtext w-full"
-        [disabled]="!!editingMenuDocument">
+        class="p-inputtext w-full">
         <option [ngValue]="null" disabled>Select document type</option>
         <option *ngFor="let docType of documentTypes" [ngValue]="docType.id">
           {{ docType.menuCaption || docType.name }}
@@ -961,8 +962,7 @@
           id="menu"
           pInputText
           formControlName="menuId"
-          class="p-inputtext w-full"
-          [disabled]="!!currentMenuForDocument || !!editingMenuDocument">
+          class="p-inputtext w-full">
           <option [ngValue]="null">Select menu (optional if sub menu selected)</option>
           <option *ngFor="let menu of menus" [ngValue]="menu.id">
             {{ menu.name }}
@@ -979,8 +979,7 @@
           id="subMenu"
           pInputText
           formControlName="subMenuId"
-          class="p-inputtext w-full"
-          [disabled]="!!currentSubMenuForDocument">
+          class="p-inputtext w-full">
           <option [ngValue]="null">Select sub menu (optional if menu selected)</option>
           <option *ngFor="let subMenu of subMenus" [ngValue]="subMenu.id">
             {{ subMenu.name }}
@@ -1037,25 +1036,28 @@
         </span>
       </div>
     </div>
+    
+    <!-- Footer Buttons -->
+    <div class="dialog-footer">
+      <button
+        pButton
+        type="button"
+        label="Cancel"
+        icon="pi pi-times"
+        class="p-button-text"
+        (click)="closeMenuDocumentModal()">
+      </button>
+      <button
+        pButton
+        type="button"
+        [label]="editingMenuDocument ? 'Update' : 'Assign'"
+        icon="pi pi-check"
+        class="p-button-success"
+        (click)="saveMenuDocument()"
+        [disabled]="loading.save || menuDocumentForm.invalid">
+      </button>
+    </div>
   </form>
-
-  <ng-template pTemplate="footer">
-    <button
-      pButton
-      label="Cancel"
-      icon="pi pi-times"
-      class="p-button-text"
-      (click)="closeMenuDocumentModal()">
-    </button>
-    <button
-      pButton
-      [label]="editingMenuDocument ? 'Update' : 'Assign'"
-      icon="pi pi-check"
-      class="p-button-success"
-      (click)="saveMenuDocument()"
-      [disabled]="loading.save || menuDocumentForm.invalid">
-    </button>
-  </ng-template>
 </app-dialog-shell>
 
 <p-toast></p-toast>

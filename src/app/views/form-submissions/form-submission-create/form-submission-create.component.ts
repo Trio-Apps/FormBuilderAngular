@@ -2492,10 +2492,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
     
     const isLoading = this.loadingFieldOptions[field.id] || false;
+    const isEditable = this.isFieldEditable(field);
+    const shouldBeDisabled = isLoading || !isEditable;
     
-    if (isLoading && !control.disabled) {
+    if (shouldBeDisabled && !control.disabled) {
       control.disable({ emitEvent: false });
-    } else if (!isLoading && control.disabled && !this.isFieldReadOnly(field)) {
+    } else if (!shouldBeDisabled && control.disabled && !this.isFieldReadOnly(field)) {
       control.enable({ emitEvent: false });
     }
   }
@@ -2743,6 +2745,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             isReadOnly: state.isReadOnly,
             value: state.value
           };
+        }
+      });
+      
+      // Update disabled state for all fields after rule evaluation
+      this.fields.forEach(field => {
+        if (field.id) {
+          this.updateFieldDisabledState(field);
         }
       });
 
@@ -3315,6 +3324,23 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
   }
 
+  private getFormErrors(formGroup: FormGroup): any {
+    const errors: any = {};
+    Object.keys(formGroup.controls).forEach(key => {
+      const control = formGroup.get(key);
+      if (control && control.errors) {
+        errors[key] = control.errors;
+      }
+      if (control instanceof FormGroup) {
+        const nestedErrors = this.getFormErrors(control);
+        if (Object.keys(nestedErrors).length > 0) {
+          errors[key] = nestedErrors;
+        }
+      }
+    });
+    return errors;
+  }
+
   goBack(): void {
     this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
   }
@@ -3674,9 +3700,26 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    * Final submit - uses the submit endpoint to change status and trigger workflow
    */
   async saveSubmission(): Promise<void> {
+    console.log('[FormSubmissionCreate] saveSubmission() called');
+    console.log('[FormSubmissionCreate] Form states:', {
+      submissionFormValid: this.submissionForm.valid,
+      submissionFormInvalid: this.submissionForm.invalid,
+      fieldsFormValid: this.fieldsForm.valid,
+      fieldsFormInvalid: this.fieldsForm.invalid,
+      selectedTabId: this.selectedTabId,
+      isSubmitting: this.isSubmitting,
+      loadingCreate: this.loading.create
+    });
+    
+    // Set submitting flag
+    this.isSubmitting = true;
+    this.cdr.detectChanges();
+    
     // Validate all fields (email, phone, password, required, etc.)
     const fieldValidation = this.validateAllFields();
     if (!fieldValidation.isValid) {
+      console.log('[FormSubmissionCreate] Field validation failed:', fieldValidation.errors);
+      this.isSubmitting = false;
       this.markFormGroupTouched(this.fieldsForm);
       this.cdr.detectChanges();
       // Scroll to first error
@@ -3690,8 +3733,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
 
     if (this.submissionForm.invalid) {
+      console.log('[FormSubmissionCreate] submissionForm is invalid');
+      console.log('[FormSubmissionCreate] submissionForm errors:', this.getFormErrors(this.submissionForm));
       this.markFormGroupTouched(this.submissionForm);
       this.cdr.detectChanges();
+      this.isSubmitting = false;
       // Scroll to first error
       setTimeout(() => {
         const firstError = document.querySelector('.field-error-message');
@@ -3702,18 +3748,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.fields.length > 0 && this.fieldsForm.invalid) {
-      this.markFormGroupTouched(this.fieldsForm);
-      this.cdr.detectChanges();
-      // Scroll to first error
-      setTimeout(() => {
-        const firstError = document.querySelector('.field-error-message');
-        if (firstError) {
-          firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 100);
-      return;
-    }
+    // Note: We don't check fieldsForm.invalid here because validateAllFields() above
+    // already validates all visible and required fields. fieldsForm.invalid might be true
+    // for hidden fields or fields that are not actually required (due to dynamic rules),
+    // but validateAllFields() handles this correctly by checking visibility and requirements.
+    
+    console.log('[FormSubmissionCreate] All validations passed, proceeding with submission...');
 
     // Calculate calculated fields that need to be recalculated on submit
     await this.calculateCalculatedFields('OnSubmitOnly');
@@ -3740,17 +3780,21 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
 
     if (missingRequiredFiles.length > 0) {
+      console.log('[FormSubmissionCreate] Missing required files:', missingRequiredFiles);
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation Error',
         detail: `Please upload files for required fields: ${missingRequiredFiles.join(', ')}`
       });
+      this.isSubmitting = false;
+      this.cdr.detectChanges();
       return;
     }
 
     // Validate grids
     const gridValidation = this.validateAllGrids();
     if (!gridValidation.isValid) {
+      console.log('[FormSubmissionCreate] Grid validation failed:', gridValidation.errors);
       gridValidation.errors.forEach(error => {
         this.messageService.add({
           severity: 'warn',
@@ -3765,6 +3809,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           gridError.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }, 100);
+      this.isSubmitting = false;
+      this.cdr.detectChanges();
       return;
     }
 
@@ -3893,8 +3939,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               life: 5000
             });
             
-            // Navigate to submission details
-            this.router.navigate(['/form-submissions', newSubmission.id]);
+            // Navigate to submissions list page
+            this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
             this.cdr.detectChanges();
           });
         },
@@ -3952,18 +3998,27 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
         // Always update status to "Submitted" regardless of backend response
         // This ensures consistency - user wants status to always be "Submitted" after submission
+        // Do this in background to avoid blocking navigation
         if (submittedSubmission.status !== 'Submitted') {
-          console.log('[FormSubmissionCreate] Status is not Submitted, updating to Submitted...');
+          console.log('[FormSubmissionCreate] Status is not Submitted, updating to Submitted in background...');
           this.formSubmissionsService.updateSubmission(submittedSubmission.id, { status: 'Submitted' }).subscribe({
             next: () => {
-              console.log('[FormSubmissionCreate] ✅ Status updated to Submitted');
+              console.log('[FormSubmissionCreate] ✅ Status updated to Submitted in background');
               submittedSubmission.status = 'Submitted';
-              this.currentSubmission!.status = 'Submitted';
+              if (this.currentSubmission) {
+                this.currentSubmission.status = 'Submitted';
+              }
             },
             error: (updateError) => {
-              console.warn('[FormSubmissionCreate] Failed to update status to Submitted:', updateError);
+              console.warn('[FormSubmissionCreate] Failed to update status to Submitted in background:', updateError);
             }
           });
+        } else {
+          // If status is already Submitted, update local reference
+          submittedSubmission.status = 'Submitted';
+          if (this.currentSubmission) {
+            this.currentSubmission.status = 'Submitted';
+          }
         }
 
         const currentLang = this.translationService.getCurrentLanguage();
@@ -3976,39 +4031,23 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           life: 5000
         });
 
-        // If submission status is "Submitted", activate workflow stage and refresh submission to reflect stageId.
+        // Note: Status is already updated to "Submitted" above, so we don't need to handle "Approved" case separately
+        // The code above ensures status is always "Submitted" after submission
+
+        this.isSubmitting = false;
+        this.loading.create = false;
+
+        // Navigate to submissions list page immediately
+        this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
+
+        // Activate workflow stage in background (don't wait for it)
         if (submittedSubmission.status === 'Submitted') {
           this.approvalWorkflowRuntimeService.activateStage(submittedSubmission.id).subscribe({
             next: () => {
-              console.log('[FormSubmissionCreate] ✅ activate-stage succeeded, re-fetching submission to get stageId...');
-              this.formSubmissionsService.getSubmissionById(submittedSubmission.id).subscribe({
-                next: (refetched: any) => {
-                  this.currentSubmission = refetched;
-                  // Keep the old UI behavior (stageId update attempt) as a fallback.
-                  // If backend didn't set stageId, we still try client-side stage lookup.
-                  const docTypeId = submittedSubmission.documentTypeId || this.documentTypeId;
-                  if (docTypeId) {
-                    // load document type & stage list flow already exists further down the file via setSubmissionStageId().
-                    // Here we only need to set it if backend didn't.
-                    if (!refetched?.stageId) {
-                      console.warn('[FormSubmissionCreate] stageId still null after activate-stage; falling back to stage lookup by workflow.');
-                      // Try to resolve workflowId and set stageId via stages list (existing logic)
-                      // (This uses cached documentType when available)
-                      const approvalWorkflowId = this.documentType?.approvalWorkflowId;
-                      if (approvalWorkflowId) {
-                        this.tryUpdateSubmissionStageIdWithRetry(submittedSubmission.id, approvalWorkflowId);
-                      }
-                    }
-                  }
-                  this.cdr.detectChanges();
-                },
-                error: (refetchErr) => {
-                  console.warn('[FormSubmissionCreate] Failed to re-fetch submission after activate-stage:', refetchErr);
-                }
-              });
+              console.log('[FormSubmissionCreate] ✅ activate-stage succeeded in background');
             },
             error: (activateError) => {
-              console.warn('[FormSubmissionCreate] Failed to activate workflow stage:', activateError);
+              console.warn('[FormSubmissionCreate] Failed to activate workflow stage in background:', activateError);
               const msg = (activateError?.message || '').toString();
               if (msg.toLowerCase().includes('stage requires minimum')) {
                 const currentLang = this.translationService.getCurrentLanguage();
@@ -4024,15 +4063,6 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             }
           });
         }
-        
-        // Note: Status is already updated to "Submitted" above, so we don't need to handle "Approved" case separately
-        // The code above ensures status is always "Submitted" after submission
-
-        this.isSubmitting = false;
-        this.loading.create = false;
-
-        // Navigate to success page or submission details
-        this.router.navigate(['/form-submissions', submittedSubmission.id]);
 
         this.cdr.detectChanges();
       },
@@ -4053,13 +4083,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
                   this.isSubmitting = false;
                   this.loading.create = false;
                   this.cdr.detectChanges();
-                  this.router.navigate(['/form-submissions', this.submissionId!]);
+                  this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
                 },
                 error: () => {
                   this.isSubmitting = false;
                   this.loading.create = false;
                   this.cdr.detectChanges();
-                  this.router.navigate(['/form-submissions', this.submissionId!]);
+                  this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
                 }
               });
             },
