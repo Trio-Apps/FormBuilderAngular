@@ -43,6 +43,8 @@
             <th>#</th>
             <th>From User</th>
             <th>To User</th>
+            <th>Scope Type</th>
+            <th>Scope</th>
             <th>Start Date</th>
             <th>End Date</th>
             <th>Status</th>
@@ -54,6 +56,20 @@
             <td>{{ first + rowIndex + 1 }}</td>
             <td>{{ delegation.fromUserName || getUserNameById(delegation.fromUserId) }}</td>
             <td>{{ delegation.toUserName || getUserNameById(delegation.toUserId) }}</td>
+            <td>
+              <span class="badge" [ngClass]="{
+                'badge-primary': delegation.scopeType === 'Global',
+                'badge-info': delegation.scopeType === 'Workflow',
+                'badge-warning': delegation.scopeType === 'Document'
+              }">
+                {{ delegation.scopeType || 'Global' }}
+              </span>
+            </td>
+            <td>
+              <span *ngIf="delegation.scopeType === 'Global'">All Workflows</span>
+              <span *ngIf="delegation.scopeType === 'Workflow'">{{ delegation.scopeName || ('Workflow #' + delegation.scopeId) }}</span>
+              <span *ngIf="delegation.scopeType === 'Document'">{{ 'Document #' + delegation.scopeId }}</span>
+            </td>
             <td>{{ formatDate(delegation.startDate) }}</td>
             <td>{{ formatDate(delegation.endDate) }}</td>
             <td>
@@ -137,6 +153,76 @@
           <span>To user is required</span>
         </div>
       </div>
+      
+      <!-- Scope Type Dropdown -->
+      <div class="form-field-wrapper">
+        <label class="field-label" for="scopeType">
+          Scope Type <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <select
+            id="scopeType"
+            formControlName="scopeType"
+            class="form-input"
+            [class.input-error]="delegationForm.get('scopeType')?.invalid && delegationForm.get('scopeType')?.touched">
+            <option value="Global">Global (All Workflows)</option>
+            <option value="Workflow">Workflow (Specific Workflow)</option>
+            <option value="Document">Document (Specific Submission)</option>
+          </select>
+        </div>
+        <div *ngIf="delegationForm.get('scopeType')?.invalid && delegationForm.get('scopeType')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>Scope type is required</span>
+        </div>
+      </div>
+      
+      <!-- Scope ID (Workflow or Document) -->
+      <div class="form-field-wrapper" *ngIf="delegationForm.get('scopeType')?.value === 'Workflow'">
+        <label class="field-label" for="scopeId">
+          Workflow <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <select
+            id="scopeId"
+            formControlName="scopeId"
+            class="form-input"
+            [class.input-error]="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched">
+            <option [ngValue]="null">Select workflow...</option>
+            <option *ngFor="let workflow of workflows" [ngValue]="workflow.id">
+              {{ workflow.name }}
+            </option>
+          </select>
+        </div>
+        <div *ngIf="loading.workflows" class="field-hint">
+          <i class="pi pi-spin pi-spinner"></i>
+          <span>Loading workflows...</span>
+        </div>
+        <div *ngIf="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>Workflow is required</span>
+        </div>
+      </div>
+      
+      <!-- Scope ID (Document/Submission) -->
+      <div class="form-field-wrapper" *ngIf="delegationForm.get('scopeType')?.value === 'Document'">
+        <label class="field-label" for="scopeId">
+          Submission ID <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <input
+            type="number"
+            id="scopeId"
+            formControlName="scopeId"
+            class="form-input"
+            placeholder="Enter submission ID..."
+            [class.input-error]="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched" />
+        </div>
+        <div *ngIf="delegationForm.get('scopeId')?.invalid && delegationForm.get('scopeId')?.touched" class="field-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>Submission ID is required</span>
+        </div>
+      </div>
+      
       <div class="form-field-wrapper">
         <label class="field-label">Start Date <span class="required-indicator">*</span></label>
         <input type="datetime-local" class="form-input" formControlName="startDate" />

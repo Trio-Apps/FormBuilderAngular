@@ -6,15 +6,20 @@ import { environment } from '../../../environments/environment';
 
 // ==================== Approval Delegation DTOs ====================
 
+export type ScopeType = 'Global' | 'Workflow' | 'Document';
+
 export interface ApprovalDelegationDto {
   id: number;
   fromUserId: string;
+  fromUserName?: string;
   toUserId: string;
+  toUserName?: string;
+  scopeType: ScopeType;
+  scopeId?: number | null;
+  scopeName?: string;
   startDate: string | Date;
   endDate: string | Date;
   isActive: boolean;
-  fromUserName?: string;
-  toUserName?: string;
   createdDate?: string | Date;
   updatedDate?: string | Date | null;
 }
@@ -22,6 +27,8 @@ export interface ApprovalDelegationDto {
 export interface CreateApprovalDelegationDto {
   fromUserId: string;
   toUserId: string;
+  scopeType: ScopeType;
+  scopeId?: number | null;
   startDate: string | Date;
   endDate: string | Date;
   isActive?: boolean;
@@ -29,9 +36,23 @@ export interface CreateApprovalDelegationDto {
 
 export interface UpdateApprovalDelegationDto {
   toUserId?: string;
+  scopeType?: ScopeType;
+  scopeId?: number | null;
   startDate?: string | Date;
   endDate?: string | Date;
   isActive?: boolean;
+}
+
+export interface ResolveDelegationRequest {
+  originalApproverId: string;
+  workflowId?: number | null;
+  submissionId?: number | null;
+}
+
+export interface ResolveDelegationResponse {
+  originalApproverId: string;
+  delegatedUserId: string | null;
+  hasDelegation: boolean;
 }
 
 @Injectable({
@@ -160,6 +181,29 @@ export class ApprovalDelegationService {
       return throwError(() => new Error('To user ID is required'));
     }
 
+    if (!dto.scopeType) {
+      return throwError(() => new Error('Scope type is required'));
+    }
+
+    // Validate scopeType
+    const validScopeTypes: ScopeType[] = ['Global', 'Workflow', 'Document'];
+    if (!validScopeTypes.includes(dto.scopeType)) {
+      return throwError(() => new Error('ScopeType must be "Global", "Workflow", or "Document"'));
+    }
+
+    // Validate scopeId based on scopeType
+    if (dto.scopeType === 'Workflow' && !dto.scopeId) {
+      return throwError(() => new Error('ScopeId is required for Workflow scope type'));
+    }
+
+    if (dto.scopeType === 'Document' && !dto.scopeId) {
+      return throwError(() => new Error('ScopeId is required for Document scope type'));
+    }
+
+    if (dto.scopeType === 'Global' && dto.scopeId !== null && dto.scopeId !== undefined) {
+      return throwError(() => new Error('ScopeId must be null for Global scope type'));
+    }
+
     if (!dto.startDate) {
       return throwError(() => new Error('Start date is required'));
     }
@@ -192,6 +236,8 @@ export class ApprovalDelegationService {
     const createDto: CreateApprovalDelegationDto = {
       fromUserId: dto.fromUserId.trim(),
       toUserId: dto.toUserId.trim(),
+      scopeType: dto.scopeType,
+      scopeId: dto.scopeType === 'Global' ? null : dto.scopeId,
       startDate: dto.startDate,
       endDate: dto.endDate,
       isActive: dto.isActive !== undefined ? dto.isActive : true
@@ -201,9 +247,14 @@ export class ApprovalDelegationService {
 
     return this.http.post<any>(this.baseUrl, createDto).pipe(
       map((response: any) => {
-        // Handle ServiceResult<T> or direct object response
-        if (response && typeof response === 'object' && !response.id) {
-          return response.data || response.result || response;
+        // Handle ApiResponse wrapper or direct object response
+        if (response && typeof response === 'object') {
+          if (response.statusCode !== undefined && response.data) {
+            return response.data;
+          }
+          if (!response.id && (response.data || response.result)) {
+            return response.data || response.result;
+          }
         }
         return response;
       }),
@@ -255,8 +306,8 @@ export class ApprovalDelegationService {
   }
 
   /**
-   * Soft delete delegation
-   * Uses DELETE /api/ApprovalDelegation/{id} (this endpoint performs soft delete)
+   * Delete delegation
+   * DELETE /api/ApprovalDelegation/{id}
    */
   deleteDelegation(id: number, deletedByUserId?: string): Observable<void> {
     const delegationId = Number(id);
@@ -264,26 +315,60 @@ export class ApprovalDelegationService {
       return throwError(() => new Error(`Invalid delegation ID: ${id}`));
     }
 
-    console.log('[ApprovalDelegationService] Soft deleting delegation:', { id: delegationId, deletedByUserId });
+    console.log('[ApprovalDelegationService] Deleting delegation:', { id: delegationId, deletedByUserId });
 
     const params: any = {};
     if (deletedByUserId) {
       params.deletedByUserId = deletedByUserId;
     }
 
-    // Use DELETE /api/ApprovalDelegation/{id} - this endpoint performs soft delete
     return this.http.delete<any>(`${this.baseUrl}/${delegationId}`, { params }).pipe(
       map(() => {
-        console.log('[ApprovalDelegationService] Delegation soft deleted successfully');
+        console.log('[ApprovalDelegationService] Delegation deleted successfully');
         return;
       }),
       catchError((error) => {
-        console.error('[ApprovalDelegationService] Error soft deleting delegation:', error);
+        console.error('[ApprovalDelegationService] Error deleting delegation:', error);
         
         if (error.status === 404) {
           throw new Error('Delegation not found');
         }
 
+        const errorMessage = this.extractErrorMessage(error);
+        throw new Error(errorMessage);
+      })
+    );
+  }
+
+  /**
+   * Resolve delegated approver
+   * POST /api/ApprovalDelegation/resolve
+   * Returns the delegated user ID if a delegation exists, otherwise returns null
+   * Priority: Document → Workflow → Global
+   */
+  resolveDelegatedApprover(request: ResolveDelegationRequest): Observable<ResolveDelegationResponse> {
+    if (!request.originalApproverId || request.originalApproverId.trim() === '') {
+      return throwError(() => new Error('OriginalApproverId is required'));
+    }
+
+    console.log('[ApprovalDelegationService] Resolving delegated approver:', request);
+
+    return this.http.post<any>(`${this.baseUrl}/resolve`, request).pipe(
+      map((response: any) => {
+        // Handle ApiResponse wrapper or direct object response
+        if (response && typeof response === 'object') {
+          if (response.statusCode !== undefined && response.data) {
+            return response.data;
+          }
+          if (response.originalApproverId !== undefined) {
+            return response;
+          }
+          return response.data || response.result || response;
+        }
+        return response;
+      }),
+      catchError((error) => {
+        console.error('[ApprovalDelegationService] Error resolving delegated approver:', error);
         const errorMessage = this.extractErrorMessage(error);
         throw new Error(errorMessage);
       })
