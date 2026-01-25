@@ -1671,6 +1671,10 @@ export class FormViewComponent implements OnInit {
     }
     
     console.log('[FormView] Base field states:', Object.keys(baseFieldStates));
+    console.log('[FormView] Base field states details:', Object.keys(baseFieldStates).map(key => ({
+      fieldCode: key,
+      isVisible: baseFieldStates[key].isVisible
+    })));
     console.log('[FormView] All field codes in form:', allFieldCodes);
     // Removed NOTES field warning - it's optional and may not exist in all forms
 
@@ -1680,10 +1684,18 @@ export class FormViewComponent implements OnInit {
       this.fieldValues,
       baseFieldStates
     );
+    
+    console.log('[FormView] Evaluated states keys:', Object.keys(evaluatedStates));
+    console.log('[FormView] Evaluated states details:', Object.keys(evaluatedStates).map(key => ({
+      fieldCode: key,
+      isVisible: evaluatedStates[key].isVisible
+    })));
 
     // Update dynamicFieldStates with evaluated states
+    console.log('[FormView] Updating dynamicFieldStates from evaluatedStates. Evaluated states keys:', Object.keys(evaluatedStates));
     Object.keys(evaluatedStates).forEach(fieldCode => {
       const state = evaluatedStates[fieldCode];
+      const previousVisible = this.dynamicFieldStates[fieldCode]?.isVisible;
       if (this.dynamicFieldStates[fieldCode]) {
         this.dynamicFieldStates[fieldCode].isVisible = state.isVisible;
         this.dynamicFieldStates[fieldCode].isRequired = state.isMandatory;
@@ -1691,7 +1703,7 @@ export class FormViewComponent implements OnInit {
         if (state.value !== undefined) {
           this.dynamicFieldStates[fieldCode].value = state.value;
         }
-        // Removed NOTES-specific logging
+        console.log(`[FormView] Updated field "${fieldCode}": visibility ${previousVisible} -> ${state.isVisible}`);
       } else {
         this.dynamicFieldStates[fieldCode] = {
           isVisible: state.isVisible,
@@ -1699,7 +1711,7 @@ export class FormViewComponent implements OnInit {
           isReadOnly: state.isReadOnly,
           value: state.value
         };
-        // Removed NOTES-specific logging
+        console.log(`[FormView] Created new dynamic state for field "${fieldCode}": visibility = ${state.isVisible}`);
       }
     });
     

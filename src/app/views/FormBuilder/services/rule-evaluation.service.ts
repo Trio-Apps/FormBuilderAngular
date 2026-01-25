@@ -170,19 +170,48 @@ export class RuleEvaluationService {
       return;
     }
 
-    // Skip StoredProcedure type rules (they don't use condition evaluation)
+    // Handle StoredProcedure type rules
     if (rule.ruleType === 'StoredProcedure') {
-      console.log(`[RuleEvaluationService] Rule "${rule.ruleName}" is StoredProcedure type, skipping condition evaluation`);
+      console.log(`[RuleEvaluationService] Rule "${rule.ruleName}" is StoredProcedure type`);
+      
+      // For StoredProcedure rules, if they have actions, execute them directly
+      // (In a full implementation, you would call the stored procedure first and check result mapping)
+      // For now, if there's no storedProcedureId or if we want to execute actions directly, do so
+      if (rule.actions && rule.actions.length > 0) {
+        console.log(`[RuleEvaluationService] Executing ${rule.actions.length} actions for StoredProcedure rule "${rule.ruleName}"`);
+        console.log(`[RuleEvaluationService] Actions:`, rule.actions);
+        console.log(`[RuleEvaluationService] Field states before applying actions:`, Object.keys(fieldStates));
+        this.applyActions(rule.actions, fieldValues, fieldStates);
+        console.log(`[RuleEvaluationService] Field states after applying actions:`, Object.keys(fieldStates).map(key => ({
+          fieldCode: key,
+          isVisible: fieldStates[key].isVisible
+        })));
+      } else {
+        console.log(`[RuleEvaluationService] StoredProcedure rule "${rule.ruleName}" has no actions to execute`);
+      }
       return;
     }
 
-    // Skip rules without condition
-    if (!rule.condition) {
-      console.log(`[RuleEvaluationService] Rule "${rule.ruleName}" has no condition, skipping condition evaluation`);
+    // If rule has no condition (or empty condition), treat it as always true and execute actions
+    if (!rule.condition || !rule.condition.field || 
+        (typeof rule.condition.field === 'string' && rule.condition.field.trim() === '')) {
+      console.log(`[RuleEvaluationService] Rule "${rule.ruleName}" has no condition, treating as always true and executing actions`);
+      if (rule.actions && rule.actions.length > 0) {
+        console.log(`[RuleEvaluationService] Applying ${rule.actions.length} actions for rule "${rule.ruleName}" (no condition)`);
+        console.log(`[RuleEvaluationService] Actions:`, rule.actions);
+        console.log(`[RuleEvaluationService] Field states before applying actions:`, Object.keys(fieldStates));
+        this.applyActions(rule.actions, fieldValues, fieldStates);
+        console.log(`[RuleEvaluationService] Field states after applying actions:`, Object.keys(fieldStates).map(key => ({
+          fieldCode: key,
+          isVisible: fieldStates[key].isVisible
+        })));
+      } else {
+        console.warn(`[RuleEvaluationService] Rule "${rule.ruleName}" has no actions to apply`);
+      }
       return;
     }
 
-    // At this point, TypeScript knows rule.condition is defined
+    // At this point, TypeScript knows rule.condition is defined and has a valid field
     const condition = rule.condition;
     const conditionMet = this.evaluateCondition(condition, fieldValues);
     
@@ -220,6 +249,8 @@ export class RuleEvaluationService {
     fieldValues: Record<string, any>,
     fieldStates: Record<string, FieldState>
   ): void {
+    console.log(`[RuleEvaluationService] Applying action: type="${action.type}", fieldCode="${action.fieldCode}", value=${action.value}`);
+    
     if (!fieldStates[action.fieldCode]) {
       // Initialize field state if not exists
       fieldStates[action.fieldCode] = {
@@ -227,26 +258,32 @@ export class RuleEvaluationService {
         isMandatory: false,
         isReadOnly: false
       };
-      console.log(`[RuleEvaluationService] Initialized field state for "${action.fieldCode}"`);
+      console.log(`[RuleEvaluationService] Initialized field state for "${action.fieldCode}" with default values`);
     }
 
     const state = fieldStates[action.fieldCode];
+    const previousVisibility = state.isVisible;
 
     switch (action.type) {
       case 'SetVisible':
-        // For SetVisible, if value is null, undefined, or false, default to true
-        // Only set to false if explicitly false
+        // For SetVisible, convert value to boolean properly
+        // Handle string values like "true", "false", "1", "0", etc.
         let newVisibility: boolean;
-        if (action.value === false) {
+        if (action.value === false || action.value === 'false' || action.value === 0 || action.value === '0') {
           newVisibility = false;
-        } else if (action.value === true) {
+        } else if (action.value === true || action.value === 'true' || action.value === 1 || action.value === '1') {
+          newVisibility = true;
+        } else if (action.value === null || action.value === undefined || action.value === '') {
+          // If value is null, undefined, or empty string, default to true for SetVisible
+          // (SetVisible without a value means "show")
           newVisibility = true;
         } else {
-          // If value is null, undefined, or any other value, default to true for SetVisible
+          // For any other value, default to true for SetVisible
           newVisibility = true;
         }
-        console.log(`[RuleEvaluationService] Setting visibility for "${action.fieldCode}" to ${newVisibility} (action.value was: ${action.value})`);
+        console.log(`[RuleEvaluationService] Setting visibility for "${action.fieldCode}" from ${previousVisibility} to ${newVisibility} (action.value was: ${action.value}, type: ${typeof action.value})`);
         state.isVisible = newVisibility;
+        console.log(`[RuleEvaluationService] Field "${action.fieldCode}" visibility updated: ${state.isVisible}`);
         break;
       case 'SetReadOnly':
         state.isReadOnly = action.value !== undefined ? action.value : true;
@@ -302,12 +339,33 @@ export class RuleEvaluationService {
 
     // Sort rules by executionOrder (lower order first)
     const sortedRules = [...rules]
-      .filter(rule => rule.isActive)
+      .filter(rule => {
+        const isActive = rule.isActive;
+        console.log(`[RuleEvaluationService] Rule "${rule.ruleName}": isActive=${isActive}, ruleType=${rule.ruleType}, actionsCount=${rule.actions?.length || 0}`);
+        return isActive;
+      })
       .sort((a, b) => (a.executionOrder || 0) - (b.executionOrder || 0));
+
+    console.log(`[RuleEvaluationService] Filtered ${sortedRules.length} active rules from ${rules.length} total rules`);
 
     // Execute each rule
     for (const rule of sortedRules) {
+      console.log(`[RuleEvaluationService] ===== Executing rule: "${rule.ruleName}" (order: ${rule.executionOrder}, type: ${rule.ruleType}) =====`);
+      console.log(`[RuleEvaluationService] Rule details:`, {
+        ruleName: rule.ruleName,
+        ruleType: rule.ruleType,
+        isActive: rule.isActive,
+        executionOrder: rule.executionOrder,
+        hasCondition: !!rule.condition,
+        conditionField: rule.condition?.field,
+        actionsCount: rule.actions?.length || 0,
+        actions: rule.actions
+      });
       this.executeRule(rule, fieldValues, fieldStates);
+      console.log(`[RuleEvaluationService] After rule "${rule.ruleName}", field states:`, Object.keys(fieldStates).map(key => ({
+        fieldCode: key,
+        isVisible: fieldStates[key].isVisible
+      })));
     }
 
     console.log('[RuleEvaluationService] Final field states:', Object.keys(fieldStates).map(key => ({
