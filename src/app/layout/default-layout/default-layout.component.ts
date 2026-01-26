@@ -367,6 +367,15 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         continue;
       }
 
+      // Show Email Test only for Admin users
+      if (item.name === 'Email Test') {
+        const requiredRoles = item.attributes?.['roles'] as string[] | undefined;
+        if (this.hasRoleAccess(requiredRoles) || isAdmin) {
+          filteredItems.push(item);
+        }
+        continue;
+      }
+
       // Show Approval Workflows with children (for all users)
       if (item.name === 'Approval Workflows') {
         // For User role, only show Approval Inbox (not Manage Workflows or Approvals History)

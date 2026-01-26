@@ -104,6 +104,14 @@ export const routes: Routes = [
         canActivate: [authGuard]
       },
 
+      // ===== Email Test ===== (Admin only - for testing)
+      {
+        path: 'email-test',
+        loadComponent: () => import('./views/email-test/email-test.component')
+          .then(m => m.EmailTestComponent),
+        canActivate: [authGuard, adminGuard] // Admin only
+      },
+
       // ===== Approval Delegations =====
       {
         path: 'approval-delegations',

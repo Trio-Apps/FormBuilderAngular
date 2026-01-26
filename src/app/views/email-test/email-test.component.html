@@ -1,0 +1,394 @@
+<div class="email-test-container p-4">
+  <div class="container-fluid">
+    <h2 class="mb-4">📧 اختبار Email Endpoints</h2>
+
+    <p-toast></p-toast>
+
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs mb-4" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="activeTab === 'simple'" (click)="activeTab = 'simple'" type="button">
+          إرسال بريد بسيط
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="activeTab === 'template'" (click)="activeTab = 'template'" type="button">
+          اختبار Template
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="activeTab === 'confirmation'" (click)="activeTab = 'confirmation'" type="button">
+          تأكيد التقديم
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="activeTab === 'approval-required'" (click)="activeTab = 'approval-required'" type="button">
+          طلب الموافقة
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="activeTab === 'approval-result'" (click)="activeTab = 'approval-result'" type="button">
+          نتيجة الموافقة
+        </button>
+      </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+      <!-- Tab 1: Simple Email -->
+      <div class="tab-pane" [class.active]="activeTab === 'simple'" *ngIf="activeTab === 'simple'">
+        <div class="card">
+          <div class="card-body">
+            <form (ngSubmit)="sendSimpleEmail()" #simpleEmailForm="ngForm">
+              <div class="mb-3">
+                <label class="form-label">إلى (To):</label>
+                <input
+                  type="email"
+                  pInputText
+                  [(ngModel)]="simpleEmailRequest.to"
+                  name="to"
+                  required
+                  class="form-control"
+                  placeholder="example@email.com"
+                />
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">الموضوع (Subject):</label>
+                <input
+                  type="text"
+                  pInputText
+                  [(ngModel)]="simpleEmailRequest.subject"
+                  name="subject"
+                  required
+                  class="form-control"
+                  placeholder="موضوع البريد"
+                />
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">المحتوى (Body):</label>
+                <textarea
+                  [(ngModel)]="simpleEmailRequest.body"
+                  name="body"
+                  required
+                  rows="5"
+                  class="form-control"
+                  placeholder="محتوى البريد"
+                ></textarea>
+              </div>
+
+              <div class="mb-3">
+                <p-checkbox
+                  [(ngModel)]="simpleEmailRequest.isHtml"
+                  name="isHtml"
+                  [binary]="true"
+                  label="HTML Format"
+                ></p-checkbox>
+              </div>
+
+              <p-button
+                type="submit"
+                label="إرسال"
+                icon="pi pi-send"
+                [disabled]="!simpleEmailForm.valid || simpleEmailLoading"
+                [loading]="simpleEmailLoading"
+              ></p-button>
+            </form>
+
+            <div *ngIf="simpleEmailResponse" class="mt-4">
+              <div class="card">
+                <div class="card-header">
+                  <strong>النتيجة</strong>
+                </div>
+                <div class="card-body">
+                  <pre>{{ simpleEmailResponse | json }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Template Test -->
+      <div class="tab-pane" [class.active]="activeTab === 'template'" *ngIf="activeTab === 'template'">
+        <div class="card">
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">اختر Template:</label>
+              <select
+                [(ngModel)]="selectedTemplate"
+                (change)="onTemplateChange()"
+                class="form-control"
+              >
+                <option [value]="null">-- اختر Template --</option>
+                <option *ngFor="let template of templates" [value]="template.name">
+                  {{ template.name }} - {{ template.description }}
+                </option>
+              </select>
+            </div>
+
+            <div *ngIf="selectedTemplate" class="mt-4">
+              <h4>بيانات Template</h4>
+
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Document Number:</label>
+                  <input
+                    type="text"
+                    pInputText
+                    [(ngModel)]="templateData.DocumentNumber"
+                    class="form-control"
+                  />
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Submission ID:</label>
+                  <input
+                    type="text"
+                    pInputText
+                    [(ngModel)]="templateData.SubmissionId"
+                    class="form-control"
+                  />
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Document Type:</label>
+                  <input
+                    type="text"
+                    pInputText
+                    [(ngModel)]="templateData.DocumentType"
+                    class="form-control"
+                  />
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Submitted By:</label>
+                  <input
+                    type="text"
+                    pInputText
+                    [(ngModel)]="templateData.SubmittedBy"
+                    class="form-control"
+                  />
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Approval Stage:</label>
+                  <input
+                    type="text"
+                    pInputText
+                    [(ngModel)]="templateData.ApprovalStage"
+                    class="form-control"
+                  />
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">System URL:</label>
+                  <input
+                    type="text"
+                    pInputText
+                    [(ngModel)]="templateData.SystemUrl"
+                    class="form-control"
+                  />
+                </div>
+              </div>
+
+              <p-button
+                label="اختبار Template"
+                icon="pi pi-check"
+                (onClick)="testTemplate()"
+                [disabled]="templateLoading"
+                [loading]="templateLoading"
+              ></p-button>
+            </div>
+
+            <div *ngIf="templateResponse" class="mt-4">
+              <div class="card">
+                <div class="card-header">
+                  <strong>النتيجة</strong>
+                </div>
+                <div class="card-body">
+                  <div class="mb-3">
+                    <strong>Subject:</strong>
+                    <div class="p-2 bg-light rounded mt-2">{{ templateResponse.subject }}</div>
+                  </div>
+                  <div>
+                    <strong>Body:</strong>
+                    <div class="p-2 bg-light rounded mt-2">
+                      <pre class="mb-0">{{ templateResponse.body }}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Submission Confirmation -->
+      <div class="tab-pane" [class.active]="activeTab === 'confirmation'" *ngIf="activeTab === 'confirmation'">
+        <div class="card">
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">Submission ID:</label>
+              <p-inputNumber
+                [(ngModel)]="submissionId"
+                [showButtons]="true"
+                [min]="1"
+                styleClass="w-100"
+              ></p-inputNumber>
+            </div>
+
+            <p-button
+              label="إرسال تأكيد التقديم"
+              icon="pi pi-check-circle"
+              (onClick)="sendSubmissionConfirmation()"
+              [disabled]="submissionConfirmationLoading"
+              [loading]="submissionConfirmationLoading"
+            ></p-button>
+
+            <div *ngIf="submissionConfirmationResponse" class="mt-4">
+              <div class="card">
+                <div class="card-header">
+                  <strong>النتيجة</strong>
+                </div>
+                <div class="card-body">
+                  <pre>{{ submissionConfirmationResponse | json }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 4: Approval Required -->
+      <div class="tab-pane" [class.active]="activeTab === 'approval-required'" *ngIf="activeTab === 'approval-required'">
+        <div class="card">
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">Submission ID:</label>
+              <p-inputNumber
+                [(ngModel)]="approvalRequiredRequest.submissionId"
+                [showButtons]="true"
+                [min]="1"
+                styleClass="w-100"
+              ></p-inputNumber>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Stage ID:</label>
+              <p-inputNumber
+                [(ngModel)]="approvalRequiredRequest.stageId"
+                [showButtons]="true"
+                [min]="1"
+                styleClass="w-100"
+              ></p-inputNumber>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Approver User IDs (مفصولة بفواصل):</label>
+              <input
+                type="text"
+                pInputText
+                [(ngModel)]="approverIdsInput"
+                (blur)="updateApproverIds()"
+                class="form-control"
+                placeholder="1027, anas"
+              />
+              <small class="text-muted">أدخل User IDs مفصولة بفواصل</small>
+            </div>
+
+            <p-button
+              label="إرسال طلب الموافقة"
+              icon="pi pi-send"
+              (onClick)="sendApprovalRequired()"
+              [disabled]="approvalRequiredLoading"
+              [loading]="approvalRequiredLoading"
+            ></p-button>
+
+            <div *ngIf="approvalRequiredResponse" class="mt-4">
+              <div class="card">
+                <div class="card-header">
+                  <strong>النتيجة</strong>
+                </div>
+                <div class="card-body">
+                  <p><strong>تم إرسال:</strong> {{ approvalRequiredResponse.approverCount }} طلب موافقة</p>
+                  <pre>{{ approvalRequiredResponse | json }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 5: Approval Result -->
+      <div class="tab-pane" [class.active]="activeTab === 'approval-result'" *ngIf="activeTab === 'approval-result'">
+        <div class="card">
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">Submission ID:</label>
+              <p-inputNumber
+                [(ngModel)]="approvalResultRequest.submissionId"
+                [showButtons]="true"
+                [min]="1"
+                styleClass="w-100"
+              ></p-inputNumber>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Action Type:</label>
+              <select
+                [(ngModel)]="approvalResultRequest.actionType"
+                class="form-control"
+              >
+                <option *ngFor="let action of actionTypes" [value]="action.value">
+                  {{ action.label }}
+                </option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Approver User ID:</label>
+              <input
+                type="text"
+                pInputText
+                [(ngModel)]="approvalResultRequest.approverUserId"
+                class="form-control"
+                placeholder="1027"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Comments (اختياري):</label>
+              <textarea
+                [(ngModel)]="approvalResultRequest.comments"
+                rows="3"
+                class="form-control"
+                placeholder="تعليقات"
+              ></textarea>
+            </div>
+
+            <p-button
+              label="إرسال نتيجة الموافقة"
+              icon="pi pi-check"
+              (onClick)="sendApprovalResult()"
+              [disabled]="approvalResultLoading"
+              [loading]="approvalResultLoading"
+            ></p-button>
+
+            <div *ngIf="approvalResultResponse" class="mt-4">
+              <div class="card">
+                <div class="card-header">
+                  <strong>النتيجة</strong>
+                </div>
+                <div class="card-body">
+                  <pre>{{ approvalResultResponse | json }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

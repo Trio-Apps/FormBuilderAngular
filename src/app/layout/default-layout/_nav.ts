@@ -82,6 +82,16 @@ export const navItems: INavData[] = [
       }
     ]
   },
+  {
+    title: true,
+    name: 'Testing & Tools'
+  },
+  {
+    name: 'Email Test',
+    url: '/email-test',
+    iconComponent: { name: 'cil-envelope-letter' },
+    attributes: { roles: ['Administration'] } // Admin only
+  },
   
   {
     title: true,

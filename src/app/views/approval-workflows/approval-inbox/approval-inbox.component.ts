@@ -1609,15 +1609,35 @@ export class ApprovalInboxComponent implements OnInit {
     const inboxItem = this.inboxItems.find(item => item.submissionId === this.selectedSubmission!.id);
     const stageId = inboxItem?.stageId || 1; // Use inbox item's stageId, or default to 1 if not found
 
-    if (!inboxItem || stageId === 0 || stageId < 0) {
-      console.error('[ApprovalInbox] ⚠️ SECURITY: No valid inbox item found for submission');
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Access Denied',
-        detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
-        life: 5000
-      });
-      return;
+    // For admin users, allow approval even without inbox item (they have global permissions)
+    // For non-admin users, require inbox item to ensure they're assigned as Stage Assignee
+    if (!this.isAdmin) {
+      if (!inboxItem || stageId === 0 || stageId < 0) {
+        console.error('[ApprovalInbox] ⚠️ SECURITY: No valid inbox item found for submission');
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Access Denied',
+          detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
+          life: 5000
+        });
+        return;
+      }
+    } else {
+      // Admin users: validate stageId is positive, but allow even without inbox item
+      if (stageId <= 0) {
+        console.error('[ApprovalInbox] ⚠️ SECURITY: Invalid stageId for admin approval');
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Invalid stage ID. Cannot process approval.',
+          life: 5000
+        });
+        return;
+      }
+      // Log admin override for audit purposes
+      if (!inboxItem) {
+        console.log('[ApprovalInbox] ⚠️ Admin approval without inbox item - using default stageId:', stageId);
+      }
     }
 
     this.loading.action = true;

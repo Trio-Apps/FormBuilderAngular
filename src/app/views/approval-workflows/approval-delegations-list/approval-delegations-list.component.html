@@ -134,19 +134,19 @@
           <i class="pi pi-user"></i>
           From User <span class="required">*</span>
         </label>
-        <select
-          id="fromUserId"
+          <select
+            id="fromUserId"
           pInputText
-          formControlName="fromUserId"
+            formControlName="fromUserId"
           class="p-inputtext w-full"
           [class.ng-invalid]="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched"
           [compareWith]="compareUsers"
           style="width: 100%;">
-          <option [ngValue]="null">Select from user...</option>
-          <option *ngFor="let user of users" [ngValue]="user">
-            {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
-          </option>
-        </select>
+            <option [ngValue]="null">Select from user...</option>
+            <option *ngFor="let user of users" [ngValue]="user">
+              {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
+            </option>
+          </select>
         <div *ngIf="loading.users" class="help-text">
           <i class="pi pi-spin pi-spinner"></i>
           <span>Loading users...</span>
@@ -163,19 +163,19 @@
           <i class="pi pi-user-plus"></i>
           To User <span class="required">*</span>
         </label>
-        <select
-          id="toUserId"
+          <select
+            id="toUserId"
           pInputText
-          formControlName="toUserId"
+            formControlName="toUserId"
           class="p-inputtext w-full"
           [class.ng-invalid]="delegationForm.get('toUserId')?.invalid && delegationForm.get('toUserId')?.touched"
           [compareWith]="compareUsers"
           style="width: 100%;">
-          <option [ngValue]="null">Select to user...</option>
-          <option *ngFor="let user of users" [ngValue]="user">
-            {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
-          </option>
-        </select>
+            <option [ngValue]="null">Select to user...</option>
+            <option *ngFor="let user of users" [ngValue]="user">
+              {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
+            </option>
+          </select>
         <div *ngIf="loading.users" class="help-text">
           <i class="pi pi-spin pi-spinner"></i>
           <span>Loading users...</span>
@@ -263,8 +263,8 @@
           <i class="pi pi-exclamation-circle"></i>
           Document is required
         </small>
+        </div>
       </div>
-    </div>
 
     <!-- Date & Status Section -->
     <div class="form-section">
@@ -325,7 +325,7 @@
             <span>Active Delegation</span>
             <small class="checkbox-help">Only active delegations will be applied</small>
           </label>
-        </div>
+      </div>
       </div>
     </div>
 
