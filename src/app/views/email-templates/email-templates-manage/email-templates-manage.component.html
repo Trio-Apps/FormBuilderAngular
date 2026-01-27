@@ -1,0 +1,288 @@
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+
+<div class="page-container">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/dashboard" title="Back">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Email Templates</h1>
+          <p class="page-subtitle">Manage templates (DocumentType + TemplateCode) and link to SMTP</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadTemplates()" [disabled]="loading.list || loading.init" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openCreate()" [disabled]="loading.init">
+          <i class="pi pi-plus"></i>
+          <span>New Template</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-file-edit"></i>
+        <span>Email Templates</span>
+      </span>
+    </nav>
+  </div>
+
+  <div class="main-content">
+    <div class="stats-row" *ngIf="!loading.init">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-file-edit"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ filteredTemplates.length }}</div>
+          <div class="stat-label">Templates (Filtered)</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveCount() }}</div>
+          <div class="stat-label">Active</div>
+        </div>
+      </div>
+    </div>
+
+    <app-table-shell title="Manage Email Templates" icon="pi pi-table">
+      <div table-actions class="filters-row">
+        <p-select
+          [options]="documentTypes"
+          optionLabel="name"
+          optionValue="id"
+          [showClear]="true"
+          placeholder="Document Type"
+          [(ngModel)]="selectedDocumentTypeId"
+          (onChange)="loadTemplates()"
+          [style]="{ width: '260px' }"
+        ></p-select>
+
+        <p-select
+          [options]="templateCodeOptions"
+          optionLabel="label"
+          optionValue="value"
+          [showClear]="true"
+          placeholder="Template Code"
+          [(ngModel)]="selectedTemplateCode"
+          (onChange)="applyFilters()"
+          [style]="{ width: '260px' }"
+        ></p-select>
+
+        <span class="p-input-icon-left">
+          <i class="pi pi-search"></i>
+          <input
+            pInputText
+            type="text"
+            placeholder="Search (name/subject)"
+            [(ngModel)]="searchTerm"
+            (input)="applyFilters()"
+            style="width: 260px"
+          />
+        </span>
+
+        <span class="toggle-inline">
+          <p-checkbox [(ngModel)]="includeInactive" [binary]="true" inputId="incInactive" (onChange)="loadTemplates()">
+          </p-checkbox>
+          <label for="incInactive">Include inactive</label>
+        </span>
+      </div>
+
+      <p-table
+        [value]="filteredTemplates"
+        [loading]="loading.init || loading.list"
+        [paginator]="true"
+        [rows]="10"
+        [rowsPerPageOptions]="[10, 20, 50]"
+        styleClass="p-datatable-striped"
+      >
+        <ng-template pTemplate="header">
+          <tr>
+            <th style="width: 70px">ID</th>
+            <th>Template</th>
+            <th style="width: 180px">Code</th>
+            <th style="width: 240px">Document Type</th>
+            <th style="width: 240px">SMTP</th>
+            <th style="width: 120px">Default</th>
+            <th style="width: 120px">Status</th>
+            <th style="width: 160px">Actions</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-row>
+          <tr>
+            <td><code>#{{ row.id }}</code></td>
+            <td>
+              <div class="name-cell">
+                <strong>{{ row.templateName }}</strong>
+                <div class="muted">{{ row.subjectTemplate }}</div>
+              </div>
+            </td>
+            <td><code>{{ row.templateCode }}</code></td>
+            <td>{{ getDocTypeName(row.documentTypeId) }}</td>
+            <td>{{ getSmtpName(row.smtpConfigId) }}</td>
+            <td>
+              <span [class]="row.isDefault ? 'status-badge active' : 'status-badge inactive'">
+                {{ row.isDefault ? 'Yes' : 'No' }}
+              </span>
+            </td>
+            <td>
+              <span [class]="row.isActive ? 'status-badge active' : 'status-badge inactive'">
+                <i [class]="row.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
+                {{ row.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            <td>
+              <app-table-actions>
+                <button
+                  pButton
+                  icon="pi pi-pencil"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="openEdit(row)"
+                  [pTooltip]="'Edit'"
+                  tooltipPosition="top"
+                ></button>
+                <button
+                  pButton
+                  [icon]="row.isActive ? 'pi pi-ban' : 'pi pi-check'"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="toggleActive(row)"
+                  [disabled]="loading.toggle"
+                  [pTooltip]="row.isActive ? 'Deactivate' : 'Activate'"
+                  tooltipPosition="top"
+                ></button>
+                <button
+                  pButton
+                  icon="pi pi-trash"
+                  class="p-button-text p-button-sm p-button-danger action-btn"
+                  (click)="confirmDelete(row)"
+                  [disabled]="loading.delete"
+                  [pTooltip]="'Delete'"
+                  tooltipPosition="top"
+                ></button>
+              </app-table-actions>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="8" class="empty-message">
+              <div class="empty-state">
+                <i class="pi pi-inbox"></i>
+                <p>No email templates found.</p>
+                <button pButton icon="pi pi-plus" label="Create Template" (click)="openCreate()"></button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </app-table-shell>
+  </div>
+
+  <app-dialog-shell
+    [(visible)]="showModal"
+    [header]="editing ? 'Edit Email Template' : 'Create Email Template'"
+    [style]="{ width: '860px' }"
+  >
+    <form [formGroup]="form" class="form-grid">
+      <div class="help-box">
+        <div><strong>Placeholders</strong>: use <code>{{'{{DocumentNumber}}'}}</code>, <code>{{'{{SubmittedBy}}'}}</code>, …</div>
+        <div><strong>Conditional</strong>: <code>{{'{{#if Comments}}'}}...{{'{{/if}}'}}</code> renders only when value exists.</div>
+      </div>
+
+      <div class="form-row two-cols">
+        <div class="col">
+          <label class="form-label">Document Type *</label>
+          <p-select
+            [options]="documentTypes"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="Select document type"
+            formControlName="documentTypeId"
+            [style]="{ width: '100%' }"
+          ></p-select>
+        </div>
+        <div class="col">
+          <label class="form-label">Template Code *</label>
+          <p-select
+            [options]="templateCodeOptions"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select code"
+            formControlName="templateCode"
+            [style]="{ width: '100%' }"
+          ></p-select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Template Name *</label>
+        <input pInputText type="text" formControlName="templateName" placeholder="e.g. Approval Required (Default)" />
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">SMTP Config *</label>
+        <p-select
+          [options]="smtpConfigs"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="Select SMTP config"
+          formControlName="smtpConfigId"
+          [style]="{ width: '100%' }"
+        ></p-select>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Subject Template *</label>
+        <input pInputText type="text" formControlName="subjectTemplate" placeholder="e.g. Approval Required – {{'{{DocumentNumber}}'}}" />
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Body Template (HTML) *</label>
+        <textarea
+          class="p-inputtext p-component textarea"
+          formControlName="bodyTemplateHtml"
+          rows="10"
+          placeholder="HTML body with placeholders..."
+        ></textarea>
+      </div>
+
+      <div class="form-row two-cols">
+        <div class="col checkbox-col">
+          <p-checkbox formControlName="isDefault" [binary]="true" inputId="isDefault"></p-checkbox>
+          <label for="isDefault" class="checkbox-label">Default for this (DocumentType + Code)</label>
+        </div>
+        <div class="col checkbox-col">
+          <p-checkbox formControlName="isActive" [binary]="true" inputId="isActiveT"></p-checkbox>
+          <label for="isActiveT" class="checkbox-label">Active</label>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button pButton type="button" class="p-button-text" (click)="closeModal()">Cancel</button>
+        <button pButton type="button" (click)="save()" [disabled]="loading.save">
+          <span>{{ loading.save ? 'Saving...' : (editing ? 'Save Changes' : 'Create') }}</span>
+        </button>
+      </div>
+    </form>
+  </app-dialog-shell>
+</div>
+
+

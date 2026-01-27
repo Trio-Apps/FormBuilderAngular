@@ -88,6 +88,22 @@ export const routes: Routes = [
         canActivate: [authGuard, adminGuard]
       },
 
+      // ===== SMTP Configs ===== (Admin only)
+      {
+        path: 'smtp-configs',
+        loadComponent: () => import('./views/smtp-configs/smtp-configs-manage/smtp-configs-manage.component')
+          .then(m => m.SmtpConfigsManageComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      // ===== Email Templates ===== (Admin only)
+      {
+        path: 'email-templates',
+        loadComponent: () => import('./views/email-templates/email-templates-manage/email-templates-manage.component')
+          .then(m => m.EmailTemplatesManageComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
       // ===== Approval Workflows ===== (Available for all authenticated users)
       {
         path: 'approval-workflows',

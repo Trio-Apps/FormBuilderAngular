@@ -52,6 +52,18 @@ export const navItems: INavData[] = [
     attributes: { roles: ['Administration'] } // Admin only
   },
   {
+    name: 'SMTP Configs',
+    url: '/smtp-configs',
+    iconComponent: { name: 'cil-envelope-closed' },
+    attributes: { roles: ['Administration'] } // Admin only
+  },
+  {
+    name: 'Email Templates',
+    url: '/email-templates',
+    iconComponent: { name: 'cil-envelope-open' },
+    attributes: { roles: ['Administration'] } // Admin only
+  },
+  {
     name: 'Manage Table Menus',
     url: '/table-menus',
     iconComponent: { name: 'cil-menu' },
