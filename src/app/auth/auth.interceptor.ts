@@ -122,6 +122,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
                                req.url.includes('/FormFields/tab/') ||
                                req.url.includes('/FormGrids/') ||
                                req.url.includes('/FormTabs/') ||
+                               // Public submission flow (draft/submit) for public forms
+                               req.url.includes('/FormSubmissions/draft') ||
+                               req.url.includes('/FormSubmissions/submit') ||
                                isPublicFormViewRoute;
   
   // Only warn about missing token for non-public endpoints (public forms don't need tokens)

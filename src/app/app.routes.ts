@@ -80,6 +80,14 @@ export const routes: Routes = [
         canActivate: [authGuard] // All authenticated users can access
       },
 
+      // ===== Alert Rules ===== (Admin only)
+      {
+        path: 'alert-rules',
+        loadComponent: () => import('./views/alert-rules/alert-rules-manage/alert-rules-manage.component')
+          .then(m => m.AlertRulesManageComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
       // ===== Approval Workflows ===== (Available for all authenticated users)
       {
         path: 'approval-workflows',
@@ -104,13 +112,7 @@ export const routes: Routes = [
         canActivate: [authGuard]
       },
 
-      // ===== Email Test ===== (Admin only - for testing)
-      {
-        path: 'email-test',
-        loadComponent: () => import('./views/email-test/email-test.component')
-          .then(m => m.EmailTestComponent),
-        canActivate: [authGuard, adminGuard] // Admin only
-      },
+   
 
       // ===== Approval Delegations =====
       {

@@ -1,0 +1,324 @@
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+
+<div class="alert-rules-page-container">
+  <!-- Top Navigation Bar -->
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/dashboard" title="Back">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Alert Rules</h1>
+          <p class="page-subtitle">تحكم في إرسال الإيميلات حسب DocumentType + Trigger</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="refreshRules()" [disabled]="loading.rules || loading.init" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openCreateModal()" [disabled]="loading.init">
+          <i class="pi pi-plus"></i>
+          <span>New Rule</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-bell"></i>
+        <span>Alert Rules</span>
+      </span>
+    </nav>
+  </div>
+
+  <div class="main-content">
+    <!-- Stats -->
+    <div class="stats-row" *ngIf="!loading.init">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-bell"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ filteredRules.length }}</div>
+          <div class="stat-label">Rules (Filtered)</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ getActiveCount() }}</div>
+          <div class="stat-label">Active</div>
+        </div>
+      </div>
+    </div>
+
+    <app-table-shell title="Manage Alert Rules" icon="pi pi-table">
+      <div table-actions class="filters-row">
+        <p-select
+          [options]="documentTypes"
+          optionLabel="name"
+          optionValue="id"
+          [showClear]="true"
+          placeholder="Document Type"
+          [(ngModel)]="selectedDocumentTypeId"
+          (onChange)="applyFilters()"
+          [style]="{ width: '260px' }"
+        ></p-select>
+
+        <p-select
+          [options]="triggerOptions"
+          optionLabel="label"
+          optionValue="value"
+          [showClear]="true"
+          placeholder="Trigger Type"
+          [(ngModel)]="selectedTriggerType"
+          (onChange)="applyFilters()"
+          [style]="{ width: '260px' }"
+        ></p-select>
+      </div>
+
+      <p-table
+        [value]="filteredRules"
+        [loading]="loading.init || loading.rules"
+        [paginator]="true"
+        [rows]="10"
+        [rowsPerPageOptions]="[10, 20, 50]"
+        styleClass="p-datatable-striped"
+      >
+        <ng-template pTemplate="header">
+          <tr>
+            <th style="width: 70px">ID</th>
+            <th>Rule Name</th>
+            <th style="width: 220px">Document Type</th>
+            <th style="width: 200px">Trigger</th>
+            <th style="width: 140px">Notification</th>
+            <th style="width: 220px">Target</th>
+            <th style="width: 120px">Status</th>
+            <th style="width: 140px">Actions</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-rule>
+          <tr>
+            <td><code>#{{ rule.id }}</code></td>
+            <td>
+              <div class="name-cell">
+                <strong>{{ rule.ruleName }}</strong>
+              </div>
+            </td>
+            <td>{{ getDocTypeName(rule.documentTypeId) }}</td>
+            <td><code>{{ rule.triggerType }}</code></td>
+            <td>{{ rule.notificationType }}</td>
+            <td>
+              <span *ngIf="rule.targetUserId">User: <code>{{ rule.targetUserId }}</code></span>
+              <span *ngIf="!rule.targetUserId && rule.targetRoleId">Role: <code>{{ rule.targetRoleId }}</code></span>
+              <span *ngIf="!rule.targetUserId && !rule.targetRoleId" class="text-muted">Not set</span>
+            </td>
+            <td>
+              <span [class]="rule.isActive ? 'status-badge active' : 'status-badge inactive'">
+                <i [class]="rule.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
+                {{ rule.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            <td>
+              <app-table-actions>
+                <button
+                  pButton
+                  [icon]="rule.isActive ? 'pi pi-ban' : 'pi pi-check'"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="toggleActive(rule)"
+                  [disabled]="loading.toggle"
+                  [pTooltip]="rule.isActive ? 'Disable' : 'Enable'"
+                  tooltipPosition="top"
+                ></button>
+              </app-table-actions>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="8" class="empty-message">
+              <div class="empty-state">
+                <i class="pi pi-inbox"></i>
+                <p>No rules found for current filters.</p>
+                <button pButton icon="pi pi-plus" label="Create Rule" (click)="openCreateModal()"></button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </app-table-shell>
+
+    <app-table-shell title="Test Trigger (Verify Email Will Send)" icon="pi pi-check-circle">
+      <div table-actions class="filters-row">
+        <form [formGroup]="testForm" class="test-row">
+          <div class="test-item">
+            <label class="test-label">Submission ID</label>
+            <input pInputText type="number" formControlName="submissionId" placeholder="e.g. 6" />
+          </div>
+
+          <div class="test-item">
+            <label class="test-label">Trigger Type</label>
+            <p-select
+              [options]="triggerOptions"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="triggerType"
+              [style]="{ width: '260px' }"
+            ></p-select>
+          </div>
+
+          <div class="test-actions">
+            <button pButton type="button" (click)="runTest()" [disabled]="testLoading">
+              <i class="pi pi-play"></i>
+              <span>Run Test</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="test-result" *ngIf="testSubmission">
+        <div class="test-summary">
+          <strong>Submission:</strong>
+          <code>#{{ $any(testSubmission).id || testForm.value.submissionId }}</code>
+          <span class="sep">•</span>
+          <strong>DocumentTypeId:</strong>
+          <code>{{ $any(testSubmission).documentTypeId }}</code>
+          <span class="sep">•</span>
+          <strong>Trigger:</strong>
+          <code>{{ testForm.value.triggerType }}</code>
+        </div>
+
+        <div class="test-outcome" *ngIf="matchingActiveRules.length === 0">
+          <span class="status-badge inactive">
+            <i class="pi pi-times-circle"></i>
+            No matching ACTIVE rules → No email
+          </span>
+        </div>
+
+        <div class="test-outcome" *ngIf="matchingActiveRules.length > 0">
+          <span class="status-badge active">
+            <i class="pi pi-check-circle"></i>
+            {{ matchingActiveRules.length }} matching ACTIVE rule(s) → Email will send
+          </span>
+        </div>
+
+        <p-table
+          *ngIf="matchingActiveRules.length > 0"
+          [value]="matchingActiveRules"
+          [paginator]="false"
+          styleClass="p-datatable-striped"
+        >
+          <ng-template pTemplate="header">
+            <tr>
+              <th style="width: 70px">ID</th>
+              <th>Rule Name</th>
+              <th style="width: 200px">Trigger</th>
+              <th style="width: 220px">Target</th>
+              <th style="width: 120px">Status</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-rule>
+            <tr>
+              <td><code>#{{ rule.id }}</code></td>
+              <td><strong>{{ rule.ruleName }}</strong></td>
+              <td><code>{{ rule.triggerType }}</code></td>
+              <td>
+                <span *ngIf="rule.targetUserId">User: <code>{{ rule.targetUserId }}</code></span>
+                <span *ngIf="!rule.targetUserId && rule.targetRoleId">Role: <code>{{ rule.targetRoleId }}</code></span>
+                <span *ngIf="!rule.targetUserId && !rule.targetRoleId" class="text-muted">Not set</span>
+              </td>
+              <td>
+                <span class="status-badge active">
+                  <i class="pi pi-check-circle"></i>
+                  Active
+                </span>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    </app-table-shell>
+  </div>
+
+  <!-- Create Modal -->
+  <app-dialog-shell
+    [(visible)]="showCreateModal"
+    header="Create Alert Rule (Email)"
+    [style]="{ width: '680px' }"
+  >
+    <form class="form-grid" [formGroup]="createForm">
+      <div class="form-row">
+        <label>Document Type</label>
+        <p-select
+          [options]="documentTypes"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="Select Document Type"
+          formControlName="documentTypeId"
+          [style]="{ width: '100%' }"
+        ></p-select>
+      </div>
+
+      <div class="form-row">
+        <label>Trigger Type</label>
+        <p-select
+          [options]="triggerOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select Trigger Type"
+          formControlName="triggerType"
+          [style]="{ width: '100%' }"
+        ></p-select>
+      </div>
+
+      <div class="form-row">
+        <label>Rule Name</label>
+        <input pInputText formControlName="ruleName" placeholder="e.g. Send email on submit" />
+      </div>
+
+      <div class="form-row">
+        <label>Target User Id (optional)</label>
+        <input pInputText formControlName="targetUserId" placeholder="e.g. public-user" />
+      </div>
+
+      <div class="form-row">
+        <label>Target Role Id (optional)</label>
+        <input pInputText formControlName="targetRoleId" placeholder="e.g. Administration" />
+      </div>
+
+      <div class="form-row">
+        <label>Condition JSON</label>
+        <input pInputText formControlName="conditionJson" placeholder="{}" />
+      </div>
+
+      <div class="form-row inline">
+        <p-checkbox formControlName="isActive" [binary]="true"></p-checkbox>
+        <label class="inline-label">Active</label>
+      </div>
+
+      <div class="actions-row">
+        <button pButton class="p-button-text" type="button" (click)="closeCreateModal()">Cancel</button>
+        <button pButton type="button" (click)="saveRule()" [disabled]="loading.save">
+          <i class="pi pi-save"></i>
+          <span>Create</span>
+        </button>
+      </div>
+    </form>
+  </app-dialog-shell>
+</div>
+
+

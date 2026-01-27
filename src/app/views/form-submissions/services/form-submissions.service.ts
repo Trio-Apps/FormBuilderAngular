@@ -373,7 +373,7 @@ export class FormSubmissionsService {
       params.seriesId = seriesId.toString();
     }
     
-    return this.http.post<any>(`${this.baseUrl}/draft`, null, { params }).pipe(
+    return this.http.post<any>(`${this.baseUrl}/draft`, {}, { params }).pipe(
       map((response: any) => {
         if (response && typeof response === 'object' && !response.id) {
           return response.data || response.result || response;

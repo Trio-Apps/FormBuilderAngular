@@ -46,6 +46,12 @@ export const navItems: INavData[] = [
     ]
   },
   {
+    name: 'Alert Rules',
+    url: '/alert-rules',
+    iconComponent: { name: 'cil-bell' },
+    attributes: { roles: ['Administration'] } // Admin only
+  },
+  {
     name: 'Manage Table Menus',
     url: '/table-menus',
     iconComponent: { name: 'cil-menu' },
@@ -86,12 +92,7 @@ export const navItems: INavData[] = [
     title: true,
     name: 'Testing & Tools'
   },
-  {
-    name: 'Email Test',
-    url: '/email-test',
-    iconComponent: { name: 'cil-envelope-letter' },
-    attributes: { roles: ['Administration'] } // Admin only
-  },
+
   
   {
     title: true,
