@@ -21,6 +21,7 @@ import {
 
 import { AuthService } from '../../../auth/auth.service';
 import { TranslationService } from '../../../core/services/translation.service';
+import { NotificationBellComponent } from './notification-bell/notification-bell.component';
 
 @Component({
   selector: 'app-default-header',
@@ -39,7 +40,8 @@ import { TranslationService } from '../../../core/services/translation.service';
     AvatarComponent,
     DropdownMenuDirective,
     DropdownHeaderDirective,
-    DropdownItemDirective
+    DropdownItemDirective,
+    NotificationBellComponent
   ]
 })
 export class DefaultHeaderComponent extends HeaderComponent {

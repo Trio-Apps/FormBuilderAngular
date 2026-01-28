@@ -6,6 +6,11 @@
     <c-nav-item><a cNavLink routerLink="/settings" routerLinkActive="active">Settings</a></c-nav-item>
   </c-header-nav>
 
+  <!-- Notification Bell (Admin only) -->
+  <c-header-nav class="me-2" *ngIf="(authService.role() || '').toLowerCase() === 'administration' || (authService.role() || '').toLowerCase() === 'admin'">
+    <app-notification-bell></app-notification-bell>
+  </c-header-nav>
+
   <!-- User dropdown -->
   <c-header-nav class="mx-0">
     <c-dropdown [popperOptions]="{ placement: 'bottom-start' }" variant="nav-item">
