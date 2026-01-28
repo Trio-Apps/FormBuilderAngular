@@ -3965,7 +3965,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
 
     // Submission exists - update it and submit
+    // Backend expects username (e.g. \"anas\") for submittedByUserId to resolve emails/recipients correctly.
     const submitUserId = this.authService.userName();
+    console.log('[FormSubmissionCreate] DEBUG submitUserId (username used for submittedByUserId):', submitUserId);
     if (!submitUserId) {
       this.messageService.add({
         severity: 'error',
@@ -3983,15 +3985,16 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // Save data first
     this.saveSubmissionDataDirectly(this.submissionId, submissionStatus, () => {
       // Then submit the submission
-      console.log('[FormSubmissionCreate] Performing final submit for submission:', this.submissionId);
-      
-      this.formSubmissionsService.submitSubmission({
+      const submitPayload = {
         submissionId: this.submissionId!,
         submittedByUserId: submitUserId
-      }).subscribe({
+      };
+      console.log('[FormSubmissionCreate] Performing final submit with payload:', submitPayload);
+      
+      this.formSubmissionsService.submitSubmission(submitPayload).subscribe({
       next: (submittedSubmission) => {
-        console.log('[FormSubmissionCreate] Submission completed successfully:', submittedSubmission);
-        console.log('[FormSubmissionCreate] Initial status from backend:', submittedSubmission.status);
+        console.log('[FormSubmissionCreate] ✅ Submission completed successfully:', submittedSubmission);
+        console.log('[FormSubmissionCreate] Backend status after submit:', submittedSubmission.status);
 
         this.isDraftMode = false;
         this.currentSubmission = submittedSubmission;
@@ -4069,6 +4072,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       error: (error) => {
         // If backend says it's already submitted, don't stop the flow; just activate stage directly.
         const backendMsg: string = (error?.error?.message || error?.message || '').toString();
+        console.error('[FormSubmissionCreate] ❌ Error during final submit. Payload:', submitPayload, 'Error:', error);
         const isAlreadySubmitted = backendMsg.toLowerCase().includes('already submitted');
 
         if (isAlreadySubmitted && this.submissionId) {

@@ -231,7 +231,7 @@
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.9rem 1rem;
+  gap: 1rem 1.25rem;
 }
 
 .form-row {
@@ -243,6 +243,7 @@
 .form-row label {
   font-weight: 600;
   color: #374151;
+  font-size: 0.9rem;
 }
 
 .form-row.inline {
@@ -260,7 +261,32 @@
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.user-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.user-name {
+  font-weight: 600;
+  color: #111827;
+  font-size: 0.9rem;
+}
+
+.user-meta {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.user-username {
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+.user-email {
+  margin-left: 0.25rem;
 }
 
 @media (max-width: 900px) {

@@ -6,7 +6,7 @@ import { environment } from '../../../environments/environment';
 
 // ==================== Alert Rules DTOs ====================
 
-export type AlertNotificationType = 'Email';
+export type AlertNotificationType = 'Email' | 'Internal' | 'Both';
 
 export type AlertTriggerType =
   | 'FormSubmitted'
@@ -20,8 +20,8 @@ export interface CreateAlertRuleDto {
   ruleName: string;
   triggerType: AlertTriggerType | string;
   conditionJson: string;
-  emailTemplateId?: number | null;
-  notificationType: AlertNotificationType | string;
+  emailTemplateId: number | null;
+  notificationType: AlertNotificationType;
   targetRoleId?: string | null;
   targetUserId?: string | null;
   isActive: boolean;
@@ -92,7 +92,9 @@ export class AlertRulesService {
     const payload: CreateAlertRuleDto = {
       ...dto,
       ruleName: dto.ruleName.trim(),
-      conditionJson: dto.conditionJson?.trim?.() ?? dto.conditionJson
+      conditionJson: dto.conditionJson?.trim?.() ?? dto.conditionJson,
+      emailTemplateId: dto.emailTemplateId ?? null,
+      notificationType: dto.notificationType
     };
 
     return this.http.post<any>(this.baseUrl, payload).pipe(

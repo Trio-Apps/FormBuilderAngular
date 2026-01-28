@@ -1,0 +1,50 @@
+<p-toast></p-toast>
+
+<div *ngIf="submission as s">
+  <div style="display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px;">
+    <div>
+      <strong>Submission #{{ s.id }}</strong>
+      <div style="color:#6b7280; font-size: 12px;">
+        Status: <code>{{ $any(s).status }}</code>
+        <span *ngIf="$any(s).stageId"> • Stage: <code>{{ $any(s).stageId }}</code></span>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button pButton type="button" label="Refresh" (click)="loadSubmission()" [disabled]="isLoading"></button>
+    </div>
+  </div>
+
+  <div *ngIf="canSubmit()" style="margin-bottom:16px;">
+    <button pButton type="button" label="Submit" (click)="onSubmit()" [disabled]="isLoading"></button>
+  </div>
+
+  <div *ngIf="canApprove()" style="margin-bottom:16px;">
+    <div style="margin-bottom:6px; font-weight:600;">Approve</div>
+    <form [formGroup]="approvalForm" style="display:flex; flex-direction:column; gap:8px;">
+      <textarea rows="3" formControlName="comments" placeholder="Comments (optional)" style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
+      <div style="display:flex; gap:8px;">
+        <button pButton type="button" label="Approve" (click)="onApprove()" [disabled]="isLoading || approvalForm.invalid"></button>
+      </div>
+    </form>
+  </div>
+
+  <div *ngIf="canReject()">
+    <div style="margin-bottom:6px; font-weight:600;">Reject</div>
+    <form [formGroup]="rejectForm" style="display:flex; flex-direction:column; gap:8px;">
+      <textarea rows="3" formControlName="comments" placeholder="Rejection reason (required)" style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
+      <div style="display:flex; gap:8px;">
+        <button pButton type="button" label="Reject" class="p-button-danger" (click)="onReject()" [disabled]="isLoading || rejectForm.invalid"></button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div *ngIf="!submission && !isLoading" style="color:#6b7280;">
+  No submission loaded.
+</div>
+
+<div *ngIf="isLoading" style="color:#6b7280;">
+  Loading...
+</div>
+
+

@@ -136,11 +136,28 @@
               <app-table-actions>
                 <button
                   pButton
+                  icon="pi pi-pencil"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="openCreateModal(rule)"
+                  [pTooltip]="'Edit'"
+                  tooltipPosition="top"
+                ></button>
+                <button
+                  pButton
                   [icon]="rule.isActive ? 'pi pi-ban' : 'pi pi-check'"
                   class="p-button-text p-button-sm action-btn"
                   (click)="toggleActive(rule)"
                   [disabled]="loading.toggle"
                   [pTooltip]="rule.isActive ? 'Disable' : 'Enable'"
+                  tooltipPosition="top"
+                ></button>
+                <button
+                  pButton
+                  icon="pi pi-trash"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="deleteRule(rule)"
+                  [disabled]="loading.delete"
+                  [pTooltip]="'Delete'"
                   tooltipPosition="top"
                 ></button>
               </app-table-actions>
@@ -162,96 +179,7 @@
       </p-table>
     </app-table-shell>
 
-    <app-table-shell title="Test Trigger (Verify Email Will Send)" icon="pi pi-check-circle">
-      <div table-actions class="filters-row">
-        <form [formGroup]="testForm" class="test-row">
-          <div class="test-item">
-            <label class="test-label">Submission ID</label>
-            <input pInputText type="number" formControlName="submissionId" placeholder="e.g. 6" />
-          </div>
-
-          <div class="test-item">
-            <label class="test-label">Trigger Type</label>
-            <p-select
-              [options]="triggerOptions"
-              optionLabel="label"
-              optionValue="value"
-              formControlName="triggerType"
-              [style]="{ width: '260px' }"
-            ></p-select>
-          </div>
-
-          <div class="test-actions">
-            <button pButton type="button" (click)="runTest()" [disabled]="testLoading">
-              <i class="pi pi-play"></i>
-              <span>Run Test</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <div class="test-result" *ngIf="testSubmission">
-        <div class="test-summary">
-          <strong>Submission:</strong>
-          <code>#{{ $any(testSubmission).id || testForm.value.submissionId }}</code>
-          <span class="sep">•</span>
-          <strong>DocumentTypeId:</strong>
-          <code>{{ $any(testSubmission).documentTypeId }}</code>
-          <span class="sep">•</span>
-          <strong>Trigger:</strong>
-          <code>{{ testForm.value.triggerType }}</code>
-        </div>
-
-        <div class="test-outcome" *ngIf="matchingActiveRules.length === 0">
-          <span class="status-badge inactive">
-            <i class="pi pi-times-circle"></i>
-            No matching ACTIVE rules → No email
-          </span>
-        </div>
-
-        <div class="test-outcome" *ngIf="matchingActiveRules.length > 0">
-          <span class="status-badge active">
-            <i class="pi pi-check-circle"></i>
-            {{ matchingActiveRules.length }} matching ACTIVE rule(s) → Email will send
-          </span>
-        </div>
-
-        <p-table
-          *ngIf="matchingActiveRules.length > 0"
-          [value]="matchingActiveRules"
-          [paginator]="false"
-          styleClass="p-datatable-striped"
-        >
-          <ng-template pTemplate="header">
-            <tr>
-              <th style="width: 70px">ID</th>
-              <th>Rule Name</th>
-              <th style="width: 200px">Trigger</th>
-              <th style="width: 220px">Target</th>
-              <th style="width: 120px">Status</th>
-            </tr>
-          </ng-template>
-          <ng-template pTemplate="body" let-rule>
-            <tr>
-              <td><code>#{{ rule.id }}</code></td>
-              <td><strong>{{ rule.ruleName }}</strong></td>
-              <td><code>{{ rule.triggerType }}</code></td>
-              <td>
-                <span *ngIf="rule.targetUserId">User: <code>{{ rule.targetUserId }}</code></span>
-                <span *ngIf="!rule.targetUserId && rule.targetRoleId">Role: <code>{{ rule.targetRoleId }}</code></span>
-                <span *ngIf="!rule.targetUserId && !rule.targetRoleId" class="text-muted">Not set</span>
-              </td>
-              <td>
-                <span class="status-badge active">
-                  <i class="pi pi-check-circle"></i>
-                  Active
-                </span>
-              </td>
-            </tr>
-          </ng-template>
-        </p-table>
-      </div>
-    </app-table-shell>
+    <!-- Test Trigger section removed as requested -->
   </div>
 
   <!-- Create Modal -->
@@ -286,13 +214,59 @@
       </div>
 
       <div class="form-row">
+        <label>Notification Type</label>
+        <p-select
+          [options]="notificationOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select Notification Type"
+          formControlName="notificationType"
+          [style]="{ width: '100%' }"
+        ></p-select>
+      </div>
+
+      <div class="form-row">
         <label>Rule Name</label>
         <input pInputText formControlName="ruleName" placeholder="e.g. Send email on submit" />
       </div>
 
       <div class="form-row">
-        <label>Target User Id (optional)</label>
-        <input pInputText formControlName="targetUserId" placeholder="e.g. public-user" />
+        <label>Email Template (optional)</label>
+        <p-select
+          [options]="emailTemplateOptionsForSelectedDocType"
+          optionLabel="templateName"
+          optionValue="id"
+          [showClear]="true"
+          placeholder="Without Template"
+          formControlName="emailTemplateId"
+          [style]="{ width: '100%' }"
+        ></p-select>
+      </div>
+
+      <div class="form-row">
+        <label>Target User (optional)</label>
+        <p-select
+          [options]="users"
+          optionLabel="username"
+          optionValue="username"
+          [showClear]="true"
+          placeholder="Select user (from Tbl_User)"
+          formControlName="targetUserId"
+          [style]="{ width: '100%' }"
+        >
+          <ng-template let-user pTemplate="item">
+            <div class="user-option">
+              <div class="user-name">{{ user.name || user.username }}</div>
+              <div class="user-meta">
+                <span class="user-username">{{ user.username }}</span>
+                <span class="user-email" *ngIf="user.email"> - {{ user.email }}</span>
+              </div>
+            </div>
+          </ng-template>
+          <ng-template let-user pTemplate="selectedItem">
+            <span>{{ user?.name || user?.username }}</span>
+          </ng-template>
+        </p-select>
       </div>
 
       <div class="form-row">

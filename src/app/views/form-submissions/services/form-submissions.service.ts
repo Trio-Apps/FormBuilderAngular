@@ -507,10 +507,9 @@ export class FormSubmissionsService {
    * Submit form submission
    * POST /api/FormSubmissions/submit
    *
-   * Workflow Logic:
-   * - If DocumentType has no ApprovalWorkflow → Auto-approve (status = "Approved")
-   * - If DocumentType has Active ApprovalWorkflow → Submit (status = "Submitted")
-   * - If DocumentType has Inactive ApprovalWorkflow → Auto-approve (status = "Approved")
+   * Backend workflow logic (current):
+   * - Always keeps status = "Submitted" when user submits
+   * - Approval is handled explicitly via /approve or workflow runtime
    *
    * @param dto SubmitFormDto containing submissionId and submittedByUserId
    */

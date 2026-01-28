@@ -25,10 +25,14 @@ import {
   AlertRulesService,
   AlertRuleDto,
   AlertTriggerType,
-  CreateAlertRuleDto
+  CreateAlertRuleDto,
+  AlertNotificationType
 } from '../../FormBuilder/services/alert-rules.service';
+import { EmailTemplatesService, EmailTemplateDto } from '../../FormBuilder/services/email-templates.service';
+import { UsersService, UserDto } from '../../FormBuilder/services/users.service';
 
 type TriggerOption = { label: string; value: AlertTriggerType };
+type NotificationOption = { label: string; value: AlertNotificationType };
 
 @Component({
   selector: 'app-alert-rules-manage',
@@ -64,29 +68,32 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
     { label: 'ApprovalRejected', value: 'ApprovalRejected' },
     { label: 'ApprovalReturned', value: 'ApprovalReturned' }
   ];
+  notificationOptions: NotificationOption[] = [
+    { label: 'Email', value: 'Email' },
+    { label: 'Internal', value: 'Internal' },
+    { label: 'Both', value: 'Both' }
+  ];
 
   selectedDocumentTypeId: number | null = null;
   selectedTriggerType: AlertTriggerType | null = null;
 
   rules: AlertRuleDto[] = [];
   filteredRules: AlertRuleDto[] = [];
+  emailTemplates: EmailTemplateDto[] = [];
+  users: UserDto[] = [];
 
   loading = {
     init: false,
     rules: false,
     save: false,
-    toggle: false
+    toggle: false,
+    delete: false
   };
 
   showCreateModal = false;
   createForm!: FormGroup;
 
-  // Test Trigger (to verify which rules would send email for a submission)
-  testForm!: FormGroup;
-  testLoading = false;
-  testSubmission: FormSubmissionDetailDto | null = null;
-  matchingActiveRules: AlertRuleDto[] = [];
-
+  private editingRule: AlertRuleDto | null = null;
   private subs: Subscription[] = [];
 
   constructor(
@@ -94,6 +101,8 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
     private docTypesService: DocumentTypesService,
     private alertRulesService: AlertRulesService,
     private formSubmissionsService: FormSubmissionsService,
+    private emailTemplatesService: EmailTemplatesService,
+    private usersService: UsersService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService
   ) {}
@@ -107,12 +116,8 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
       targetRoleId: [''],
       isActive: [true],
       notificationType: ['Email', Validators.required],
+      emailTemplateId: [null],
       conditionJson: ['{}', Validators.required]
-    });
-
-    this.testForm = this.fb.group({
-      submissionId: [null, [Validators.required, Validators.min(1)]],
-      triggerType: ['FormSubmitted', Validators.required]
     });
 
     this.loadInitialData();
@@ -126,11 +131,15 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
     this.loading.init = true;
     const sub = forkJoin({
       docTypes: this.docTypesService.getActiveDocumentTypes(),
-      rules: this.alertRulesService.getAll()
+      rules: this.alertRulesService.getAll(),
+      emailTemplates: this.emailTemplatesService.getAll({ includeInactive: true }),
+      users: this.usersService.getActiveUsers()
     }).subscribe({
-      next: ({ docTypes, rules }) => {
+      next: ({ docTypes, rules, emailTemplates, users }) => {
         this.documentTypes = docTypes || [];
         this.rules = rules || [];
+        this.emailTemplates = emailTemplates || [];
+        this.users = users || [];
         this.applyFilters();
         this.loading.init = false;
       },
@@ -167,22 +176,42 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
     this.filteredRules = items;
   }
 
-  openCreateModal(): void {
-    this.createForm.reset({
-      documentTypeId: this.selectedDocumentTypeId,
-      triggerType: this.selectedTriggerType,
-      ruleName: '',
-      targetUserId: '',
-      targetRoleId: '',
-      isActive: true,
-      notificationType: 'Email',
-      conditionJson: '{}'
-    });
+  openCreateModal(rule?: AlertRuleDto): void {
+    if (rule) {
+      // Edit mode
+      this.editingRule = rule;
+      this.createForm.reset({
+        documentTypeId: rule.documentTypeId,
+        triggerType: rule.triggerType as AlertTriggerType,
+        ruleName: rule.ruleName,
+        targetUserId: rule.targetUserId || '',
+        targetRoleId: rule.targetRoleId || '',
+        isActive: rule.isActive,
+        notificationType: (rule.notificationType as AlertNotificationType) || 'Email',
+        emailTemplateId: rule.emailTemplateId ?? null,
+        conditionJson: rule.conditionJson || '{}'
+      });
+    } else {
+      // Create mode
+      this.editingRule = null;
+      this.createForm.reset({
+        documentTypeId: this.selectedDocumentTypeId,
+        triggerType: this.selectedTriggerType,
+        ruleName: '',
+        targetUserId: '',
+        targetRoleId: '',
+        isActive: true,
+        notificationType: 'Email',
+        emailTemplateId: null,
+        conditionJson: '{}'
+      });
+    }
     this.showCreateModal = true;
   }
 
   closeCreateModal(): void {
     this.showCreateModal = false;
+    this.editingRule = null;
   }
 
   saveRule(): void {
@@ -192,81 +221,77 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
     }
 
     const v = this.createForm.value;
-    const dto: CreateAlertRuleDto = {
-      documentTypeId: Number(v.documentTypeId),
-      triggerType: v.triggerType,
-      ruleName: String(v.ruleName).trim(),
-      conditionJson: v.conditionJson ?? '{}',
-      emailTemplateId: null,
-      notificationType: 'Email',
-      targetRoleId: v.targetRoleId ? String(v.targetRoleId).trim() : '',
-      targetUserId: v.targetUserId ? String(v.targetUserId).trim() : '',
-      isActive: !!v.isActive
-    };
-
+    const emailTemplateId =
+      v.emailTemplateId !== null && v.emailTemplateId !== undefined && v.emailTemplateId !== ''
+        ? Number(v.emailTemplateId)
+        : null;
     this.loading.save = true;
-    const sub = this.alertRulesService.createRule(dto).subscribe({
-      next: () => {
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Alert rule created successfully'
-        });
-        this.showCreateModal = false;
-        this.loading.save = false;
-        this.refreshRules();
-      },
-      error: () => {
-        this.loading.save = false;
-      }
-    });
-    this.subs.push(sub);
-  }
 
-  runTest(): void {
-    if (this.testForm.invalid) {
-      this.testForm.markAllAsTouched();
-      return;
-    }
+    if (this.editingRule) {
+      // Update existing rule
+      const updated: AlertRuleDto = {
+        ...this.editingRule,
+        documentTypeId: Number(v.documentTypeId),
+        triggerType: String(v.triggerType),
+        ruleName: String(v.ruleName).trim(),
+        conditionJson: v.conditionJson ?? '{}',
+        emailTemplateId,
+        notificationType: v.notificationType as string,
+        targetRoleId: v.targetRoleId ? String(v.targetRoleId).trim() : '',
+        targetUserId: v.targetUserId ? String(v.targetUserId).trim() : '',
+        isActive: !!v.isActive
+      };
 
-    const submissionId = Number(this.testForm.value.submissionId);
-    const triggerType = String(this.testForm.value.triggerType || 'FormSubmitted');
-
-    this.testLoading = true;
-    this.testSubmission = null;
-    this.matchingActiveRules = [];
-
-    const sub = this.formSubmissionsService.getSubmissionById(submissionId).subscribe({
-      next: (submission) => {
-        this.testSubmission = submission;
-        const documentTypeId = Number((submission as any)?.documentTypeId);
-
-        if (!documentTypeId || isNaN(documentTypeId)) {
-          this.testLoading = false;
+      const sub = this.alertRulesService.updateRule(updated).subscribe({
+        next: () => {
           this.messageService.add({
-            severity: 'warn',
-            summary: 'Warning',
-            detail: 'Submission does not contain documentTypeId in response.'
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Alert rule updated successfully'
           });
-          return;
+          // Update local list immediately
+          this.rules = (this.rules || []).map(r => (r.id === updated.id ? updated : r));
+          this.applyFilters();
+          this.showCreateModal = false;
+          this.loading.save = false;
+          this.editingRule = null;
+        },
+        error: () => {
+          this.loading.save = false;
         }
+      });
+      this.subs.push(sub);
+    } else {
+      // Create new rule
+      const dto: CreateAlertRuleDto = {
+        documentTypeId: Number(v.documentTypeId),
+        triggerType: v.triggerType,
+        ruleName: String(v.ruleName).trim(),
+        conditionJson: v.conditionJson ?? '{}',
+        emailTemplateId,
+        notificationType: v.notificationType as AlertNotificationType,
+        targetRoleId: v.targetRoleId ? String(v.targetRoleId).trim() : '',
+        targetUserId: v.targetUserId ? String(v.targetUserId).trim() : '',
+        isActive: !!v.isActive
+      };
 
-        const sub2 = this.alertRulesService.getActive(documentTypeId, triggerType).subscribe({
-          next: (rules) => {
-            this.matchingActiveRules = rules || [];
-            this.testLoading = false;
-          },
-          error: () => {
-            this.testLoading = false;
-          }
-        });
-        this.subs.push(sub2);
-      },
-      error: () => {
-        this.testLoading = false;
-      }
-    });
-    this.subs.push(sub);
+      const sub = this.alertRulesService.createRule(dto).subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Alert rule created successfully'
+          });
+          this.showCreateModal = false;
+          this.loading.save = false;
+          this.refreshRules();
+        },
+        error: () => {
+          this.loading.save = false;
+        }
+      });
+      this.subs.push(sub);
+    }
   }
 
   toggleActive(rule: AlertRuleDto): void {
@@ -303,6 +328,33 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
     });
   }
 
+  deleteRule(rule: AlertRuleDto): void {
+    this.confirmationService.confirm({
+      header: 'Confirm',
+      message: `Delete rule "${rule.ruleName}"?`,
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        this.loading.delete = true;
+        const sub = this.alertRulesService.delete(rule.id).subscribe({
+          next: () => {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: 'Alert rule deleted successfully'
+            });
+            this.rules = (this.rules || []).filter(r => r.id !== rule.id);
+            this.applyFilters();
+            this.loading.delete = false;
+          },
+          error: () => {
+            this.loading.delete = false;
+          }
+        });
+        this.subs.push(sub);
+      }
+    });
+  }
+
   getDocTypeName(documentTypeId: number): string {
     const dt = this.documentTypes.find(d => Number(d.id) === Number(documentTypeId));
     return dt?.name || `#${documentTypeId}`;
@@ -310,6 +362,14 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
 
   getActiveCount(): number {
     return (this.filteredRules || []).filter(r => r.isActive).length;
+  }
+
+  get emailTemplateOptionsForSelectedDocType(): EmailTemplateDto[] {
+    const docTypeId = this.createForm?.value?.documentTypeId;
+    if (!docTypeId) {
+      return this.emailTemplates || [];
+    }
+    return (this.emailTemplates || []).filter(t => Number(t.documentTypeId) === Number(docTypeId));
   }
 }
 
