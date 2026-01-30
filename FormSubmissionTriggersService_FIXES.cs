@@ -86,6 +86,18 @@ private async Task<List<string>> GetEmailRecipientsAsync(int documentTypeId, str
 {
     try
     {
+        var isPublicUser = !string.IsNullOrWhiteSpace(defaultUserId) &&
+                           string.Equals(defaultUserId, "public-user", StringComparison.OrdinalIgnoreCase);
+
+        // If the submission is made by public-user, do not send any email
+        // (skip all triggers to avoid sending to alert-rule recipients)
+        if (isPublicUser)
+        {
+            _logger?.LogInformation("Public user submission detected (user: {DefaultUserId}). Skipping email for trigger {TriggerType}.",
+                defaultUserId, triggerType);
+            return new List<string>();
+        }
+
         _logger?.LogInformation("Checking ALERT_RULES for DocumentTypeId {DocumentTypeId}, TriggerType {TriggerType}, DefaultUserId {DefaultUserId}",
             documentTypeId, triggerType, defaultUserId ?? "null");
 
@@ -109,7 +121,7 @@ private async Task<List<string>> GetEmailRecipientsAsync(int documentTypeId, str
         // If no active rule exists, use defaultUserId (e.g., SubmittedByUserId) to ensure email is sent
         if (!alertRules.Any())
         {
-            if (!string.IsNullOrWhiteSpace(defaultUserId))
+            if (!string.IsNullOrWhiteSpace(defaultUserId) && !isPublicUser)
             {
                 recipients.Add(defaultUserId);
                 _logger?.LogInformation("No active ALERT_RULE found for DocumentTypeId {DocumentTypeId}, TriggerType {TriggerType}. Using default user {DefaultUserId}.",
@@ -182,7 +194,7 @@ private async Task<List<string>> GetEmailRecipientsAsync(int documentTypeId, str
             // Priority 3: If neither TargetUserId nor TargetRoleId is specified, use default user (e.g., SubmittedByUserId)
             if (string.IsNullOrWhiteSpace(rule.TargetUserId) && string.IsNullOrWhiteSpace(rule.TargetRoleId))
             {
-                if (!string.IsNullOrWhiteSpace(defaultUserId))
+                if (!string.IsNullOrWhiteSpace(defaultUserId) && !isPublicUser)
                 {
                     recipients.Add(defaultUserId);
                     _logger?.LogInformation("Rule {RuleId} has no TargetUserId or TargetRoleId. Using default user {DefaultUserId}.", 
@@ -217,7 +229,7 @@ private async Task<List<string>> GetEmailRecipientsAsync(int documentTypeId, str
             // ✅ FIX: Fallback to defaultUserId if no valid recipients found
             if (!validRecipients.Any())
             {
-                if (!string.IsNullOrWhiteSpace(defaultUserId))
+                if (!string.IsNullOrWhiteSpace(defaultUserId) && !isPublicUser)
                 {
                     // Double-check defaultUserId has Email before adding
                     var defaultUserHasEmail = await _unitOfWork.AppDbContext
@@ -253,7 +265,7 @@ private async Task<List<string>> GetEmailRecipientsAsync(int documentTypeId, str
                 documentTypeId, triggerType, defaultUserId ?? "null");
             
             // Fallback: if no recipients found from rules but defaultUserId exists, use it
-            if (!string.IsNullOrWhiteSpace(defaultUserId))
+            if (!string.IsNullOrWhiteSpace(defaultUserId) && !isPublicUser)
             {
                 // Validate defaultUserId has Email
                 var defaultUserHasEmail = await _unitOfWork.AppDbContext
@@ -284,7 +296,7 @@ private async Task<List<string>> GetEmailRecipientsAsync(int documentTypeId, str
             documentTypeId, triggerType, defaultUserId ?? "null");
         
         // On error, try to use defaultUserId if available and has Email
-        if (!string.IsNullOrWhiteSpace(defaultUserId))
+        if (!string.IsNullOrWhiteSpace(defaultUserId) && !isPublicUser)
         {
             try
             {

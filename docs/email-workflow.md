@@ -26,6 +26,7 @@
   - لو الـRule فيها `TargetUserId` → هيتبعت لهم
   - لو فيها `TargetRoleId` → بيتحلّ لـUsers (Roles → Users)
   - ولو مفيش Recipients محددين، النظام بيستخدم **SubmittedByUserId** كـ fallback (حسب التعديلات اللي عندك)
+- لو `submittedByUserId = "public-user"` → **مفيش أي Email بيتبعت** (لكل التريجرز) حتى لو في Rules
 
 ### B) بعد الـApprove
 - Endpoint المستخدم: `POST /api/FormSubmissions/approve`

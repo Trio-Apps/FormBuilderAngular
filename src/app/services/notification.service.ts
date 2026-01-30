@@ -1,5 +1,5 @@
 import { Injectable, signal, computed, OnDestroy } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpHeaders } from '@angular/common/http';
 import { Observable, of, Subject, interval, Subscription } from 'rxjs';
 import { catchError, map, takeUntil, tap } from 'rxjs/operators';
 import { environment } from '../environments/environment';
@@ -14,6 +14,11 @@ import {
 export class NotificationService implements OnDestroy {
   private baseUrl = `${environment.apiUrl}/Notifications`;
   private destroy$ = new Subject<void>();
+  private readonly noCacheHeaders = new HttpHeaders({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  });
   
   // Polling interval (30 seconds as per documentation)
   private readonly POLL_INTERVAL = 30000;
@@ -94,7 +99,7 @@ export class NotificationService implements OnDestroy {
 
     console.log('[NotificationService] Fetching notifications for user:', userId);
 
-    this.http.get<any>(`${this.baseUrl}`, { params })
+    this.http.get<any>(`${this.baseUrl}`, { params, headers: this.noCacheHeaders })
       .pipe(
         map(response => this.unwrapNotificationsResponse(response)),
         catchError(error => {
@@ -119,7 +124,7 @@ export class NotificationService implements OnDestroy {
 
     const params = new HttpParams().set('userId', userId);
 
-    this.http.get<any>(`${this.baseUrl}/unread-count`, { params })
+    this.http.get<any>(`${this.baseUrl}/unread-count`, { params, headers: this.noCacheHeaders })
       .pipe(
         map(response => {
           if (typeof response === 'number') return response;
@@ -157,7 +162,7 @@ export class NotificationService implements OnDestroy {
       .set('userId', userId)
       .set('limit', limit.toString());
 
-    return this.http.get<any>(`${this.baseUrl}`, { params }).pipe(
+    return this.http.get<any>(`${this.baseUrl}`, { params, headers: this.noCacheHeaders }).pipe(
       map(response => this.unwrapResponse<NotificationSummary>(response)),
       catchError(error => {
         console.error('[NotificationService] Error fetching notifications:', error);
@@ -174,7 +179,7 @@ export class NotificationService implements OnDestroy {
 
     const params = new HttpParams().set('userId', userId);
 
-    return this.http.get<any>(`${this.baseUrl}/unread-count`, { params }).pipe(
+    return this.http.get<any>(`${this.baseUrl}/unread-count`, { params, headers: this.noCacheHeaders }).pipe(
       map(response => {
         if (typeof response === 'number') return response;
         if (response?.data !== undefined) return response.data;
@@ -336,11 +341,8 @@ export class NotificationService implements OnDestroy {
     // Normalize notification objects (handle different field names)
     notifications = notifications.map(n => this.normalizeNotification(n));
 
-    // Filter: only show Internal/Both (though API should already filter)
-    // Safety filter as mentioned in documentation
-    notifications = notifications.filter(n => 
-      !n.notificationType || n.notificationType === 'Internal' || n.notificationType === 'Both'
-    );
+    // Filter out deleted notifications; show all types returned by API
+    notifications = notifications.filter(n => !n.isDeleted);
 
     return { notifications, unreadCount, totalCount };
   }

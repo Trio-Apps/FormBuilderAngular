@@ -14,6 +14,7 @@ import {
 
 import { NotificationService } from '../../../../services/notification.service';
 import { AuthService } from '../../../../auth/auth.service';
+import { StorageService } from '../../../../auth/storage.service';
 import { NotificationDto, getNotificationDate } from '../../../../models/notification.model';
 
 @Component({
@@ -36,6 +37,7 @@ import { NotificationDto, getNotificationDate } from '../../../../models/notific
         cDropdownToggle 
         class="notification-bell-btn position-relative"
         aria-label="Notifications"
+        (click)="onDropdownOpen()"
       >
         <svg 
           class="notification-icon" 
@@ -394,6 +396,7 @@ import { NotificationDto, getNotificationDate } from '../../../../models/notific
 export class NotificationBellComponent implements OnInit, OnDestroy {
   private notificationService = inject(NotificationService);
   private authService = inject(AuthService);
+  private storageService = inject(StorageService);
   private router = inject(Router);
 
   // Expose service signals
@@ -420,7 +423,40 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
    * Get current user ID from auth service
    */
   private getCurrentUserId(): string {
-    return this.authService.userName() || '';
+    const overrideUser = this.getNotificationOverrideUser();
+    if (overrideUser) {
+      console.warn('[NotificationBell] Using override user for notifications:', overrideUser);
+      return overrideUser;
+    }
+
+    const userName = this.authService.userName();
+    if (userName) {
+      if (/^\d+$/.test(userName)) {
+        const storedUserId = this.storageService.getUserId();
+        console.warn('[NotificationBell] Username is numeric. If backend expects a username, check login data.', {
+          userName,
+          storedUserId
+        });
+      }
+      return userName;
+    }
+
+    const userId = this.storageService.getUserId();
+    if (userId) {
+      console.warn('[NotificationBell] Username missing; falling back to numeric userId for notifications.', userId);
+      return userId.toString();
+    }
+
+    return '';
+  }
+
+  private getNotificationOverrideUser(): string {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('notifyUser') || '';
+    } catch {
+      return '';
+    }
   }
 
   /**
