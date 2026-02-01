@@ -15,7 +15,9 @@
         <button class="btn-icon" (click)="loadForms()" [disabled]="loading" [title]="'common.refresh' | translate">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openFormModal()" [disabled]="loading">
+        <button class="btn-primary" (click)="openFormModal()" 
+          [disabled]="loading || !permissionService.hasPermission('FormBuilder_Allow_Create')"
+          [title]="permissionService.hasPermission('FormBuilder_Allow_Create') ? '' : 'You do not have permission to create forms'">
           <i class="pi pi-plus"></i>
           <span>{{ 'forms.newForm' | translate }}</span>
         </button>
@@ -104,7 +106,9 @@
         </div>
         <h3>{{ 'forms.noFormsFound' | translate }}</h3>
         <p>{{ 'forms.getStarted' | translate }}</p>
-        <button class="btn-primary" (click)="openFormModal()">
+        <button class="btn-primary" (click)="openFormModal()" 
+          [disabled]="!permissionService.hasPermission('FormBuilder_Allow_Create')"
+          [title]="permissionService.hasPermission('FormBuilder_Allow_Create') ? '' : 'You do not have permission to create forms'">
           <i class="pi pi-plus"></i>
           <span>{{ 'forms.createForm' | translate }}</span>
         </button>
@@ -161,15 +165,17 @@
                   </button>
                   <button
                     class="action-btn action-edit"
-                    [title]="'common.edit' | translate"
+                    [title]="permissionService.hasPermission('FormBuilder_Allow_Edit') ? ('common.edit' | translate) : 'No permission to edit'"
                     (click)="openFormModal(form)"
+                    [disabled]="!permissionService.hasPermission('FormBuilder_Allow_Edit')"
                   >
                     <i class="pi pi-pencil"></i>
                   </button>
                   <button
                     class="action-btn action-copy"
-                    [title]="'forms.duplicateForm' | translate"
+                    [title]="permissionService.hasPermission('FormBuilder_Allow_Create') ? ('forms.duplicateForm' | translate) : 'No permission to duplicate'"
                     (click)="duplicateForm(form)"
+                    [disabled]="!permissionService.hasPermission('FormBuilder_Allow_Create')"
                   >
                     <i class="pi pi-clone"></i>
                   </button>
@@ -200,8 +206,9 @@
                
                   <button
                     class="action-btn action-delete"
-                    [title]="form.isActive === false ? ('forms.permanentDelete' | translate) : ('common.delete' | translate)"
+                    [title]="permissionService.hasPermission('FormBuilder_Allow_Delete') ? (form.isActive === false ? ('forms.permanentDelete' | translate) : ('common.delete' | translate)) : 'No permission to delete'"
                     (click)="deleteForm(form.id)"
+                    [disabled]="!permissionService.hasPermission('FormBuilder_Allow_Delete')"
                   >
                     <i class="pi pi-trash"></i>
                   </button>

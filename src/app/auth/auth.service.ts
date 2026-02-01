@@ -1,9 +1,10 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap, throwError, catchError } from 'rxjs';
+import { Observable, tap, throwError, catchError, switchMap, of } from 'rxjs';
 import { StorageService } from './storage.service';
 import { environment } from '../environments/environment';
+import { PermissionService } from '../services/permission.service';
 
 export interface LoginCredentials {
   username: string;
@@ -18,6 +19,7 @@ export interface LoginResponse {
   userId?: string | number; // User ID from backend
   expiresAt?: string;
   errorMessage?: string;
+  permissions?: string[]; // Optional: permissions from login response
 }
 
 @Injectable({
@@ -25,6 +27,7 @@ export interface LoginResponse {
 })
 export class AuthService {
   private apiUrl = `${environment.apiUrl}/account`;
+  private permissionService = inject(PermissionService);
 
   constructor(
     private http: HttpClient,
@@ -70,6 +73,23 @@ export class AuthService {
             userId,
             expiresAtMs
           );
+          
+          // Load user permissions after successful login
+          // If permissions are included in the response, use them directly
+          if (response.permissions && response.permissions.length > 0) {
+            this.permissionService.setPermissions(response.permissions);
+            console.log('[AuthService] ✅ Permissions set from login response:', response.permissions);
+          } else {
+            // Otherwise, load them from the API
+            this.permissionService.loadUserPermissions().subscribe({
+              next: (permissions) => {
+                console.log('[AuthService] ✅ Permissions loaded after login:', permissions);
+              },
+              error: (err) => {
+                console.warn('[AuthService] ⚠️ Failed to load permissions:', err);
+              }
+            });
+          }
         }
       }),
       catchError(this.handleError)
@@ -77,6 +97,8 @@ export class AuthService {
   }
 
   logout(): void {
+    // Clear permissions first
+    this.permissionService.clearPermissions();
     this.clearSession();
     this.router.navigate(['/pages/login']);
   }

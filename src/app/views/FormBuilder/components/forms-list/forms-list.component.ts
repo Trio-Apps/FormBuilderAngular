@@ -27,6 +27,8 @@ import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { TranslationService } from '../../../../core/services/translation.service';
 import { DuplicateValidationHelper } from '../../../../core/utils/duplicate-validation.helper';
 import { TableShellComponent } from '../../../../shared/table-shell/table-shell.component';
+import { HasPermissionDirective } from '../../../../directives/has-permission.directive';
+import { PermissionService } from '../../../../services/permission.service';
 
 @Component({
   selector: 'app-forms-list',
@@ -46,7 +48,8 @@ import { TableShellComponent } from '../../../../shared/table-shell/table-shell.
     TooltipModule,
     PaginatorModule,
     TranslatePipe,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './forms-list.component.html',
   styleUrls: ['./forms-list.component.scss'],
@@ -88,13 +91,36 @@ export class FormsListComponent implements OnInit, OnDestroy {
     private confirmationService: ConfirmationService,
     private router: Router,
     private cdr: ChangeDetectorRef,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    public permissionService: PermissionService
   ) {
     // Bind window focus handler to preserve reference for cleanup
     this.windowFocusHandler = this.onWindowFocus.bind(this);
   }
 
   ngOnInit(): void {
+    // DEBUG: Log current permissions
+    const currentPerms = this.permissionService.permissions();
+    console.log('[FormsList] 🔐 Current Permissions:', currentPerms);
+    console.log('[FormsList] 🔐 Permissions count:', currentPerms.length);
+    console.log('[FormsList] 🔐 Has FormBuilder_Allow_Create:', this.permissionService.hasPermission('FormBuilder_Allow_Create'));
+    console.log('[FormsList] 🔐 Has FormBuilder_Allow_Edit:', this.permissionService.hasPermission('FormBuilder_Allow_Edit'));
+    console.log('[FormsList] 🔐 Has FormBuilder_Allow_Delete:', this.permissionService.hasPermission('FormBuilder_Allow_Delete'));
+    
+    // Force load permissions if not loaded
+    if (currentPerms.length === 0) {
+      console.log('[FormsList] 🔐 Permissions empty! Loading from API...');
+      this.permissionService.loadUserPermissions().subscribe({
+        next: (perms) => {
+          console.log('[FormsList] 🔐 Permissions loaded from API:', perms);
+          console.log('[FormsList] 🔐 Has FormBuilder_Allow_Create after load:', this.permissionService.hasPermission('FormBuilder_Allow_Create'));
+        },
+        error: (err) => {
+          console.error('[FormsList] 🔐 Error loading permissions:', err);
+        }
+      });
+    }
+    
     // Force English language for admin panel by default
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
@@ -461,7 +487,16 @@ export class FormsListComponent implements OnInit, OnDestroy {
   }
 
   openFormModal(form?: FormBuilderDto): void {
+    // Permission check: Create for new, Edit for existing
     if (form) {
+      if (!this.permissionService.hasPermission('FormBuilder_Allow_Edit')) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit forms.'
+        });
+        return;
+      }
       this.editingForm = form;
       this.formName = form.formName;
       this.foreignFormName = form.foreignFormName || '';
@@ -471,6 +506,14 @@ export class FormsListComponent implements OnInit, OnDestroy {
       this.isPublished = form.isPublished ?? false;
       this.isActive = form.isActive !== false;
     } else {
+      if (!this.permissionService.hasPermission('FormBuilder_Allow_Create')) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create forms.'
+        });
+        return;
+      }
       this.editingForm = null;
       this.formName = '';
       this.foreignFormName = '';
@@ -907,6 +950,16 @@ export class FormsListComponent implements OnInit, OnDestroy {
   }
 
   deleteForm(id: number): void {
+    // Permission check
+    if (!this.permissionService.hasPermission('FormBuilder_Allow_Delete')) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete forms.'
+      });
+      return;
+    }
+    
     console.log('[FormsList] deleteForm called for id:', id);
     const formToDelete = this.forms.find(f => f.id === id);
     if (!formToDelete) {
@@ -1230,6 +1283,16 @@ export class FormsListComponent implements OnInit, OnDestroy {
   }
 
   duplicateForm(form: FormBuilderDto): void {
+    // Permission check (duplicate requires create permission)
+    if (!this.permissionService.hasPermission('FormBuilder_Allow_Create')) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to duplicate forms.'
+      });
+      return;
+    }
+    
     if (!form?.id) {
       this.messageService.add({
         severity: 'warn',

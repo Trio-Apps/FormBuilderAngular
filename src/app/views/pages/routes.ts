@@ -28,5 +28,12 @@ export const routes: Routes = [
     data: {
       title: 'Register Page'
     }
+  },
+  {
+    path: 'access-denied',
+    loadComponent: () => import('./access-denied/access-denied.component').then(m => m.AccessDeniedComponent),
+    data: {
+      title: 'Access Denied'
+    }
   }
 ];

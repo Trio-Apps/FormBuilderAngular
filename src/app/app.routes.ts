@@ -27,6 +27,13 @@ export const routes: Routes = [
       .then(m => m.FormSubmissionSuccessComponent)
   },
   
+  // ===== صفحة رفض الوصول (Access Denied) =====
+  {
+    path: 'access-denied',
+    loadComponent: () => import('./views/pages/access-denied/access-denied.component')
+      .then(m => m.AccessDeniedComponent)
+  },
+  
   // ===== الصفحات العامة (Login, Register, etc.) =====
   {
     path: 'pages',

@@ -3168,10 +3168,9 @@ export class FormViewComponent implements OnInit {
         const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 6; // Default to 6 if not provided (most common project)
         const submittedByUserId = queryParams['userId'] || 'public-user';
 
-        // Use createDraft (new workflow)
-        // Check if user is authenticated (has token) - if yes, use authenticated user ID
-        const token = this.storageService.getToken();
-        const finalUserId = token ? (this.storageService.getUsername() || submittedByUserId) : submittedByUserId;
+        // PUBLIC FORM: Always use 'public-user' - never use stored admin credentials
+        // This prevents spoofing where public submissions appear as admin
+        const finalUserId = submittedByUserId;
         
         let submission: FormSubmissionDto | undefined;
         try {
@@ -3221,8 +3220,8 @@ export class FormViewComponent implements OnInit {
           
           if (createError?.status === 404) {
             this.fileUploadErrors[field.id] = currentLang === 'ar'
-              ? `خدمة حفظ النماذج غير متاحة (404).\n\nAPI URL: ${apiUrl}\nEndpoint المطلوب: POST /FormSubmissions\n\nملاحظة: ${token ? 'يوجد token لكن الـ endpoint غير موجود' : 'لا يوجد token - قد يتطلب الـ endpoint authentication'}`
-              : `Form submission service is not available (404).\n\nAPI URL: ${apiUrl}\nRequired endpoint: POST /FormSubmissions\n\nNote: ${token ? 'Token exists but endpoint not found' : 'No token - endpoint may require authentication'}`;
+              ? `خدمة حفظ النماذج غير متاحة (404).\n\nAPI URL: ${apiUrl}\nEndpoint المطلوب: POST /FormSubmissions`
+              : `Form submission service is not available (404).\n\nAPI URL: ${apiUrl}\nRequired endpoint: POST /FormSubmissions`;
           } else if (createError?.status === 401) {
             this.fileUploadErrors[field.id] = currentLang === 'ar'
               ? `غير مصرح لك بإنشاء submission. يرجى تسجيل الدخول أولاً.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`
@@ -3360,10 +3359,9 @@ export class FormViewComponent implements OnInit {
         const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 6; // Default to 6 if not provided (most common project)
         const submittedByUserId = queryParams['userId'] || 'public-user';
 
-        // Use createDraft (new workflow)
-        // Check if user is authenticated (has token) - if yes, use authenticated user ID
-        const token = this.storageService.getToken();
-        const finalUserId = token ? (this.storageService.getUsername() || submittedByUserId) : submittedByUserId;
+        // PUBLIC FORM: Always use 'public-user' - never use stored admin credentials
+        // This prevents spoofing where public submissions appear as admin
+        const finalUserId = submittedByUserId;
         
         let submission: FormSubmissionDto | undefined;
         try {
@@ -3413,8 +3411,8 @@ export class FormViewComponent implements OnInit {
           
           if (createError?.status === 404) {
             this.fileUploadErrors[field.id] = currentLang === 'ar'
-              ? `خدمة حفظ النماذج غير متاحة (404).\n\nAPI URL: ${apiUrl}\nEndpoint المطلوب: POST /FormSubmissions\n\nملاحظة: ${token ? 'يوجد token لكن الـ endpoint غير موجود' : 'لا يوجد token - قد يتطلب الـ endpoint authentication'}`
-              : `Form submission service is not available (404).\n\nAPI URL: ${apiUrl}\nRequired endpoint: POST /FormSubmissions\n\nNote: ${token ? 'Token exists but endpoint not found' : 'No token - endpoint may require authentication'}`;
+              ? `خدمة حفظ النماذج غير متاحة (404).\n\nAPI URL: ${apiUrl}\nEndpoint المطلوب: POST /FormSubmissions`
+              : `Form submission service is not available (404).\n\nAPI URL: ${apiUrl}\nRequired endpoint: POST /FormSubmissions`;
           } else if (createError?.status === 401) {
             this.fileUploadErrors[field.id] = currentLang === 'ar'
               ? `غير مصرح لك بإنشاء submission. يرجى تسجيل الدخول أولاً.\n\nError: ${createError?.error?.message || createError?.message || 'Unauthorized'}`
@@ -3916,8 +3914,8 @@ export class FormViewComponent implements OnInit {
     const queryParams = this.route.snapshot.queryParams;
     let documentTypeId: number = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1;
     let projectId: number | null = queryParams['projectId'] ? +queryParams['projectId'] : null;
-    const token = this.storageService.getToken();
-    const submittedByUserId = token ? (this.storageService.getUsername() || 'public-user') : 'public-user';
+    // PUBLIC FORM: Always use 'public-user' - never use stored admin credentials
+    const submittedByUserId = queryParams['userId'] || 'public-user';
 
     // Validate and load active documentTypeId if the provided one is inactive/soft-deleted
     const loadActiveDocumentTypeId = async (docTypeId: number): Promise<number> => {
@@ -4965,9 +4963,8 @@ export class FormViewComponent implements OnInit {
       // Step 2: Ensure we have a draft submission (using new Draft → Save → Submit workflow)
       let submission: FormSubmissionDto | undefined;
       
-      // Check if user is authenticated (has token) - if yes, use authenticated user ID
-      const token = this.storageService.getToken();
-      const finalUserId = token ? (this.storageService.getUsername() || submittedByUserId) : submittedByUserId;
+      // PUBLIC FORM: Always use 'public-user' - never use stored admin credentials
+      const finalUserId = submittedByUserId;
       
       if (currentSubmissionId === 0 || !this.hasDraft) {
         // No draft exists - create one first

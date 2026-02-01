@@ -106,12 +106,9 @@
         
         <ng-template pTemplate="header">
           <tr>
-            <th style="width: 100px">Order</th>
             <th>Menu Name</th>
             <th style="width: 150px">Menu Code</th>
-            <th style="width: 100px">Icon</th>
             <th style="width: 100px">Status</th>
-            <th style="width: 200px">Permissions</th>
             <th style="width: 180px">Actions</th>
           </tr>
         </ng-template>
@@ -119,45 +116,19 @@
         <ng-template pTemplate="body" let-menu>
           <tr>
             <td>
-              <span class="order-badge">{{ menu.displayOrder }}</span>
-            </td>
-            <td>
               <div class="menu-name-cell">
                 <strong>{{ menu.name }}</strong>
                 <span *ngIf="menu.foreignName" class="foreign-name">{{ menu.foreignName }}</span>
               </div>
-</td>
-            <td>
-              <code class="menu-code">{{ menu.menuCode }}</code>
             </td>
             <td>
-              <div class="icon-cell" *ngIf="menu.icon">
-                <i [class]="menu.icon"></i>
-              </div>
-              <span *ngIf="!menu.icon" class="text-muted">-</span>
+              <code class="menu-code">{{ menu.menuCode }}</code>
             </td>
             <td>
               <span [class]="menu.isActive ? 'status-badge active' : 'status-badge inactive'">
                 <i [class]="menu.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
                 {{ menu.isActive ? 'Active' : 'Inactive' }}
               </span>
-            </td>
-            <td>
-              <div class="permissions-cell" *ngIf="menu.permissions && menu.permissions.length > 0">
-                <span 
-                  *ngFor="let perm of menu.permissions.slice(0, 2)" 
-                  class="permission-tag">
-                  {{ perm }}
-                </span>
-                <span 
-                  *ngIf="menu.permissions.length > 2" 
-                  class="permission-more"
-                  [pTooltip]="getPermissionsTooltip(menu.permissions)"
-                  tooltipPosition="top">
-                  +{{ menu.permissions.length - 2 }} more
-                </span>
-              </div>
-              <span *ngIf="!menu.permissions || menu.permissions.length === 0" class="text-muted">All Users</span>
             </td>
             <td>
               <app-table-actions>
@@ -201,7 +172,7 @@
 
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="7" class="empty-message">
+            <td colspan="4" class="empty-message">
               <div class="empty-state">
                 <i class="pi pi-inbox"></i>
                 <p>No menus found. Create your first menu to get started.</p>
@@ -214,7 +185,7 @@
                   [disabled]="loading.menus">
                 </button>
               </div>
-</td>
+            </td>
           </tr>
         </ng-template>
       </p-table>
@@ -265,46 +236,24 @@
         styleClass="p-datatable-striped">
         <ng-template pTemplate="header">
           <tr>
-            <th style="width: 100px">Order</th>
             <th>Sub Menu Name</th>
             <th style="width: 100px">Status</th>
-            <th style="width: 200px">Permissions</th>
             <th style="width: 150px">Actions</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-subMenu>
           <tr>
             <td>
-              <span class="order-badge">{{ subMenu.displayOrder }}</span>
-            </td>
-            <td>
               <div class="menu-name-cell">
                 <strong>{{ subMenu.name }}</strong>
                 <span *ngIf="subMenu.foreignName" class="foreign-name">{{ subMenu.foreignName }}</span>
               </div>
-</td>
+            </td>
             <td>
               <span [class]="subMenu.isActive ? 'status-badge active' : 'status-badge inactive'">
                 <i [class]="subMenu.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
                 {{ subMenu.isActive ? 'Active' : 'Inactive' }}
               </span>
-            </td>
-            <td>
-              <div class="permissions-cell" *ngIf="subMenu.permissions && subMenu.permissions.length > 0">
-                <span 
-                  *ngFor="let perm of subMenu.permissions.slice(0, 2)" 
-                  class="permission-tag">
-                  {{ perm }}
-                </span>
-                <span 
-                  *ngIf="subMenu.permissions.length > 2" 
-                  class="permission-more"
-                  [pTooltip]="getPermissionsTooltip(subMenu.permissions)"
-                  tooltipPosition="top">
-                  +{{ subMenu.permissions.length - 2 }} more
-                </span>
-              </div>
-              <span *ngIf="!subMenu.permissions || subMenu.permissions.length === 0" class="text-muted">All Users</span>
             </td>
             <td>
               <app-table-actions>
@@ -339,12 +288,12 @@
         </ng-template>
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="5" class="empty-message">
+            <td colspan="3" class="empty-message">
               <div class="empty-state">
                 <i class="pi pi-inbox"></i>
                 <p>No sub menus found for this menu.</p>
               </div>
-</td>
+            </td>
           </tr>
         </ng-template>
       </p-table>
@@ -401,9 +350,7 @@
             <th>Document Type</th>
             <th>Menu</th>
             <th>Sub Menu</th>
-            <th style="width: 100px">Order</th>
             <th style="width: 100px">Status</th>
-            <th style="width: 200px">Permissions</th>
             <th style="width: 120px">Actions</th>
           </tr>
         </ng-template>
@@ -413,30 +360,10 @@
             <td>{{ document.menuName || '-' }}</td>
             <td>{{ document.subMenuName || '-' }}</td>
             <td>
-              <span class="order-badge">{{ document.displayOrder }}</span>
-            </td>
-            <td>
               <span [class]="document.isActive ? 'status-badge active' : 'status-badge inactive'">
                 <i [class]="document.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
                 {{ document.isActive ? 'Active' : 'Inactive' }}
               </span>
-            </td>
-            <td>
-              <div class="permissions-cell" *ngIf="document.permissions && document.permissions.length > 0">
-                <span 
-                  *ngFor="let perm of document.permissions.slice(0, 2)" 
-                  class="permission-tag">
-                  {{ perm }}
-                </span>
-                <span 
-                  *ngIf="document.permissions.length > 2" 
-                  class="permission-more"
-                  [pTooltip]="getPermissionsTooltip(document.permissions)"
-                  tooltipPosition="top">
-                  +{{ document.permissions.length - 2 }} more
-                </span>
-              </div>
-              <span *ngIf="!document.permissions || document.permissions.length === 0" class="text-muted">All Users</span>
             </td>
             <td>
               <app-table-actions>
@@ -463,12 +390,12 @@
         </ng-template>
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="7" class="empty-message">
+            <td colspan="5" class="empty-message">
               <div class="empty-state">
                 <i class="pi pi-inbox"></i>
                 <p>No documents found for this menu.</p>
               </div>
-</td>
+            </td>
           </tr>
         </ng-template>
       </p-table>
@@ -583,52 +510,11 @@
       </div>
     </div>
 
-    <!-- Display Settings Section -->
+    <!-- Status Section -->
     <div class="form-section">
       <div class="section-title">
         <i class="pi pi-sliders-h"></i>
-        <span>Display Settings</span>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="icon" class="form-label">
-            <i class="pi pi-image"></i>
-            Icon Class
-          </label>
-          <span class="p-input-icon-left" style="width: 100%;">
-            <i class="pi pi-palette"></i>
-            <input
-              id="icon"
-              type="text"
-              pInputText
-              formControlName="icon"
-              placeholder="e.g., pi pi-shopping-cart"
-              style="width: 100%;">
-          </span>
-          <small class="help-text">
-            <i class="pi pi-info-circle"></i>
-            PrimeNG icon class (e.g., pi pi-shopping-cart)
-          </small>
-        </div>
-
-        <div class="form-group">
-          <label for="displayOrder" class="form-label">
-            <i class="pi pi-sort"></i>
-            Display Order <span class="required">*</span>
-          </label>
-          <p-inputNumber
-            id="displayOrder"
-            formControlName="displayOrder"
-            [min]="1"
-            [showButtons]="true"
-            styleClass="w-full">
-          </p-inputNumber>
-          <small class="help-text">
-            <i class="pi pi-info-circle"></i>
-            Lower numbers appear first
-          </small>
-        </div>
+        <span>Status</span>
       </div>
 
       <div class="form-group">
@@ -643,52 +529,6 @@
             <span>Active Menu</span>
             <small class="checkbox-help">Only active menus will be visible to users</small>
           </label>
-        </div>
-      </div>
-    </div>
-
-    <!-- Permissions Section -->
-    <div class="form-section">
-      <div class="section-title">
-        <i class="pi pi-shield"></i>
-        <span>Access Permissions</span>
-      </div>
-
-      <div class="form-group">
-        <label for="permissions" class="form-label">
-          <i class="pi pi-users"></i>
-          Required Permissions
-        </label>
-        <p-multiSelect
-          id="permissions"
-          formControlName="permissions"
-          [options]="availablePermissions"
-          placeholder="Select permissions (leave empty for all users)"
-          [displaySelectedLabel]="true"
-          [maxSelectedLabels]="3"
-          selectedItemsLabel="{0} permissions selected"
-          [showClear]="true"
-          styleClass="w-full">
-        </p-multiSelect>
-        <small class="help-text">
-          <i class="pi pi-info-circle"></i>
-          Select roles/permissions required to view this menu. Leave empty to allow all authenticated users.
-        </small>
-        <div *ngIf="menuForm.get('permissions')?.value && menuForm.get('permissions')?.value.length > 0" class="selected-permissions">
-          <div class="permissions-header">
-            <i class="pi pi-check"></i>
-            <span>Selected Permissions ({{ menuForm.get('permissions')?.value.length }})</span>
-          </div>
-          <div class="permissions-tags">
-            <span *ngFor="let perm of menuForm.get('permissions')?.value" class="permission-tag">
-              <i class="pi pi-tag"></i>
-              {{ perm }}
-            </span>
-          </div>
-        </div>
-        <div *ngIf="!menuForm.get('permissions')?.value || menuForm.get('permissions')?.value.length === 0" class="no-permissions">
-          <i class="pi pi-globe"></i>
-          <span>All authenticated users can access this menu</span>
         </div>
       </div>
     </div>
@@ -816,91 +656,25 @@
       </div>
     </div>
 
-    <!-- Display Settings Section -->
+    <!-- Status Section -->
     <div class="form-section">
       <div class="section-title">
         <i class="pi pi-sliders-h"></i>
-        <span>Display Settings</span>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="subMenuDisplayOrder" class="form-label">
-            <i class="pi pi-sort"></i>
-            Display Order <span class="required">*</span>
-          </label>
-          <p-inputNumber
-            id="subMenuDisplayOrder"
-            formControlName="displayOrder"
-            [min]="1"
-            [showButtons]="true"
-            styleClass="w-full">
-          </p-inputNumber>
-          <small class="help-text">
-            <i class="pi pi-info-circle"></i>
-            Lower numbers appear first
-          </small>
-        </div>
-
-        <div class="form-group">
-          <div class="checkbox-wrapper">
-            <p-checkbox
-              formControlName="isActive"
-              [binary]="true"
-              inputId="subMenuIsActive">
-            </p-checkbox>
-            <label for="subMenuIsActive" class="checkbox-label">
-              <i class="pi pi-check-circle"></i>
-              <span>Active Sub Menu</span>
-              <small class="checkbox-help">Only active sub menus will be visible</small>
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Permissions Section -->
-    <div class="form-section">
-      <div class="section-title">
-        <i class="pi pi-shield"></i>
-        <span>Access Permissions</span>
+        <span>Status</span>
       </div>
 
       <div class="form-group">
-        <label for="subMenuPermissions" class="form-label">
-          <i class="pi pi-users"></i>
-          Required Permissions
-        </label>
-        <p-multiSelect
-          id="subMenuPermissions"
-          formControlName="permissions"
-          [options]="availablePermissions"
-          placeholder="Select permissions (leave empty for all users)"
-          [displaySelectedLabel]="true"
-          [maxSelectedLabels]="3"
-          selectedItemsLabel="{0} permissions selected"
-          [showClear]="true"
-          styleClass="w-full">
-        </p-multiSelect>
-        <small class="help-text">
-          <i class="pi pi-info-circle"></i>
-          Select roles/permissions required to view this sub menu. Leave empty to allow all authenticated users.
-        </small>
-        <div *ngIf="subMenuForm.get('permissions')?.value && subMenuForm.get('permissions')?.value.length > 0" class="selected-permissions">
-          <div class="permissions-header">
-            <i class="pi pi-check"></i>
-            <span>Selected Permissions ({{ subMenuForm.get('permissions')?.value.length }})</span>
-          </div>
-          <div class="permissions-tags">
-            <span *ngFor="let perm of subMenuForm.get('permissions')?.value" class="permission-tag">
-              <i class="pi pi-tag"></i>
-              {{ perm }}
-            </span>
-          </div>
-        </div>
-        <div *ngIf="!subMenuForm.get('permissions')?.value || subMenuForm.get('permissions')?.value.length === 0" class="no-permissions">
-          <i class="pi pi-globe"></i>
-          <span>All authenticated users can access this sub menu</span>
+        <div class="checkbox-wrapper">
+          <p-checkbox
+            formControlName="isActive"
+            [binary]="true"
+            inputId="subMenuIsActive">
+          </p-checkbox>
+          <label for="subMenuIsActive" class="checkbox-label">
+            <i class="pi pi-check-circle"></i>
+            <span>Active Sub Menu</span>
+            <small class="checkbox-help">Only active sub menus will be visible</small>
+          </label>
         </div>
       </div>
     </div>
@@ -991,50 +765,14 @@
       </div>
     </div>
 
-    <div class="form-row">
-      <div class="form-group">
-        <label for="documentDisplayOrder">Display Order *</label>
-        <p-inputNumber
-          id="documentDisplayOrder"
-          formControlName="displayOrder"
-          [min]="1"
-          [showButtons]="true"
-          styleClass="w-full">
-        </p-inputNumber>
-      </div>
-
-      <div class="form-group">
-        <p-checkbox
-          formControlName="isActive"
-          label="Active"
-          [binary]="true"
-          inputId="documentIsActive">
-        </p-checkbox>
-        <small class="help-text">Only active documents will be visible</small>
-      </div>
-    </div>
-
     <div class="form-group">
-      <label for="documentPermissions">Permissions</label>
-      <p-multiSelect
-        id="documentPermissions"
-        formControlName="permissions"
-        [options]="availablePermissions"
-        placeholder="Select permissions (leave empty for all users)"
-        [displaySelectedLabel]="true"
-        [maxSelectedLabels]="3"
-        selectedItemsLabel="{0} permissions selected"
-        [showClear]="true"
-        styleClass="w-full">
-      </p-multiSelect>
-      <small class="help-text">
-        Select roles/permissions required to view this document. Leave empty to allow all authenticated users.
-      </small>
-      <div *ngIf="menuDocumentForm.get('permissions')?.value && menuDocumentForm.get('permissions')?.value.length > 0" class="selected-permissions">
-        <span *ngFor="let perm of menuDocumentForm.get('permissions')?.value" class="permission-tag">
-          {{ perm }}
-        </span>
-      </div>
+      <p-checkbox
+        formControlName="isActive"
+        label="Active"
+        [binary]="true"
+        inputId="documentIsActive">
+      </p-checkbox>
+      <small class="help-text">Only active documents will be visible</small>
     </div>
     
     <!-- Footer Buttons -->
