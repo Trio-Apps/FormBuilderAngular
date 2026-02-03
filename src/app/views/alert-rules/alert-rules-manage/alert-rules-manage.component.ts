@@ -18,6 +18,9 @@ import { Subscription, forkJoin } from 'rxjs';
 import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
+import { ChangeDetectorRef } from '@angular/core';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { DocumentType } from '../../FormBuilder/form-builder/models/document-types.model';
 import { FormSubmissionsService, FormSubmissionDetailDto } from '../../form-submissions/services/form-submissions.service';
@@ -53,7 +56,8 @@ type NotificationOption = { label: string; value: AlertNotificationType };
     TableModule,
     TableShellComponent,
     TableActionsComponent,
-    DialogShellComponent
+    DialogShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './alert-rules-manage.component.html',
   styleUrls: ['./alert-rules-manage.component.scss'],
@@ -82,6 +86,13 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
   emailTemplates: EmailTemplateDto[] = [];
   users: UserDto[] = [];
 
+  // Permission flags
+  canViewAlertRules = false;
+  canCreateAlertRules = false;
+  canEditAlertRules = false;
+  canDeleteAlertRules = false;
+  canManageAlertRules = false;
+
   loading = {
     init: false,
     rules: false,
@@ -104,10 +115,32 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
     private emailTemplatesService: EmailTemplatesService,
     private usersService: UsersService,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
+    public permissionService: PermissionService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[AlertRulesManage] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[AlertRulesManage] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[AlertRulesManage] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     this.createForm = this.fb.group({
       documentTypeId: [null, Validators.required],
       triggerType: [null, Validators.required],
@@ -121,6 +154,24 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
     });
 
     this.loadInitialData();
+  }
+
+  /**
+   * Load user permissions for alert rule operations
+   */
+  private loadPermissions(): void {
+    this.canViewAlertRules = this.permissionService.canViewAlertRules();
+    this.canCreateAlertRules = this.permissionService.canCreateAlertRules();
+    this.canEditAlertRules = this.permissionService.canEditAlertRules();
+    this.canDeleteAlertRules = this.permissionService.canDeleteAlertRules();
+    this.canManageAlertRules = this.permissionService.canManageAlertRules();
+    console.log('[AlertRulesManage] Permission flags:', {
+      canViewAlertRules: this.canViewAlertRules,
+      canCreateAlertRules: this.canCreateAlertRules,
+      canEditAlertRules: this.canEditAlertRules,
+      canDeleteAlertRules: this.canDeleteAlertRules,
+      canManageAlertRules: this.canManageAlertRules
+    });
   }
 
   ngOnDestroy(): void {
@@ -178,6 +229,11 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
 
   openCreateModal(rule?: AlertRuleDto): void {
     if (rule) {
+      // Editing existing rule
+      if (!this.canEditAlertRules && !this.canManageAlertRules) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit alert rules.' });
+        return;
+      }
       // Edit mode
       this.editingRule = rule;
       this.createForm.reset({
@@ -192,6 +248,11 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
         conditionJson: rule.conditionJson || '{}'
       });
     } else {
+      // Creating new rule
+      if (!this.canCreateAlertRules && !this.canManageAlertRules) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create alert rules.' });
+        return;
+      }
       // Create mode
       this.editingRule = null;
       this.createForm.reset({
@@ -215,6 +276,20 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
   }
 
   saveRule(): void {
+    if (this.editingRule) {
+      // Update existing rule
+      if (!this.canEditAlertRules && !this.canManageAlertRules) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to edit alert rules.' });
+        return;
+      }
+    } else {
+      // Create new rule
+      if (!this.canCreateAlertRules && !this.canManageAlertRules) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to create alert rules.' });
+        return;
+      }
+    }
+
     if (this.createForm.invalid) {
       this.createForm.markAllAsTouched();
       return;
@@ -329,6 +404,11 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
   }
 
   deleteRule(rule: AlertRuleDto): void {
+    if (!this.canDeleteAlertRules && !this.canManageAlertRules) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to delete alert rules.' });
+      return;
+    }
+
     this.confirmationService.confirm({
       header: 'Confirm',
       message: `Delete rule "${rule.ruleName}"?`,

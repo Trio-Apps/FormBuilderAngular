@@ -15,7 +15,10 @@
         <button class="btn-icon" (click)="loadProjects()" [disabled]="loading" [title]="'common.refresh' | translate">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openProjectModal()" [disabled]="loading">
+        <button class="btn-primary" 
+                (click)="openProjectModal()" 
+                [disabled]="loading || (!permissionService.canCreateProjects() && !permissionService.canManageProjects())"
+                [title]="permissionService.canCreateProjects() || permissionService.canManageProjects() ? 'New Project' : 'You do not have permission to create projects'">
           <i class="pi pi-plus"></i>
           <span>New Project</span>
         </button>
@@ -118,7 +121,10 @@
         </div>
         <h3>No Projects Found</h3>
         <p>Get started by creating your first project</p>
-        <button class="btn-primary" (click)="openProjectModal()">
+        <button class="btn-primary" 
+                (click)="openProjectModal()"
+                [disabled]="!permissionService.canCreateProjects() && !permissionService.canManageProjects()"
+                [title]="permissionService.canCreateProjects() || permissionService.canManageProjects() ? 'Create Project' : 'You do not have permission to create projects'">
           <i class="pi pi-plus"></i>
           <span>Create Project</span>
         </button>
@@ -157,10 +163,16 @@
               </td>
               <td class="col-actions">
                 <app-table-actions>
-                  <button class="action-btn action-edit" (click)="openProjectModal(project)" [title]="'Edit'">
+                  <button class="action-btn action-edit" 
+                          (click)="openProjectModal(project)" 
+                          [title]="permissionService.canEditProjects() || permissionService.canManageProjects() ? 'Edit' : 'No permission to edit'"
+                          [disabled]="!permissionService.canEditProjects() && !permissionService.canManageProjects()">
                     <i class="pi pi-pencil"></i>
                   </button>
-                  <button class="action-btn action-delete" (click)="deleteProject(project)" [title]="'Delete'">
+                  <button class="action-btn action-delete" 
+                          (click)="deleteProject(project)" 
+                          [title]="permissionService.canDeleteProjects() || permissionService.canManageProjects() ? 'Delete' : 'No permission to delete'"
+                          [disabled]="!permissionService.canDeleteProjects() && !permissionService.canManageProjects()">
                     <i class="pi pi-trash"></i>
                   </button>
                 </app-table-actions>

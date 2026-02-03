@@ -19,7 +19,10 @@
           <i class="pi pi-shield"></i>
           <span>Manage Rules</span>
         </button>
-        <button class="btn-primary" (click)="openAddFieldModal()" [disabled]="loading.fields || loading.fieldTypes">
+        <button class="btn-primary" 
+                (click)="openAddFieldModal()" 
+                [disabled]="loading.fields || loading.fieldTypes || (!permissionService.canCreateFields() && !permissionService.canManageFields())"
+                [title]="permissionService.canCreateFields() || permissionService.canManageFields() ? '' : 'You do not have permission to create fields'">
           <i class="pi pi-plus"></i>
           <span>New Field</span>
         </button>
@@ -109,7 +112,10 @@
         </div>
         <h3>No Fields Found</h3>
         <p>Start building your form by adding your first field</p>
-        <button class="btn-primary" (click)="openAddFieldModal()">
+        <button class="btn-primary" 
+                (click)="openAddFieldModal()"
+                [disabled]="!permissionService.canCreateFields() && !permissionService.canManageFields()"
+                [title]="permissionService.canCreateFields() || permissionService.canManageFields() ? '' : 'You do not have permission to create fields'">
           <i class="pi pi-plus"></i>
           <span>Add First Field</span>
         </button>
@@ -197,21 +203,42 @@
               </td>
               <td class="col-actions">
                 <app-table-actions>
-                  <button class="action-btn action-edit" (click)="openEditFieldModal(field)" title="Edit">
+                  <button class="action-btn action-edit" 
+                          (click)="openEditFieldModal(field)" 
+                          [title]="permissionService.canEditFields() || permissionService.canManageFields() ? 'Edit' : 'You do not have permission to edit fields'"
+                          [disabled]="!permissionService.canEditFields() && !permissionService.canManageFields()">
                     <i class="pi pi-pencil"></i>
                   </button>
-                  <button class="action-btn action-duplicate" (click)="duplicateField(field)" title="Duplicate">
+                  <button
+                    class="action-btn action-duplicate"
+                    (click)="duplicateField(field)"
+                    [title]="permissionService.canCreateFields() || permissionService.canManageFields() ? ('common.duplicate' | translate) : ('common.permissionDenied' | translate)"
+                    [disabled]="!permissionService.canCreateFields() && !permissionService.canManageFields()"
+                  >
                     <i class="pi pi-copy"></i>
                   </button>
-                  <button class="action-btn action-rule" [routerLink]="['/form-builder/rules', formBuilderId]" 
-                    [queryParams]="{ fieldCode: field.fieldCode }" title="Create Rule for this Field">
+                  <button
+                    class="action-btn action-rule"
+                    [routerLink]="['/form-builder/rules', formBuilderId]"
+                    [queryParams]="{ fieldCode: field.fieldCode }"
+                    [title]="permissionService.canCreateFormRules() || permissionService.canManageFormRules() ? ('fields.createRuleForThisField' | translate) : ('common.permissionDenied' | translate)"
+                    [disabled]="!permissionService.canCreateFormRules() && !permissionService.canManageFormRules()"
+                  >
                     <i class="pi pi-shield"></i>
                   </button>
-                  <button *ngIf="field.isDeleted" class="action-btn action-activate" (click)="restoreField(field)"
-                    title="Restore">
+                  <button
+                    *ngIf="field.isDeleted"
+                    class="action-btn action-activate"
+                    (click)="restoreField(field)"
+                    [title]="permissionService.canDeleteFields() || permissionService.canManageFields() ? ('common.restore' | translate) : ('common.permissionDenied' | translate)"
+                    [disabled]="!permissionService.canDeleteFields() && !permissionService.canManageFields()"
+                  >
                     <i class="pi pi-undo"></i>
                   </button>
-                  <button class="action-btn action-delete" (click)="deleteField(field.id!)" title="Delete">
+                  <button class="action-btn action-delete" 
+                          (click)="deleteField(field.id!)" 
+                          [title]="permissionService.canDeleteFields() || permissionService.canManageFields() ? 'Delete' : 'You do not have permission to delete fields'"
+                          [disabled]="!permissionService.canDeleteFields() && !permissionService.canManageFields()">
                     <i class="pi pi-trash"></i>
                   </button>
                 </app-table-actions>

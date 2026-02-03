@@ -16,7 +16,10 @@
         <button class="btn-icon" (click)="loadDocumentTypes()" [disabled]="loading.documentTypes" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" *ngIf="isAdmin" (click)="openAddModal()" [disabled]="loading.documentTypes">
+        <button class="btn-primary" 
+                (click)="openAddModal()" 
+                [disabled]="loading.documentTypes || (!permissionService.canCreateDocuments() && !permissionService.canManageDocuments())"
+                [title]="permissionService.canCreateDocuments() || permissionService.canManageDocuments() ? 'Add New Document Type' : 'You do not have permission to create document types'">
           <i class="pi pi-plus"></i>
           <span>New Document Type</span>
         </button>
@@ -57,9 +60,15 @@
           <i class="pi pi-file"></i>
         </div>
         <h4>No Document Types Configured</h4>
-        <p *ngIf="isAdmin">There are no document types yet. Click "Add Document Type" to create one.</p>
-        <p *ngIf="!isAdmin">There are no document types available for submission.</p>
-        <button *ngIf="isAdmin" pButton label="Add Document Type" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
+        <p *ngIf="canCreateDocuments || canManageDocuments">There are no document types yet. Click "Add Document Type" to create one.</p>
+        <p *ngIf="!canCreateDocuments && !canManageDocuments">There are no document types available for submission.</p>
+        <button pButton 
+                label="Add Document Type" 
+                icon="pi pi-plus" 
+                class="p-button-primary btn-primary" 
+                (click)="openAddModal()"
+                [disabled]="!permissionService.canCreateDocuments() && !permissionService.canManageDocuments()"
+                [title]="permissionService.canCreateDocuments() || permissionService.canManageDocuments() ? 'Add New Document Type' : 'You do not have permission to create document types'"></button>
       </div>
 
       <div *ngIf="!loading.documentTypes && documentTypes.length > 0" class="table-wrapper">
@@ -114,34 +123,36 @@
                     <i class="pi pi-plus"></i>
                   </button>
 
-                  <!-- Admin mode: full management -->
-                  <ng-container *ngIf="isAdmin">
-                    <button 
-                      class="action-btn action-duplicate"
-                      (click)="openManageSeriesModal(documentType)"
-                      [title]="'Manage Series'">
-                      <i class="pi pi-list"></i>
-                    </button>
-                    <button 
-                      class="action-btn action-rules"
-                      [routerLink]="['/approval-workflows']"
-                      [queryParams]="{ documentTypeId: documentType.id }"
-                      [title]="'Manage Approval Workflow'">
-                      <i class="pi pi-sitemap"></i>
-                    </button>
-                    <button 
-                      class="action-btn action-edit"
-                      (click)="openEditModal(documentType)"
-                      [title]="'Edit'">
-                      <i class="pi pi-pencil"></i>
-                    </button>
-                    <button 
-                      class="action-btn action-delete"
-                      (click)="deleteDocumentType(documentType)"
-                      [title]="'Delete'">
-                      <i class="pi pi-trash"></i>
-                    </button>
-                  </ng-container>
+                  <!-- Permission-based management -->
+                  <button 
+                    *appHasPermission="'Document_Allow_Manage'"
+                    class="action-btn action-duplicate"
+                    (click)="openManageSeriesModal(documentType)"
+                    [title]="'Manage Series'">
+                    <i class="pi pi-list"></i>
+                  </button>
+                  <button 
+                    *appHasPermission="'Document_Allow_Manage'"
+                    class="action-btn action-rules"
+                    [routerLink]="['/approval-workflows']"
+                    [queryParams]="{ documentTypeId: documentType.id }"
+                    [title]="'Manage Approval Workflow'">
+                    <i class="pi pi-sitemap"></i>
+                  </button>
+                  <button 
+                    *appHasPermission="'Document_Allow_Edit'"
+                    class="action-btn action-edit"
+                    (click)="openEditModal(documentType)"
+                    [title]="canEditDocuments || canManageDocuments ? 'Edit' : 'No permission to edit'">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  <button 
+                    *appHasPermission="'Document_Allow_Delete'"
+                    class="action-btn action-delete"
+                    (click)="deleteDocumentType(documentType)"
+                    [title]="canDeleteDocuments || canManageDocuments ? 'Delete' : 'No permission to delete'">
+                    <i class="pi pi-trash"></i>
+                  </button>
                 </app-table-actions>
               </td>
             </tr>

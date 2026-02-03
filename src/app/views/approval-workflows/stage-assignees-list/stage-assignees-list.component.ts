@@ -21,6 +21,8 @@ import { PaginatorModule } from 'primeng/paginator';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 @Component({
   selector: 'app-stage-assignees-list',
@@ -42,7 +44,8 @@ import { TableShellComponent } from '../../../shared/table-shell/table-shell.com
     TableModule,
     PaginatorModule,
     MultiSelectModule,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './stage-assignees-list.component.html',
   styleUrls: ['./stage-assignees-list.component.scss'],
@@ -52,6 +55,12 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
   // Route params
   stageId!: number;
   stage: ApprovalStageDto | null = null;
+
+  // Permission flags
+  canViewStageAssignees = false;
+  canCreateStageAssignees = false;
+  canEditStageAssignees = false;
+  canDeleteStageAssignees = false;
 
   // Data Arrays
   assignees: ApprovalStageAssigneeDto[] = [];
@@ -104,6 +113,7 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     private stageService: ApprovalStageService,
     private usersService: UsersService,
     private authService: AuthService,
+    public permissionService: PermissionService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
@@ -125,6 +135,26 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[StageAssigneesList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[StageAssigneesList] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[StageAssigneesList] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     // Set language preference
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
@@ -159,6 +189,16 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Cleanup if needed
+  }
+
+  /**
+   * Load user permissions for stage assignee operations
+   */
+  private loadPermissions(): void {
+    this.canViewStageAssignees = this.permissionService.canViewStageAssignees();
+    this.canCreateStageAssignees = this.permissionService.canCreateStageAssignees();
+    this.canEditStageAssignees = this.permissionService.canEditStageAssignees();
+    this.canDeleteStageAssignees = this.permissionService.canDeleteStageAssignees();
   }
 
   /**
@@ -386,6 +426,16 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
     if (!this.stageId) {
       return;
     }
+
+    // Permission check
+    if (!this.canCreateStageAssignees) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to create stage assignees.'
+      });
+      return;
+    }
     
     this.editingAssignee = null;
     this.showModal = true;
@@ -406,6 +456,16 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
   }
 
   openEditModal(assignee: ApprovalStageAssigneeDto): void {
+    // Permission check
+    if (!this.canEditStageAssignees) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to edit stage assignees.'
+      });
+      return;
+    }
+
     this.editingAssignee = assignee;
     this.showModal = true;
     
@@ -455,6 +515,29 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
   }
 
   saveAssignee(): void {
+    // Permission check
+    if (this.editingAssignee) {
+      // Editing - check edit permission
+      if (!this.canEditStageAssignees) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit stage assignees.'
+        });
+        return;
+      }
+    } else {
+      // Creating - check create permission
+      if (!this.canCreateStageAssignees) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create stage assignees.'
+        });
+        return;
+      }
+    }
+
     if (this.assigneeForm.invalid) {
       this.markFormGroupTouched(this.assigneeForm);
       this.messageService.add({ 
@@ -949,6 +1032,16 @@ export class StageAssigneesListComponent implements OnInit, OnDestroy {
 
   deleteAssignee(assignee: ApprovalStageAssigneeDto): void {
     if (!assignee || !assignee.id) return;
+
+    // Permission check
+    if (!this.canDeleteStageAssignees) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete stage assignees.'
+      });
+      return;
+    }
 
     // Check minimum required before deleting (only for active assignees)
     if (assignee.isActive && !this.canDeleteOrDeactivate(assignee)) {

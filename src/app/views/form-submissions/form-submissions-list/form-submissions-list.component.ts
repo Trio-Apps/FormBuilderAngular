@@ -33,6 +33,8 @@ import { FormGridDto } from '../../FormBuilder/form-builder/models/grid-dto.mode
 import { TranslationService } from '../../../core/services/translation.service';
 import { AuthService } from '../../../auth/auth.service';
 import { StorageService } from '../../../auth/storage.service';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
 import { ApprovalStageAssigneesService, ApprovalStageAssigneeDto } from '../../FormBuilder/services/approval-stage-assignees.service';
 import { ApprovalStageService } from '../../FormBuilder/services/approval-stage.service';
@@ -63,7 +65,8 @@ import { TableShellComponent } from '../../../shared/table-shell/table-shell.com
     CheckboxModule,
     CalculatedFieldComponent,
     GridViewComponent,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './form-submissions-list.component.html',
   styleUrls: ['./form-submissions-list.component.scss'],
@@ -151,6 +154,12 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   // ✅ Role-based access control
   isAdmin = false; // Only admins can Approve/Reject
   currentUsername: string | null = null;
+  
+  // Permission flags
+  canViewDocuments = false;
+  canCreateDocuments = false;
+  canEditDocuments = false;
+  canDeleteDocuments = false;
   statusOptions = [
     { label: 'All Statuses', value: null },
     { label: 'Draft', value: 'Draft' },
@@ -180,6 +189,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     private confirmationService: ConfirmationService,
     public translationService: TranslationService,
     private authService: AuthService,
+    public permissionService: PermissionService,
     public fileUploadService: FileUploadService,
     private storageService: StorageService,
     private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService,
@@ -252,6 +262,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       this.translationService.setLanguage('en');
       localStorage.setItem('adminLanguagePreference', 'en');
     }
+
+    // Load permissions
+    this.loadPermissions();
 
     // ✅ Check if user is Admin
     const userRole = this.storageService.getRole() || this.authService.role();
@@ -353,6 +366,16 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  /**
+   * Load user permissions for document operations
+   */
+  private loadPermissions(): void {
+    this.canViewDocuments = this.permissionService.canViewDocuments();
+    this.canCreateDocuments = this.permissionService.canCreateDocuments();
+    this.canEditDocuments = this.permissionService.canEditDocuments();
+    this.canDeleteDocuments = this.permissionService.canDeleteDocuments();
   }
 
   loadSubmissions(): void {
@@ -706,6 +729,16 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   }
 
   openEditModal(submission: FormSubmissionDto): void {
+    // Permission check
+    if (!this.canEditDocuments) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to edit submissions.'
+      });
+      return;
+    }
+
     // Navigate to edit page instead of opening modal
     this.router.navigate(['/document-types', submission.documentTypeId, 'submissions', submission.id, 'edit']);
   }
@@ -1952,6 +1985,16 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   deleteSubmission(submission: FormSubmissionDto): void {
     if (!submission || !submission.id) return;
 
+    // Permission check
+    if (!this.canDeleteDocuments) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete submissions.'
+      });
+      return;
+    }
+
     this.confirmationService.confirm({
       message: `Are you sure you want to delete the form submission "${submission.documentNumber || '#' + submission.id}"? This action cannot be undone.`,
       header: 'Confirm Deletion',
@@ -2751,6 +2794,16 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   }
 
   createSubmission(): void {
+    // Permission check
+    if (!this.canCreateDocuments) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to create submissions.'
+      });
+      return;
+    }
+
     if (this.addSubmissionForm.invalid || !this.documentType) {
       this.markFormGroupTouched(this.addSubmissionForm);
       return;

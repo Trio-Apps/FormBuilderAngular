@@ -21,7 +21,10 @@
           <i class="pi pi-refresh"></i>
         </button>
         
-        <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.assignees || !stageId">
+        <button class="btn-primary" 
+                (click)="openAddModal()" 
+                [disabled]="loading.assignees || !stageId || !permissionService.canCreateStageAssignees()"
+                [title]="permissionService.canCreateStageAssignees() ? 'New Assignee' : 'You do not have permission to create stage assignees'">
           <i class="pi pi-plus"></i>
           <span>New Assignee</span>
         </button>
@@ -104,7 +107,13 @@
         </div>
         <h4>No Assignees Configured</h4>
         <p>There are no assignees for this stage yet. Click "New Assignee" to add one.</p>
-        <button pButton label="New Assignee" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
+        <button pButton 
+                label="New Assignee" 
+                icon="pi pi-plus" 
+                class="p-button-primary btn-primary" 
+                (click)="openAddModal()"
+                [disabled]="!permissionService.canCreateStageAssignees()"
+                [title]="permissionService.canCreateStageAssignees() ? 'New Assignee' : 'You do not have permission to create stage assignees'"></button>
       </div>
 
       <p-table *ngIf="!loading.assignees && assignees.length > 0" 

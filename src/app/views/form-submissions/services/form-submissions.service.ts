@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { catchError, map, timeout } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../models/approve-reject-submission.model';
@@ -532,25 +532,105 @@ export class FormSubmissionsService {
 
     return this.http.post<any>(`${this.baseUrl}/submit`, requestBody).pipe(
       map((response: any) => {
-        console.log(`[FormSubmissionsService] Submit successful for submission ${requestBody.submissionId}`);
-        // Handle ServiceResult<T> or direct object response
+        console.log(`[FormSubmissionsService] Submit response for submission ${requestBody.submissionId}:`, response);
+
+        // Normalize the payload (ServiceResult<T> أو object مباشر)
+        let payload = response;
         if (response && typeof response === 'object') {
           if (response.success !== undefined) {
-            return response.data || response;
-          }
-          if (!response.id) {
-            return response.data || response.result || response;
+            payload = response.data ?? response;
+          } else if (!response.id) {
+            payload = response.data || response.result || response;
           }
         }
-        return response;
+
+        // بعض الـ APIs قد ترجع 200 مع body فيه isBlocked بدل 403
+        // هنا نحولها إلى Error بـ isBlocked=true حتى يتعامل معها الـ component
+        const blockingSource: any = payload && typeof payload === 'object'
+          ? (payload.data && typeof payload.data === 'object' ? payload.data : payload)
+          : null;
+
+        if (blockingSource?.isBlocked) {
+          const errorMessage =
+            blockingSource.message ||
+            response?.message ||
+            'Form submission is blocked by a validation rule.';
+
+          console.warn('[FormSubmissionsService] Submission blocked by rule (200 response with isBlocked=true):', {
+            ruleId: blockingSource.ruleId,
+            ruleName: blockingSource.ruleName,
+            conditionKey: blockingSource.conditionKey,
+            message: errorMessage
+          });
+
+          const blockingError: any = new Error(errorMessage);
+          blockingError.isBlocked = true;
+          blockingError.ruleId = blockingSource.ruleId;
+          blockingError.ruleName = blockingSource.ruleName;
+          blockingError.conditionKey =
+            blockingSource.conditionKey || blockingSource.conditionField;
+          blockingError.blockMessage = errorMessage;
+
+          // رمي الـ Error علشان يوصَل للـ subscribe في الـ component
+          throw blockingError;
+        }
+
+        console.log(
+          `[FormSubmissionsService] Submit successful (no blocking) for submission ${requestBody.submissionId}`
+        );
+        return payload;
       }),
       catchError((error) => {
         console.error(`[FormSubmissionsService] Error submitting form submission ${requestBody.submissionId}:`, error);
-        
-        // Extract error message
+
+        // لو الماب فوق رمى BlockingError، نعيد رميه كما هو
+        if (error?.isBlocked) {
+          return throwError(() => error);
+        }
+
+        // Extract error response/body
         const errorResponse = error?.error;
         let errorMessage = 'Failed to submit form submission';
-        
+
+        // بعض الـ Backends بترجع Blocking Rules كـ 400 أو 403 مع body فيه isBlocked
+        // هنا نطبع الـ error بالكامل عشان نعرف الشكل، وبعدين نحاول نطبع الـ payload المهم
+        console.warn('[FormSubmissionsService] Raw submit error response:', errorResponse);
+
+        // نحاول نطلع الـ payload اللي فيه isBlocked سواء في data أو مباشرة في الـ body
+        const blockingPayload: any =
+          (errorResponse && typeof errorResponse === 'object'
+            ? (errorResponse.data && typeof errorResponse.data === 'object'
+                ? errorResponse.data
+                : errorResponse)
+            : null);
+
+        if (blockingPayload?.isBlocked) {
+          // This is a blocking rule violation (status ممكن يكون 400 أو 403 أو غيره)
+          errorMessage =
+            blockingPayload.message ||
+            errorResponse?.message ||
+            'Form submission is blocked by a validation rule.';
+
+          console.warn('[FormSubmissionsService] Submission blocked by rule (error response with isBlocked=true):', {
+            status: error?.status,
+            ruleId: blockingPayload.ruleId,
+            ruleName: blockingPayload.ruleName,
+            conditionKey: blockingPayload.conditionKey,
+            message: errorMessage
+          });
+
+          const blockingError: any = new Error(errorMessage);
+          blockingError.isBlocked = true;
+          blockingError.ruleId = blockingPayload.ruleId;
+          blockingError.ruleName = blockingPayload.ruleName;
+          blockingError.conditionKey =
+            blockingPayload.conditionKey || blockingPayload.conditionField;
+          blockingError.blockMessage = errorMessage;
+
+          return throwError(() => blockingError);
+        }
+
+        // لو مش Blocking Rule، نكمّل استخراج رسالة الخطأ العادية
         if (errorResponse) {
           if (typeof errorResponse === 'string') {
             errorMessage = errorResponse;

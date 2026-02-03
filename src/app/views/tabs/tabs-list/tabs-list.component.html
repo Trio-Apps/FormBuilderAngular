@@ -16,7 +16,10 @@
         <button class="btn-icon" (click)="loadTabs()" [disabled]="loading" [title]="'common.refresh' | translate">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openTabModal()" [disabled]="loading">
+        <button class="btn-primary" 
+                (click)="openTabModal()" 
+                [disabled]="loading || (!permissionService.canCreateTabs() && !permissionService.canManageTabs())"
+                [title]="permissionService.canCreateTabs() || permissionService.canManageTabs() ? '' : ('common.permissionDenied' | translate)">
           <i class="pi pi-plus"></i>
           <span>{{ 'tabs.newTab' | translate }}</span>
         </button>
@@ -117,7 +120,10 @@
         </div>
         <h3>{{ 'tabs.noTabsFound' | translate }}</h3>
         <p>{{ 'tabs.getStarted' | translate }}</p>
-        <button class="btn-primary" (click)="openTabModal()">
+        <button class="btn-primary" 
+                (click)="openTabModal()"
+                [disabled]="!permissionService.canCreateTabs() && !permissionService.canManageTabs()"
+                [title]="permissionService.canCreateTabs() || permissionService.canManageTabs() ? '' : ('common.permissionDenied' | translate)">
           <i class="pi pi-plus"></i>
           <span>{{ 'tabs.addFirstTab' | translate }}</span>
         </button>
@@ -177,16 +183,32 @@
               </td>
               <td class="col-actions">
                 <app-table-actions>
-                  <button class="action-btn action-edit" (click)="openTabModal(tab)" [title]="'common.edit' | translate">
+                  <button class="action-btn action-edit" 
+                          (click)="openTabModal(tab)" 
+                          [title]="permissionService.canEditTabs() || permissionService.canManageTabs() ? ('common.edit' | translate) : ('common.permissionDenied' | translate)"
+                          [disabled]="!permissionService.canEditTabs() && !permissionService.canManageTabs()">
                     <i class="pi pi-pencil"></i>
                   </button>
-                  <button class="action-btn action-duplicate" (click)="navigateToFields(tab.id)" [title]="'tabs.manageFields' | translate">
+                  <button
+                    class="action-btn action-duplicate"
+                    (click)="navigateToFields(tab.id)"
+                    [title]="permissionService.canManageFields() ? ('tabs.manageFields' | translate) : ('common.permissionDenied' | translate)"
+                    [disabled]="!permissionService.canManageFields()"
+                  >
                     <i class="pi pi-list"></i>
                   </button>
-                  <button class="action-btn action-table" (click)="navigateToGrids(tab.id)" [title]="'tabs.manageGrids' | translate">
+                  <button
+                    class="action-btn action-table"
+                    (click)="navigateToGrids(tab.id)"
+                    [title]="permissionService.canManageGrids() ? ('tabs.manageGrids' | translate) : ('common.permissionDenied' | translate)"
+                    [disabled]="!permissionService.canManageGrids()"
+                  >
                     <i class="pi pi-table"></i>
                   </button>
-                  <button class="action-btn action-delete" (click)="deleteTab(tab.id)" [title]="'common.delete' | translate">
+                  <button class="action-btn action-delete" 
+                          (click)="deleteTab(tab.id)" 
+                          [title]="permissionService.canDeleteTabs() || permissionService.canManageTabs() ? ('common.delete' | translate) : ('common.permissionDenied' | translate)"
+                          [disabled]="!permissionService.canDeleteTabs() && !permissionService.canManageTabs()">
                     <i class="pi pi-trash"></i>
                   </button>
                 </app-table-actions>

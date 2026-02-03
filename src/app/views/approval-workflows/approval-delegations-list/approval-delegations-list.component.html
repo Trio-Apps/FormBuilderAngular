@@ -15,7 +15,12 @@
         <button class="btn-icon" (click)="loadDelegations()" [disabled]="loading.delegations" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.delegations">
+        <button
+          class="btn-primary"
+          (click)="openAddModal()"
+          [disabled]="loading.delegations || !permissionService.canCreateApprovalDelegations()"
+          [title]="permissionService.canCreateApprovalDelegations() ? 'New Delegation' : 'You do not have permission to create delegations'"
+        >
           <i class="pi pi-plus"></i>
           <span>New Delegation</span>
         </button>
@@ -103,10 +108,24 @@
             </td>
             <td>
               <app-table-actions>
-                <button pButton icon="pi pi-pencil" class="p-button-text p-button-sm action-btn" (click)="openEditModal(delegation)" pTooltip="Edit"></button>
-                <button pButton icon="pi pi-trash" class="p-button-text p-button-sm action-btn action-btn-danger" (click)="deleteDelegation(delegation)" pTooltip="Delete"></button>
+                <button
+                  pButton
+                  icon="pi pi-pencil"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="openEditModal(delegation)"
+                  [pTooltip]="permissionService.canEditApprovalDelegations() ? 'Edit' : 'You do not have permission to edit delegations'"
+                  [disabled]="!permissionService.canEditApprovalDelegations()"
+                ></button>
+                <button
+                  pButton
+                  icon="pi pi-trash"
+                  class="p-button-text p-button-sm action-btn action-btn-danger"
+                  (click)="deleteDelegation(delegation)"
+                  [pTooltip]="permissionService.canDeleteApprovalDelegations() ? 'Delete' : 'You do not have permission to delete delegations'"
+                  [disabled]="loading.delete || !permissionService.canDeleteApprovalDelegations()"
+                ></button>
               </app-table-actions>
-</td>
+            </td>
           </tr>
         </ng-template>
       </p-table>

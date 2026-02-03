@@ -70,6 +70,12 @@
             </div>
           </div>
 
+          <!-- General Blocking Error Message (when no specific field is identified) -->
+          <div class="general-blocking-error" *ngIf="generalBlockingError">
+            <i class="pi pi-exclamation-circle"></i>
+            <span>{{ generalBlockingError }}</span>
+          </div>
+
           <!-- Loading Fields State -->
           <div *ngIf="loading.fields" class="loading-fields-state">
             <i class="pi pi-spin pi-spinner"></i>
@@ -368,7 +374,13 @@
                 <span *ngIf="hasFieldError(field)" class="field-error-message">
                   <i class="pi pi-exclamation-circle"></i>
                   {{ getFieldError(field) }}
-                    </span>
+                </span>
+                
+                <!-- Blocking Rule Error Message (specific styling for blocking rules) -->
+                <span class="field-error-message blocking-rule-error" *ngIf="hasBlockingRuleError(field) && !hasFieldError(field)">
+                  <i class="pi pi-ban"></i>
+                  {{ getBlockingRuleError(field) }}
+                </span>
                 </div>
               </ng-container>
             </form>

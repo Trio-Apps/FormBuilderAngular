@@ -26,6 +26,8 @@ import { TooltipModule } from 'primeng/tooltip';
 import { CheckboxModule } from 'primeng/checkbox';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 @Component({
   selector: 'app-tabs-list',
@@ -46,7 +48,8 @@ import { TableShellComponent } from '../../../shared/table-shell/table-shell.com
     TooltipModule,
     CheckboxModule,
     TranslatePipe,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './tabs-list.component.html',
   styleUrls: ['./tabs-list.component.scss'],
@@ -61,6 +64,13 @@ export class TabsListComponent implements OnInit, OnDestroy {
   private routeSubscription?: Subscription;
   searchTerm = '';
   showDeletedTabs = false; // Toggle to show/hide deleted tabs
+  
+  // Permission flags
+  canViewTabs = false;
+  canCreateTabs = false;
+  canEditTabs = false;
+  canDeleteTabs = false;
+  canManageTabs = false;
   
   // Tab Modal updated
   showTabModal = false;
@@ -79,10 +89,31 @@ export class TabsListComponent implements OnInit, OnDestroy {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public translationService: TranslationService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    public permissionService: PermissionService
   ) {}
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[TabsList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[TabsList] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[TabsList] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     // Force English language for admin panel by default
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
@@ -112,6 +143,24 @@ export class TabsListComponent implements OnInit, OnDestroy {
     if (this.routeSubscription) {
       this.routeSubscription.unsubscribe();
     }
+  }
+
+  /**
+   * Load user permissions for tab operations
+   */
+  private loadPermissions(): void {
+    this.canViewTabs = this.permissionService.canViewTabs();
+    this.canCreateTabs = this.permissionService.canCreateTabs();
+    this.canEditTabs = this.permissionService.canEditTabs();
+    this.canDeleteTabs = this.permissionService.canDeleteTabs();
+    this.canManageTabs = this.permissionService.canManageTabs();
+    console.log('[TabsList] Permission flags:', {
+      canViewTabs: this.canViewTabs,
+      canCreateTabs: this.canCreateTabs,
+      canEditTabs: this.canEditTabs,
+      canDeleteTabs: this.canDeleteTabs,
+      canManageTabs: this.canManageTabs
+    });
   }
 
   /**
@@ -220,6 +269,20 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
   openTabModal(tab?: FormTabDto): void {
+    if (tab) {
+      // Editing existing tab
+      if (!this.canEditTabs && !this.canManageTabs) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit tabs.' });
+        return;
+      }
+    } else {
+      // Creating new tab
+      if (!this.canCreateTabs && !this.canManageTabs) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create tabs.' });
+        return;
+      }
+    }
+
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     if (tab) {
       this.editingTab = tab;
@@ -263,6 +326,20 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
   saveTab(): void {
+    if (this.editingTab) {
+      // Update existing tab
+      if (!this.canEditTabs && !this.canManageTabs) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to edit tabs.' });
+        return;
+      }
+    } else {
+      // Create new tab
+      if (!this.canCreateTabs && !this.canManageTabs) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to create tabs.' });
+        return;
+      }
+    }
+
     if (!this.tabName || !this.tabCode) {
       this.messageService.add({
         severity: 'warn',
@@ -534,10 +611,28 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
   navigateToFields(tabId: number): void {
+    if (!this.permissionService.canManageFields()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to manage fields.'
+      });
+      return;
+    }
+
     this.router.navigate(['../../fields', tabId], { relativeTo: this.route });
   }
 
   navigateToGrids(tabId?: number): void {
+    if (!this.permissionService.canManageGrids()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to manage grids.'
+      });
+      return;
+    }
+
     const targetTabId = tabId || this.tabs[0]?.id;
     if (targetTabId) {
       this.router.navigate(['../../grids', targetTabId], { relativeTo: this.route });
@@ -551,6 +646,11 @@ export class TabsListComponent implements OnInit, OnDestroy {
   }
 
   deleteTab(id: number): void {
+    if (!this.canDeleteTabs && !this.canManageTabs) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to delete tabs.' });
+      return;
+    }
+
     console.log('[TabsList] deleteTab called for id:', id);
     const tabToDelete = this.tabs.find(t => t.id === id);
     if (!tabToDelete) {

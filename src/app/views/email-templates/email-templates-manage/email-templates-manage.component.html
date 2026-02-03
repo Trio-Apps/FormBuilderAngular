@@ -17,7 +17,10 @@
         <button class="btn-icon" (click)="loadTemplates()" [disabled]="loading.list || loading.init" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openCreate()" [disabled]="loading.init">
+        <button class="btn-primary" 
+                (click)="openCreate()" 
+                [disabled]="loading.init || (!permissionService.canCreateEmailTemplates() && !permissionService.canManageEmailTemplates())"
+                [title]="permissionService.canCreateEmailTemplates() || permissionService.canManageEmailTemplates() ? '' : 'You do not have permission to create email templates'">
           <i class="pi pi-plus"></i>
           <span>New Template</span>
         </button>
@@ -155,7 +158,8 @@
                   icon="pi pi-pencil"
                   class="p-button-text p-button-sm action-btn"
                   (click)="openEdit(row)"
-                  [pTooltip]="'Edit'"
+                  [pTooltip]="permissionService.canEditEmailTemplates() || permissionService.canManageEmailTemplates() ? 'Edit' : 'You do not have permission to edit email templates'"
+                  [disabled]="!permissionService.canEditEmailTemplates() && !permissionService.canManageEmailTemplates()"
                   tooltipPosition="top"
                 ></button>
                 <button
@@ -172,8 +176,8 @@
                   icon="pi pi-trash"
                   class="p-button-text p-button-sm p-button-danger action-btn"
                   (click)="confirmDelete(row)"
-                  [disabled]="loading.delete"
-                  [pTooltip]="'Delete'"
+                  [disabled]="loading.delete || (!permissionService.canDeleteEmailTemplates() && !permissionService.canManageEmailTemplates())"
+                  [pTooltip]="permissionService.canDeleteEmailTemplates() || permissionService.canManageEmailTemplates() ? 'Delete' : 'You do not have permission to delete email templates'"
                   tooltipPosition="top"
                 ></button>
               </app-table-actions>
@@ -187,7 +191,12 @@
               <div class="empty-state">
                 <i class="pi pi-inbox"></i>
                 <p>No email templates found.</p>
-                <button pButton icon="pi pi-plus" label="Create Template" (click)="openCreate()"></button>
+                <button pButton 
+                        icon="pi pi-plus" 
+                        label="Create Template" 
+                        (click)="openCreate()"
+                        [disabled]="!permissionService.canCreateEmailTemplates() && !permissionService.canManageEmailTemplates()"
+                        [title]="permissionService.canCreateEmailTemplates() || permissionService.canManageEmailTemplates() ? '' : 'You do not have permission to create email templates'"></button>
               </div>
             </td>
           </tr>

@@ -380,6 +380,8 @@ export interface FormRule {
   isActive: boolean;
   isDeleted?: boolean; // ✅ Soft delete flag
   executionOrder: number;
+  evaluationPhase?: 'OnFieldChange' | 'PreSubmit' | 'PreOpen'; // ✅ Evaluation phase for blocking rules
+  blockMessage?: string; // ✅ Block message for blocking rules (PreSubmit/PreOpen)
 }
 
 /**
@@ -403,6 +405,8 @@ export interface CreateFormRuleDto {
   elseActions?: Action[]; // ✅ Array directly (not JSON string)
   isActive?: boolean;
   executionOrder?: number;
+  evaluationPhase?: 'OnFieldChange' | 'PreSubmit' | 'PreOpen'; // ✅ Evaluation phase for blocking rules
+  blockMessage?: string; // ✅ Block message for blocking rules (PreSubmit/PreOpen)
 }
 
 /**
@@ -426,6 +430,8 @@ export interface UpdateFormRuleDto {
   elseActions?: Action[]; // ✅ Array directly (not JSON string)
   isActive?: boolean;
   executionOrder?: number;
+  evaluationPhase?: 'OnFieldChange' | 'PreSubmit' | 'PreOpen'; // ✅ Evaluation phase for blocking rules
+  blockMessage?: string; // ✅ Block message for blocking rules (PreSubmit/PreOpen)
 }
 
 /**
@@ -453,6 +459,8 @@ export interface FormRuleDto {
   isActive: boolean;
   isDeleted?: boolean; // ✅ Soft delete flag
   executionOrder?: number;
+  evaluationPhase?: 'OnFieldChange' | 'PreSubmit' | 'PreOpen'; // ✅ Evaluation phase for blocking rules
+  blockMessage?: string; // ✅ Block message for blocking rules (PreSubmit/PreOpen)
   formName?: string;
   formCode?: string;
 }
@@ -589,8 +597,11 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     }
   }
 
-  if (cleanActions.length === 0) {
-    throw new Error('At least one action is required');
+  // Only require actions for regular rules (OnFieldChange)
+  // Blocking rules (PreSubmit/PreOpen) don't require actions
+  const evaluationPhase = formRule.evaluationPhase || 'OnFieldChange';
+  if (evaluationPhase === 'OnFieldChange' && cleanActions.length === 0) {
+    throw new Error('At least one action is required for OnFieldChange rules');
   }
 
   // Convert condition value to string (handle null/undefined/empty) - only for Condition type
@@ -618,7 +629,9 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     actions: cleanActions.length > 0 ? cleanActions : undefined,      // ✅ Array directly
     elseActions: cleanElseActions.length > 0 ? cleanElseActions : undefined,  // ✅ Array directly
     isActive: formRule.isActive !== undefined ? formRule.isActive : true,
-    executionOrder: formRule.executionOrder || 1
+    executionOrder: formRule.executionOrder || 1,
+    evaluationPhase: formRule.evaluationPhase || 'OnFieldChange', // ✅ Default to OnFieldChange if not specified
+    blockMessage: formRule.blockMessage || undefined // ✅ Block message for blocking rules
   };
 }
 
@@ -705,6 +718,8 @@ export function convertFormRuleDtoToFormRule(dto: FormRuleDto): FormRule {
     elseActions: elseActions.length > 0 ? elseActions : undefined,
     isActive: dto.isActive,
     isDeleted: dto.isDeleted, // ✅ Copy isDeleted flag
-    executionOrder: dto.executionOrder || 1
+    executionOrder: dto.executionOrder || 1,
+    evaluationPhase: dto.evaluationPhase || 'OnFieldChange', // ✅ Default to OnFieldChange if not specified
+    blockMessage: dto.blockMessage || undefined // ✅ Block message for blocking rules
   };
 }

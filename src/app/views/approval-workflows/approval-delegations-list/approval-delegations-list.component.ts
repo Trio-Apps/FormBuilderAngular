@@ -23,6 +23,7 @@ import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
 
 @Component({
   selector: 'app-approval-delegations-list',
@@ -96,7 +97,8 @@ export class ApprovalDelegationsListComponent implements OnInit {
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    public permissionService: PermissionService
   ) {
     this.delegationForm = this.fb.group({
       fromUserId: [null, [Validators.required]],
@@ -115,6 +117,16 @@ export class ApprovalDelegationsListComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // 🔐 View permission check for Approval Delegations
+    if (!this.permissionService.canViewApprovalDelegations()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to view approval delegations.'
+      });
+      return;
+    }
+
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
       this.translationService.setLanguage(adminLanguagePreference as 'en' | 'ar');
@@ -400,6 +412,15 @@ export class ApprovalDelegationsListComponent implements OnInit {
   }
 
   openAddModal(): void {
+    if (!this.permissionService.canCreateApprovalDelegations()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to create approval delegations.'
+      });
+      return;
+    }
+
     this.editingDelegation = null;
     this.showModal = true;
     
@@ -428,6 +449,15 @@ export class ApprovalDelegationsListComponent implements OnInit {
   }
 
   openEditModal(delegation: ApprovalDelegationDto): void {
+    if (!this.permissionService.canEditApprovalDelegations()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to edit approval delegations.'
+      });
+      return;
+    }
+
     this.editingDelegation = delegation;
     this.showModal = true;
     
@@ -468,6 +498,27 @@ export class ApprovalDelegationsListComponent implements OnInit {
   }
 
   saveDelegation(): void {
+    // Permission checks: create vs edit
+    if (this.editingDelegation) {
+      if (!this.permissionService.canEditApprovalDelegations()) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit approval delegations.'
+        });
+        return;
+      }
+    } else {
+      if (!this.permissionService.canCreateApprovalDelegations()) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create approval delegations.'
+        });
+        return;
+      }
+    }
+
     if (this.delegationForm.invalid) {
       this.markFormGroupTouched(this.delegationForm);
       this.messageService.add({ 
@@ -609,6 +660,15 @@ export class ApprovalDelegationsListComponent implements OnInit {
 
   deleteDelegation(delegation: ApprovalDelegationDto): void {
     if (!delegation || !delegation.id) return;
+
+    if (!this.permissionService.canDeleteApprovalDelegations()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete approval delegations.'
+      });
+      return;
+    }
 
     this.confirmationService.confirm({
       message: `Are you sure you want to delete this delegation? This action cannot be undone.`,

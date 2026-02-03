@@ -27,6 +27,9 @@ import { map } from 'rxjs/operators';
 import { TranslationService } from '../../../../core/services/translation.service';
 import { DuplicateValidationHelper } from '../../../../core/utils/duplicate-validation.helper';
 import { TableShellComponent } from '../../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../../services/permission.service';
+import { HasPermissionDirective } from '../../../../directives/has-permission.directive';
+import { ChangeDetectorRef } from '@angular/core';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -54,7 +57,8 @@ import { TooltipModule } from 'primeng/tooltip';
     ToastModule,
     ConfirmDialogModule,
     TooltipModule,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './form-rules-list.component.html',
   styleUrls: ['./form-rules-list.component.scss'],
@@ -68,6 +72,13 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
   loading = false;
   searchTerm = '';
   private routeSubscription?: Subscription;
+
+  // Permission flags
+  canViewFormRules = false;
+  canCreateFormRules = false;
+  canEditFormRules = false;
+  canDeleteFormRules = false;
+  canManageFormRules = false;
 
   // Rule Modal
   showRuleModal = false;
@@ -124,12 +135,34 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private fb: FormBuilder,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    public permissionService: PermissionService,
+    private cdr: ChangeDetectorRef
   ) {
     this.initRuleForm();
   }
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[FormRulesList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[FormRulesList] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[FormRulesList] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
       this.translationService.setLanguage(adminLanguagePreference as 'en' | 'ar');
@@ -188,6 +221,8 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
       storedProcedureId: [null],
       isActive: [true],
       executionOrder: [1, [Validators.required, Validators.min(0)]],
+      evaluationPhase: ['OnFieldChange'], // Default: OnFieldChange (for regular rules), can be changed to PreSubmit for blocking rules
+      blockMessage: [''], // Block message for blocking rules (PreSubmit)
       condition: this.fb.group({
         field: [''],
         operator: ['Equals', Validators.required],
@@ -217,6 +252,36 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
       if (spId) {
         this.onStoredProcedureSelected(spId);
       }
+    });
+
+    // Watch evaluation phase changes - remove default action if switching to blocking rule
+    this.ruleForm.get('evaluationPhase')?.valueChanges.subscribe(phase => {
+      const actionsArray = this.ruleForm.get('actions') as FormArray;
+      if ((phase === 'PreSubmit' || phase === 'PreOpen') && actionsArray.length > 0) {
+        // Clear actions for blocking rules (they don't need actions)
+        actionsArray.clear();
+      } else if (phase === 'OnFieldChange' && actionsArray.length === 0) {
+        // Add default action for regular rules if none exists
+        this.addAction();
+      }
+    });
+  }
+
+  /**
+   * Load user permissions for form rule operations
+   */
+  private loadPermissions(): void {
+    this.canViewFormRules = this.permissionService.canViewFormRules();
+    this.canCreateFormRules = this.permissionService.canCreateFormRules();
+    this.canEditFormRules = this.permissionService.canEditFormRules();
+    this.canDeleteFormRules = this.permissionService.canDeleteFormRules();
+    this.canManageFormRules = this.permissionService.canManageFormRules();
+    console.log('[FormRulesList] Permission flags:', {
+      canViewFormRules: this.canViewFormRules,
+      canCreateFormRules: this.canCreateFormRules,
+      canEditFormRules: this.canEditFormRules,
+      canDeleteFormRules: this.canDeleteFormRules,
+      canManageFormRules: this.canManageFormRules
     });
   }
 
@@ -407,6 +472,20 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
   }
 
   openRuleModal(rule?: FormRule): void {
+    if (rule) {
+      // Editing existing rule
+      if (!this.canEditFormRules && !this.canManageFormRules) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit form rules.' });
+        return;
+      }
+    } else {
+      // Creating new rule
+      if (!this.canCreateFormRules && !this.canManageFormRules) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create form rules.' });
+        return;
+      }
+    }
+
     // Ensure fields are loaded before opening modal
     if (this.formFields.length === 0) {
       this.loadFormFields();
@@ -430,7 +509,9 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         ruleType: rule.ruleType || 'Condition',
         storedProcedureId: rule.storedProcedureId || null,
         isActive: rule.isActive,
-        executionOrder: rule.executionOrder || 1
+        executionOrder: rule.executionOrder || 1,
+        evaluationPhase: rule.evaluationPhase || 'OnFieldChange', // ✅ Evaluation phase
+        blockMessage: rule.blockMessage || '' // ✅ Block message
       });
 
       // Load stored procedure data if it's a StoredProcedure type
@@ -481,14 +562,23 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         });
       }
     } else {
-      // Add mode - add one default action
-      this.addAction();
+      // Add mode - add one default action only for regular rules (OnFieldChange)
+      // Blocking rules (PreSubmit/PreOpen) don't need default actions
+      const evaluationPhase = this.ruleForm.get('evaluationPhase')?.value || 'OnFieldChange';
+      if (evaluationPhase === 'OnFieldChange') {
+        this.addAction();
+      }
     }
 
     this.showRuleModal = true;
   }
 
   openRuleModalWithField(fieldCode: string): void {
+    if (!this.canCreateFormRules && !this.canManageFormRules) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create form rules.' });
+      return;
+    }
+
     // Ensure fields are loaded before opening modal
     if (this.formFields.length === 0) {
       this.loadFormFields();
@@ -631,14 +721,31 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Validate that at least one action exists
-    if (!formValue.actions || formValue.actions.length === 0) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Validation',
-        detail: 'Please add at least one action'
-      });
-      return;
+    // Validate evaluation phase and block message
+    const evaluationPhase = formValue.evaluationPhase || 'OnFieldChange';
+    
+    // For blocking rules (PreSubmit/PreOpen), blockMessage is required, but actions are optional
+    if (evaluationPhase === 'PreSubmit' || evaluationPhase === 'PreOpen') {
+      if (!formValue.blockMessage || formValue.blockMessage.trim() === '') {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Block Message is required for PreSubmit/PreOpen rules'
+        });
+        return;
+      }
+      // Blocking rules don't require actions - they just block submission
+      // So we skip the actions validation for blocking rules
+    } else {
+      // For regular rules (OnFieldChange), at least one action is required
+      if (!formValue.actions || formValue.actions.length === 0) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please add at least one action'
+        });
+        return;
+      }
     }
 
     // Build FormRule object - clean empty values
@@ -690,11 +797,16 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
             })
         : undefined,
       isActive: formValue.isActive !== undefined ? formValue.isActive : true,
-      executionOrder: formValue.executionOrder || 1
+      executionOrder: formValue.executionOrder || 1,
+      evaluationPhase: formValue.evaluationPhase || 'OnFieldChange', // ✅ Default to OnFieldChange
+      blockMessage: formValue.blockMessage && formValue.blockMessage.trim() !== '' 
+        ? formValue.blockMessage.trim() 
+        : undefined // ✅ Block message for blocking rules
     };
 
-    // Validate actions after cleaning
-    if (formRule.actions.length === 0) {
+    // Validate actions after cleaning - only for regular rules (OnFieldChange)
+    // Blocking rules (PreSubmit/PreOpen) don't require actions
+    if (formRule.evaluationPhase !== 'PreSubmit' && formRule.evaluationPhase !== 'PreOpen' && formRule.actions.length === 0) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation',
@@ -708,12 +820,14 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     try {
       ruleDto = convertFormRuleToDto(formRule, this.formId);
       
-      // Validate actions before sending
-      if (!ruleDto.actions || ruleDto.actions.length === 0) {
+      // Validate actions before sending - only for regular rules (OnFieldChange)
+      // Blocking rules (PreSubmit/PreOpen) don't require actions
+      const evaluationPhase = formValue.evaluationPhase || 'OnFieldChange';
+      if (evaluationPhase === 'OnFieldChange' && (!ruleDto.actions || ruleDto.actions.length === 0)) {
         this.messageService.add({
           severity: 'error',
           summary: 'Validation Error',
-          detail: 'At least one action is required',
+          detail: 'At least one action is required for OnFieldChange rules',
           life: 7000
         });
         return;
@@ -753,7 +867,9 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         actions: ruleDto.actions,
         elseActions: ruleDto.elseActions,
         isActive: ruleDto.isActive,
-        executionOrder: ruleDto.executionOrder
+        executionOrder: ruleDto.executionOrder,
+        evaluationPhase: ruleDto.evaluationPhase, // ✅ Evaluation phase
+        blockMessage: ruleDto.blockMessage // ✅ Block message
       };
       
       this.formRulesService.updateRule(this.editingRule.id, updateDto).subscribe({
@@ -930,6 +1046,11 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
   }
 
   deleteRule(ruleId: number | undefined): void {
+    if (!this.canDeleteFormRules && !this.canManageFormRules) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to delete form rules.' });
+      return;
+    }
+
     if (!ruleId) {
       console.warn('[FormRulesList] deleteRule called with invalid ruleId:', ruleId);
       return;

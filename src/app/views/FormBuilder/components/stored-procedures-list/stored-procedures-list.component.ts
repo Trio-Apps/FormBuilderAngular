@@ -17,6 +17,9 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { StoredProcedureFormComponent } from '../stored-procedure-form/stored-procedure-form.component';
 import { TableShellComponent } from '../../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../../services/permission.service';
+import { HasPermissionDirective } from '../../../../directives/has-permission.directive';
+import { ChangeDetectorRef } from '@angular/core';
 
 @Component({
   selector: 'app-stored-procedures-list',
@@ -34,7 +37,8 @@ import { TableShellComponent } from '../../../../shared/table-shell/table-shell.
     ConfirmDialogModule,
     TooltipModule,
     StoredProcedureFormComponent,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './stored-procedures-list.component.html',
   styleUrls: ['./stored-procedures-list.component.scss'],
@@ -45,6 +49,13 @@ export class StoredProceduresListComponent implements OnInit {
   filteredProcedures: StoredProcedure[] = [];
   loading = false;
   searchTerm = '';
+  
+  // Permission flags
+  canViewStoredProcedures = false;
+  canCreateStoredProcedures = false;
+  canEditStoredProcedures = false;
+  canDeleteStoredProcedures = false;
+  canManageStoredProcedures = false;
   
   // Filters
   selectedDatabase = '';
@@ -61,11 +72,51 @@ export class StoredProceduresListComponent implements OnInit {
   constructor(
     private spService: StoredProceduresService,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
+    public permissionService: PermissionService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[StoredProceduresList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[StoredProceduresList] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[StoredProceduresList] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     this.loadStoredProcedures();
+  }
+
+  /**
+   * Load user permissions for stored procedure operations
+   */
+  private loadPermissions(): void {
+    this.canViewStoredProcedures = this.permissionService.canViewStoredProcedures();
+    this.canCreateStoredProcedures = this.permissionService.canCreateStoredProcedures();
+    this.canEditStoredProcedures = this.permissionService.canEditStoredProcedures();
+    this.canDeleteStoredProcedures = this.permissionService.canDeleteStoredProcedures();
+    this.canManageStoredProcedures = this.permissionService.canManageStoredProcedures();
+    console.log('[StoredProceduresList] Permission flags:', {
+      canViewStoredProcedures: this.canViewStoredProcedures,
+      canCreateStoredProcedures: this.canCreateStoredProcedures,
+      canEditStoredProcedures: this.canEditStoredProcedures,
+      canDeleteStoredProcedures: this.canDeleteStoredProcedures,
+      canManageStoredProcedures: this.canManageStoredProcedures
+    });
   }
 
   loadStoredProcedures(): void {
@@ -132,6 +183,20 @@ export class StoredProceduresListComponent implements OnInit {
   }
 
   openModal(sp?: StoredProcedure): void {
+    if (sp) {
+      // Editing existing stored procedure
+      if (!this.canEditStoredProcedures && !this.canManageStoredProcedures) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit stored procedures.' });
+        return;
+      }
+    } else {
+      // Creating new stored procedure
+      if (!this.canCreateStoredProcedures && !this.canManageStoredProcedures) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create stored procedures.' });
+        return;
+      }
+    }
+
     this.editingSp = sp || null;
     this.showModal = true;
   }
@@ -147,6 +212,11 @@ export class StoredProceduresListComponent implements OnInit {
   }
 
   deleteSp(id: number): void {
+    if (!this.canDeleteStoredProcedures && !this.canManageStoredProcedures) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to delete stored procedures.' });
+      return;
+    }
+
     this.confirmationService.confirm({
       message: 'Are you sure you want to delete this stored procedure?',
       header: 'Confirm Delete',

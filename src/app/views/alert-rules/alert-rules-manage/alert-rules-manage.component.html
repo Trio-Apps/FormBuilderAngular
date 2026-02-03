@@ -18,7 +18,10 @@
         <button class="btn-icon" (click)="refreshRules()" [disabled]="loading.rules || loading.init" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openCreateModal()" [disabled]="loading.init">
+        <button class="btn-primary" 
+                (click)="openCreateModal()" 
+                [disabled]="loading.init || (!permissionService.canCreateAlertRules() && !permissionService.canManageAlertRules())"
+                [title]="permissionService.canCreateAlertRules() || permissionService.canManageAlertRules() ? '' : 'You do not have permission to create alert rules'">
           <i class="pi pi-plus"></i>
           <span>New Rule</span>
         </button>
@@ -139,7 +142,8 @@
                   icon="pi pi-pencil"
                   class="p-button-text p-button-sm action-btn"
                   (click)="openCreateModal(rule)"
-                  [pTooltip]="'Edit'"
+                  [pTooltip]="permissionService.canEditAlertRules() || permissionService.canManageAlertRules() ? 'Edit' : 'You do not have permission to edit alert rules'"
+                  [disabled]="!permissionService.canEditAlertRules() && !permissionService.canManageAlertRules()"
                   tooltipPosition="top"
                 ></button>
                 <button
@@ -156,8 +160,8 @@
                   icon="pi pi-trash"
                   class="p-button-text p-button-sm action-btn"
                   (click)="deleteRule(rule)"
-                  [disabled]="loading.delete"
-                  [pTooltip]="'Delete'"
+                  [disabled]="loading.delete || (!permissionService.canDeleteAlertRules() && !permissionService.canManageAlertRules())"
+                  [pTooltip]="permissionService.canDeleteAlertRules() || permissionService.canManageAlertRules() ? 'Delete' : 'You do not have permission to delete alert rules'"
                   tooltipPosition="top"
                 ></button>
               </app-table-actions>
@@ -171,7 +175,12 @@
               <div class="empty-state">
                 <i class="pi pi-inbox"></i>
                 <p>No rules found for current filters.</p>
-                <button pButton icon="pi pi-plus" label="Create Rule" (click)="openCreateModal()"></button>
+                <button pButton 
+                        icon="pi pi-plus" 
+                        label="Create Rule" 
+                        (click)="openCreateModal()"
+                        [disabled]="!permissionService.canCreateAlertRules() && !permissionService.canManageAlertRules()"
+                        [title]="permissionService.canCreateAlertRules() || permissionService.canManageAlertRules() ? '' : 'You do not have permission to create alert rules'"></button>
               </div>
             </td>
           </tr>

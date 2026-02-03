@@ -73,8 +73,9 @@ export class PermissionService {
     private http: HttpClient,
     private storageService: StorageService
   ) {
-    // Try to load cached permissions on init
-    this.loadCachedPermissions();
+    // Don't load from cache automatically - let components call refreshPermissions() explicitly
+    // This ensures we always get fresh permissions from the API
+    // this.loadCachedPermissions();
   }
   
   // ==================== Permission Loading ====================
@@ -176,7 +177,16 @@ export class PermissionService {
       tap((permissions: string[]) => {
         this.setPermissions(permissions);
         this.cachePermissions(permissions);
-        console.log('[PermissionService] ✅ Loaded permissions:', permissions);
+        console.log('[PermissionService] ✅ Loaded permissions from API:', permissions.length, 'permissions');
+        // Check for specific permissions
+        const hasProjectCreate = permissions.includes('Project_Allow_Create');
+        const hasProjectManage = permissions.includes('Project_Allow_Manage');
+        const hasWorkflowCreate = permissions.includes('ApprovalWorkflow_Allow_Create');
+        const hasWorkflowManage = permissions.includes('ApprovalWorkflow_Allow_Manage');
+        console.log('[PermissionService] Project_Allow_Create:', hasProjectCreate);
+        console.log('[PermissionService] Project_Allow_Manage:', hasProjectManage);
+        console.log('[PermissionService] ApprovalWorkflow_Allow_Create:', hasWorkflowCreate);
+        console.log('[PermissionService] ApprovalWorkflow_Allow_Manage:', hasWorkflowManage);
       }),
       catchError((error: HttpErrorResponse) => {
         console.error('[PermissionService] Error loading permissions:', error);
@@ -540,6 +550,688 @@ export class PermissionService {
    */
   getPermissionsSync(): string[] {
     return this._permissions();
+  }
+
+  // ==================== Project Permission Helpers ====================
+  
+  /**
+   * Check if user can view projects
+   * Permission: Project_Allow_View
+   */
+  canViewProjects(): boolean {
+    return this.hasPermission('Project_Allow_View');
+  }
+
+  /**
+   * Check if user can create projects
+   * Permission: Project_Allow_Create
+   */
+  canCreateProjects(): boolean {
+    return this.hasPermission('Project_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit projects
+   * Permission: Project_Allow_Edit
+   */
+  canEditProjects(): boolean {
+    return this.hasPermission('Project_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete projects
+   * Permission: Project_Allow_Delete
+   */
+  canDeleteProjects(): boolean {
+    return this.hasPermission('Project_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage projects (full control)
+   * Permission: Project_Allow_Manage
+   */
+  canManageProjects(): boolean {
+    return this.hasPermission('Project_Allow_Manage');
+  }
+
+  // ==================== Approval Workflow Permission Helpers ====================
+  
+  /**
+   * Check if user can view approval workflows
+   * Permission: ApprovalWorkflow_Allow_View
+   */
+  canViewApprovalWorkflows(): boolean {
+    return this.hasPermission('ApprovalWorkflow_Allow_View');
+  }
+
+  /**
+   * Check if user can create approval workflows
+   * Permission: ApprovalWorkflow_Allow_Create
+   */
+  canCreateApprovalWorkflows(): boolean {
+    return this.hasPermission('ApprovalWorkflow_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit approval workflows
+   * Permission: ApprovalWorkflow_Allow_Edit
+   */
+  canEditApprovalWorkflows(): boolean {
+    return this.hasPermission('ApprovalWorkflow_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete approval workflows
+   * Permission: ApprovalWorkflow_Allow_Delete
+   */
+  canDeleteApprovalWorkflows(): boolean {
+    return this.hasPermission('ApprovalWorkflow_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage approval workflows (full control)
+   * Permission: ApprovalWorkflow_Allow_Manage
+   */
+  canManageApprovalWorkflows(): boolean {
+    return this.hasPermission('ApprovalWorkflow_Allow_Manage');
+  }
+
+  // ==================== Approval Stage Permission Helpers ====================
+  
+  /**
+   * Check if user can view approval stages
+   * Permission: ApprovalStage_Allow_View
+   */
+  canViewApprovalStages(): boolean {
+    return this.hasPermission('ApprovalStage_Allow_View');
+  }
+
+  /**
+   * Check if user can create approval stages
+   * Permission: ApprovalStage_Allow_Create
+   */
+  canCreateApprovalStages(): boolean {
+    return this.hasPermission('ApprovalStage_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit approval stages
+   * Permission: ApprovalStage_Allow_Edit
+   */
+  canEditApprovalStages(): boolean {
+    return this.hasPermission('ApprovalStage_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete approval stages
+   * Permission: ApprovalStage_Allow_Delete
+   */
+  canDeleteApprovalStages(): boolean {
+    return this.hasPermission('ApprovalStage_Allow_Delete');
+  }
+
+  // ==================== Approval Inbox Permission Helpers ====================
+  
+  /**
+   * Check if user can view approval inbox
+   * Permission: ApprovalInbox_Allow_View
+   */
+  canViewApprovalInbox(): boolean {
+    return this.hasPermission('ApprovalInbox_Allow_View');
+  }
+
+  /**
+   * Check if user can approve submissions
+   * Permission: ApprovalInbox_Allow_Approve
+   */
+  canApproveSubmissions(): boolean {
+    return this.hasPermission('ApprovalInbox_Allow_Approve');
+  }
+
+  /**
+   * Check if user can reject submissions
+   * Permission: ApprovalInbox_Allow_Reject
+   */
+  canRejectSubmissions(): boolean {
+    return this.hasPermission('ApprovalInbox_Allow_Reject');
+  }
+
+  /**
+   * Check if user can view Approvals History (global)
+   * Permission: ApprovalWorkflow_Allow_View
+   */
+  canViewApprovalsHistory(): boolean {
+    return this.hasPermission('ApprovalWorkflow_Allow_View');
+  }
+
+  // ==================== Stage Assignee Permission Helpers ====================
+  
+  /**
+   * Check if user can view stage assignees
+   * Permission: ApprovalStageAssignee_Allow_View
+   */
+  canViewStageAssignees(): boolean {
+    return this.hasPermission('ApprovalStageAssignee_Allow_View');
+  }
+
+  /**
+   * Check if user can create stage assignees
+   * Permission: ApprovalStageAssignee_Allow_Create
+   */
+  canCreateStageAssignees(): boolean {
+    return this.hasPermission('ApprovalStageAssignee_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit stage assignees
+   * Permission: ApprovalStageAssignee_Allow_Edit
+   */
+  canEditStageAssignees(): boolean {
+    return this.hasPermission('ApprovalStageAssignee_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete stage assignees
+   * Permission: ApprovalStageAssignee_Allow_Delete
+   */
+  canDeleteStageAssignees(): boolean {
+    return this.hasPermission('ApprovalStageAssignee_Allow_Delete');
+  }
+
+  // ==================== Approval Delegation Permission Helpers ====================
+  
+  /**
+   * Check if user can view approval delegations
+   * Permission: ApprovalDelegation_Allow_View
+   */
+  canViewApprovalDelegations(): boolean {
+    return this.hasPermission('ApprovalDelegation_Allow_View');
+  }
+
+  /**
+   * Check if user can create approval delegations
+   * Permission: ApprovalDelegation_Allow_Create
+   */
+  canCreateApprovalDelegations(): boolean {
+    return this.hasPermission('ApprovalDelegation_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit approval delegations
+   * Permission: ApprovalDelegation_Allow_Edit
+   */
+  canEditApprovalDelegations(): boolean {
+    return this.hasPermission('ApprovalDelegation_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete approval delegations
+   * Permission: ApprovalDelegation_Allow_Delete
+   */
+  canDeleteApprovalDelegations(): boolean {
+    return this.hasPermission('ApprovalDelegation_Allow_Delete');
+  }
+
+  // ==================== Form Tab Permission Helpers ====================
+  
+  /**
+   * Check if user can view tabs
+   * Permission: FormTab_Allow_View
+   */
+  canViewTabs(): boolean {
+    return this.hasPermission('FormTab_Allow_View');
+  }
+
+  /**
+   * Check if user can create tabs
+   * Permission: FormTab_Allow_Create
+   */
+  canCreateTabs(): boolean {
+    return this.hasPermission('FormTab_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit tabs
+   * Permission: FormTab_Allow_Edit
+   */
+  canEditTabs(): boolean {
+    return this.hasPermission('FormTab_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete tabs
+   * Permission: FormTab_Allow_Delete
+   */
+  canDeleteTabs(): boolean {
+    return this.hasPermission('FormTab_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage tabs (full control)
+   * Permission: FormTab_Allow_Manage
+   */
+  canManageTabs(): boolean {
+    return this.hasPermission('FormTab_Allow_Manage');
+  }
+
+  // ==================== Form Field Permission Helpers ====================
+  
+  /**
+   * Check if user can view fields
+   * Permission: FormField_Allow_View
+   */
+  canViewFields(): boolean {
+    return this.hasPermission('FormField_Allow_View');
+  }
+
+  /**
+   * Check if user can create fields
+   * Permission: FormField_Allow_Create
+   */
+  canCreateFields(): boolean {
+    return this.hasPermission('FormField_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit fields
+   * Permission: FormField_Allow_Edit
+   */
+  canEditFields(): boolean {
+    return this.hasPermission('FormField_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete fields
+   * Permission: FormField_Allow_Delete
+   */
+  canDeleteFields(): boolean {
+    return this.hasPermission('FormField_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage fields (full control)
+   * Permission: FormField_Allow_Manage
+   */
+  canManageFields(): boolean {
+    return this.hasPermission('FormField_Allow_Manage');
+  }
+
+  // ==================== Stored Procedure Permission Helpers ====================
+  
+  /**
+   * Check if user can view stored procedures
+   * Permission: StoredProcedure_Allow_View
+   */
+  canViewStoredProcedures(): boolean {
+    return this.hasPermission('StoredProcedure_Allow_View');
+  }
+
+  /**
+   * Check if user can create stored procedures
+   * Permission: StoredProcedure_Allow_Create
+   */
+  canCreateStoredProcedures(): boolean {
+    return this.hasPermission('StoredProcedure_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit stored procedures
+   * Permission: StoredProcedure_Allow_Edit
+   */
+  canEditStoredProcedures(): boolean {
+    return this.hasPermission('StoredProcedure_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete stored procedures
+   * Permission: StoredProcedure_Allow_Delete
+   */
+  canDeleteStoredProcedures(): boolean {
+    return this.hasPermission('StoredProcedure_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage stored procedures (full control)
+   * Permission: StoredProcedure_Allow_Manage
+   */
+  canManageStoredProcedures(): boolean {
+    return this.hasPermission('StoredProcedure_Allow_Manage');
+  }
+
+  // ==================== Form Rule Permission Helpers ====================
+  
+  /**
+   * Check if user can view form rules
+   * Permission: FormRule_Allow_View
+   */
+  canViewFormRules(): boolean {
+    return this.hasPermission('FormRule_Allow_View');
+  }
+
+  /**
+   * Check if user can create form rules
+   * Permission: FormRule_Allow_Create
+   */
+  canCreateFormRules(): boolean {
+    return this.hasPermission('FormRule_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit form rules
+   * Permission: FormRule_Allow_Edit
+   */
+  canEditFormRules(): boolean {
+    return this.hasPermission('FormRule_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete form rules
+   * Permission: FormRule_Allow_Delete
+   */
+  canDeleteFormRules(): boolean {
+    return this.hasPermission('FormRule_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage form rules (full control)
+   * Permission: FormRule_Allow_Manage
+   */
+  canManageFormRules(): boolean {
+    return this.hasPermission('FormRule_Allow_Manage');
+  }
+
+  // ==================== Alert Rule Permission Helpers ====================
+  
+  /**
+   * Check if user can view alert rules
+   * Permission: AlertRule_Allow_View
+   */
+  canViewAlertRules(): boolean {
+    return this.hasPermission('AlertRule_Allow_View');
+  }
+
+  /**
+   * Check if user can create alert rules
+   * Permission: AlertRule_Allow_Create
+   */
+  canCreateAlertRules(): boolean {
+    return this.hasPermission('AlertRule_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit alert rules
+   * Permission: AlertRule_Allow_Edit
+   */
+  canEditAlertRules(): boolean {
+    return this.hasPermission('AlertRule_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete alert rules
+   * Permission: AlertRule_Allow_Delete
+   */
+  canDeleteAlertRules(): boolean {
+    return this.hasPermission('AlertRule_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage alert rules (full control)
+   * Permission: AlertRule_Allow_Manage
+   */
+  canManageAlertRules(): boolean {
+    return this.hasPermission('AlertRule_Allow_Manage');
+  }
+
+  // ==================== Email Template Permission Helpers ====================
+  
+  /**
+   * Check if user can view email templates
+   * Permission: EmailTemplate_Allow_View
+   */
+  canViewEmailTemplates(): boolean {
+    return this.hasPermission('EmailTemplate_Allow_View');
+  }
+
+  /**
+   * Check if user can create email templates
+   * Permission: EmailTemplate_Allow_Create
+   */
+  canCreateEmailTemplates(): boolean {
+    return this.hasPermission('EmailTemplate_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit email templates
+   * Permission: EmailTemplate_Allow_Edit
+   */
+  canEditEmailTemplates(): boolean {
+    return this.hasPermission('EmailTemplate_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete email templates
+   * Permission: EmailTemplate_Allow_Delete
+   */
+  canDeleteEmailTemplates(): boolean {
+    return this.hasPermission('EmailTemplate_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage email templates (full control)
+   * Permission: EmailTemplate_Allow_Manage
+   */
+  canManageEmailTemplates(): boolean {
+    return this.hasPermission('EmailTemplate_Allow_Manage');
+  }
+
+  // ==================== SMTP Config Permission Helpers ====================
+  
+  /**
+   * Check if user can view SMTP configs
+   * Permission: SmtpConfig_Allow_View
+   */
+  canViewSmtpConfigs(): boolean {
+    return this.hasPermission('SmtpConfig_Allow_View');
+  }
+
+  /**
+   * Check if user can create SMTP configs
+   * Permission: SmtpConfig_Allow_Create
+   */
+  canCreateSmtpConfigs(): boolean {
+    return this.hasPermission('SmtpConfig_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit SMTP configs
+   * Permission: SmtpConfig_Allow_Edit
+   */
+  canEditSmtpConfigs(): boolean {
+    return this.hasPermission('SmtpConfig_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete SMTP configs
+   * Permission: SmtpConfig_Allow_Delete
+   */
+  canDeleteSmtpConfigs(): boolean {
+    return this.hasPermission('SmtpConfig_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage SMTP configs (full control)
+   * Permission: SmtpConfig_Allow_Manage
+   */
+  canManageSmtpConfigs(): boolean {
+    return this.hasPermission('SmtpConfig_Allow_Manage');
+  }
+
+  // ==================== Table Menu Permission Helpers ====================
+  
+  /**
+   * Check if user can view table menus
+   * Permission: TableMenu_Allow_View
+   */
+  canViewTableMenus(): boolean {
+    return this.hasPermission('TableMenu_Allow_View');
+  }
+
+  /**
+   * Check if user can create table menus
+   * Permission: TableMenu_Allow_Create
+   */
+  canCreateTableMenus(): boolean {
+    return this.hasPermission('TableMenu_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit table menus
+   * Permission: TableMenu_Allow_Edit
+   */
+  canEditTableMenus(): boolean {
+    return this.hasPermission('TableMenu_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete table menus
+   * Permission: TableMenu_Allow_Delete
+   */
+  canDeleteTableMenus(): boolean {
+    return this.hasPermission('TableMenu_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage table menus (full control)
+   * Permission: TableMenu_Allow_Manage
+   */
+  canManageTableMenus(): boolean {
+    return this.hasPermission('TableMenu_Allow_Manage');
+  }
+
+  // ==================== Table Sub Menu Permission Helpers ====================
+  
+  /**
+   * Check if user can view table sub menus
+   * Permission: TableSubMenu_Allow_View
+   */
+  canViewTableSubMenus(): boolean {
+    return this.hasPermission('TableSubMenu_Allow_View');
+  }
+
+  /**
+   * Check if user can create table sub menus
+   * Permission: TableSubMenu_Allow_Create
+   */
+  canCreateTableSubMenus(): boolean {
+    return this.hasPermission('TableSubMenu_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit table sub menus
+   * Permission: TableSubMenu_Allow_Edit
+   */
+  canEditTableSubMenus(): boolean {
+    return this.hasPermission('TableSubMenu_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete table sub menus
+   * Permission: TableSubMenu_Allow_Delete
+   */
+  canDeleteTableSubMenus(): boolean {
+    return this.hasPermission('TableSubMenu_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage table sub menus (full control)
+   * Permission: TableSubMenu_Allow_Manage
+   */
+  canManageTableSubMenus(): boolean {
+    return this.hasPermission('TableSubMenu_Allow_Manage');
+  }
+
+  // ==================== Grid Permission Helpers ====================
+  
+  /**
+   * Check if user can view grids
+   * Permission: Grid_Allow_View
+   */
+  canViewGrids(): boolean {
+    return this.hasPermission('Grid_Allow_View');
+  }
+
+  /**
+   * Check if user can create grids
+   * Permission: Grid_Allow_Create
+   */
+  canCreateGrids(): boolean {
+    return this.hasPermission('Grid_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit grids
+   * Permission: Grid_Allow_Edit
+   */
+  canEditGrids(): boolean {
+    return this.hasPermission('Grid_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete grids
+   * Permission: Grid_Allow_Delete
+   */
+  canDeleteGrids(): boolean {
+    return this.hasPermission('Grid_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage grids (full control)
+   * Permission: Grid_Allow_Manage
+   */
+  canManageGrids(): boolean {
+    return this.hasPermission('Grid_Allow_Manage');
+  }
+
+  // ==================== Grid Column Permission Helpers ====================
+  
+  /**
+   * Check if user can view grid columns
+   * Permission: GridColumn_Allow_View
+   */
+  canViewGridColumns(): boolean {
+    return this.hasPermission('GridColumn_Allow_View');
+  }
+
+  /**
+   * Check if user can create grid columns
+   * Permission: GridColumn_Allow_Create
+   */
+  canCreateGridColumns(): boolean {
+    return this.hasPermission('GridColumn_Allow_Create');
+  }
+
+  /**
+   * Check if user can edit grid columns
+   * Permission: GridColumn_Allow_Edit
+   */
+  canEditGridColumns(): boolean {
+    return this.hasPermission('GridColumn_Allow_Edit');
+  }
+
+  /**
+   * Check if user can delete grid columns
+   * Permission: GridColumn_Allow_Delete
+   */
+  canDeleteGridColumns(): boolean {
+    return this.hasPermission('GridColumn_Allow_Delete');
+  }
+
+  /**
+   * Check if user can manage grid columns (full control)
+   * Permission: GridColumn_Allow_Manage
+   */
+  canManageGridColumns(): boolean {
+    return this.hasPermission('GridColumn_Allow_Manage');
   }
 }
 

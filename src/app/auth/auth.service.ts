@@ -80,8 +80,8 @@ export class AuthService {
             this.permissionService.setPermissions(response.permissions);
             console.log('[AuthService] ✅ Permissions set from login response:', response.permissions);
           } else {
-            // Otherwise, load them from the API
-            this.permissionService.loadUserPermissions().subscribe({
+            // Otherwise, refresh them from the API (clears cache first)
+            this.permissionService.refreshPermissions().subscribe({
               next: (permissions) => {
                 console.log('[AuthService] ✅ Permissions loaded after login:', permissions);
               },

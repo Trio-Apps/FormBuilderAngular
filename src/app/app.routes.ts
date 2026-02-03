@@ -79,12 +79,12 @@ export const routes: Routes = [
           .then(m => m.ProjectsListComponent)
       },
 
-      // ===== Document Types ===== (Available for all authenticated users)
+      // ===== Document Types ===== (Available for all authenticated users, buttons disabled based on permissions)
       {
         path: 'document-types',
         loadComponent: () => import('./views/document-types/document-types-list/document-types-list.component')
           .then(m => m.DocumentTypesListComponent),
-        canActivate: [authGuard] // All authenticated users can access
+        canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions
       },
 
       // ===== Alert Rules ===== (Admin only)
@@ -181,25 +181,24 @@ export const routes: Routes = [
       {
         path: 'document-types/:documentTypeId/submissions',
         loadComponent: () => import('./views/form-submissions/form-submissions-list/form-submissions-list.component')
-          .then(m => m.FormSubmissionsListComponent)
-          .catch(err => {
-            console.error('Error loading FormSubmissionsListComponent:', err);
-            throw err;
-          })
+          .then(m => m.FormSubmissionsListComponent),
+        canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions
       },
 
       // ===== Create New Form Submission =====
       {
         path: 'document-types/:documentTypeId/submissions/new',
         loadComponent: () => import('./views/form-submissions/form-submission-create/form-submission-create.component')
-          .then(m => m.FormSubmissionCreateComponent)
+          .then(m => m.FormSubmissionCreateComponent),
+        canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions
       },
 
       // ===== Edit Form Submission =====
       {
         path: 'document-types/:documentTypeId/submissions/:submissionId/edit',
         loadComponent: () => import('./views/form-submissions/form-submission-create/form-submission-create.component')
-          .then(m => m.FormSubmissionCreateComponent)
+          .then(m => m.FormSubmissionCreateComponent),
+        canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions
       },
 
       // ===== Form Builder System ===== (Admin only)

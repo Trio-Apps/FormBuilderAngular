@@ -99,27 +99,21 @@ export class FormsListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    // DEBUG: Log current permissions
-    const currentPerms = this.permissionService.permissions();
-    console.log('[FormsList] 🔐 Current Permissions:', currentPerms);
-    console.log('[FormsList] 🔐 Permissions count:', currentPerms.length);
-    console.log('[FormsList] 🔐 Has FormBuilder_Allow_Create:', this.permissionService.hasPermission('FormBuilder_Allow_Create'));
-    console.log('[FormsList] 🔐 Has FormBuilder_Allow_Edit:', this.permissionService.hasPermission('FormBuilder_Allow_Edit'));
-    console.log('[FormsList] 🔐 Has FormBuilder_Allow_Delete:', this.permissionService.hasPermission('FormBuilder_Allow_Delete'));
-    
-    // Force load permissions if not loaded
-    if (currentPerms.length === 0) {
-      console.log('[FormsList] 🔐 Permissions empty! Loading from API...');
-      this.permissionService.loadUserPermissions().subscribe({
-        next: (perms) => {
-          console.log('[FormsList] 🔐 Permissions loaded from API:', perms);
-          console.log('[FormsList] 🔐 Has FormBuilder_Allow_Create after load:', this.permissionService.hasPermission('FormBuilder_Allow_Create'));
-        },
-        error: (err) => {
-          console.error('[FormsList] 🔐 Error loading permissions:', err);
-        }
-      });
-    }
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[FormsList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[FormsList] 🔐 Permissions loaded from API:', perms);
+        console.log('[FormsList] 🔐 Permissions count:', perms.length);
+        console.log('[FormsList] 🔐 Has FormBuilder_Allow_Create:', this.permissionService.hasPermission('FormBuilder_Allow_Create'));
+        console.log('[FormsList] 🔐 Has FormBuilder_Allow_Edit:', this.permissionService.hasPermission('FormBuilder_Allow_Edit'));
+        console.log('[FormsList] 🔐 Has FormBuilder_Allow_Delete:', this.permissionService.hasPermission('FormBuilder_Allow_Delete'));
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[FormsList] 🔐 Error loading permissions:', err);
+      }
+    });
     
     // Force English language for admin panel by default
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');

@@ -21,6 +21,8 @@ import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 @Component({
   selector: 'app-approval-stages-list',
@@ -42,7 +44,8 @@ import { TableShellComponent } from '../../../shared/table-shell/table-shell.com
     ButtonModule,
     TableModule,
     PaginatorModule,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './approval-stages-list.component.html',
   styleUrls: ['./approval-stages-list.component.scss'],
@@ -53,6 +56,12 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
   workflowId!: number;
   workflow: ApprovalWorkflowDto | null = null;
   documentType: DocumentType | null = null;
+
+  // Permission flags
+  canViewApprovalStages = false;
+  canCreateApprovalStages = false;
+  canEditApprovalStages = false;
+  canDeleteApprovalStages = false;
 
   // Data Arrays
   approvalStages: ApprovalStageDto[] = [];
@@ -90,6 +99,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     private documentTypesService: DocumentTypesService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
+    public permissionService: PermissionService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public translationService: TranslationService
@@ -129,6 +139,26 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[ApprovalStagesList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[ApprovalStagesList] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[ApprovalStagesList] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     // Set language preference
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
@@ -153,6 +183,16 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Cleanup if needed
+  }
+
+  /**
+   * Load user permissions for approval stage operations
+   */
+  private loadPermissions(): void {
+    this.canViewApprovalStages = this.permissionService.canViewApprovalStages();
+    this.canCreateApprovalStages = this.permissionService.canCreateApprovalStages();
+    this.canEditApprovalStages = this.permissionService.canEditApprovalStages();
+    this.canDeleteApprovalStages = this.permissionService.canDeleteApprovalStages();
   }
 
   /**
@@ -377,6 +417,16 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     if (!this.workflowId) {
       return;
     }
+
+    // Permission check
+    if (!this.canCreateApprovalStages) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to create approval stages.'
+      });
+      return;
+    }
     
     this.editingStage = null;
     this.showModal = true;
@@ -407,6 +457,16 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
   }
 
   openEditModal(stage: ApprovalStageDto): void {
+    // Permission check
+    if (!this.canEditApprovalStages) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to edit approval stages.'
+      });
+      return;
+    }
+
     this.editingStage = stage;
     this.showModal = true;
     this.stageForm.patchValue({
@@ -450,6 +510,29 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
   }
 
   saveStage(): void {
+    // Permission check
+    if (this.editingStage) {
+      // Editing - check edit permission
+      if (!this.canEditApprovalStages) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit approval stages.'
+        });
+        return;
+      }
+    } else {
+      // Creating - check create permission
+      if (!this.canCreateApprovalStages) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create approval stages.'
+        });
+        return;
+      }
+    }
+
     if (this.stageForm.invalid) {
       this.markFormGroupTouched(this.stageForm);
       this.messageService.add({ 
@@ -634,6 +717,16 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
 
   deleteStage(stage: ApprovalStageDto): void {
     if (!stage || !stage.id) return;
+
+    // Permission check
+    if (!this.canDeleteApprovalStages) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete approval stages.'
+      });
+      return;
+    }
 
     this.confirmationService.confirm({
       message: `Are you sure you want to delete the approval stage "${stage.stageName}"? This action cannot be undone.`,

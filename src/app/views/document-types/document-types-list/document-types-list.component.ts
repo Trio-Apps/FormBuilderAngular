@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
 import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
@@ -27,6 +28,8 @@ import { TableShellComponent } from '../../../shared/table-shell/table-shell.com
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { AuthService } from '../../../auth/auth.service';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 @Component({
   selector: 'app-document-types-list',
@@ -48,7 +51,8 @@ import { AuthService } from '../../../auth/auth.service';
     ButtonModule,
     TableModule,
     PaginatorModule,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './document-types-list.component.html',
   styleUrls: ['./document-types-list.component.scss'],
@@ -57,6 +61,13 @@ import { AuthService } from '../../../auth/auth.service';
 export class DocumentTypesListComponent implements OnInit, OnDestroy {
   /** Role-based UI: Admin can manage document types; User can only create submissions */
   isAdmin = false;
+  
+  // Permission flags
+  canViewDocuments = false;
+  canCreateDocuments = false;
+  canEditDocuments = false;
+  canDeleteDocuments = false;
+  canManageDocuments = false;
 
   // Data Arrays
   documentTypes: DocumentType[] = [];
@@ -109,6 +120,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   rows = 10;
   totalRecords = 0;
 
+  // Subscription for permissions
+  private permissionsSubscription?: Subscription;
+
   constructor(
     private route: ActivatedRoute,
     private documentTypesService: DocumentTypesService,
@@ -116,6 +130,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     private projectsService: ProjectsService,
     private approvalWorkflowService: ApprovalWorkflowService,
     private authService: AuthService,
+    public permissionService: PermissionService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
@@ -148,6 +163,15 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     const role = this.authService.role() || 'User';
     this.isAdmin = ['administration', 'admin'].includes(role.toLowerCase());
 
+    // Load permissions initially
+    this.loadPermissions();
+
+    // Subscribe to permission changes
+    this.permissionsSubscription = this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
       this.translationService.setLanguage(adminLanguagePreference as 'en' | 'ar');
@@ -170,8 +194,31 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     // No need to get formId from route anymore
   }
 
+  /**
+   * Load user permissions for document operations
+   */
+  private loadPermissions(): void {
+    this.canViewDocuments = this.permissionService.canViewDocuments();
+    this.canCreateDocuments = this.permissionService.canCreateDocuments();
+    this.canEditDocuments = this.permissionService.canEditDocuments();
+    this.canDeleteDocuments = this.permissionService.canDeleteDocuments();
+    this.canManageDocuments = this.permissionService.canManageDocuments();
+    
+    // Debug log
+    console.log('[DocumentTypesList] Permissions loaded:', {
+      canViewDocuments: this.canViewDocuments,
+      canCreateDocuments: this.canCreateDocuments,
+      canEditDocuments: this.canEditDocuments,
+      canDeleteDocuments: this.canDeleteDocuments,
+      canManageDocuments: this.canManageDocuments
+    });
+  }
+
   ngOnDestroy(): void {
-    // Cleanup if needed
+    // Unsubscribe from permissions
+    if (this.permissionsSubscription) {
+      this.permissionsSubscription.unsubscribe();
+    }
   }
 
   /**
@@ -347,6 +394,16 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   }
 
   openAddModal(): void {
+    // Permission check
+    if (!this.canCreateDocuments && !this.canManageDocuments) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to create document types.'
+      });
+      return;
+    }
+
     this.editingDocumentType = null;
     this.showModal = true;
     this.loadParentMenuOptions();
@@ -367,6 +424,16 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   }
 
   openEditModal(documentType: DocumentType): void {
+    // Permission check
+    if (!this.canEditDocuments && !this.canManageDocuments) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to edit document types.'
+      });
+      return;
+    }
+
     this.editingDocumentType = documentType;
     this.showModal = true;
     this.loadParentMenuOptions();
@@ -435,6 +502,29 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   }
 
   saveDocumentType(): void {
+    // Permission check
+    if (this.editingDocumentType) {
+      // Editing - check edit permission
+      if (!this.canEditDocuments && !this.canManageDocuments) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit document types.'
+        });
+        return;
+      }
+    } else {
+      // Creating - check create permission
+      if (!this.canCreateDocuments && !this.canManageDocuments) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create document types.'
+        });
+        return;
+      }
+    }
+
     if (this.documentTypeForm.invalid) {
       this.markFormGroupTouched(this.documentTypeForm);
       this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Please fill all required fields correctly' });
@@ -624,6 +714,16 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
 
   deleteDocumentType(documentType: DocumentType): void {
     if (!documentType || !documentType.id) return;
+
+    // Permission check
+    if (!this.canDeleteDocuments && !this.canManageDocuments) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete document types.'
+      });
+      return;
+    }
 
     this.loading.delete = true;
     this.documentTypesService.hasChildDocumentTypes(documentType.id).subscribe({

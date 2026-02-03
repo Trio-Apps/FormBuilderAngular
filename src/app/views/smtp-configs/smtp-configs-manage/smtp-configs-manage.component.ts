@@ -18,6 +18,8 @@ import { TooltipModule } from 'primeng/tooltip';
 import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 import {
   CreateSmtpConfigDto,
   SmtpConfigDto,
@@ -44,7 +46,8 @@ import {
     TableModule,
     TableShellComponent,
     TableActionsComponent,
-    DialogShellComponent
+    DialogShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './smtp-configs-manage.component.html',
   styleUrls: ['./smtp-configs-manage.component.scss'],
@@ -53,6 +56,13 @@ import {
 export class SmtpConfigsManageComponent implements OnInit, OnDestroy {
   configs: SmtpConfigDto[] = [];
   filteredConfigs: SmtpConfigDto[] = [];
+
+  // Permission flags
+  canViewSmtpConfigs = false;
+  canCreateSmtpConfigs = false;
+  canEditSmtpConfigs = false;
+  canDeleteSmtpConfigs = false;
+  canManageSmtpConfigs = false;
 
   includeInactive = false;
   loading = {
@@ -75,7 +85,8 @@ export class SmtpConfigsManageComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
+    public permissionService: PermissionService
   ) {
     this.form = this.fb.group({
       name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -91,7 +102,45 @@ export class SmtpConfigsManageComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[SmtpConfigsManage] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[SmtpConfigsManage] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[SmtpConfigsManage] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     this.load();
+  }
+
+  /**
+   * Load user permissions for SMTP config operations
+   */
+  private loadPermissions(): void {
+    this.canViewSmtpConfigs = this.permissionService.canViewSmtpConfigs();
+    this.canCreateSmtpConfigs = this.permissionService.canCreateSmtpConfigs();
+    this.canEditSmtpConfigs = this.permissionService.canEditSmtpConfigs();
+    this.canDeleteSmtpConfigs = this.permissionService.canDeleteSmtpConfigs();
+    this.canManageSmtpConfigs = this.permissionService.canManageSmtpConfigs();
+    console.log('[SmtpConfigsManage] Permission flags:', {
+      canViewSmtpConfigs: this.canViewSmtpConfigs,
+      canCreateSmtpConfigs: this.canCreateSmtpConfigs,
+      canEditSmtpConfigs: this.canEditSmtpConfigs,
+      canDeleteSmtpConfigs: this.canDeleteSmtpConfigs,
+      canManageSmtpConfigs: this.canManageSmtpConfigs
+    });
   }
 
   ngOnDestroy(): void {
@@ -140,8 +189,22 @@ export class SmtpConfigsManageComponent implements OnInit, OnDestroy {
     return (this.configs || []).filter(c => !!c.isActive).length;
   }
 
-  openCreate(): void {
-    this.editing = null;
+  openCreate(config?: SmtpConfigDto): void {
+    if (config) {
+      // Editing existing config
+      if (!this.canEditSmtpConfigs && !this.canManageSmtpConfigs) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit SMTP configs.' });
+        return;
+      }
+      this.editing = config;
+    } else {
+      // Creating new config
+      if (!this.canCreateSmtpConfigs && !this.canManageSmtpConfigs) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create SMTP configs.' });
+        return;
+      }
+      this.editing = null;
+    }
     this.form.reset({
       name: '',
       host: '',
@@ -157,6 +220,11 @@ export class SmtpConfigsManageComponent implements OnInit, OnDestroy {
   }
 
   openEdit(row: SmtpConfigDto): void {
+    if (!this.canEditSmtpConfigs && !this.canManageSmtpConfigs) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit SMTP configs.' });
+      return;
+    }
+
     this.editing = row;
     this.form.reset({
       name: row.name || '',
@@ -182,6 +250,20 @@ export class SmtpConfigsManageComponent implements OnInit, OnDestroy {
   }
 
   save(): void {
+    if (this.editing) {
+      // Update existing config
+      if (!this.canEditSmtpConfigs && !this.canManageSmtpConfigs) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to edit SMTP configs.' });
+        return;
+      }
+    } else {
+      // Create new config
+      if (!this.canCreateSmtpConfigs && !this.canManageSmtpConfigs) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to create SMTP configs.' });
+        return;
+      }
+    }
+
     if (this.form.invalid) {
       this.markTouched();
       this.messageService.add({
@@ -284,6 +366,12 @@ export class SmtpConfigsManageComponent implements OnInit, OnDestroy {
 
   confirmDelete(row: SmtpConfigDto): void {
     if (!row?.id) return;
+    
+    if (!this.canDeleteSmtpConfigs && !this.canManageSmtpConfigs) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to delete SMTP configs.' });
+      return;
+    }
+
     this.confirmationService.confirm({
       header: 'Delete SMTP Config',
       message: `Are you sure you want to delete "${row.name}"?`,

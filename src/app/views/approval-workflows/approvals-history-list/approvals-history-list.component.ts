@@ -13,6 +13,7 @@ import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
 import { FormSubmissionsService, FormSubmissionDetailDto, FormSubmissionValueDto, FormSubmissionGridDto, FormSubmissionGridCellDto } from '../../form-submissions/services/form-submissions.service';
 import { FormSubmissionAttachmentsService, FormSubmissionAttachmentDto } from '../../form-submissions/services/form-submission-attachments.service';
 import { environment } from '../../../environments/environment';
@@ -81,7 +82,8 @@ export class ApprovalsHistoryListComponent implements OnInit {
     private formSubmissionAttachmentsService: FormSubmissionAttachmentsService,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    public permissionService: PermissionService
   ) {}
 
   ngOnInit(): void {

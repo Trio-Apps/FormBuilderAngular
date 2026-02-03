@@ -17,7 +17,12 @@
         <button class="btn-icon" (click)="loadColumns()" [disabled]="loading" [title]="translateLabel('common.refresh') || 'Refresh'">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openColumnModal()" [disabled]="loading">
+        <button
+          class="btn-primary"
+          (click)="openColumnModal()"
+          [disabled]="loading || (!permissionService.canCreateGridColumns() && !permissionService.canManageGridColumns())"
+          [title]="permissionService.canCreateGridColumns() || permissionService.canManageGridColumns() ? (translateLabel('grids.columns.newColumn') || 'New Column') : (translateLabel('common.permissionDenied') || 'You do not have permission to create grid columns')"
+        >
           <i class="pi pi-plus"></i>
           <span>{{ translateLabel('grids.columns.newColumn') || 'New Column' }}</span>
         </button>
@@ -175,14 +180,24 @@
               </td>
               <td class="col-actions">
                 <app-table-actions>
-                  <button class="action-btn action-edit" (click)="openColumnModal(column)" [title]="translateLabel('common.edit') || 'Edit'">
+                  <button
+                    class="action-btn action-edit"
+                    (click)="openColumnModal(column)"
+                    [title]="permissionService.canEditGridColumns() || permissionService.canManageGridColumns() ? (translateLabel('common.edit') || 'Edit') : (translateLabel('common.permissionDenied') || 'You do not have permission to edit grid columns')"
+                    [disabled]="!permissionService.canEditGridColumns() && !permissionService.canManageGridColumns()"
+                  >
                     <i class="pi pi-pencil"></i>
                   </button>
-                  <button class="action-btn action-delete" (click)="deleteColumn(column.id)" [title]="translateLabel('common.delete') || 'Delete'">
+                  <button
+                    class="action-btn action-delete"
+                    (click)="deleteColumn(column.id)"
+                    [title]="permissionService.canDeleteGridColumns() || permissionService.canManageGridColumns() ? (translateLabel('common.delete') || 'Delete') : (translateLabel('common.permissionDenied') || 'You do not have permission to delete grid columns')"
+                    [disabled]="!permissionService.canDeleteGridColumns() && !permissionService.canManageGridColumns()"
+                  >
                     <i class="pi pi-trash"></i>
                   </button>
                 </app-table-actions>
-</td>
+              </td>
             </tr>
           </tbody>
         </table>

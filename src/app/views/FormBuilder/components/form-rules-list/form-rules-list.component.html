@@ -19,7 +19,10 @@
         <button class="btn-icon" (click)="loadRules()" [disabled]="loading" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openRuleModal()" [disabled]="loading">
+        <button class="btn-primary" 
+                (click)="openRuleModal()" 
+                [disabled]="loading || (!permissionService.canCreateFormRules() && !permissionService.canManageFormRules())"
+                [title]="permissionService.canCreateFormRules() || permissionService.canManageFormRules() ? '' : 'You do not have permission to create form rules'">
           <i class="pi pi-plus"></i>
           <span>New Rule</span>
         </button>
@@ -100,7 +103,10 @@
         </div>
         <h3>No rules found</h3>
         <p>Create your first rule to get started</p>
-        <button class="btn-primary" (click)="openRuleModal()">
+        <button class="btn-primary" 
+                (click)="openRuleModal()"
+                [disabled]="!permissionService.canCreateFormRules() && !permissionService.canManageFormRules()"
+                [title]="permissionService.canCreateFormRules() || permissionService.canManageFormRules() ? '' : 'You do not have permission to create form rules'">
           <i class="pi pi-plus"></i>
           <span>Add First Rule</span>
         </button>
@@ -182,10 +188,16 @@
               </td>
               <td class="col-actions">
                 <app-table-actions>
-                  <button class="action-btn action-edit" (click)="openRuleModal(rule)" title="Edit Rule">
+                  <button class="action-btn action-edit" 
+                          (click)="openRuleModal(rule)" 
+                          [title]="permissionService.canEditFormRules() || permissionService.canManageFormRules() ? 'Edit Rule' : 'You do not have permission to edit form rules'"
+                          [disabled]="!permissionService.canEditFormRules() && !permissionService.canManageFormRules()">
                     <i class="pi pi-pencil"></i>
                   </button>
-                  <button class="action-btn action-delete" (click)="deleteRule(rule.id)" title="Delete Rule">
+                  <button class="action-btn action-delete" 
+                          (click)="deleteRule(rule.id)" 
+                          [title]="permissionService.canDeleteFormRules() || permissionService.canManageFormRules() ? 'Delete Rule' : 'You do not have permission to delete form rules'"
+                          [disabled]="!permissionService.canDeleteFormRules() && !permissionService.canManageFormRules()">
                     <i class="pi pi-trash"></i>
                   </button>
                 </app-table-actions>
@@ -253,6 +265,27 @@
                 </label>
               </div>
             </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Evaluation Phase *</label>
+            <select formControlName="evaluationPhase" class="form-control">
+              <option value="OnFieldChange">On Field Change (Regular Rules)</option>
+              <option value="PreSubmit">Pre Submit (Blocking Rules)</option>
+              <option value="PreOpen">Pre Open (Blocking Rules)</option>
+            </select>
+            <small class="form-text">PreSubmit: Blocks submission if condition is met</small>
+          </div>
+          <div class="form-group form-group-full" *ngIf="ruleForm.get('evaluationPhase')?.value === 'PreSubmit' || ruleForm.get('evaluationPhase')?.value === 'PreOpen'">
+            <label>Block Message *</label>
+            <textarea
+              formControlName="blockMessage"
+              class="form-control"
+              rows="2"
+              placeholder="Enter error message to show when rule blocks submission (e.g., 'Total amount exceeds allowed limit of 10,000')"
+              [required]="ruleForm.get('evaluationPhase')?.value === 'PreSubmit' || ruleForm.get('evaluationPhase')?.value === 'PreOpen'"></textarea>
+            <small class="form-text">This message will be displayed to the user when the rule blocks submission</small>
           </div>
         </div>
       </div>

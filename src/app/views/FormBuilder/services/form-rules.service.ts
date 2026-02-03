@@ -224,6 +224,91 @@ export class FormRulesService {
   }
 
   /**
+   * POST - Evaluate blocking rules before submit/open
+   * يستخدمها الـ Forms (سواء Public أو داخل النظام) للتحقق من قواعد الـ Blocking قبل التنفيذ الفعلي.
+   *
+   * Expected backend endpoint: POST /api/FormRules/evaluate-blocking
+   * Payload example:
+   * {
+   *   formBuilderId: 123,
+   *   evaluationPhase: 'PreSubmit',
+   *   fieldValues: { FIELD_CODE: value, '123': valueById, ... }
+   * }
+   *
+   * The backend should return something like:
+   * - 200 OK with body: { isBlocked: false } أو { isBlocked: true, blockMessage, ruleId, conditionKey, ... }
+   * - or 400/403 with body (or data) containing isBlocked=true
+   *
+   * This method يحاول توحيد الـ response قدر الإمكان:
+   * - يرجع Observable<{ isBlocked: boolean; blockMessage?: string; message?: string; ruleId?: number; conditionKey?: string; [key: string]: any }>
+   * - لو حصل خطأ network/غيره بدون isBlocked، يُرمى كما هو ليتعامل معه الـ component
+   */
+  evaluateBlockingRules(payload: {
+    formBuilderId: number;
+    evaluationPhase: 'OnFieldChange' | 'PreSubmit' | 'PreOpen';
+    fieldValues: { [key: string]: any };
+  }): Observable<{
+    isBlocked?: boolean;
+    blockMessage?: string;
+    message?: string;
+    ruleId?: number;
+    ruleName?: string;
+    conditionKey?: string;
+    [key: string]: any;
+  }> {
+    return this.http.post<any>(`${this.baseUrl}/evaluate-blocking`, payload).pipe(
+      map((response: any) => {
+        // Normalize common ServiceResult<ApiResponse<T>> shapes
+        let result = response;
+        if (response && typeof response === 'object') {
+          if (response.success !== undefined) {
+            result = response.data ?? response;
+          } else if (!response.isBlocked && (response.data || response.result)) {
+            result = response.data || response.result || response;
+          }
+        }
+        return result;
+      }),
+      catchError((error) => {
+        console.error('[FormRulesService] Error evaluating blocking rules:', error);
+
+        const errorResponse = error?.error;
+        const blockingPayload: any =
+          errorResponse && typeof errorResponse === 'object'
+            ? (errorResponse.data && typeof errorResponse.data === 'object'
+                ? errorResponse.data
+                : errorResponse)
+            : null;
+
+        if (blockingPayload?.isBlocked) {
+          // Treat as a blocking rule violation and return a normalized object
+          const errorMessage =
+            blockingPayload.blockMessage ||
+            blockingPayload.message ||
+            errorResponse?.message ||
+            'Form submission is blocked by a validation rule.';
+
+          console.warn('[FormRulesService] Blocking rules evaluation returned isBlocked=true:', {
+            status: error?.status,
+            ruleId: blockingPayload.ruleId,
+            ruleName: blockingPayload.ruleName,
+            conditionKey: blockingPayload.conditionKey,
+            message: errorMessage
+          });
+
+          return of({
+            ...blockingPayload,
+            isBlocked: true,
+            blockMessage: errorMessage
+          });
+        }
+
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
    * POST - إنشاء Rule جديد
    * ✅ Updated: Handles both ApiResponse wrapper and direct FormRuleDto response
    */

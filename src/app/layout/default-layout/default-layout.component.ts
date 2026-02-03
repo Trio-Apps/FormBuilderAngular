@@ -26,6 +26,7 @@ import { DocumentTypesService } from '../../views/FormBuilder/services/document-
 import { DocumentType } from '../../views/FormBuilder/form-builder/models/document-types.model';
 import { UsersService, UserGroupDto } from '../../views/FormBuilder/services/users.service';
 import { TableMenusService, TableMenuDto } from '../../services/table-menus.service';
+import { PermissionService } from '../../services/permission.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -64,7 +65,8 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     private router: Router,
     private documentTypesService: DocumentTypesService,
     private usersService: UsersService,
-    private tableMenusService: TableMenusService
+    private tableMenusService: TableMenusService,
+    private permissionService: PermissionService
   ) {}
 
   ngOnInit(): void {
@@ -301,13 +303,46 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   private filterNavItemsByRole(): void {
     const isAdmin = this.isUserAdmin();
     
-    // If role is "Administration" (from UserGroups table), show all items
+    // Helper to apply permission-based filtering (permissionCode في attributes)
+    const applyPermissionFilter = (items: INavData[]): INavData[] => {
+      const result: INavData[] = [];
+
+      for (const item of items) {
+        const attrs: any = item.attributes || {};
+        const permissionCode = attrs.permissionCode as string | undefined;
+
+        // فلترة الأطفال أولاً
+        let children: INavData[] | undefined;
+        if (item.children && item.children.length > 0) {
+          children = applyPermissionFilter(item.children);
+        }
+
+        // لو في permissionCode ولازم يكون عند المستخدم صلاحية الـ view
+        if (permissionCode && !this.permissionService.hasPermission(permissionCode)) {
+          // حتى لو الأطفال مسموحين، بنخفي الـ parent علشان ال sidebar يكون واضح
+          continue;
+        }
+
+        if (children && children.length > 0) {
+          result.push({ ...item, children });
+        } else if (!item.children) {
+          result.push(item);
+        } else if (!permissionCode || this.permissionService.hasPermission(permissionCode)) {
+          // عنصر أب بدون أطفال بعد الفلترة لكن مسموح عرضه (مثلاً عنوان section)
+          result.push({ ...item, children: [] });
+        }
+      }
+
+      return result;
+    };
+
+    // If role is "Administration" (from UserGroups table), نطبق فلتر الـ permissions فقط
     if (isAdmin) {
-      this.navItems = [...navItems];
+      this.navItems = applyPermissionFilter(navItems);
       return;
     }
 
-    // If role is "User" or any other role, filter items
+    // If role is "User" or any other role, filter items بالمنطق القديم + permissions
     // Hide: Dashboard, Form Builder section and Projects section
     // Show: Document Types, Logout
     const filteredItems: INavData[] = [];
@@ -408,7 +443,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
       }
     }
 
-    this.navItems = filteredItems;
+    this.navItems = applyPermissionFilter(filteredItems);
   }
 
   /**

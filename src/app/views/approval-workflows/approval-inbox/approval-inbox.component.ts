@@ -24,6 +24,8 @@ import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 @Component({
   selector: 'app-approval-inbox',
@@ -42,7 +44,8 @@ import { TableShellComponent } from '../../../shared/table-shell/table-shell.com
     ButtonModule,
     TableModule,
     PaginatorModule,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './approval-inbox.component.html',
   styleUrls: ['./approval-inbox.component.scss'],
@@ -93,6 +96,7 @@ export class ApprovalInboxComponent implements OnInit {
     private approvalDelegationService: ApprovalDelegationService,
     private storageService: StorageService,
     private authService: AuthService,
+    public permissionService: PermissionService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
@@ -711,6 +715,11 @@ export class ApprovalInboxComponent implements OnInit {
    */
   canApproveReject(item: ApprovalInboxItemDto | null): boolean {
     if (!item) return false;
+
+    // Permission check: user must have at least Approve or Reject permission
+    if (!this.permissionService.canApproveSubmissions() && !this.permissionService.canRejectSubmissions()) {
+      return false;
+    }
     
     // Admin can always approve
     if (this.isAdmin) {
@@ -791,6 +800,11 @@ export class ApprovalInboxComponent implements OnInit {
    */
   canApproveRejectSubmission(submission: FormSubmissionDto | null): boolean {
     if (!submission) return false;
+
+    // Permission check: user must have at least Approve or Reject permission
+    if (!this.permissionService.canApproveSubmissions() && !this.permissionService.canRejectSubmissions()) {
+      return false;
+    }
     
     // Admin can always approve
     if (this.isAdmin) {
@@ -1576,6 +1590,12 @@ export class ApprovalInboxComponent implements OnInit {
     if (this.actionType !== 'Approved') {
       return false;
     }
+
+    // Also disable if user has no approve permission
+    if (!this.permissionService.canApproveSubmissions()) {
+      return true;
+    }
+
     return this.loading.action || !this.isAmountValid;
   }
 

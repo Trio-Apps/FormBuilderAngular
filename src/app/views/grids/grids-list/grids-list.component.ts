@@ -11,6 +11,7 @@ import { FormGridDto, CreateFormGridDto, UpdateFormGridDto } from '../../FormBui
 import { Subscription } from 'rxjs';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -71,7 +72,8 @@ export class GridsListComponent implements OnInit, OnDestroy {
     private tabsService: TabsService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    public permissionService: PermissionService
   ) {}
 
   ngOnInit(): void {
@@ -243,6 +245,27 @@ export class GridsListComponent implements OnInit, OnDestroy {
   }
 
   openGridModal(grid?: FormGridDto): void {
+    // Permission checks: create vs edit
+    if (grid) {
+      if (!this.permissionService.canEditGrids() && !this.permissionService.canManageGrids()) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit grids.'
+        });
+        return;
+      }
+    } else {
+      if (!this.permissionService.canCreateGrids() && !this.permissionService.canManageGrids()) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create grids.'
+        });
+        return;
+      }
+    }
+
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     if (grid) {
       this.editingGrid = grid;
@@ -287,6 +310,27 @@ export class GridsListComponent implements OnInit, OnDestroy {
   }
 
   saveGrid(): void {
+    // Permission checks: create vs edit
+    if (this.editingGrid) {
+      if (!this.permissionService.canEditGrids() && !this.permissionService.canManageGrids()) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit grids.'
+        });
+        return;
+      }
+    } else {
+      if (!this.permissionService.canCreateGrids() && !this.permissionService.canManageGrids()) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create grids.'
+        });
+        return;
+      }
+    }
+
     if (!this.gridName || !this.gridCode) {
       this.messageService.add({
         severity: 'warn',
@@ -393,6 +437,15 @@ export class GridsListComponent implements OnInit, OnDestroy {
   deleteGrid(id: number): void {
     const gridToDelete = this.grids.find(g => g.id === id);
     if (!gridToDelete) return;
+
+    if (!this.permissionService.canDeleteGrids() && !this.permissionService.canManageGrids()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete grids.'
+      });
+      return;
+    }
 
     this.confirmationService.confirm({
       message: `Are you sure you want to delete "${gridToDelete.gridName}"?`,

@@ -15,7 +15,10 @@
         <button class="btn-icon" (click)="loadApprovalWorkflows()" [disabled]="loading.workflows" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.workflows">
+        <button class="btn-primary" 
+                (click)="openAddModal()" 
+                [disabled]="loading.workflows || (!permissionService.canCreateApprovalWorkflows() && !permissionService.canManageApprovalWorkflows())"
+                [title]="permissionService.canCreateApprovalWorkflows() || permissionService.canManageApprovalWorkflows() ? 'New Approval Workflow' : 'You do not have permission to create approval workflows'">
           <i class="pi pi-plus"></i>
           <span>New Approval Workflow</span>
         </button>
@@ -129,17 +132,16 @@
                   </button>
                   <button
                     class="action-btn action-edit"
-                    [title]="'Edit'"
+                    [title]="permissionService.canEditApprovalWorkflows() || permissionService.canManageApprovalWorkflows() ? 'Edit' : 'No permission to edit'"
                     (click)="openEditModal(workflow)"
-                  >
+                    [disabled]="!permissionService.canEditApprovalWorkflows() && !permissionService.canManageApprovalWorkflows()">
                     <i class="pi pi-pencil"></i>
                   </button>
                   <button
                     class="action-btn action-delete"
-                    [title]="'Delete'"
+                    [title]="permissionService.canDeleteApprovalWorkflows() || permissionService.canManageApprovalWorkflows() ? 'Delete' : 'No permission to delete'"
                     (click)="deleteWorkflow(workflow)"
-                    [disabled]="loading.delete"
-                  >
+                    [disabled]="loading.delete || (!permissionService.canDeleteApprovalWorkflows() && !permissionService.canManageApprovalWorkflows())">
                     <i class="pi pi-trash"></i>
                   </button>
                 </app-table-actions>

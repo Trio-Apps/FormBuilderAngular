@@ -26,6 +26,7 @@ import { Subscription, forkJoin, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -162,7 +163,8 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public translationService: TranslationService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    public permissionService: PermissionService
   ) {
     this.columnForm = this.fb.group({
       fieldTypeId: ['', Validators.required],
@@ -910,6 +912,26 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   }
 
   openColumnModal(column?: FormGridColumnDto): void {
+    // Permission checks: create vs edit
+    if (column) {
+      if (!this.permissionService.canEditGridColumns() && !this.permissionService.canManageGridColumns()) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit grid columns.'
+        });
+        return;
+      }
+    } else {
+      if (!this.permissionService.canCreateGridColumns() && !this.permissionService.canManageGridColumns()) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create grid columns.'
+        });
+        return;
+      }
+    }
     this.currentInputLanguage = 'en';
     if (column) {
       this.editingColumn = column;
@@ -1990,6 +2012,29 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   }
 
   saveColumn(): void {
+    // Permission checks: create vs edit
+    if (this.editingColumn) {
+      if (!this.permissionService.canEditGridColumns() && !this.permissionService.canManageGridColumns()) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit grid columns.'
+        });
+        this.loading = false;
+        return;
+      }
+    } else {
+      if (!this.permissionService.canCreateGridColumns() && !this.permissionService.canManageGridColumns()) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create grid columns.'
+        });
+        this.loading = false;
+        return;
+      }
+    }
+
     if (this.columnForm.invalid) {
       this.columnForm.markAllAsTouched();
       this.messageService.add({
@@ -2351,6 +2396,15 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   deleteColumn(id: number): void {
     const columnToDelete = this.columns.find(c => c.id === id);
     if (!columnToDelete) return;
+
+    if (!this.permissionService.canDeleteGridColumns() && !this.permissionService.canManageGridColumns()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete grid columns.'
+      });
+      return;
+    }
 
     this.confirmationService.confirm({
       message: `Delete "${columnToDelete.columnName}"? This will soft delete the column (it will be hidden but not permanently removed).`,

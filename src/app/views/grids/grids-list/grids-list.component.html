@@ -17,7 +17,12 @@
         <button class="btn-icon" (click)="loadGrids()" [disabled]="loading" [title]="translateLabel('common.refresh') || 'Refresh'">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openGridModal()" [disabled]="loading">
+        <button
+          class="btn-primary"
+          (click)="openGridModal()"
+          [disabled]="loading || (!permissionService.canCreateGrids() && !permissionService.canManageGrids())"
+          [title]="permissionService.canCreateGrids() || permissionService.canManageGrids() ? (translateLabel('grids.addGrid') || 'New Grid') : (translateLabel('common.permissionDenied') || 'You do not have permission to create grids')"
+        >
           <i class="pi pi-plus"></i>
           <span>New Grid</span>
         </button>
@@ -167,20 +172,42 @@
               </td>
               <td class="col-actions">
                 <app-table-actions>
-                  <button class="action-btn action-edit" (click)="openGridModal(grid)" [title]="translateLabel('common.edit') || 'Edit'">
+                  <button
+                    class="action-btn action-edit"
+                    (click)="openGridModal(grid)"
+                    [title]="permissionService.canEditGrids() || permissionService.canManageGrids() ? (translateLabel('common.edit') || 'Edit') : (translateLabel('common.permissionDenied') || 'You do not have permission to edit grids')"
+                    [disabled]="!permissionService.canEditGrids() && !permissionService.canManageGrids()"
+                  >
                     <i class="pi pi-pencil"></i>
                   </button>
-                  <button class="action-btn action-duplicate" (click)="navigateToGridColumns(grid.id)" [title]="translateLabel('grids.manageColumns') || 'Manage Columns'">
+                  <button
+                    class="action-btn action-duplicate"
+                    (click)="navigateToGridColumns(grid.id)"
+                    [title]="permissionService.canManageGridColumns() ? (translateLabel('grids.manageColumns') || 'Manage Columns') : (translateLabel('common.permissionDenied') || 'You do not have permission to manage grid columns')"
+                    [disabled]="!permissionService.canManageGridColumns()"
+                  >
                     <i class="pi pi-list"></i>
                   </button>
-                  <button *ngIf="grid.isDeleted" class="action-btn action-activate" (click)="restoreGrid(grid)" [title]="translateLabel('common.restore') || 'Restore'">
+                  <button
+                    *ngIf="grid.isDeleted"
+                    class="action-btn action-activate"
+                    (click)="restoreGrid(grid)"
+                    [title]="permissionService.canDeleteGrids() || permissionService.canManageGrids() ? (translateLabel('common.restore') || 'Restore') : (translateLabel('common.permissionDenied') || 'You do not have permission to restore grids')"
+                    [disabled]="!permissionService.canDeleteGrids() && !permissionService.canManageGrids()"
+                  >
                     <i class="pi pi-undo"></i>
                   </button>
-                  <button *ngIf="!grid.isDeleted" class="action-btn action-delete" (click)="deleteGrid(grid.id)" [title]="translateLabel('common.delete') || 'Delete'">
+                  <button
+                    *ngIf="!grid.isDeleted"
+                    class="action-btn action-delete"
+                    (click)="deleteGrid(grid.id)"
+                    [title]="permissionService.canDeleteGrids() || permissionService.canManageGrids() ? (translateLabel('common.delete') || 'Delete') : (translateLabel('common.permissionDenied') || 'You do not have permission to delete grids')"
+                    [disabled]="!permissionService.canDeleteGrids() && !permissionService.canManageGrids()"
+                  >
                     <i class="pi pi-trash"></i>
                   </button>
                 </app-table-actions>
-</td>
+              </td>
             </tr>
           </tbody>
         </table>

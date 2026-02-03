@@ -20,7 +20,10 @@
           title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openModal()" [disabled]="loading">
+        <button class="btn-primary" 
+                (click)="openModal()" 
+                [disabled]="loading || (!permissionService.canCreateStoredProcedures() && !permissionService.canManageStoredProcedures())"
+                [title]="permissionService.canCreateStoredProcedures() || permissionService.canManageStoredProcedures() ? '' : 'You do not have permission to create stored procedures'">
           <i class="pi pi-plus"></i>
           <span>Add Stored Procedure</span>
         </button>
@@ -162,7 +165,10 @@
         </div>
         <h3>No Stored Procedures Found</h3>
         <p>Get started by creating your first stored procedure.</p>
-        <button class="btn-primary" (click)="openModal()">
+        <button class="btn-primary" 
+                (click)="openModal()"
+                [disabled]="!permissionService.canCreateStoredProcedures() && !permissionService.canManageStoredProcedures()"
+                [title]="permissionService.canCreateStoredProcedures() || permissionService.canManageStoredProcedures() ? '' : 'You do not have permission to create stored procedures'">
           <i class="pi pi-plus"></i> Add Stored Procedure
         </button>
       </div>
@@ -208,10 +214,16 @@
           </td>
           <td>
             <app-table-actions>
-              <button class="action-btn action-edit" (click)="editSp(sp.id)" title="Edit">
+              <button class="action-btn action-edit" 
+                      (click)="editSp(sp.id)" 
+                      [title]="permissionService.canEditStoredProcedures() || permissionService.canManageStoredProcedures() ? 'Edit' : 'You do not have permission to edit stored procedures'"
+                      [disabled]="!permissionService.canEditStoredProcedures() && !permissionService.canManageStoredProcedures()">
                 <i class="pi pi-pencil"></i>
               </button>
-              <button class="action-btn action-delete" (click)="deleteSp(sp.id)" title="Delete">
+              <button class="action-btn action-delete" 
+                      (click)="deleteSp(sp.id)" 
+                      [title]="permissionService.canDeleteStoredProcedures() || permissionService.canManageStoredProcedures() ? 'Delete' : 'You do not have permission to delete stored procedures'"
+                      [disabled]="!permissionService.canDeleteStoredProcedures() && !permissionService.canManageStoredProcedures()">
                 <i class="pi pi-trash"></i>
               </button>
             </app-table-actions>

@@ -17,7 +17,10 @@
         <button class="btn-icon" (click)="load()" [disabled]="loading.list" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openCreate()" [disabled]="loading.list">
+        <button class="btn-primary" 
+                (click)="openCreate()" 
+                [disabled]="loading.list || (!permissionService.canCreateSmtpConfigs() && !permissionService.canManageSmtpConfigs())"
+                [title]="permissionService.canCreateSmtpConfigs() || permissionService.canManageSmtpConfigs() ? '' : 'You do not have permission to create SMTP configs'">
           <i class="pi pi-plus"></i>
           <span>New Config</span>
         </button>
@@ -137,7 +140,8 @@
                   icon="pi pi-pencil"
                   class="p-button-text p-button-sm action-btn"
                   (click)="openEdit(row)"
-                  [pTooltip]="'Edit'"
+                  [pTooltip]="permissionService.canEditSmtpConfigs() || permissionService.canManageSmtpConfigs() ? 'Edit' : 'You do not have permission to edit SMTP configs'"
+                  [disabled]="!permissionService.canEditSmtpConfigs() && !permissionService.canManageSmtpConfigs()"
                   tooltipPosition="top"
                 ></button>
                 <button
@@ -154,8 +158,8 @@
                   icon="pi pi-trash"
                   class="p-button-text p-button-sm p-button-danger action-btn"
                   (click)="confirmDelete(row)"
-                  [disabled]="loading.delete"
-                  [pTooltip]="'Delete'"
+                  [disabled]="loading.delete || (!permissionService.canDeleteSmtpConfigs() && !permissionService.canManageSmtpConfigs())"
+                  [pTooltip]="permissionService.canDeleteSmtpConfigs() || permissionService.canManageSmtpConfigs() ? 'Delete' : 'You do not have permission to delete SMTP configs'"
                   tooltipPosition="top"
                 ></button>
               </app-table-actions>
@@ -169,7 +173,12 @@
               <div class="empty-state">
                 <i class="pi pi-inbox"></i>
                 <p>No SMTP configs found.</p>
-                <button pButton icon="pi pi-plus" label="Create Config" (click)="openCreate()"></button>
+                <button pButton 
+                        icon="pi pi-plus" 
+                        label="Create Config" 
+                        (click)="openCreate()"
+                        [disabled]="!permissionService.canCreateSmtpConfigs() && !permissionService.canManageSmtpConfigs()"
+                        [title]="permissionService.canCreateSmtpConfigs() || permissionService.canManageSmtpConfigs() ? '' : 'You do not have permission to create SMTP configs'"></button>
               </div>
             </td>
           </tr>

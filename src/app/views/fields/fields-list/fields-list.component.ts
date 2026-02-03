@@ -21,6 +21,7 @@ import { ButtonModule } from 'primeng/button';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { TranslationService } from '../../../core/services/translation.service';
+import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import { DuplicateValidationHelper } from '../../../core/utils/duplicate-validation.helper';
 import { environment } from '../../../environments/environment';
 import { AttachmentTypesService } from '../../FormBuilder/services/attachment-types.service';
@@ -33,6 +34,8 @@ import { ValidationErrorCollection } from '../../angular-validation/models/valid
 import { UserQueriesService } from '../../FormBuilder/services/user-queries.service';
 import { UserQueryDto, CreateUserQueryDto } from '../../FormBuilder/form-builder/models/user-query-dto.model';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 @Component({
   selector: 'app-fields-list',
@@ -50,6 +53,8 @@ import { TableShellComponent } from '../../../shared/table-shell/table-shell.com
     ButtonModule,
     RouterLink,
     TableShellComponent,
+    HasPermissionDirective,
+    TranslatePipe
   ],
   templateUrl: './fields-list.component.html',
   styleUrls: ['./fields-list.component.scss'],
@@ -60,6 +65,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   tabId!: number;
   formBuilderId!: number;
   tabName: string = '';
+
+  // Permission flags
+  canViewFields = false;
+  canCreateFields = false;
+  canEditFields = false;
+  canDeleteFields = false;
+  canManageFields = false;
 
   // Data Arrays
   fields: FormFieldDto[] = [];
@@ -238,7 +250,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     public translationService: TranslationService,
     private validationService: ValidationService,
     private formSubmissionService: FormSubmissionService,
-    private userQueriesService: UserQueriesService
+    private userQueriesService: UserQueriesService,
+    public permissionService: PermissionService
   ) {
     // Initialize the form
     this.fieldForm = this.fb.group({
@@ -316,6 +329,26 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[FieldsList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[FieldsList] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[FieldsList] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     this.routeSub = this.route.params.subscribe(params => {
       this.tabId = +params['tabId'];
 
@@ -330,6 +363,24 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     // Set tabId in form
     this.fieldForm.patchValue({ tabId: this.tabId });
+  }
+
+  /**
+   * Load user permissions for field operations
+   */
+  private loadPermissions(): void {
+    this.canViewFields = this.permissionService.canViewFields();
+    this.canCreateFields = this.permissionService.canCreateFields();
+    this.canEditFields = this.permissionService.canEditFields();
+    this.canDeleteFields = this.permissionService.canDeleteFields();
+    this.canManageFields = this.permissionService.canManageFields();
+    console.log('[FieldsList] Permission flags:', {
+      canViewFields: this.canViewFields,
+      canCreateFields: this.canCreateFields,
+      canEditFields: this.canEditFields,
+      canDeleteFields: this.canDeleteFields,
+      canManageFields: this.canManageFields
+    });
   }
 
   loadTabAndFormId(): void {
@@ -556,6 +607,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
 
   openAddFieldModal(): void {
+    if (!this.canCreateFields && !this.canManageFields) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create fields.' });
+      return;
+    }
+
     this.editingField = null;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.selectedFileExtensions = []; // Reset file extensions
@@ -614,6 +670,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   openEditFieldModal(field: FormFieldDto): void {
+    if (!this.canEditFields && !this.canManageFields) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit fields.' });
+      return;
+    }
+
     this.editingField = field;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     
@@ -921,6 +982,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   saveField(): void {
+    if (this.editingField) {
+      // Update existing field
+      if (!this.canEditFields && !this.canManageFields) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to edit fields.' });
+        return;
+      }
+    } else {
+      // Create new field
+      if (!this.canCreateFields && !this.canManageFields) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to create fields.' });
+        return;
+      }
+    }
+
     if (this.fieldForm.invalid) {
       this.markFormGroupTouched(this.fieldForm);
       this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Please fill all required fields correctly' });
@@ -1151,6 +1226,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   deleteField(fieldId: number): void {
+    if (!this.canDeleteFields && !this.canManageFields) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to delete fields.' });
+      return;
+    }
+
     const fieldToDelete = this.fields.find(f => f.id === fieldId);
     if (!fieldToDelete) return;
 

@@ -24,6 +24,8 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { Subscription } from 'rxjs';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 @Component({
   selector: 'app-table-menus-list',
@@ -47,7 +49,8 @@ import { Subscription } from 'rxjs';
     PaginatorModule,
     MultiSelectModule,
     TranslatePipe,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './table-menus-list.component.html',
   styleUrls: ['./table-menus-list.component.scss'],
@@ -60,6 +63,20 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   subMenus: TableSubMenuDto[] = [];
   menuDocuments: TableMenuDocumentDto[] = [];
   documentTypes: DocumentType[] = [];
+
+  // Permission flags - Menu
+  canViewTableMenus = false;
+  canCreateTableMenus = false;
+  canEditTableMenus = false;
+  canDeleteTableMenus = false;
+  canManageTableMenus = false;
+
+  // Permission flags - Sub Menu
+  canViewTableSubMenus = false;
+  canCreateTableSubMenus = false;
+  canEditTableSubMenus = false;
+  canDeleteTableSubMenus = false;
+  canManageTableSubMenus = false;
 
   // Loading States
   loading = {
@@ -110,12 +127,33 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private cdr: ChangeDetectorRef,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    public permissionService: PermissionService
   ) {
     this.initializeForms();
   }
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[TableMenusList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[TableMenusList] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[TableMenusList] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     this.loadUserGroups(); // Load permissions from UserGroups table first
     this.loadMenus();
     this.loadDocumentTypes();
@@ -133,6 +171,36 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
           this.loadAllSubMenusForDocumentModal();
         }
       }
+    });
+  }
+
+  /**
+   * Load user permissions for table menu operations
+   */
+  private loadPermissions(): void {
+    this.canViewTableMenus = this.permissionService.canViewTableMenus();
+    this.canCreateTableMenus = this.permissionService.canCreateTableMenus();
+    this.canEditTableMenus = this.permissionService.canEditTableMenus();
+    this.canDeleteTableMenus = this.permissionService.canDeleteTableMenus();
+    this.canManageTableMenus = this.permissionService.canManageTableMenus();
+    
+    this.canViewTableSubMenus = this.permissionService.canViewTableSubMenus();
+    this.canCreateTableSubMenus = this.permissionService.canCreateTableSubMenus();
+    this.canEditTableSubMenus = this.permissionService.canEditTableSubMenus();
+    this.canDeleteTableSubMenus = this.permissionService.canDeleteTableSubMenus();
+    this.canManageTableSubMenus = this.permissionService.canManageTableSubMenus();
+    
+    console.log('[TableMenusList] Permission flags:', {
+      canViewTableMenus: this.canViewTableMenus,
+      canCreateTableMenus: this.canCreateTableMenus,
+      canEditTableMenus: this.canEditTableMenus,
+      canDeleteTableMenus: this.canDeleteTableMenus,
+      canManageTableMenus: this.canManageTableMenus,
+      canViewTableSubMenus: this.canViewTableSubMenus,
+      canCreateTableSubMenus: this.canCreateTableSubMenus,
+      canEditTableSubMenus: this.canEditTableSubMenus,
+      canDeleteTableSubMenus: this.canDeleteTableSubMenus,
+      canManageTableSubMenus: this.canManageTableSubMenus
     });
   }
 
@@ -340,6 +408,20 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   // ==================== Menu CRUD ====================
 
   openMenuModal(menu?: TableMenuDto): void {
+    if (menu) {
+      // Editing existing menu
+      if (!this.canEditTableMenus && !this.canManageTableMenus) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit table menus.' });
+        return;
+      }
+    } else {
+      // Creating new menu
+      if (!this.canCreateTableMenus && !this.canManageTableMenus) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create table menus.' });
+        return;
+      }
+    }
+
     this.editingMenu = menu || null;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     
@@ -386,6 +468,20 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   }
 
   saveMenu(): void {
+    if (this.editingMenu) {
+      // Update existing menu
+      if (!this.canEditTableMenus && !this.canManageTableMenus) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to edit table menus.' });
+        return;
+      }
+    } else {
+      // Create new menu
+      if (!this.canCreateTableMenus && !this.canManageTableMenus) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to create table menus.' });
+        return;
+      }
+    }
+
     if (this.menuForm.invalid) {
       this.messageService.add({
         severity: 'warn',
@@ -468,6 +564,11 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   }
 
   deleteMenu(menu: TableMenuDto): void {
+    if (!this.canDeleteTableMenus && !this.canManageTableMenus) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to delete table menus.' });
+      return;
+    }
+
     this.confirmationService.confirm({
       message: `Are you sure you want to delete "${menu.name}"?`,
       header: 'Confirm Delete',
@@ -501,6 +602,20 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   // ==================== Sub Menu CRUD ====================
 
   openSubMenuModal(menu: TableMenuDto, subMenu?: TableSubMenuDto): void {
+    if (subMenu) {
+      // Editing existing sub menu
+      if (!this.canEditTableSubMenus && !this.canManageTableSubMenus) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit table sub menus.' });
+        return;
+      }
+    } else {
+      // Creating new sub menu
+      if (!this.canCreateTableSubMenus && !this.canManageTableSubMenus) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create table sub menus.' });
+        return;
+      }
+    }
+
     this.currentMenuForSubMenu = menu;
     this.editingSubMenu = subMenu || null;
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
@@ -545,6 +660,20 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   }
 
   saveSubMenu(): void {
+    if (this.editingSubMenu) {
+      // Update existing sub menu
+      if (!this.canEditTableSubMenus && !this.canManageTableSubMenus) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to edit table sub menus.' });
+        return;
+      }
+    } else {
+      // Create new sub menu
+      if (!this.canCreateTableSubMenus && !this.canManageTableSubMenus) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to create table sub menus.' });
+        return;
+      }
+    }
+
     if (this.subMenuForm.invalid) {
       this.messageService.add({
         severity: 'warn',
@@ -629,6 +758,11 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
   }
 
   deleteSubMenu(subMenu: TableSubMenuDto): void {
+    if (!this.canDeleteTableSubMenus && !this.canManageTableSubMenus) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to delete table sub menus.' });
+      return;
+    }
+
     this.confirmationService.confirm({
       message: `Are you sure you want to delete "${subMenu.name}"?`,
       header: 'Confirm Delete',

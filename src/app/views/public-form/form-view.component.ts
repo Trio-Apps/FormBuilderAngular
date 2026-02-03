@@ -104,6 +104,8 @@ export class FormViewComponent implements OnInit {
   } = {};
   fieldValues: { [fieldCode: string]: any } = {}; // Track field values for rule evaluation
   fieldValidationErrors: { [fieldCode: string]: string } = {}; // Track validation errors for each field
+  blockingRuleErrors: { [fieldCode: string]: string } = {}; // Track blocking rule errors for each field
+  generalBlockingError: string = ''; // General blocking error message when no specific field is identified
 
   // Grid components reference
   @ViewChildren(GridViewComponent) gridViewComponents!: QueryList<GridViewComponent>;
@@ -2152,7 +2154,7 @@ export class FormViewComponent implements OnInit {
    */
   hasFieldError(field: FormFieldDto): boolean {
     const fieldCode = field.fieldCode || `field_${field.id}`;
-    return !!this.fieldValidationErrors[fieldCode];
+    return !!this.fieldValidationErrors[fieldCode] || !!this.blockingRuleErrors[fieldCode];
   }
 
   /**
@@ -2160,7 +2162,24 @@ export class FormViewComponent implements OnInit {
    */
   getFieldError(field: FormFieldDto): string {
     const fieldCode = field.fieldCode || `field_${field.id}`;
-    return this.fieldValidationErrors[fieldCode] || '';
+    // Priority: blocking rule errors > validation errors
+    return this.blockingRuleErrors[fieldCode] || this.fieldValidationErrors[fieldCode] || '';
+  }
+
+  /**
+   * Check if field has blocking rule error
+   */
+  hasBlockingRuleError(field: FormFieldDto): boolean {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    return !!this.blockingRuleErrors[fieldCode];
+  }
+
+  /**
+   * Get blocking rule error message
+   */
+  getBlockingRuleError(field: FormFieldDto): string {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    return this.blockingRuleErrors[fieldCode] || '';
   }
 
   /**
@@ -2170,6 +2189,13 @@ export class FormViewComponent implements OnInit {
     const fieldCode = field.fieldCode || `field_${field.id}`;
     if (this.fieldValidationErrors[fieldCode]) {
       delete this.fieldValidationErrors[fieldCode];
+    }
+    if (this.blockingRuleErrors[fieldCode]) {
+      delete this.blockingRuleErrors[fieldCode];
+    }
+    // Also clear general blocking error when user starts editing
+    if (this.generalBlockingError) {
+      this.generalBlockingError = '';
     }
   }
 
@@ -5704,14 +5730,80 @@ export class FormViewComponent implements OnInit {
       } catch (submitError: any) {
         console.error('[FormView] Error during final submit:', submitError);
         const currentLang = this.translationService.getCurrentLanguage();
-        const errorMsg = submitError?.message ||
-          (currentLang === 'ar' ? 'فشل في إرسال الطلب' : 'Failed to submit request');
-        this.messageService.add({
-          severity: 'error',
-          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
-          detail: errorMsg,
-          life: 7000
-        });
+        
+        // Handle Blocking Rules (403 Forbidden)
+        let errorMsg: string;
+        if (submitError?.isBlocked) {
+          // This is a blocking rule violation - show the specific blocking message
+          errorMsg = submitError.blockMessage || submitError.message || 
+            (currentLang === 'ar' ? 'تم منع إرسال النموذج بسبب قاعدة التحقق' : 'Form submission is blocked by a validation rule');
+          
+          // Log blocking rule details for debugging
+          console.warn('[FormView] Submission blocked by rule:', {
+            ruleId: submitError.ruleId,
+            ruleName: submitError.ruleName,
+            message: errorMsg
+          });
+          
+          // Extract field code from error response to show error under specific field
+          const blockMessage = submitError.blockMessage || errorMsg;
+          
+          // Priority 1: Use ConditionKey from error response (most reliable)
+          if (submitError.conditionKey) {
+            const fieldCode = submitError.conditionKey;
+            this.blockingRuleErrors[fieldCode] = blockMessage;
+            console.log(`[FormView] Setting blocking error for field (from conditionKey): ${fieldCode}`, blockMessage);
+          }
+          // Priority 2: Try to get field code from rule data if available
+          else if (submitError.ruleId && this.form?.formRules) {
+            const rule = this.form.formRules.find(r => r.id === submitError.ruleId);
+            if (rule && rule.condition && rule.condition.field) {
+              const fieldCode = rule.condition.field;
+              this.blockingRuleErrors[fieldCode] = blockMessage;
+              console.log(`[FormView] Setting blocking error for field (from rule): ${fieldCode}`, blockMessage);
+            }
+          }
+          // Priority 3: Try to extract field code from error message (fallback)
+          else {
+            // Try common field codes from the form
+            const commonFieldCodes = ['F', 'TOTAL_AMOUNT', 'AMOUNT', 'PHONE_NUMBER'];
+            for (const fieldCode of commonFieldCodes) {
+              if (blockMessage.toLowerCase().includes(fieldCode.toLowerCase()) || 
+                  blockMessage.toLowerCase().includes('amount') || 
+                  blockMessage.toLowerCase().includes('مبلغ')) {
+                this.blockingRuleErrors[fieldCode] = blockMessage;
+                console.log(`[FormView] Setting blocking error for field (from message): ${fieldCode}`, blockMessage);
+                break;
+              }
+            }
+          }
+          
+          // If no field code found, set a general error message
+          if (Object.keys(this.blockingRuleErrors).length === 0) {
+            this.generalBlockingError = blockMessage;
+          }
+          
+          // Scroll to first error field
+          setTimeout(() => {
+            const firstErrorField = document.querySelector('.blocking-rule-error, .field-error-message, .general-blocking-error');
+            if (firstErrorField) {
+              firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 100);
+          
+          // Don't show Toast for blocking rules - error is shown in span
+        } else {
+          errorMsg = submitError?.message ||
+            (currentLang === 'ar' ? 'فشل في إرسال الطلب' : 'Failed to submit request');
+          
+          // Show Toast only for non-blocking errors
+          this.messageService.add({
+            severity: 'error',
+            summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+            detail: errorMsg,
+            life: 7000
+          });
+        }
         this.isSubmitting = false;
         this.isSaving = false;
         return;

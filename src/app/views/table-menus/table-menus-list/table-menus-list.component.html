@@ -15,7 +15,10 @@
         <button class="btn-icon" (click)="loadMenus()" [disabled]="loading.menus" [title]="'common.refresh' | translate">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openMenuModal()" [disabled]="loading.menus">
+        <button class="btn-primary" 
+                (click)="openMenuModal()" 
+                [disabled]="loading.menus || (!permissionService.canCreateTableMenus() && !permissionService.canManageTableMenus())"
+                [title]="permissionService.canCreateTableMenus() || permissionService.canManageTableMenus() ? '' : 'You do not have permission to create table menus'">
           <i class="pi pi-plus"></i>
           <span>New Menu</span>
         </button>
@@ -153,7 +156,8 @@
                   icon="pi pi-pencil"
                   class="p-button-text p-button-sm action-btn"
                   (click)="openMenuModal(menu)"
-                  pTooltip="Edit"
+                  [pTooltip]="permissionService.canEditTableMenus() || permissionService.canManageTableMenus() ? 'Edit' : 'You do not have permission to edit table menus'"
+                  [disabled]="!permissionService.canEditTableMenus() && !permissionService.canManageTableMenus()"
                   tooltipPosition="top">
                 </button>
                 <button
@@ -161,8 +165,8 @@
                   icon="pi pi-trash"
                   class="p-button-text p-button-sm action-btn action-btn-danger"
                   (click)="deleteMenu(menu)"
-                  [disabled]="loading.delete"
-                  pTooltip="Delete"
+                  [disabled]="loading.delete || (!permissionService.canDeleteTableMenus() && !permissionService.canManageTableMenus())"
+                  [pTooltip]="permissionService.canDeleteTableMenus() || permissionService.canManageTableMenus() ? 'Delete' : 'You do not have permission to delete table menus'"
                   tooltipPosition="top">
                 </button>
               </app-table-actions>
@@ -182,7 +186,8 @@
                   label="Create New Menu"
                   class="p-button-success p-button-lg"
                   (click)="openMenuModal()"
-                  [disabled]="loading.menus">
+                  [disabled]="loading.menus || (!permissionService.canCreateTableMenus() && !permissionService.canManageTableMenus())"
+                  [title]="permissionService.canCreateTableMenus() || permissionService.canManageTableMenus() ? '' : 'You do not have permission to create table menus'">
                 </button>
               </div>
             </td>
@@ -221,7 +226,8 @@
             label="New Sub Menu"
             class="p-button-success p-button-sm"
             (click)="openSubMenuModal(currentMenuForSubMenu)"
-            [disabled]="!currentMenuForSubMenu || loading.subMenus">
+            [disabled]="!currentMenuForSubMenu || loading.subMenus || (!permissionService.canCreateTableSubMenus() && !permissionService.canManageTableSubMenus())"
+            [title]="permissionService.canCreateTableSubMenus() || permissionService.canManageTableSubMenus() ? '' : 'You do not have permission to create table sub menus'">
           </button>
         </div>
       </div>
@@ -270,7 +276,8 @@
                   icon="pi pi-pencil"
                   class="p-button-text p-button-sm action-btn"
                   (click)="openSubMenuModal(currentMenuForSubMenu, subMenu)"
-                  pTooltip="Edit"
+                  [pTooltip]="permissionService.canEditTableSubMenus() || permissionService.canManageTableSubMenus() ? 'Edit' : 'You do not have permission to edit table sub menus'"
+                  [disabled]="!permissionService.canEditTableSubMenus() && !permissionService.canManageTableSubMenus()"
                   tooltipPosition="top">
                 </button>
                 <button
@@ -278,8 +285,8 @@
                   icon="pi pi-trash"
                   class="p-button-text p-button-sm action-btn action-btn-danger"
                   (click)="deleteSubMenu(subMenu)"
-                  [disabled]="loading.delete"
-                  pTooltip="Delete"
+                  [disabled]="loading.delete || (!permissionService.canDeleteTableSubMenus() && !permissionService.canManageTableSubMenus())"
+                  [pTooltip]="permissionService.canDeleteTableSubMenus() || permissionService.canManageTableSubMenus() ? 'Delete' : 'You do not have permission to delete table sub menus'"
                   tooltipPosition="top">
                 </button>
               </app-table-actions>

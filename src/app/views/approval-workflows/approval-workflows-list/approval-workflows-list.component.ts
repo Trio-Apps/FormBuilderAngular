@@ -21,6 +21,8 @@ import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 @Component({
   selector: 'app-approval-workflows-list',
@@ -42,7 +44,8 @@ import { TableShellComponent } from '../../../shared/table-shell/table-shell.com
     ButtonModule,
     TableModule,
     PaginatorModule,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './approval-workflows-list.component.html',
   styleUrls: ['./approval-workflows-list.component.scss'],
@@ -53,6 +56,13 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
   approvalWorkflows: ApprovalWorkflowDto[] = [];
   filteredWorkflows: ApprovalWorkflowDto[] = [];
   documentTypes: DocumentType[] = [];
+
+  // Permission flags
+  canViewApprovalWorkflows = false;
+  canCreateApprovalWorkflows = false;
+  canEditApprovalWorkflows = false;
+  canDeleteApprovalWorkflows = false;
+  canManageApprovalWorkflows = false;
 
   // Loading States
   loading = {
@@ -82,6 +92,7 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
     private documentTypesService: DocumentTypesService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
+    public permissionService: PermissionService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public translationService: TranslationService
@@ -95,6 +106,28 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[ApprovalWorkflowsList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[ApprovalWorkflowsList] Permissions loaded from API:', perms);
+        console.log('[ApprovalWorkflowsList] Has ApprovalWorkflow_Allow_Create:', perms.includes('ApprovalWorkflow_Allow_Create'));
+        console.log('[ApprovalWorkflowsList] Has ApprovalWorkflow_Allow_Manage:', perms.includes('ApprovalWorkflow_Allow_Manage'));
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[ApprovalWorkflowsList] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     // Set language preference
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
@@ -110,6 +143,25 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Cleanup if needed
+  }
+
+  /**
+   * Load user permissions for approval workflow operations
+   */
+  private loadPermissions(): void {
+    this.canViewApprovalWorkflows = this.permissionService.canViewApprovalWorkflows();
+    this.canCreateApprovalWorkflows = this.permissionService.canCreateApprovalWorkflows();
+    this.canEditApprovalWorkflows = this.permissionService.canEditApprovalWorkflows();
+    this.canDeleteApprovalWorkflows = this.permissionService.canDeleteApprovalWorkflows();
+    this.canManageApprovalWorkflows = this.permissionService.canManageApprovalWorkflows();
+    
+    console.log('[ApprovalWorkflowsList] Permission flags:', {
+      canViewApprovalWorkflows: this.canViewApprovalWorkflows,
+      canCreateApprovalWorkflows: this.canCreateApprovalWorkflows,
+      canEditApprovalWorkflows: this.canEditApprovalWorkflows,
+      canDeleteApprovalWorkflows: this.canDeleteApprovalWorkflows,
+      canManageApprovalWorkflows: this.canManageApprovalWorkflows
+    });
   }
 
   loadApprovalWorkflows(): void {
@@ -236,6 +288,16 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
   }
 
   openAddModal(): void {
+    // Permission check
+    if (!this.canCreateApprovalWorkflows && !this.canManageApprovalWorkflows) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to create approval workflows.'
+      });
+      return;
+    }
+
     this.editingWorkflow = null;
     this.workflowForm.reset({
       name: '',
@@ -247,6 +309,16 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
   }
 
   openEditModal(workflow: ApprovalWorkflowDto): void {
+    // Permission check
+    if (!this.canEditApprovalWorkflows && !this.canManageApprovalWorkflows) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to edit approval workflows.'
+      });
+      return;
+    }
+
     this.editingWorkflow = workflow;
     this.workflowForm.patchValue({
       name: workflow.name,
@@ -263,6 +335,29 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
   }
 
   saveWorkflow(): void {
+    // Permission check
+    if (this.editingWorkflow) {
+      // Editing - check edit permission
+      if (!this.canEditApprovalWorkflows && !this.canManageApprovalWorkflows) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit approval workflows.'
+        });
+        return;
+      }
+    } else {
+      // Creating - check create permission
+      if (!this.canCreateApprovalWorkflows && !this.canManageApprovalWorkflows) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create approval workflows.'
+        });
+        return;
+      }
+    }
+
     if (this.workflowForm.invalid) {
       this.markFormGroupTouched(this.workflowForm);
       this.messageService.add({
@@ -346,6 +441,16 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
 
   deleteWorkflow(workflow: ApprovalWorkflowDto): void {
     if (!workflow || !workflow.id) return;
+
+    // Permission check
+    if (!this.canDeleteApprovalWorkflows && !this.canManageApprovalWorkflows) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete approval workflows.'
+      });
+      return;
+    }
 
     this.confirmationService.confirm({
       message: `Are you sure you want to delete the approval workflow "${workflow.name}"? This action cannot be undone.`,

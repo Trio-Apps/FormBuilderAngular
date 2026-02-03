@@ -20,7 +20,10 @@
         <button class="btn-icon" (click)="loadApprovalStages()" [disabled]="loading.stages" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" (click)="openAddModal()" [disabled]="loading.stages || !workflowId">
+        <button class="btn-primary" 
+                (click)="openAddModal()" 
+                [disabled]="loading.stages || !workflowId || !permissionService.canCreateApprovalStages()"
+                [title]="permissionService.canCreateApprovalStages() ? 'New Approval Stage' : 'You do not have permission to create approval stages'">
           <i class="pi pi-plus"></i>
           <span>New Approval Stage</span>
         </button>
@@ -101,7 +104,13 @@
         </div>
         <h4>No Approval Stages Configured</h4>
         <p>There are no approval stages for this workflow yet. Click "New Approval Stage" to create one.</p>
-        <button pButton label="New Approval Stage" icon="pi pi-plus" class="p-button-primary btn-primary" (click)="openAddModal()"></button>
+        <button pButton 
+                label="New Approval Stage" 
+                icon="pi pi-plus" 
+                class="p-button-primary btn-primary" 
+                (click)="openAddModal()"
+                [disabled]="!permissionService.canCreateApprovalStages()"
+                [title]="permissionService.canCreateApprovalStages() ? 'New Approval Stage' : 'You do not have permission to create approval stages'"></button>
       </div>
 
       <p-table *ngIf="!loading.stages && approvalStages.length > 0" 
@@ -174,13 +183,16 @@
                   icon="pi pi-pencil" 
                   class="p-button-text p-button-sm action-btn" 
                   (click)="openEditModal(stage)"
+                  [disabled]="!permissionService.canEditApprovalStages()"
+                  [title]="permissionService.canEditApprovalStages() ? 'Edit' : 'No permission to edit'"
                   pTooltip="Edit"
                   tooltipPosition="top"></button>
                 <button pButton 
                   icon="pi pi-trash" 
                   class="p-button-text p-button-sm action-btn action-btn-danger" 
                   (click)="deleteStage(stage)"
-                  [disabled]="loading.delete"
+                  [disabled]="loading.delete || !permissionService.canDeleteApprovalStages()"
+                  [title]="permissionService.canDeleteApprovalStages() ? 'Delete' : 'No permission to delete'"
                   pTooltip="Delete"
                   tooltipPosition="top"></button>
               </app-table-actions>

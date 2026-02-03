@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChildren, QueryLis
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto, FormSubmissionDetailDto, FormSubmissionGridDto } from '../services/form-submissions.service';
+import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto, FormSubmissionDetailDto, FormSubmissionGridDto, SaveFormSubmissionDataDto, SaveFormSubmissionValueDto, SaveFormSubmissionAttachmentDto, SaveFormSubmissionGridDto } from '../services/form-submissions.service';
 // Approve/Reject imports removed - only available in admin dashboard
 import { FormSubmissionValuesService, BulkFormSubmissionValuesDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto } from '../services/form-submission-values.service';
 import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
@@ -117,6 +117,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   // Track validation errors for each field (for inline validation display)
   fieldValidationErrors: { [fieldCode: string]: string } = {};
+  // Track blocking rule errors for each field
+  blockingRuleErrors: { [fieldCode: string]: string } = {};
+  // General blocking error message when no specific field is identified
+  generalBlockingError: string = '';
 
   // Track which fields depend on context for reloading options
   private contextDependencies: { [fieldId: number]: string[] } = {}; // fieldId -> array of context field codes
@@ -1973,7 +1977,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    */
   hasFieldError(field: FormFieldDto): boolean {
     const fieldCode = field.fieldCode || `field_${field.id}`;
-    // Check custom validation errors first
+    // Priority: blocking rule errors > validation errors > form control errors
+    if (this.blockingRuleErrors[fieldCode]) {
+      return true;
+    }
+    // Check custom validation errors
     if (this.fieldValidationErrors[fieldCode]) {
       return true;
     }
@@ -1989,6 +1997,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    */
   getFieldError(field: FormFieldDto): string {
     const fieldCode = field.fieldCode || `field_${field.id}`;
+    // Priority: blocking rule errors > validation errors > form control errors
+    if (this.blockingRuleErrors[fieldCode]) {
+      return this.blockingRuleErrors[fieldCode];
+    }
     // Return custom validation error if exists
     if (this.fieldValidationErrors[fieldCode]) {
       return this.fieldValidationErrors[fieldCode];
@@ -2008,12 +2020,35 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Check if field has blocking rule error
+   */
+  hasBlockingRuleError(field: FormFieldDto): boolean {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    return !!this.blockingRuleErrors[fieldCode];
+  }
+
+  /**
+   * Get blocking rule error message
+   */
+  getBlockingRuleError(field: FormFieldDto): string {
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    return this.blockingRuleErrors[fieldCode] || '';
+  }
+
+  /**
    * Clear field error on input change
    */
   clearFieldError(field: FormFieldDto): void {
     const fieldCode = field.fieldCode || `field_${field.id}`;
     if (this.fieldValidationErrors[fieldCode]) {
       delete this.fieldValidationErrors[fieldCode];
+    }
+    if (this.blockingRuleErrors[fieldCode]) {
+      delete this.blockingRuleErrors[fieldCode];
+    }
+    // Also clear general blocking error when user starts editing
+    if (this.generalBlockingError) {
+      this.generalBlockingError = '';
     }
   }
 
@@ -3869,7 +3904,116 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Determine status based on approval workflow configuration (Task 2)
+    // ===== NEW: Evaluate Blocking Rules before final submit (PreSubmit phase) =====
+    try {
+      const formBuilderId = this.documentType.formBuilderId;
+
+      console.log('[FormSubmissionCreate] Evaluating blocking rules before submit...', {
+        formBuilderId,
+        evaluationPhase: 'PreSubmit'
+      });
+
+      const blockingResult: any = await this.formRulesService
+        .evaluateBlockingRules({
+          formBuilderId,
+          evaluationPhase: 'PreSubmit',
+          fieldValues: this.fieldValues
+        })
+        .toPromise();
+
+      const blockingSource: any =
+        blockingResult && typeof blockingResult === 'object'
+          ? (blockingResult.data && typeof blockingResult.data === 'object'
+              ? blockingResult.data
+              : blockingResult)
+          : null;
+
+      if (blockingSource?.isBlocked) {
+        const currentLang = this.translationService.getCurrentLanguage();
+        const errorMsg =
+          blockingSource.blockMessage ||
+          blockingSource.message ||
+          (currentLang === 'ar'
+            ? 'تم منع إرسال النموذج بسبب قاعدة التحقق'
+            : 'Form submission is blocked by a validation rule');
+
+        console.warn('[FormSubmissionCreate] Pre-submit blocking rule detected:', {
+          ruleId: blockingSource.ruleId,
+          ruleName: blockingSource.ruleName,
+          conditionKey: blockingSource.conditionKey,
+          message: errorMsg
+        });
+
+        const blockMessage = blockingSource.blockMessage || errorMsg;
+
+        // Priority 1: Use conditionKey from backend if available
+        if (blockingSource.conditionKey) {
+          const fieldCode = blockingSource.conditionKey;
+          this.blockingRuleErrors[fieldCode] = blockMessage;
+          console.log(
+            `[FormSubmissionCreate] Setting blocking error for field (from conditionKey, pre-submit): ${fieldCode}`,
+            blockMessage
+          );
+        }
+        // Priority 2: Try to use rule data from currentForm if available
+        else if (blockingSource.ruleId && this.currentForm?.formRules) {
+          const rule = this.currentForm.formRules.find(r => r.id === blockingSource.ruleId);
+          if (rule && (rule as any).condition && (rule as any).condition.field) {
+            const fieldCode = (rule as any).condition.field;
+            this.blockingRuleErrors[fieldCode] = blockMessage;
+            console.log(
+              `[FormSubmissionCreate] Setting blocking error for field (from rule, pre-submit): ${fieldCode}`,
+              blockMessage
+            );
+          }
+        }
+        // Priority 3: Fallback - try to infer field code from message
+        else {
+          const commonFieldCodes = ['F', 'TOTAL_AMOUNT', 'AMOUNT', 'PHONE_NUMBER'];
+          for (const fieldCode of commonFieldCodes) {
+            if (
+              blockMessage.toLowerCase().includes(fieldCode.toLowerCase()) ||
+              blockMessage.toLowerCase().includes('amount') ||
+              blockMessage.toLowerCase().includes('مبلغ')
+            ) {
+              this.blockingRuleErrors[fieldCode] = blockMessage;
+              console.log(
+                `[FormSubmissionCreate] Setting blocking error for field (from message, pre-submit): ${fieldCode}`,
+                blockMessage
+              );
+              break;
+            }
+          }
+        }
+
+        // If we still don't know which field, show a general blocking error
+        if (Object.keys(this.blockingRuleErrors).length === 0) {
+          this.generalBlockingError = blockMessage;
+        }
+
+        // Scroll to first error field
+        setTimeout(() => {
+          const firstErrorField = document.querySelector(
+            '.blocking-rule-error, .field-error-message, .general-blocking-error'
+          );
+          if (firstErrorField) {
+            firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+
+        this.isSubmitting = false;
+        this.loading.create = false;
+        this.cdr.detectChanges();
+        return;
+      }
+    } catch (blockingError) {
+      console.error('[FormSubmissionCreate] Error evaluating blocking rules before submit:', blockingError);
+      // لا نمنع الإرسال في حال فشل التحقق نفسه، فقط نسجل الخطأ ونستمر في المسار العادي
+    }
+
+    // Determine final status based on approval workflow configuration (Task 2)
+    // NOTE: We always create the submission initially as 'Draft' to avoid marking it as Submitted
+    // if blocking rules prevent the final submit. After a successful submit, status is updated to 'Submitted'.
     const submissionStatus = this.determineSubmissionStatus();
 
     const formData = this.submissionForm.getRawValue();
@@ -3878,7 +4022,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       documentTypeId: this.documentTypeId,
       seriesId: defaultSeries.id, // Fixed value - use default series
       submittedByUserId: currentUserId,
-      status: submissionStatus // Determined by approval workflow configuration
+      // IMPORTANT: Always create as Draft first (like public form)
+      // Blocking rules are evaluated on submit; if they block, submission stays Draft.
+      status: 'Draft'
     };
 
     // In Edit Mode, if submission status is not Draft, just update the data without submitting
@@ -3901,66 +4047,216 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // If no submission exists, create it first
+    // If no submission exists, create it first, then save data, then submit
     if (!this.submissionId) {
-      // Create submission directly with the determined status
       this.isSubmitting = true;
       this.loading.create = true;
-      console.log('[FormSubmissionCreate] Creating new submission directly...');
-      
-      this.formSubmissionsService.createSubmission(createDto).subscribe({
-        next: (newSubmission) => {
-          console.log('[FormSubmissionCreate] Submission created successfully:', newSubmission);
-          this.submissionId = newSubmission.id!;
-          this.currentSubmission = newSubmission;
-          this.hasDraft = true;
-          this.isDraftMode = false;
-          
-          // Update grid components submissionId
-          this.updateGridComponentsSubmissionId();
-          
-          // Save all data (field values, attachments, grid data)
-          // Note: saveSubmissionData uses Observable internally, so we need to handle it differently
-          // We'll save the data and then handle the workflow
-          this.saveSubmissionDataDirectly(this.submissionId, submissionStatus, () => {
-            // After saving data, handle workflow if needed
-            this.handleSubmissionWorkflow(newSubmission);
-            
-            this.isSubmitting = false;
-            this.loading.create = false;
-            
+      console.log('[FormSubmissionCreate] Creating new submission directly (with final submit)...');
+
+      try {
+        const newSubmission = await new Promise<FormSubmissionDto>((resolve, reject) => {
+          this.formSubmissionsService.createSubmission(createDto).subscribe({
+            next: (created) => resolve(created),
+            error: (err) => reject(err)
+          });
+        });
+
+        console.log('[FormSubmissionCreate] Submission created successfully:', newSubmission);
+        this.submissionId = newSubmission.id!;
+        this.currentSubmission = newSubmission;
+        this.hasDraft = true;
+        this.isDraftMode = false;
+
+        // Update grid components submissionId
+        this.updateGridComponentsSubmissionId();
+
+        // Save all data (field values, attachments, grid data) using saveSubmissionData endpoint
+        await this.saveSubmissionDataDirectlyAsync(this.submissionId, submissionStatus);
+        console.log('[FormSubmissionCreate] ✅ Data saved successfully after create, proceeding with final submit...');
+
+        // Now perform the same final submit logic as for existing submissions
+        const submitUserIdAfterCreate = this.authService.userName();
+        if (!submitUserIdAfterCreate) {
+          this.isSubmitting = false;
+          this.loading.create = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'User not found. Please login again.'
+          });
+          return;
+        }
+
+        const submitPayloadAfterCreate = {
+          submissionId: this.submissionId!,
+          submittedByUserId: submitUserIdAfterCreate
+        };
+        console.log('[FormSubmissionCreate] Performing final submit after create with payload:', submitPayloadAfterCreate);
+
+        this.formSubmissionsService.submitSubmission(submitPayloadAfterCreate).subscribe({
+          next: (submittedSubmission) => {
+            console.log('[FormSubmissionCreate] ✅ Submission (after create) completed successfully:', submittedSubmission);
+            console.log('[FormSubmissionCreate] Backend status after submit:', submittedSubmission.status);
+
+            this.isDraftMode = false;
+            this.currentSubmission = submittedSubmission;
+
+            // Ensure status is Submitted (same behavior as existing path)
+            if (submittedSubmission.status !== 'Submitted') {
+              console.log('[FormSubmissionCreate] Status is not Submitted, updating to Submitted in background (after create)...');
+              this.formSubmissionsService.updateSubmission(submittedSubmission.id, { status: 'Submitted' }).subscribe({
+                next: () => {
+                  console.log('[FormSubmissionCreate] ✅ Status updated to Submitted in background (after create)');
+                  submittedSubmission.status = 'Submitted';
+                  if (this.currentSubmission) {
+                    this.currentSubmission.status = 'Submitted';
+                  }
+                },
+                error: (updateError) => {
+                  console.warn('[FormSubmissionCreate] Failed to update status to Submitted in background (after create):', updateError);
+                }
+              });
+            } else {
+              submittedSubmission.status = 'Submitted';
+              if (this.currentSubmission) {
+                this.currentSubmission.status = 'Submitted';
+              }
+            }
+
             const currentLang = this.translationService.getCurrentLanguage();
-            const statusMessage = currentLang === 'ar' ? 'تم إنشاء الطلب بنجاح' : 'Submission created successfully';
-            
+            const statusMessage = currentLang === 'ar'
+              ? 'تم إرسال الطلب للمراجعة'
+              : 'Request submitted for review';
+
             this.messageService.add({
               severity: 'success',
               summary: currentLang === 'ar' ? 'تم بنجاح' : 'Success',
               detail: statusMessage,
               life: 5000
             });
-            
+
+            this.isSubmitting = false;
+            this.loading.create = false;
+
             // Navigate to submissions list page
             this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
             this.cdr.detectChanges();
-          });
-        },
-        error: (error) => {
-          this.isSubmitting = false;
-          this.loading.create = false;
-          console.error('[FormSubmissionCreate] Error creating submission:', error);
-          
-          const currentLang = this.translationService.getCurrentLanguage();
-          const errorMessage = error?.error?.message || error?.message ||
-            (currentLang === 'ar' ? 'فشل في إنشاء الطلب' : 'Failed to create submission');
-          
-          this.messageService.add({
-            severity: 'error',
-            summary: currentLang === 'ar' ? 'خطأ' : 'Error',
-            detail: errorMessage
-          });
-          this.cdr.detectChanges();
-        }
-      });
+          },
+          error: (error) => {
+            // Reuse the same blocking rule handling / error behavior as existing path
+            // Handle Blocking Rules (403 Forbidden) - don't proceed if blocked
+            if (error?.isBlocked) {
+              const currentLang = this.translationService.getCurrentLanguage();
+              const errorMsg = error.blockMessage || error.message ||
+                (currentLang === 'ar' ? 'تم منع إرسال النموذج بسبب قاعدة التحقق' : 'Form submission is blocked by a validation rule');
+
+              console.warn('[FormSubmissionCreate] Submission (after create) blocked by rule:', {
+                ruleId: error.ruleId,
+                ruleName: error.ruleName,
+                message: errorMsg
+              });
+
+              const blockMessage = error.blockMessage || errorMsg;
+
+              // Priority 1: Use ConditionKey from error response (most reliable)
+              if (error.conditionKey) {
+                const fieldCode = error.conditionKey;
+                this.blockingRuleErrors[fieldCode] = blockMessage;
+                console.log(`[FormSubmissionCreate] Setting blocking error for field (from conditionKey, after create): ${fieldCode}`, blockMessage);
+              }
+              // Priority 2: Try to get field code from rule data if available
+              else if (error.ruleId && this.currentForm?.formRules) {
+                const rule = this.currentForm.formRules.find(r => r.id === error.ruleId);
+                if (rule && rule.condition && rule.condition.field) {
+                  const fieldCode = rule.condition.field;
+                  this.blockingRuleErrors[fieldCode] = blockMessage;
+                  console.log(`[FormSubmissionCreate] Setting blocking error for field (from rule, after create): ${fieldCode}`, blockMessage);
+                }
+              }
+              // Priority 3: Try to extract field code from error message (fallback)
+              else {
+                const commonFieldCodes = ['F', 'TOTAL_AMOUNT', 'AMOUNT', 'PHONE_NUMBER'];
+                for (const fieldCode of commonFieldCodes) {
+                  if (blockMessage.toLowerCase().includes(fieldCode.toLowerCase()) ||
+                      blockMessage.toLowerCase().includes('amount') ||
+                      blockMessage.toLowerCase().includes('مبلغ')) {
+                    this.blockingRuleErrors[fieldCode] = blockMessage;
+                    console.log(`[FormSubmissionCreate] Setting blocking error for field (from message, after create): ${fieldCode}`, blockMessage);
+                    break;
+                  }
+                }
+              }
+
+              if (Object.keys(this.blockingRuleErrors).length === 0) {
+                this.generalBlockingError = blockMessage;
+              }
+
+              // NEW: إذا كانت هذه المحاولة أول إنشاء (Draft) وتم حظر الإرسال، احذف الـ submission من الـ DB
+              // حتى لا يظهر أي صف جديد للقيم المخالفة للقاعدة
+              if (this.submissionId) {
+                const blockedSubmissionId = this.submissionId;
+                console.log('[FormSubmissionCreate] Blocking rule after create - deleting draft submission:', blockedSubmissionId);
+                this.formSubmissionsService.deleteSubmission(blockedSubmissionId).subscribe({
+                  next: () => {
+                    console.log('[FormSubmissionCreate] ✅ Draft submission deleted due to blocking rule:', blockedSubmissionId);
+                  },
+                  error: (deleteErr) => {
+                    console.warn('[FormSubmissionCreate] Failed to delete blocked draft submission:', deleteErr);
+                  }
+                });
+                // امسح الهوية من الواجهة حتى لا يتم استخدام هذا الـ submission مرة أخرى
+                this.submissionId = undefined as any;
+                this.currentSubmission = null;
+              }
+
+              setTimeout(() => {
+                const firstErrorField = document.querySelector('.blocking-rule-error, .field-error-message, .general-blocking-error');
+                if (firstErrorField) {
+                  firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }, 100);
+
+              this.isSubmitting = false;
+              this.loading.create = false;
+              this.cdr.detectChanges();
+              return;
+            }
+
+            // Non-blocking error (after create)
+            this.isSubmitting = false;
+            this.loading.create = false;
+
+            console.error('[FormSubmissionCreate] Error during final submit (after create):', error);
+
+            const currentLang = this.translationService.getCurrentLanguage();
+            const errorMessage = error?.message ||
+              (currentLang === 'ar' ? 'فشل في إرسال الطلب' : 'Failed to submit request');
+
+            this.messageService.add({
+              severity: 'error',
+              summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+              detail: errorMessage
+            });
+
+            this.cdr.detectChanges();
+          }
+        });
+      } catch (createError: any) {
+        this.isSubmitting = false;
+        this.loading.create = false;
+        console.error('[FormSubmissionCreate] Error creating submission (with final submit):', createError);
+
+        const currentLang = this.translationService.getCurrentLanguage();
+        const errorMessage = createError?.error?.message || createError?.message ||
+          (currentLang === 'ar' ? 'فشل في إنشاء الطلب' : 'Failed to create submission');
+
+        this.messageService.add({
+          severity: 'error',
+          summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+          detail: errorMessage
+        });
+        this.cdr.detectChanges();
+      }
       return;
     }
 
@@ -3982,8 +4278,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.isSubmitting = true;
     this.loading.create = true;
     
-    // Save data first
-    this.saveSubmissionDataDirectly(this.submissionId, submissionStatus, () => {
+    try {
+      // Save data first - use await to ensure data is saved before submit
+      // This is critical for blocking rules to evaluate the data correctly
+      await this.saveSubmissionDataDirectlyAsync(this.submissionId, submissionStatus);
+      console.log('[FormSubmissionCreate] ✅ Data saved successfully, proceeding with submit...');
+      
       // Then submit the submission
       const submitPayload = {
         submissionId: this.submissionId!,
@@ -4070,6 +4370,71 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       },
       error: (error) => {
+        // Handle Blocking Rules (403 Forbidden) - don't proceed if blocked
+        if (error?.isBlocked) {
+          const currentLang = this.translationService.getCurrentLanguage();
+          const errorMsg = error.blockMessage || error.message || 
+            (currentLang === 'ar' ? 'تم منع إرسال النموذج بسبب قاعدة التحقق' : 'Form submission is blocked by a validation rule');
+          
+          console.warn('[FormSubmissionCreate] Submission blocked by rule:', {
+            ruleId: error.ruleId,
+            ruleName: error.ruleName,
+            message: errorMsg
+          });
+          
+          // Extract field code from error response to show error under specific field
+          const blockMessage = error.blockMessage || errorMsg;
+          
+          // Priority 1: Use ConditionKey from error response (most reliable)
+          if (error.conditionKey) {
+            const fieldCode = error.conditionKey;
+            this.blockingRuleErrors[fieldCode] = blockMessage;
+            console.log(`[FormSubmissionCreate] Setting blocking error for field (from conditionKey): ${fieldCode}`, blockMessage);
+          }
+          // Priority 2: Try to get field code from rule data if available
+          else if (error.ruleId && this.currentForm?.formRules) {
+            const rule = this.currentForm.formRules.find(r => r.id === error.ruleId);
+            if (rule && rule.condition && rule.condition.field) {
+              const fieldCode = rule.condition.field;
+              this.blockingRuleErrors[fieldCode] = blockMessage;
+              console.log(`[FormSubmissionCreate] Setting blocking error for field (from rule): ${fieldCode}`, blockMessage);
+            }
+          }
+          // Priority 3: Try to extract field code from error message (fallback)
+          else {
+            // Try common field codes from the form
+            const commonFieldCodes = ['F', 'TOTAL_AMOUNT', 'AMOUNT', 'PHONE_NUMBER'];
+            for (const fieldCode of commonFieldCodes) {
+              if (blockMessage.toLowerCase().includes(fieldCode.toLowerCase()) || 
+                  blockMessage.toLowerCase().includes('amount') || 
+                  blockMessage.toLowerCase().includes('مبلغ')) {
+                this.blockingRuleErrors[fieldCode] = blockMessage;
+                console.log(`[FormSubmissionCreate] Setting blocking error for field (from message): ${fieldCode}`, blockMessage);
+                break;
+              }
+            }
+          }
+          
+          // If no field code found, set a general error message
+          if (Object.keys(this.blockingRuleErrors).length === 0) {
+            this.generalBlockingError = blockMessage;
+          }
+          
+          // Scroll to first error field
+          setTimeout(() => {
+            const firstErrorField = document.querySelector('.blocking-rule-error, .field-error-message, .general-blocking-error');
+            if (firstErrorField) {
+              firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 100);
+          
+          // Don't show Toast for blocking rules - error is shown in span
+          this.isSubmitting = false;
+          this.loading.create = false;
+          this.cdr.detectChanges();
+          return;
+        }
+        
         // If backend says it's already submitted, don't stop the flow; just activate stage directly.
         const backendMsg: string = (error?.error?.message || error?.message || '').toString();
         console.error('[FormSubmissionCreate] ❌ Error during final submit. Payload:', submitPayload, 'Error:', error);
@@ -4137,7 +4502,24 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
       });
-    });
+    } catch (saveError: any) {
+      // Handle error saving data before submit
+      console.error('[FormSubmissionCreate] ❌ Failed to save data before submit:', saveError);
+      this.isSubmitting = false;
+      this.loading.create = false;
+      
+      const currentLang = this.translationService.getCurrentLanguage();
+      const errorMessage = saveError?.message ||
+        (currentLang === 'ar' ? 'فشل في حفظ البيانات قبل الإرسال' : 'Failed to save data before submission');
+      
+      this.messageService.add({
+        severity: 'error',
+        summary: currentLang === 'ar' ? 'خطأ' : 'Error',
+        detail: errorMessage
+      });
+      
+      this.cdr.detectChanges();
+    }
   }
 
   /**
@@ -4408,6 +4790,173 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Still call callback with the workflow
         callback(workflowId);
       }
+    });
+  }
+
+  /**
+   * Save submission data directly as Promise (for use in submitSubmission to ensure data is saved before submit)
+   * Uses saveSubmissionData from FormSubmissionsService to ensure blocking rules can evaluate the data
+   */
+  private async saveSubmissionDataDirectlyAsync(submissionId: number, status: string): Promise<void> {
+    // Use saveSubmissionData from FormSubmissionsService (same as form-view) to ensure blocking rules work
+    // This method matches the logic from form-view.component.ts to ensure consistency
+    const fieldValues: SaveFormSubmissionValueDto[] = [];
+    const attachments: SaveFormSubmissionAttachmentDto[] = [];
+
+    console.log('[FormSubmissionCreate] ===== Starting saveSubmissionDataDirectlyAsync =====');
+    console.log('[FormSubmissionCreate] Submission ID:', submissionId);
+    console.log('[FormSubmissionCreate] Status:', status);
+
+    // Process field values (convert to SaveFormSubmissionValueDto format)
+    // IMPORTANT: Collect ALL fields with values (matching form-view.component.ts logic)
+    this.fields.forEach(field => {
+      if (!field.id) return;
+      const fieldKey = `field_${field.id}`;
+      const control = this.fieldsForm.get(fieldKey);
+      const fieldValue = control?.value;
+      const fieldType = this.getFieldType(field);
+      const hasValue = fieldValue !== null && 
+                      fieldValue !== undefined && 
+                      fieldValue !== '' &&
+                      !(Array.isArray(fieldValue) && fieldValue.length === 0);
+
+      // Only process fields that have values (empty fields are not needed for blocking rules)
+      if (hasValue) {
+        const valueDto: SaveFormSubmissionValueDto = {
+          fieldId: field.id,
+          fieldCode: field.fieldCode
+        };
+
+        switch (fieldType) {
+          case 'calculated':
+            if (field.resultType === 'Decimal' || field.resultType === 'Integer') {
+              const calcNumValue = Number(fieldValue);
+              valueDto.valueNumber = calcNumValue;
+              valueDto.valueString = String(calcNumValue);
+            } else {
+              valueDto.valueString = String(fieldValue);
+            }
+            break;
+          case 'number':
+            // CRITICAL: For number fields, ensure both valueNumber and valueString are set
+            // This is essential for blocking rules that evaluate numeric conditions
+            const numValue = Number(fieldValue);
+            if (!isNaN(numValue) && isFinite(numValue)) {
+              valueDto.valueNumber = numValue;
+              valueDto.valueString = String(numValue);
+            } else {
+              // Invalid number - store as string
+              valueDto.valueString = String(fieldValue);
+            }
+            break;
+          case 'date':
+            const dateValue = fieldValue instanceof Date ? fieldValue : new Date(fieldValue);
+            if (!isNaN(dateValue.getTime())) {
+              valueDto.valueDate = dateValue;
+              valueDto.valueString = dateValue.toISOString();
+            } else {
+              console.warn(`[FormSubmissionCreate] Invalid date value for field "${field.fieldName}": ${fieldValue}`);
+              valueDto.valueString = String(fieldValue);
+            }
+            break;
+          case 'boolean':
+          case 'switch':
+            valueDto.valueBool = Boolean(fieldValue);
+            valueDto.valueString = String(fieldValue);
+            break;
+          case 'checkbox':
+            if (Array.isArray(fieldValue)) {
+              valueDto.valueString = fieldValue.join(', ');
+            } else {
+              valueDto.valueString = String(fieldValue);
+            }
+            break;
+          case 'select':
+          case 'radio':
+            const optionValue = String(fieldValue);
+            valueDto.valueString = optionValue;
+            const numOptionValue = Number(optionValue);
+            if (!isNaN(numOptionValue) && isFinite(numOptionValue) && optionValue.trim() !== '') {
+              valueDto.valueNumber = numOptionValue;
+            }
+            break;
+          default:
+            if (Array.isArray(fieldValue)) {
+              valueDto.valueString = fieldValue.join(', ');
+            } else {
+              valueDto.valueString = String(fieldValue);
+            }
+            break;
+        }
+
+        fieldValues.push(valueDto);
+      }
+    });
+
+    // Process file fields (attachments)
+    Object.keys(this.fieldFiles).forEach(fieldIdStr => {
+      const fieldId = Number(fieldIdStr);
+      const files = this.fieldFiles[fieldId];
+      const field = this.fields.find(f => f.id === fieldId);
+
+      if (field && files && files.length > 0) {
+        files.forEach(file => {
+          attachments.push({
+            fieldId: fieldId,
+            fieldCode: field.fieldCode,
+            fileName: file.name,
+            filePath: '', // This will be filled by backend
+            fileSize: file.size,
+            contentType: file.type || 'application/octet-stream'
+          });
+        });
+      }
+    });
+
+    // Note: Grid data is saved separately via saveAllGridsData() before calling this method
+    // Grid data is not needed for blocking rules evaluation (rules typically evaluate field values)
+    // So we leave gridData as empty array here (matching form-view.component.ts behavior)
+
+    // Use saveSubmissionData from FormSubmissionsService (same endpoint as form-view)
+    const saveDataDto: SaveFormSubmissionDataDto = {
+      submissionId: submissionId,
+      fieldValues: fieldValues,
+      attachments: attachments,
+      gridData: [] // Grid data saved separately via saveAllGridsData
+    };
+
+    console.log('[FormSubmissionCreate] Saving data using saveSubmissionData endpoint:', {
+      submissionId: saveDataDto.submissionId,
+      fieldValuesCount: saveDataDto.fieldValues.length,
+      attachmentsCount: saveDataDto.attachments.length,
+      gridDataCount: 0 // Grid data saved separately
+    });
+
+    // Log field values for debugging blocking rules
+    if (fieldValues.length > 0) {
+      console.log('[FormSubmissionCreate] Field values being saved:', fieldValues.map(fv => ({
+        fieldId: fv.fieldId,
+        fieldCode: fv.fieldCode,
+        valueNumber: fv.valueNumber,
+        valueString: fv.valueString
+      })));
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      this.formSubmissionsService.saveSubmissionData(saveDataDto).subscribe({
+        next: () => {
+          console.log('[FormSubmissionCreate] ✅ Data saved successfully using saveSubmissionData endpoint');
+          // Add a small delay to ensure backend has processed the data before rule evaluation
+          setTimeout(() => {
+            resolve();
+          }, 300);
+        },
+        error: (err) => {
+          console.error('[FormSubmissionCreate] ❌ Error saving data using saveSubmissionData endpoint:', err);
+          // Reject to prevent submission if data save fails (blocking rules need the data)
+          reject(err);
+        }
+      });
     });
   }
 

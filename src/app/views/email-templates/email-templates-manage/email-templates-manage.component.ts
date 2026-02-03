@@ -18,6 +18,8 @@ import { SelectModule } from 'primeng/select';
 import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { DocumentType } from '../../FormBuilder/form-builder/models/document-types.model';
@@ -51,7 +53,8 @@ type TemplateCodeOption = { label: string; value: EmailTemplateCode };
     SelectModule,
     TableShellComponent,
     TableActionsComponent,
-    DialogShellComponent
+    DialogShellComponent,
+    HasPermissionDirective
   ],
   templateUrl: './email-templates-manage.component.html',
   styleUrls: ['./email-templates-manage.component.scss'],
@@ -63,6 +66,13 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
 
   templates: EmailTemplateDto[] = [];
   filteredTemplates: EmailTemplateDto[] = [];
+
+  // Permission flags
+  canViewEmailTemplates = false;
+  canCreateEmailTemplates = false;
+  canEditEmailTemplates = false;
+  canDeleteEmailTemplates = false;
+  canManageEmailTemplates = false;
 
   templateCodeOptions: TemplateCodeOption[] = [
     { label: 'SubmissionConfirmation', value: 'SubmissionConfirmation' },
@@ -96,7 +106,8 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
+    public permissionService: PermissionService
   ) {
     this.form = this.fb.group({
       documentTypeId: [null, Validators.required],
@@ -111,7 +122,45 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[EmailTemplatesManage] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[EmailTemplatesManage] Permissions loaded from API:', perms);
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[EmailTemplatesManage] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     this.loadInitialData();
+  }
+
+  /**
+   * Load user permissions for email template operations
+   */
+  private loadPermissions(): void {
+    this.canViewEmailTemplates = this.permissionService.canViewEmailTemplates();
+    this.canCreateEmailTemplates = this.permissionService.canCreateEmailTemplates();
+    this.canEditEmailTemplates = this.permissionService.canEditEmailTemplates();
+    this.canDeleteEmailTemplates = this.permissionService.canDeleteEmailTemplates();
+    this.canManageEmailTemplates = this.permissionService.canManageEmailTemplates();
+    console.log('[EmailTemplatesManage] Permission flags:', {
+      canViewEmailTemplates: this.canViewEmailTemplates,
+      canCreateEmailTemplates: this.canCreateEmailTemplates,
+      canEditEmailTemplates: this.canEditEmailTemplates,
+      canDeleteEmailTemplates: this.canDeleteEmailTemplates,
+      canManageEmailTemplates: this.canManageEmailTemplates
+    });
   }
 
   ngOnDestroy(): void {
@@ -191,8 +240,22 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
     return (this.templates || []).filter(t => !!t.isActive).length;
   }
 
-  openCreate(): void {
-    this.editing = null;
+  openCreate(template?: EmailTemplateDto): void {
+    if (template) {
+      // Editing existing template
+      if (!this.canEditEmailTemplates && !this.canManageEmailTemplates) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit email templates.' });
+        return;
+      }
+      this.editing = template;
+    } else {
+      // Creating new template
+      if (!this.canCreateEmailTemplates && !this.canManageEmailTemplates) {
+        this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to create email templates.' });
+        return;
+      }
+      this.editing = null;
+    }
     this.form.reset({
       documentTypeId: this.selectedDocumentTypeId,
       templateName: '',
@@ -207,6 +270,11 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
   }
 
   openEdit(row: EmailTemplateDto): void {
+    if (!this.canEditEmailTemplates && !this.canManageEmailTemplates) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to edit email templates.' });
+      return;
+    }
+
     this.editing = row;
     this.form.reset({
       documentTypeId: row.documentTypeId,
@@ -231,6 +299,20 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
   }
 
   save(): void {
+    if (this.editing) {
+      // Update existing template
+      if (!this.canEditEmailTemplates && !this.canManageEmailTemplates) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to edit email templates.' });
+        return;
+      }
+    } else {
+      // Create new template
+      if (!this.canCreateEmailTemplates && !this.canManageEmailTemplates) {
+        this.messageService.add({ severity: 'error', summary: 'Permission Denied', detail: 'You do not have permission to create email templates.' });
+        return;
+      }
+    }
+
     if (this.form.invalid) {
       this.markTouched();
       this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Please fill all required fields' });
@@ -313,6 +395,12 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
 
   confirmDelete(row: EmailTemplateDto): void {
     if (!row?.id) return;
+    
+    if (!this.canDeleteEmailTemplates && !this.canManageEmailTemplates) {
+      this.messageService.add({ severity: 'warn', summary: 'Permission Denied', detail: 'You do not have permission to delete email templates.' });
+      return;
+    }
+
     this.confirmationService.confirm({
       header: 'Delete Email Template',
       message: `Are you sure you want to delete "${row.templateName}"?`,

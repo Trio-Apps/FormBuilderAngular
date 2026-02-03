@@ -22,6 +22,8 @@ import { CheckboxModule } from 'primeng/checkbox';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { TranslationService } from '../../../../core/services/translation.service';
 import { TableShellComponent } from '../../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../../services/permission.service';
+import { HasPermissionDirective } from '../../../../directives/has-permission.directive';
 
 @Component({
   selector: 'app-projects-list',
@@ -43,7 +45,8 @@ import { TableShellComponent } from '../../../../shared/table-shell/table-shell.
     PaginatorModule,
     CheckboxModule,
     TranslatePipe,
-    TableShellComponent
+    TableShellComponent,
+    HasPermissionDirective
   ],
 
   templateUrl: './projects-list.component.html',
@@ -59,6 +62,13 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
   loadingDeleted = false;
   showDeletedProjects = false; // Toggle to show/hide deleted projects
 
+  // Permission flags
+  canViewProjects = false;
+  canCreateProjects = false;
+  canEditProjects = false;
+  canDeleteProjects = false;
+  canManageProjects = false;
+
   // Project Modal
   showProjectModal = false;
   projectForm: FormGroup;
@@ -73,6 +83,7 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
 
   constructor(
     private projectsService: ProjectsService,
+    public permissionService: PermissionService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private fb: FormBuilder,
@@ -88,8 +99,49 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Always reload permissions from API to ensure fresh data (clears cache first)
+    console.log('[ProjectsList] Refreshing permissions from API (clearing cache)...');
+    this.permissionService.refreshPermissions().subscribe({
+      next: (perms) => {
+        console.log('[ProjectsList] Permissions loaded from API:', perms);
+        console.log('[ProjectsList] Has Project_Allow_Create:', perms.includes('Project_Allow_Create'));
+        console.log('[ProjectsList] Has Project_Allow_Manage:', perms.includes('Project_Allow_Manage'));
+        this.loadPermissions();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[ProjectsList] Error loading permissions:', err);
+        this.loadPermissions();
+      }
+    });
+
+    // Subscribe to permission changes
+    this.permissionService.permissions$.subscribe(() => {
+      this.loadPermissions();
+      this.cdr.detectChanges();
+    });
+
     this.loadProjects();
     this.loadDeletedProjects();
+  }
+
+  /**
+   * Load user permissions for project operations
+   */
+  private loadPermissions(): void {
+    this.canViewProjects = this.permissionService.canViewProjects();
+    this.canCreateProjects = this.permissionService.canCreateProjects();
+    this.canEditProjects = this.permissionService.canEditProjects();
+    this.canDeleteProjects = this.permissionService.canDeleteProjects();
+    this.canManageProjects = this.permissionService.canManageProjects();
+    
+    console.log('[ProjectsList] Permission flags:', {
+      canViewProjects: this.canViewProjects,
+      canCreateProjects: this.canCreateProjects,
+      canEditProjects: this.canEditProjects,
+      canDeleteProjects: this.canDeleteProjects,
+      canManageProjects: this.canManageProjects
+    });
   }
 
   ngOnDestroy(): void {
@@ -206,6 +258,29 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
   }
 
   openProjectModal(project?: ProjectDto): void {
+    // Permission check
+    if (project) {
+      // Editing - check edit permission
+      if (!this.canEditProjects && !this.canManageProjects) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit projects.'
+        });
+        return;
+      }
+    } else {
+      // Creating - check create permission
+      if (!this.canCreateProjects && !this.canManageProjects) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create projects.'
+        });
+        return;
+      }
+    }
+
     this.editingProject = project || null;
     if (project) {
       this.projectForm.patchValue({
@@ -237,6 +312,29 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
   }
 
   saveProject(): void {
+    // Permission check
+    if (this.editingProject) {
+      // Editing - check edit permission
+      if (!this.canEditProjects && !this.canManageProjects) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to edit projects.'
+        });
+        return;
+      }
+    } else {
+      // Creating - check create permission
+      if (!this.canCreateProjects && !this.canManageProjects) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Permission Denied',
+          detail: 'You do not have permission to create projects.'
+        });
+        return;
+      }
+    }
+
     if (this.projectForm.invalid) {
       this.markFormGroupTouched(this.projectForm);
       this.messageService.add({
@@ -338,6 +436,16 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
   }
 
   deleteProject(project: ProjectDto): void {
+    // Permission check
+    if (!this.canDeleteProjects && !this.canManageProjects) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Denied',
+        detail: 'You do not have permission to delete projects.'
+      });
+      return;
+    }
+
     this.confirmationService.confirm({
       message: `Are you sure you want to delete project "${project.name}"?`,
       header: 'Confirm Delete',
