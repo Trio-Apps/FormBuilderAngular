@@ -3,7 +3,7 @@ import { TableActionsComponent } from '../../../../shared/table-actions/table-ac
 import { DialogShellComponent } from '../../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators, AbstractControl, FormControl } from '@angular/forms';
 import { FormRulesService } from '../../services/form-rules.service';
 import { FormsService } from '../../services/forms.service';
 import { FieldsService } from '../../services/fields.service';
@@ -20,8 +20,12 @@ import {
   Condition,
   Action,
   RuleActionType,
+  CopyToDocumentConfig,
+  FieldMapping,
   convertFormRuleToDto
 } from '../../form-builder/models/form-builder-dto.model';
+import { DocumentTypesService } from '../../services/document-types.service';
+import { DocumentType } from '../../form-builder/models/document-types.model';
 import { Subscription, forkJoin } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { TranslationService } from '../../../../core/services/translation.service';
@@ -97,6 +101,11 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     falseValue: 0
   };
 
+  // CopyToDocument support
+  documentTypes: DocumentType[] = [];
+  targetForms: FormBuilderDto[] = [];
+  targetFormFields: FormFieldDto[] = []; // Fields from target form for mapping
+
   // Available options
   conditionOperators: { label: string; value: string }[] = [
     { label: 'Equals', value: 'Equals' },
@@ -116,7 +125,8 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     { label: 'Set Mandatory', value: 'SetMandatory' },
     { label: 'Set Default', value: 'SetDefault' },
     { label: 'Clear Value', value: 'ClearValue' },
-    { label: 'Compute', value: 'Compute' }
+    { label: 'Compute', value: 'Compute' },
+    { label: 'Copy To Document', value: 'CopyToDocument' }
   ];
 
   valueTypes: { label: string; value: 'constant' | 'field' }[] = [
@@ -132,6 +142,7 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     private fieldsService: FieldsService,
     private tabsService: TabsService,
     private storedProceduresService: StoredProceduresService,
+    private documentTypesService: DocumentTypesService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private fb: FormBuilder,
@@ -179,12 +190,16 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         this.loadRules();
         this.loadFormFields();
         this.loadStoredProcedures();
+        this.loadDocumentTypes();
+        this.loadTargetForms();
       } else if (newFormId && !this.formId) {
         this.formId = newFormId;
         this.loadForm();
         this.loadRules();
         this.loadFormFields();
         this.loadStoredProcedures();
+        this.loadDocumentTypes();
+        this.loadTargetForms();
       }
     });
 
@@ -308,6 +323,76 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         console.error('[FormRulesList] Error loading stored procedures:', error);
+      }
+    });
+  }
+
+  loadDocumentTypes(): void {
+    this.documentTypesService.getActiveDocumentTypes().subscribe({
+      next: (types) => {
+        this.documentTypes = types || [];
+      },
+      error: (error) => {
+        console.error('[FormRulesList] Error loading document types:', error);
+        this.documentTypes = [];
+      }
+    });
+  }
+
+  loadTargetForms(documentTypeId?: number): void {
+    this.formsService.getForms(1, 1000).subscribe({
+      next: (result) => {
+        // Load only published and active forms
+        let forms = (result.items || []).filter((f: FormBuilderDto) => f.isPublished && f.isActive);
+        
+        // Filter by document type if provided
+        if (documentTypeId) {
+          forms = forms.filter((f: FormBuilderDto) => f.documentTypeId === documentTypeId);
+        }
+        
+        this.targetForms = forms;
+      },
+      error: (error) => {
+        console.error('[FormRulesList] Error loading target forms:', error);
+        this.targetForms = [];
+      }
+    });
+  }
+
+  loadTargetFormFields(targetFormId: number): void {
+    if (!targetFormId) {
+      this.targetFormFields = [];
+      return;
+    }
+    
+    this.targetFormFields = [];
+    // Load tabs for target form
+    this.tabsService.getTabs(targetFormId).subscribe({
+      next: (tabs) => {
+        if (tabs && tabs.length > 0) {
+          const fieldObservables = tabs.map(tab => 
+            this.fieldsService.getFields(targetFormId, tab.id).pipe(
+              map(fields => ({ tabId: tab.id, fields }))
+            )
+          );
+          
+          forkJoin(fieldObservables).subscribe({
+            next: (results) => {
+              this.targetFormFields = [];
+              results.forEach(result => {
+                if (result.fields && result.fields.length > 0) {
+                  this.targetFormFields.push(...result.fields);
+                }
+              });
+            },
+            error: (error) => {
+              console.error('[FormRulesList] Error loading target form fields:', error);
+            }
+          });
+        }
+      },
+      error: (error) => {
+        console.error('[FormRulesList] Error loading target form tabs:', error);
       }
     });
   }
@@ -677,12 +762,218 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
   }
 
   createActionFormGroup(action?: Action): FormGroup {
-    return this.fb.group({
+    const actionGroup = this.fb.group({
       type: [action?.type || 'SetVisible', Validators.required],
       fieldCode: [action?.fieldCode || '', Validators.required],
       value: [action?.value || ''],
       expression: [action?.expression || '']
     });
+
+    // Add CopyToDocument config if action type is CopyToDocument or when type changes
+    // We'll add it dynamically when type changes to CopyToDocument
+    if (action?.type === 'CopyToDocument') {
+      const copyToDocumentConfig = action?.copyToDocumentConfig || {
+        targetDocumentTypeId: null,
+        targetFormId: null,
+        createNewDocument: true,
+        fieldMappings: [],
+        gridMapping: {},
+        copyCalculatedFields: false,
+        copyGridRows: false,
+        startWorkflow: false,
+        linkDocuments: false,
+        copyMetadata: false,
+        metadataFields: []
+      };
+
+      // copyToDocumentConfig is added dynamically, so cast to any to satisfy strict typing
+      (actionGroup as any).addControl('copyToDocumentConfig', this.fb.group({
+        targetDocumentTypeId: [copyToDocumentConfig.targetDocumentTypeId, Validators.required],
+        targetFormId: [copyToDocumentConfig.targetFormId, Validators.required],
+        createNewDocument: [copyToDocumentConfig.createNewDocument !== undefined ? copyToDocumentConfig.createNewDocument : true],
+        fieldMappings: this.fb.array(
+          (copyToDocumentConfig.fieldMappings || []).map((fm: FieldMapping) => 
+            this.fb.group({
+              sourceFieldCode: [fm.sourceFieldCode, Validators.required],
+              targetFieldCode: [fm.targetFieldCode, Validators.required]
+            })
+          )
+        ),
+        gridMapping: [copyToDocumentConfig.gridMapping || {}],
+        copyCalculatedFields: [copyToDocumentConfig.copyCalculatedFields || false],
+        copyGridRows: [copyToDocumentConfig.copyGridRows || false],
+        startWorkflow: [copyToDocumentConfig.startWorkflow || false],
+        linkDocuments: [copyToDocumentConfig.linkDocuments || false],
+        copyMetadata: [copyToDocumentConfig.copyMetadata || false],
+        metadataFields: this.fb.array(
+          (copyToDocumentConfig.metadataFields || []).map((mf: string) => this.fb.control(mf))
+        )
+      }));
+    }
+
+    return actionGroup;
+  }
+
+  // Helper methods for CopyToDocument Field Mappings
+  getFieldMappingsArray(actionFormGroup: AbstractControl): FormArray {
+    const actionGroup = actionFormGroup as FormGroup;
+    const config = actionGroup.get('copyToDocumentConfig') as FormGroup | null;
+    if (!config) {
+      return this.fb.array([]);
+    }
+    const fieldMappings = config.get('fieldMappings') as FormArray | null;
+    return fieldMappings || this.fb.array([]);
+  }
+
+  addFieldMapping(actionFormGroup: AbstractControl): void {
+    const actionGroup = actionFormGroup as FormGroup;
+    const config = actionGroup.get('copyToDocumentConfig') as FormGroup | null;
+    if (!config) {
+      console.warn('[FormRulesList] Cannot add field mapping: copyToDocumentConfig not found');
+      return;
+    }
+    let fieldMappingsArray = config.get('fieldMappings') as FormArray | null;
+    if (!fieldMappingsArray) {
+      fieldMappingsArray = this.fb.array([]);
+      config.setControl('fieldMappings', fieldMappingsArray);
+    }
+    fieldMappingsArray.push(this.fb.group({
+      sourceFieldCode: ['', Validators.required],
+      targetFieldCode: ['', Validators.required]
+    }));
+  }
+
+  removeFieldMapping(actionFormGroup: AbstractControl, index: number): void {
+    const fieldMappingsArray = this.getFieldMappingsArray(actionFormGroup);
+    fieldMappingsArray.removeAt(index);
+  }
+
+  // Helper methods for CopyToDocument Grid Mappings
+  addGridMapping(actionFormGroup: AbstractControl, sourceGridCode: string, targetGridCode: string): void {
+    const actionGroup = actionFormGroup as FormGroup;
+    const config = actionGroup.get('copyToDocumentConfig') as FormGroup | null;
+    if (config) {
+      const gridMapping = config.get('gridMapping')?.value || {};
+      if (sourceGridCode && targetGridCode) {
+        gridMapping[sourceGridCode] = targetGridCode;
+        config.patchValue({ gridMapping });
+      }
+    }
+  }
+
+  removeGridMapping(actionFormGroup: AbstractControl, sourceGridCode: string): void {
+    const actionGroup = actionFormGroup as FormGroup;
+    const config = actionGroup.get('copyToDocumentConfig') as FormGroup | null;
+    if (config) {
+      const gridMapping = config.get('gridMapping')?.value || {};
+      delete gridMapping[sourceGridCode];
+      config.patchValue({ gridMapping });
+    }
+  }
+
+  getGridMappings(actionFormGroup: AbstractControl): Array<{ source: string; target: string }> {
+    const actionGroup = actionFormGroup as FormGroup;
+    const config = actionGroup.get('copyToDocumentConfig') as FormGroup | null;
+    if (config) {
+      const gridMapping = config.get('gridMapping')?.value || {};
+      return Object.keys(gridMapping).map(source => ({
+        source,
+        target: gridMapping[source]
+      }));
+    }
+    return [];
+  }
+
+  // Helper methods for Metadata Fields
+  getMetadataFieldsArray(actionFormGroup: AbstractControl): FormArray {
+    const actionGroup = actionFormGroup as FormGroup;
+    const config = actionGroup.get('copyToDocumentConfig') as FormGroup | null;
+    if (!config) {
+      return this.fb.array([]);
+    }
+    const metadataFields = config.get('metadataFields') as FormArray | null;
+    return metadataFields || this.fb.array([]);
+  }
+
+  addMetadataField(actionFormGroup: AbstractControl): void {
+    const actionGroup = actionFormGroup as FormGroup;
+    const config = actionGroup.get('copyToDocumentConfig') as FormGroup | null;
+    if (!config) {
+      console.warn('[FormRulesList] Cannot add metadata field: copyToDocumentConfig not found');
+      return;
+    }
+    let metadataFieldsArray = config.get('metadataFields') as FormArray | null;
+    if (!metadataFieldsArray) {
+      metadataFieldsArray = this.fb.array([]);
+      config.setControl('metadataFields', metadataFieldsArray);
+    }
+    metadataFieldsArray.push(this.fb.control('', Validators.required));
+  }
+
+  removeMetadataField(actionFormGroup: AbstractControl, index: number): void {
+    const metadataFieldsArray = this.getMetadataFieldsArray(actionFormGroup);
+    metadataFieldsArray.removeAt(index);
+  }
+
+  // Load target forms when document type changes
+  onTargetDocumentTypeChange(actionFormGroup: AbstractControl): void {
+    const actionGroup = actionFormGroup as FormGroup;
+    const config = actionGroup.get('copyToDocumentConfig') as FormGroup | null;
+    if (config) {
+      const documentTypeId = config.get('targetDocumentTypeId')?.value;
+      if (documentTypeId) {
+        this.loadTargetForms(documentTypeId);
+        // Reset target form when document type changes
+        config.patchValue({ targetFormId: null });
+        this.targetFormFields = [];
+      }
+    }
+  }
+
+  // Load target form fields when target form changes
+  onTargetFormChange(actionFormGroup: AbstractControl): void {
+    const actionGroup = actionFormGroup as FormGroup;
+    const config = actionGroup.get('copyToDocumentConfig') as FormGroup | null;
+    if (config) {
+      const targetFormId = config.get('targetFormId')?.value;
+      if (targetFormId) {
+        this.loadTargetFormFields(targetFormId);
+      }
+    }
+  }
+
+  // Handle action type change - add/remove copyToDocumentConfig dynamically
+  onActionTypeChange(actionFormGroup: AbstractControl): void {
+    const actionGroup = actionFormGroup as FormGroup;
+    const actionType = actionGroup.get('type')?.value;
+    const hasConfig = actionGroup.get('copyToDocumentConfig');
+
+    if (actionType === 'CopyToDocument' && !hasConfig) {
+      // Add CopyToDocument config
+      const copyToDocumentConfig = this.fb.group({
+        targetDocumentTypeId: [null, Validators.required],
+        targetFormId: [null, Validators.required],
+        createNewDocument: [true],
+        fieldMappings: this.fb.array([]),
+        gridMapping: [{}],
+        copyCalculatedFields: [false],
+        copyGridRows: [false],
+        startWorkflow: [false],
+        linkDocuments: [false],
+        copyMetadata: [false],
+        metadataFields: this.fb.array([])
+      });
+      (actionGroup as any).addControl('copyToDocumentConfig', copyToDocumentConfig);
+      // Make fieldCode optional for CopyToDocument
+      actionGroup.get('fieldCode')?.clearValidators();
+      actionGroup.get('fieldCode')?.updateValueAndValidity();
+    } else if (actionType !== 'CopyToDocument' && hasConfig) {
+      // Remove CopyToDocument config
+      actionGroup.removeControl('copyToDocumentConfig');
+      // Make fieldCode required again for other actions
+      actionGroup.get('fieldCode')?.setValidators(Validators.required);
+      actionGroup.get('fieldCode')?.updateValueAndValidity();
+    }
   }
 
   saveRule(): void {
@@ -765,33 +1056,105 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
       parameterMapping: ruleType === 'StoredProcedure' ? JSON.stringify(this.parameterMapping) : undefined,
       resultMapping: ruleType === 'StoredProcedure' ? JSON.stringify(this.resultMapping) : undefined,
       actions: formValue.actions
-        .filter((a: any) => a.fieldCode && a.type) // Filter out incomplete actions
+        .filter((a: any) => {
+          // For CopyToDocument, check copyToDocumentConfig instead of fieldCode
+          if (a.type === 'CopyToDocument') {
+            return a.copyToDocumentConfig && a.copyToDocumentConfig.targetDocumentTypeId && a.copyToDocumentConfig.targetFormId;
+          }
+          return a.fieldCode && a.type;
+        })
         .map((a: any) => {
           const action: Action = {
             type: a.type,
-            fieldCode: a.fieldCode.trim()
+            fieldCode: a.type === 'CopyToDocument' ? '' : (a.fieldCode?.trim() || '')
           };
-          if (a.value && a.value.toString().trim() !== '') {
-            action.value = a.value.toString().trim();
-          }
-          if (a.expression && a.expression.toString().trim() !== '') {
-            action.expression = a.expression.toString().trim();
+          
+          if (a.type === 'CopyToDocument' && a.copyToDocumentConfig) {
+            // Convert fieldMappings array to the format expected by the API
+            const fieldMappings = (a.copyToDocumentConfig.fieldMappings || []).map((fm: any) => ({
+              sourceFieldCode: fm.sourceFieldCode?.trim() || '',
+              targetFieldCode: fm.targetFieldCode?.trim() || ''
+            })).filter((fm: any) => fm.sourceFieldCode && fm.targetFieldCode);
+
+            // Convert metadataFields array
+            const metadataFields = (a.copyToDocumentConfig.metadataFields || [])
+              .map((mf: string) => mf?.trim())
+              .filter((mf: string) => mf);
+
+            action.copyToDocumentConfig = {
+              targetDocumentTypeId: a.copyToDocumentConfig.targetDocumentTypeId,
+              targetFormId: a.copyToDocumentConfig.targetFormId,
+              createNewDocument: a.copyToDocumentConfig.createNewDocument !== undefined ? a.copyToDocumentConfig.createNewDocument : true,
+              fieldMappings: fieldMappings.length > 0 ? fieldMappings : undefined,
+              gridMapping: a.copyToDocumentConfig.gridMapping && Object.keys(a.copyToDocumentConfig.gridMapping).length > 0 
+                ? a.copyToDocumentConfig.gridMapping 
+                : undefined,
+              copyCalculatedFields: a.copyToDocumentConfig.copyCalculatedFields || false,
+              copyGridRows: a.copyToDocumentConfig.copyGridRows || false,
+              startWorkflow: a.copyToDocumentConfig.startWorkflow || false,
+              linkDocuments: a.copyToDocumentConfig.linkDocuments || false,
+              copyMetadata: a.copyToDocumentConfig.copyMetadata || false,
+              metadataFields: metadataFields.length > 0 ? metadataFields : undefined
+            };
+          } else {
+            if (a.value && a.value.toString().trim() !== '') {
+              action.value = a.value.toString().trim();
+            }
+            if (a.expression && a.expression.toString().trim() !== '') {
+              action.expression = a.expression.toString().trim();
+            }
           }
           return action;
         }),
       elseActions: formValue.elseActions && formValue.elseActions.length > 0
         ? formValue.elseActions
-            .filter((a: any) => a.fieldCode && a.type)
+            .filter((a: any) => {
+              // For CopyToDocument, check copyToDocumentConfig instead of fieldCode
+              if (a.type === 'CopyToDocument') {
+                return a.copyToDocumentConfig && a.copyToDocumentConfig.targetDocumentTypeId && a.copyToDocumentConfig.targetFormId;
+              }
+              return a.fieldCode && a.type;
+            })
             .map((a: any) => {
               const action: Action = {
                 type: a.type,
-                fieldCode: a.fieldCode.trim()
+                fieldCode: a.type === 'CopyToDocument' ? '' : (a.fieldCode?.trim() || '')
               };
-              if (a.value && a.value.toString().trim() !== '') {
-                action.value = a.value.toString().trim();
-              }
-              if (a.expression && a.expression.toString().trim() !== '') {
-                action.expression = a.expression.toString().trim();
+              
+              if (a.type === 'CopyToDocument' && a.copyToDocumentConfig) {
+                // Convert fieldMappings array to the format expected by the API
+                const fieldMappings = (a.copyToDocumentConfig.fieldMappings || []).map((fm: any) => ({
+                  sourceFieldCode: fm.sourceFieldCode?.trim() || '',
+                  targetFieldCode: fm.targetFieldCode?.trim() || ''
+                })).filter((fm: any) => fm.sourceFieldCode && fm.targetFieldCode);
+
+                // Convert metadataFields array
+                const metadataFields = (a.copyToDocumentConfig.metadataFields || [])
+                  .map((mf: string) => mf?.trim())
+                  .filter((mf: string) => mf);
+
+                action.copyToDocumentConfig = {
+                  targetDocumentTypeId: a.copyToDocumentConfig.targetDocumentTypeId,
+                  targetFormId: a.copyToDocumentConfig.targetFormId,
+                  createNewDocument: a.copyToDocumentConfig.createNewDocument !== undefined ? a.copyToDocumentConfig.createNewDocument : true,
+                  fieldMappings: fieldMappings.length > 0 ? fieldMappings : undefined,
+                  gridMapping: a.copyToDocumentConfig.gridMapping && Object.keys(a.copyToDocumentConfig.gridMapping).length > 0 
+                    ? a.copyToDocumentConfig.gridMapping 
+                    : undefined,
+                  copyCalculatedFields: a.copyToDocumentConfig.copyCalculatedFields || false,
+                  copyGridRows: a.copyToDocumentConfig.copyGridRows || false,
+                  startWorkflow: a.copyToDocumentConfig.startWorkflow || false,
+                  linkDocuments: a.copyToDocumentConfig.linkDocuments || false,
+                  copyMetadata: a.copyToDocumentConfig.copyMetadata || false,
+                  metadataFields: metadataFields.length > 0 ? metadataFields : undefined
+                };
+              } else {
+                if (a.value && a.value.toString().trim() !== '') {
+                  action.value = a.value.toString().trim();
+                }
+                if (a.expression && a.expression.toString().trim() !== '') {
+                  action.expression = a.expression.toString().trim();
+                }
               }
               return action;
             })
@@ -1039,6 +1402,10 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
 
   requiresActionExpression(actionType: RuleActionType): boolean {
     return actionType === 'Compute';
+  }
+
+  requiresCopyToDocumentConfig(actionType: RuleActionType): boolean {
+    return actionType === 'CopyToDocument';
   }
 
   getActiveRulesCount(): number {

@@ -1,0 +1,295 @@
+<div class="copy-to-document-container">
+  <p-card header="Copy To Document" [style]="{ margin: '20px' }">
+    <form [formGroup]="copyForm" (ngSubmit)="executeCopy()">
+      
+      <!-- Source Submission ID -->
+      <div class="form-group">
+        <label for="sourceSubmissionId">
+          Source Submission ID <span class="required">*</span>
+        </label>
+        <select
+          id="sourceSubmissionId"
+          formControlName="sourceSubmissionId"
+          class="form-control">
+          <option value="">Select source submission</option>
+          <option *ngFor="let submission of submissions" [value]="submission.id">
+            Submission #{{ submission.id }} - {{ submission.documentNumber || 'N/A' }}{{ submission.formName ? ' (' + submission.formName + ')' : '' }}{{ submission.documentTypeName ? ' - ' + submission.documentTypeName : '' }}
+          </option>
+        </select>
+        <small class="text-danger" *ngIf="copyForm.get('sourceSubmissionId')?.invalid && copyForm.get('sourceSubmissionId')?.touched">
+          Source Submission ID is required
+        </small>
+      </div>
+
+      <!-- Target Document Type -->
+      <div class="form-group">
+        <label for="targetDocumentTypeId">
+          Target Document Type <span class="required">*</span>
+        </label>
+        <select
+          id="targetDocumentTypeId"
+          formControlName="targetDocumentTypeId"
+          class="form-control">
+          <option value="">Select target document type</option>
+          <option *ngFor="let docType of documentTypes" [value]="docType.id">
+            {{ docType.name }}
+          </option>
+        </select>
+        <small class="text-danger" *ngIf="copyForm.get('targetDocumentTypeId')?.invalid && copyForm.get('targetDocumentTypeId')?.touched">
+          Target Document Type is required
+        </small>
+      </div>
+
+      <!-- Target Form -->
+      <div class="form-group">
+        <label for="targetFormId">
+          Target Form <span class="required">*</span>
+        </label>
+        <select
+          id="targetFormId"
+          formControlName="targetFormId"
+          class="form-control">
+          <option value="">Select target form</option>
+          <option *ngFor="let form of targetForms" [value]="form.id">
+            {{ form.formName }}
+          </option>
+        </select>
+        <small class="text-danger" *ngIf="copyForm.get('targetFormId')?.invalid && copyForm.get('targetFormId')?.touched">
+          Target Form is required
+        </small>
+      </div>
+
+      <!-- Options -->
+      <div class="form-group">
+        <label class="options-label">Options</label>
+        <div class="checkbox-group">
+          <div class="checkbox-item">
+            <p-checkbox formControlName="createNewDocument" label="Create New Document" binary="true" inputId="createNewDocument"></p-checkbox>
+            <span class="checkbox-description">Create a new document from the source submission</span>
+          </div>
+          <div class="checkbox-item">
+            <p-checkbox formControlName="copyCalculatedFields" label="Copy Calculated Fields" binary="true" inputId="copyCalculatedFields"></p-checkbox>
+            <span class="checkbox-description">Include calculated field values in the copy</span>
+          </div>
+          <div class="checkbox-item">
+            <p-checkbox formControlName="copyGridRows" label="Copy Grid Rows" binary="true" inputId="copyGridRows"></p-checkbox>
+            <span class="checkbox-description">Copy all grid rows from source to target</span>
+          </div>
+          <div class="checkbox-item">
+            <p-checkbox formControlName="startWorkflow" label="Start Workflow" binary="true" inputId="startWorkflow"></p-checkbox>
+            <span class="checkbox-description">Automatically start the workflow process</span>
+          </div>
+          <div class="checkbox-item">
+            <p-checkbox formControlName="linkDocuments" label="Link Documents" binary="true" inputId="linkDocuments"></p-checkbox>
+            <span class="checkbox-description">Create a link between source and target documents</span>
+          </div>
+          <div class="checkbox-item">
+            <p-checkbox formControlName="copyMetadata" label="Copy Metadata" binary="true" inputId="copyMetadata"></p-checkbox>
+            <span class="checkbox-description">Copy metadata fields from source document</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Field Mappings -->
+      <p-panel header="Field Mappings" [toggleable]="true" [collapsed]="false">
+        <div formArrayName="fieldMappings">
+          <div *ngFor="let mapping of fieldMappingsArray.controls; let i = index" [formGroupName]="i" class="mapping-item">
+            <div class="mapping-row">
+              <div class="mapping-field">
+                <label>Source Field Code</label>
+                <input type="text" formControlName="sourceFieldCode" class="form-control" placeholder="SOURCE_FIELD">
+              </div>
+              <div class="mapping-arrow">→</div>
+              <div class="mapping-field">
+                <label>Target Field Code</label>
+                <input type="text" formControlName="targetFieldCode" class="form-control" placeholder="TARGET_FIELD">
+              </div>
+              <div class="mapping-actions">
+                <p-button 
+                  icon="pi pi-trash" 
+                  (onClick)="removeFieldMapping(i)"
+                  [styleClass]="'p-button-danger p-button-text'"
+                  [style]="{ width: '40px', height: '40px' }"
+                  pTooltip="Remove mapping">
+                </p-button>
+              </div>
+            </div>
+          </div>
+          <p-button 
+            label="Add Field Mapping" 
+            icon="pi pi-plus" 
+            (onClick)="addFieldMapping()"
+            [styleClass]="'p-button-secondary p-button-outlined'"
+            [style]="{ marginTop: '10px' }">
+          </p-button>
+        </div>
+      </p-panel>
+
+      <!-- Grid Mappings -->
+      <p-panel header="Grid Mappings" [toggleable]="true" [collapsed]="true">
+        <div formArrayName="gridMappings">
+          <div *ngFor="let mapping of gridMappingsArray.controls; let i = index" [formGroupName]="i" class="mapping-item">
+            <div class="mapping-row">
+              <div class="mapping-field">
+                <label>Source Grid Code</label>
+                <input type="text" formControlName="sourceGridCode" class="form-control" placeholder="SOURCE_GRID">
+              </div>
+              <div class="mapping-arrow">→</div>
+              <div class="mapping-field">
+                <label>Target Grid Code</label>
+                <input type="text" formControlName="targetGridCode" class="form-control" placeholder="TARGET_GRID">
+              </div>
+              <div class="mapping-actions">
+                <p-button 
+                  icon="pi pi-trash" 
+                  (onClick)="removeGridMapping(i)"
+                  [styleClass]="'p-button-danger p-button-text'"
+                  [style]="{ width: '40px', height: '40px' }"
+                  pTooltip="Remove mapping">
+                </p-button>
+              </div>
+            </div>
+          </div>
+          <p-button 
+            label="Add Grid Mapping" 
+            icon="pi pi-plus" 
+            (onClick)="addGridMapping()"
+            [styleClass]="'p-button-secondary p-button-outlined'"
+            [style]="{ marginTop: '10px' }">
+          </p-button>
+        </div>
+      </p-panel>
+
+      <!-- Metadata Fields -->
+      <p-panel header="Metadata Fields" [toggleable]="true" [collapsed]="true" *ngIf="copyForm.get('copyMetadata')?.value">
+        <div formArrayName="metadataFields">
+          <div *ngFor="let field of metadataFieldsArray.controls; let i = index" class="metadata-item">
+            <div class="metadata-row">
+              <input type="text" [formControlName]="i" class="form-control" placeholder="Metadata field name">
+              <p-button 
+                icon="pi pi-trash" 
+                (onClick)="removeMetadataField(i)"
+                [styleClass]="'p-button-danger p-button-text'"
+                [style]="{ width: '40px', height: '40px', marginLeft: '10px' }"
+                pTooltip="Remove field">
+              </p-button>
+            </div>
+          </div>
+          <p-button 
+            label="Add Metadata Field" 
+            icon="pi pi-plus" 
+            (onClick)="addMetadataField()"
+            [styleClass]="'p-button-secondary p-button-outlined'"
+            [style]="{ marginTop: '10px' }">
+          </p-button>
+        </div>
+      </p-panel>
+
+      <!-- Result -->
+      <div *ngIf="result" class="result-section">
+        <p-panel [header]="result.success ? 'Success' : 'Error'" [toggleable]="true">
+          <div *ngIf="result.success" class="success-result">
+            <p><strong>Target Document ID:</strong> {{ result.targetDocumentId }}</p>
+            <p><strong>Target Document Number:</strong> {{ result.targetDocumentNumber }}</p>
+            <p *ngIf="result.fieldsCopied"><strong>Fields Copied:</strong> {{ result.fieldsCopied }}</p>
+            <p *ngIf="result.gridRowsCopied"><strong>Grid Rows Copied:</strong> {{ result.gridRowsCopied }}</p>
+          </div>
+          <div *ngIf="!result.success" class="error-result">
+            <p><strong>Error:</strong> {{ result.errorMessage }}</p>
+          </div>
+        </p-panel>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="form-actions">
+        <p-button 
+          label="Execute Copy" 
+          icon="pi pi-copy" 
+          type="submit"
+          [loading]="loading"
+          [disabled]="copyForm.invalid || loading"
+          [styleClass]="'p-button-primary'">
+        </p-button>
+        
+        <p-button 
+          label="View Audit Records" 
+          icon="pi pi-list" 
+          (onClick)="openAuditDialog()"
+          [styleClass]="'p-button-info'">
+        </p-button>
+        
+        <p-button 
+          label="Load Audit by Submission" 
+          icon="pi pi-search" 
+          (onClick)="loadAuditBySubmission()"
+          [styleClass]="'p-button-info'">
+        </p-button>
+        
+        <p-button 
+          label="Reset" 
+          icon="pi pi-refresh" 
+          (onClick)="resetForm()"
+          [styleClass]="'p-button-secondary'">
+        </p-button>
+      </div>
+    </form>
+  </p-card>
+
+  <!-- Audit Records Dialog -->
+  <p-dialog 
+    [(visible)]="showAuditDialog" 
+    header="Audit Records" 
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '1200px' }"
+    [closable]="true">
+    <div *ngIf="auditLoading" class="loading-container">
+      <p>Loading audit records...</p>
+    </div>
+    <p-table 
+      *ngIf="!auditLoading"
+      [value]="auditRecords" 
+      [paginator]="true" 
+      [rows]="10"
+      [showCurrentPageReport]="true"
+      currentPageReportTemplate="Showing {first} to {last} of {totalRecords} entries">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>ID</th>
+          <th>Source Submission</th>
+          <th>Target Document</th>
+          <th>Document Number</th>
+          <th>Success</th>
+          <th>Fields Copied</th>
+          <th>Grid Rows Copied</th>
+          <th>Execution Date</th>
+          <th>Error Message</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-audit>
+        <tr>
+          <td>{{ audit.id }}</td>
+          <td>{{ audit.sourceSubmissionId }}</td>
+          <td>{{ audit.targetDocumentId || 'N/A' }}</td>
+          <td>{{ audit.targetDocumentNumber || 'N/A' }}</td>
+          <td>
+            <span [class]="audit.success ? 'badge-success' : 'badge-error'">
+              {{ audit.success ? 'Yes' : 'No' }}
+            </span>
+          </td>
+          <td>{{ audit.fieldsCopied || 0 }}</td>
+          <td>{{ audit.gridRowsCopied || 0 }}</td>
+          <td>{{ audit.executionDate | date:'short' }}</td>
+          <td>{{ audit.errorMessage || '-' }}</td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="9">No audit records found</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-dialog>
+
+  <p-toast></p-toast>
+</div>
+

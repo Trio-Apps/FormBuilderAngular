@@ -34,6 +34,12 @@ export const navItems: INavData[] = [
         iconComponent: { name: 'cil-code' },
         attributes: { permissionCode: 'StoredProcedure_Allow_View' }
       },
+      {
+        name: 'Copy To Document',
+        url: '/form-builder/copy-to-document',
+        iconComponent: { name: 'cil-copy' },
+        attributes: { permissionCode: 'FormBuilder_Allow_View' }
+      },
       
       // Tabs و Fields تحتاج IDs ديناميكية، فلا يمكن وضع رابط ثابت هنا
     ]

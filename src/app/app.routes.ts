@@ -278,6 +278,13 @@ export const routes: Routes = [
               .then(m => m.AttachmentTypesListComponent) 
           },
           
+          // Copy To Document
+          { 
+            path: 'copy-to-document', 
+            loadComponent: () => import('./views/FormBuilder/components/copy-to-document/copy-to-document.component')
+              .then(m => m.CopyToDocumentComponent) 
+          },
+          
           // NOTE: Field options are now managed directly inside the Fields screen
           // If you need a separate management screen again, you can add routes here.
         ]

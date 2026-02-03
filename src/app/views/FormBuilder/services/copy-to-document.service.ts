@@ -1,0 +1,181 @@
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
+import {
+  CopyToDocumentRequestDto,
+  CopyToDocumentResultDto,
+  CopyToDocumentAuditDto,
+  CopyToDocumentAuditQueryParams,
+  CopyToDocumentAuditResponse,
+  ApiResponse
+} from '../form-builder/models/form-builder-dto.model';
+import { environment } from '../../../environments/environment';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class CopyToDocumentService {
+  private baseUrl = `${environment.apiUrl}/CopyToDocument`;
+
+  constructor(private http: HttpClient) {}
+
+  /**
+   * تنفيذ CopyToDocument
+   * POST /api/CopyToDocument/execute
+   */
+  executeCopyToDocument(request: CopyToDocumentRequestDto): Observable<CopyToDocumentResultDto> {
+    console.log('[CopyToDocumentService] Executing CopyToDocument:', request);
+    
+    return this.http.post<ApiResponse<CopyToDocumentResultDto>>(
+      `${this.baseUrl}/execute`,
+      request
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentResultDto>) => {
+        if (response.data) {
+          return response.data;
+        }
+        // Fallback: إذا كانت الاستجابة مباشرة بدون wrapper
+        return response as any as CopyToDocumentResultDto;
+      }),
+      catchError((error) => {
+        console.error('[CopyToDocumentService] Error executing CopyToDocument:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * جلب Audit Records مع Pagination و Filters
+   * GET /api/CopyToDocument/audit
+   */
+  getAuditRecords(params?: CopyToDocumentAuditQueryParams): Observable<CopyToDocumentAuditResponse> {
+    let httpParams = new HttpParams();
+    
+    if (params) {
+      if (params.page !== undefined) {
+        httpParams = httpParams.set('page', params.page.toString());
+      }
+      if (params.pageSize !== undefined) {
+        httpParams = httpParams.set('pageSize', params.pageSize.toString());
+      }
+      if (params.sourceSubmissionId !== undefined) {
+        httpParams = httpParams.set('sourceSubmissionId', params.sourceSubmissionId.toString());
+      }
+      if (params.targetDocumentId !== undefined) {
+        httpParams = httpParams.set('targetDocumentId', params.targetDocumentId.toString());
+      }
+      if (params.success !== undefined) {
+        httpParams = httpParams.set('success', params.success.toString());
+      }
+      if (params.startDate) {
+        httpParams = httpParams.set('startDate', params.startDate);
+      }
+      if (params.endDate) {
+        httpParams = httpParams.set('endDate', params.endDate);
+      }
+    }
+
+    return this.http.get<ApiResponse<CopyToDocumentAuditResponse>>(
+      `${this.baseUrl}/audit`,
+      { params: httpParams }
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentAuditResponse>) => {
+        if (response.data) {
+          return response.data;
+        }
+        // Fallback: إذا كانت الاستجابة مباشرة
+        return response as any as CopyToDocumentAuditResponse;
+      }),
+      catchError((error) => {
+        console.error('[CopyToDocumentService] Error fetching audit records:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * جلب Audit Record محدد بالـ ID
+   * GET /api/CopyToDocument/audit/{id}
+   */
+  getAuditRecordById(id: number): Observable<CopyToDocumentAuditDto> {
+    return this.http.get<ApiResponse<CopyToDocumentAuditDto>>(
+      `${this.baseUrl}/audit/${id}`
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentAuditDto>) => {
+        if (response.data) {
+          return response.data;
+        }
+        return response as any as CopyToDocumentAuditDto;
+      }),
+      catchError((error) => {
+        console.error(`[CopyToDocumentService] Error fetching audit record ${id}:`, error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * جلب Audit Records لـ Submission محدد
+   * GET /api/CopyToDocument/audit/submission/{submissionId}
+   */
+  getAuditRecordsBySubmission(submissionId: number): Observable<CopyToDocumentAuditDto[]> {
+    return this.http.get<ApiResponse<CopyToDocumentAuditDto[]>>(
+      `${this.baseUrl}/audit/submission/${submissionId}`
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentAuditDto[]>) => {
+        if (response.data) {
+          return response.data;
+        }
+        return response as any as CopyToDocumentAuditDto[];
+      }),
+      catchError((error) => {
+        console.error(`[CopyToDocumentService] Error fetching audit records for submission ${submissionId}:`, error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * جلب Audit Records لمستند هدف محدد
+   * GET /api/CopyToDocument/audit/target/{targetDocumentId}
+   */
+  getAuditRecordsByTargetDocument(targetDocumentId: number): Observable<CopyToDocumentAuditDto[]> {
+    return this.http.get<ApiResponse<CopyToDocumentAuditDto[]>>(
+      `${this.baseUrl}/audit/target/${targetDocumentId}`
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentAuditDto[]>) => {
+        if (response.data) {
+          return response.data;
+        }
+        return response as any as CopyToDocumentAuditDto[];
+      }),
+      catchError((error) => {
+        console.error(`[CopyToDocumentService] Error fetching audit records for target document ${targetDocumentId}:`, error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * Helper Method: تحويل FieldMapping من Object إلى Array
+   */
+  convertFieldMappingToArray(fieldMapping: { [key: string]: string }): Array<{ sourceFieldCode: string; targetFieldCode: string }> {
+    return Object.keys(fieldMapping).map(sourceFieldCode => ({
+      sourceFieldCode,
+      targetFieldCode: fieldMapping[sourceFieldCode]
+    }));
+  }
+
+  /**
+   * Helper Method: تحويل FieldMapping من Array إلى Object
+   */
+  convertFieldMappingToObject(fieldMappings: Array<{ sourceFieldCode: string; targetFieldCode: string }>): { [key: string]: string } {
+    const result: { [key: string]: string } = {};
+    fieldMappings.forEach(mapping => {
+      result[mapping.sourceFieldCode] = mapping.targetFieldCode;
+    });
+    return result;
+  }
+}
+

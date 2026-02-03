@@ -5,6 +5,7 @@ export interface FormBuilderDto {
   formName: string;
   foreignFormName?: string; // Arabic form name
   formCode: string;
+  documentTypeId?: number; // ✅ used for filtering target forms by document type (CopyToDocument)
   description?: string;
   foreignDescription?: string; // Arabic description
   isPublished?: boolean;
@@ -342,14 +343,127 @@ export interface Condition {
 }
 
 /**
+ * Field Mapping for CopyToDocument action
+ */
+export interface FieldMapping {
+  sourceFieldCode: string;
+  targetFieldCode: string;
+}
+
+/**
+ * CopyToDocument Action Configuration
+ * ✅ Updated: Added support for gridMapping, linkDocuments, copyMetadata, metadataFields
+ */
+export interface CopyToDocumentConfig {
+  targetDocumentTypeId: number;
+  targetFormId: number;
+  createNewDocument: boolean;
+  fieldMappings?: FieldMapping[]; // Array format: [{ sourceFieldCode, targetFieldCode }]
+  fieldMapping?: { [key: string]: string }; // Object format: { "SOURCE_FIELD": "TARGET_FIELD" } - for API compatibility
+  gridMapping?: { [key: string]: string }; // Object format: { "SOURCE_GRID": "TARGET_GRID" }
+  copyCalculatedFields?: boolean;
+  copyGridRows?: boolean;
+  startWorkflow?: boolean;
+  linkDocuments?: boolean; // Link source and target documents
+  parentDocumentId?: number; // For linking source and target documents (legacy, use linkDocuments instead)
+  copyMetadata?: boolean; // Copy metadata fields
+  metadataFields?: string[]; // List of metadata fields to copy
+}
+
+/**
+ * CopyToDocument Request DTO - للاستخدام مع API
+ */
+export interface CopyToDocumentRequestDto {
+  config: {
+    targetDocumentTypeId: number;
+    targetFormId: number;
+    createNewDocument: boolean;
+    fieldMapping?: { [key: string]: string }; // Object format: { "SOURCE_FIELD": "TARGET_FIELD" }
+    fieldMappings?: FieldMapping[]; // Array format: [{ sourceFieldCode, targetFieldCode }]
+    gridMapping?: { [key: string]: string }; // Object format: { "SOURCE_GRID": "TARGET_GRID" }
+    copyCalculatedFields?: boolean;
+    copyGridRows?: boolean;
+    startWorkflow?: boolean;
+    linkDocuments?: boolean;
+    copyMetadata?: boolean;
+    metadataFields?: string[];
+  };
+  sourceSubmissionId: number;
+  actionId?: number | null;
+  ruleId?: number | null;
+}
+
+/**
+ * CopyToDocument Result DTO - نتيجة التنفيذ
+ */
+export interface CopyToDocumentResultDto {
+  success: boolean;
+  targetDocumentId?: number;
+  targetDocumentNumber?: string;
+  errorMessage?: string;
+  fieldsCopied?: number;
+  gridRowsCopied?: number;
+  sourceSubmissionId?: number;
+}
+
+/**
+ * CopyToDocument Audit DTO - سجل Audit
+ */
+export interface CopyToDocumentAuditDto {
+  id: number;
+  sourceSubmissionId: number;
+  targetDocumentId?: number | null;
+  actionId?: number | null;
+  ruleId?: number | null;
+  sourceFormId?: number | null;
+  targetFormId?: number | null;
+  targetDocumentTypeId?: number | null;
+  success: boolean;
+  errorMessage?: string | null;
+  fieldsCopied?: number | null;
+  gridRowsCopied?: number | null;
+  targetDocumentNumber?: string | null;
+  executionDate: string;
+  createdDate: string;
+  createdByUserId?: string | null;
+  isActive: boolean;
+  isDeleted: boolean;
+}
+
+/**
+ * CopyToDocument Audit Query Parameters
+ */
+export interface CopyToDocumentAuditQueryParams {
+  page?: number;
+  pageSize?: number;
+  sourceSubmissionId?: number;
+  targetDocumentId?: number;
+  success?: boolean;
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * CopyToDocument Audit Response - مع Pagination
+ */
+export interface CopyToDocumentAuditResponse {
+  items: CopyToDocumentAuditDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
  * Action - Rule action structure
- * ActionType values: 'SetVisible' | 'SetReadOnly' | 'SetMandatory' | 'SetDefault' | 'ClearValue' | 'Compute'
+ * ActionType values: 'SetVisible' | 'SetReadOnly' | 'SetMandatory' | 'SetDefault' | 'ClearValue' | 'Compute' | 'CopyToDocument'
  */
 export interface Action {
-  type: string; // SetVisible, SetReadOnly, SetMandatory, SetDefault, ClearValue, Compute
-  fieldCode: string;
+  type: string; // SetVisible, SetReadOnly, SetMandatory, SetDefault, ClearValue, Compute, CopyToDocument
+  fieldCode: string; // For regular actions, empty for CopyToDocument
   value?: any; // For SetVisible, SetReadOnly, SetMandatory, SetDefault
   expression?: string; // For Compute action
+  copyToDocumentConfig?: CopyToDocumentConfig; // For CopyToDocument action
 }
 
 /**
@@ -520,7 +634,7 @@ export type ActionType = 'Show' | 'Hide' | 'SetRequired' | 'SetOptional' | 'SetR
 /**
  * Action Types for FORM_RULE_ACTIONS
  */
-export type RuleActionType = 'SetVisible' | 'SetReadOnly' | 'SetMandatory' | 'SetDefault' | 'ClearValue' | 'Compute';
+export type RuleActionType = 'SetVisible' | 'SetReadOnly' | 'SetMandatory' | 'SetDefault' | 'ClearValue' | 'Compute' | 'CopyToDocument';
 
 // ==================== Form Rules Helper Functions ====================
 
@@ -547,11 +661,12 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
   // Clean actions - remove undefined/null values and any 'id' property
   // ✅ Fixed: Allow boolean false and 0 values (they are valid)
   // ✅ Fixed: Remove 'id' property to avoid Entity Framework tracking conflicts
+  // ✅ Added: Support for CopyToDocument action with copyToDocumentConfig
   const cleanActions: Action[] = (formRule.actions || []).map(action => {
     // Create a clean action object without 'id' property
     const cleanAction: Action = {
       type: action.type || '',
-      fieldCode: action.fieldCode || ''
+      fieldCode: action.fieldCode || '' // Empty for CopyToDocument
     };
     // Include value if it's not null/undefined (allow false, 0, empty string)
     if (action.value !== null && action.value !== undefined) {
@@ -560,6 +675,27 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     // Include expression if it's not null/undefined/empty
     if (action.expression !== null && action.expression !== undefined && action.expression !== '') {
       cleanAction.expression = action.expression;
+    }
+    // Include copyToDocumentConfig for CopyToDocument action
+    // ✅ Updated: Added support for gridMapping, linkDocuments, copyMetadata, metadataFields
+    if (action.type === 'CopyToDocument' && action.copyToDocumentConfig) {
+      cleanAction.copyToDocumentConfig = {
+        targetDocumentTypeId: action.copyToDocumentConfig.targetDocumentTypeId,
+        targetFormId: action.copyToDocumentConfig.targetFormId,
+        createNewDocument: action.copyToDocumentConfig.createNewDocument !== undefined 
+          ? action.copyToDocumentConfig.createNewDocument 
+          : true,
+        fieldMappings: action.copyToDocumentConfig.fieldMappings || [],
+        fieldMapping: action.copyToDocumentConfig.fieldMapping, // Object format for API compatibility
+        gridMapping: action.copyToDocumentConfig.gridMapping,
+        copyCalculatedFields: action.copyToDocumentConfig.copyCalculatedFields,
+        copyGridRows: action.copyToDocumentConfig.copyGridRows,
+        startWorkflow: action.copyToDocumentConfig.startWorkflow,
+        linkDocuments: action.copyToDocumentConfig.linkDocuments,
+        parentDocumentId: action.copyToDocumentConfig.parentDocumentId, // Legacy support
+        copyMetadata: action.copyToDocumentConfig.copyMetadata,
+        metadataFields: action.copyToDocumentConfig.metadataFields || []
+      };
     }
     // Ensure 'id' is not included (Action interface doesn't have 'id', but we explicitly exclude it)
     return cleanAction;
@@ -568,11 +704,12 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
   // Clean elseActions - remove undefined/null values and any 'id' property
   // ✅ Fixed: Allow boolean false and 0 values (they are valid)
   // ✅ Fixed: Remove 'id' property to avoid Entity Framework tracking conflicts
+  // ✅ Added: Support for CopyToDocument action with copyToDocumentConfig
   const cleanElseActions: Action[] = (formRule.elseActions || []).map(action => {
     // Create a clean action object without 'id' property
     const cleanAction: Action = {
       type: action.type || '',
-      fieldCode: action.fieldCode || ''
+      fieldCode: action.fieldCode || '' // Empty for CopyToDocument
     };
     // Include value if it's not null/undefined (allow false, 0, empty string)
     if (action.value !== null && action.value !== undefined) {
@@ -581,6 +718,27 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     // Include expression if it's not null/undefined/empty
     if (action.expression !== null && action.expression !== undefined && action.expression !== '') {
       cleanAction.expression = action.expression;
+    }
+    // Include copyToDocumentConfig for CopyToDocument action
+    // ✅ Updated: Added support for gridMapping, linkDocuments, copyMetadata, metadataFields
+    if (action.type === 'CopyToDocument' && action.copyToDocumentConfig) {
+      cleanAction.copyToDocumentConfig = {
+        targetDocumentTypeId: action.copyToDocumentConfig.targetDocumentTypeId,
+        targetFormId: action.copyToDocumentConfig.targetFormId,
+        createNewDocument: action.copyToDocumentConfig.createNewDocument !== undefined 
+          ? action.copyToDocumentConfig.createNewDocument 
+          : true,
+        fieldMappings: action.copyToDocumentConfig.fieldMappings || [],
+        fieldMapping: action.copyToDocumentConfig.fieldMapping, // Object format for API compatibility
+        gridMapping: action.copyToDocumentConfig.gridMapping,
+        copyCalculatedFields: action.copyToDocumentConfig.copyCalculatedFields,
+        copyGridRows: action.copyToDocumentConfig.copyGridRows,
+        startWorkflow: action.copyToDocumentConfig.startWorkflow,
+        linkDocuments: action.copyToDocumentConfig.linkDocuments,
+        parentDocumentId: action.copyToDocumentConfig.parentDocumentId, // Legacy support
+        copyMetadata: action.copyToDocumentConfig.copyMetadata,
+        metadataFields: action.copyToDocumentConfig.metadataFields || []
+      };
     }
     // Ensure 'id' is not included (Action interface doesn't have 'id', but we explicitly exclude it)
     return cleanAction;
@@ -665,7 +823,8 @@ export function convertFormRuleDtoToFormRule(dto: FormRuleDto): FormRule {
         type: a.type || a.actionType || '',
         fieldCode: a.fieldCode || '',
         value: a.value,
-        expression: a.expression
+        expression: a.expression,
+        copyToDocumentConfig: a.copyToDocumentConfig // ✅ Support CopyToDocument config
       }));
     } catch (e) {
       console.warn('[convertFormRuleDtoToFormRule] Failed to parse actionsJson', e);
@@ -679,12 +838,34 @@ export function convertFormRuleDtoToFormRule(dto: FormRuleDto): FormRule {
         type: a.type || a.actionType || '',
         fieldCode: a.fieldCode || '',
         value: a.value,
-        expression: a.expression
+        expression: a.expression,
+        copyToDocumentConfig: a.copyToDocumentConfig // ✅ Support CopyToDocument config
       }));
     } catch (e) {
       console.warn('[convertFormRuleDtoToFormRule] Failed to parse elseActionsJson', e);
     }
   }
+
+  // ✅ Ensure CopyToDocument actions have copyToDocumentConfig preserved
+  actions = actions.map(a => {
+    if (a.type === 'CopyToDocument' && (a as any).copyToDocumentConfig) {
+      return {
+        ...a,
+        copyToDocumentConfig: (a as any).copyToDocumentConfig
+      };
+    }
+    return a;
+  });
+
+  elseActions = elseActions.map(a => {
+    if (a.type === 'CopyToDocument' && (a as any).copyToDocumentConfig) {
+      return {
+        ...a,
+        copyToDocumentConfig: (a as any).copyToDocumentConfig
+      };
+    }
+    return a;
+  });
 
   // Fallback: Try to parse ruleJson if available (for backward compatibility)
   if (actions.length === 0 && (dto as any).ruleJson) {

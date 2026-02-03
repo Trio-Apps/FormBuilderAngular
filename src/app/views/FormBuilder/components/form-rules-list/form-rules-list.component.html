@@ -482,7 +482,7 @@
             <div class="form-row">
               <div class="form-group">
                 <label>Action Type *</label>
-                <select formControlName="type" class="form-control">
+                <select formControlName="type" (change)="onActionTypeChange(action)" class="form-control">
                   <option value="" disabled>Select action</option>
                   <option *ngFor="let actionType of actionTypes" [value]="actionType.value">
                     {{ actionType.label }}
@@ -492,7 +492,7 @@
                   Action type is required
                 </small>
               </div>
-              <div class="form-group">
+              <div class="form-group" *ngIf="!requiresCopyToDocumentConfig(action.get('type')?.value)">
                 <label>Target Field *</label>
                 <select formControlName="fieldCode" class="form-control">
                   <option value="" disabled>Select target field</option>
@@ -523,6 +523,199 @@
                   rows="3"
                   placeholder="Enter expression (e.g., field1 + field2)"></textarea>
                 <small class="form-text">Required for Compute action. Use field codes in expression.</small>
+              </div>
+            </div>
+
+            <!-- CopyToDocument Configuration -->
+            <div *ngIf="requiresCopyToDocumentConfig(action.get('type')?.value) && action.get('copyToDocumentConfig')" class="copy-to-document-config">
+              <div class="form-section-header">
+                <h5>Copy To Document Configuration</h5>
+              </div>
+
+              <div formGroupName="copyToDocumentConfig">
+                <!-- Target Document Type and Form -->
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Target Document Type *</label>
+                    <select
+                      formControlName="targetDocumentTypeId"
+                      (change)="onTargetDocumentTypeChange(action)"
+                      class="form-control">
+                      <option value="">Select document type</option>
+                      <option *ngFor="let docType of documentTypes" [value]="docType.id">
+                        {{ docType.name }}
+                      </option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Target Form *</label>
+                    <select
+                      formControlName="targetFormId"
+                      (change)="onTargetFormChange(action)"
+                      class="form-control">
+                      <option value="">Select target form</option>
+                      <option *ngFor="let form of targetForms" [value]="form.id">
+                        {{ form.formName }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Options -->
+                <div class="form-row">
+                  <div class="form-group form-group-full">
+                    <label>Options</label>
+                    <div class="checkbox-group">
+                      <label class="checkbox-label">
+                        <input type="checkbox" formControlName="createNewDocument" class="form-check-input">
+                        Create New Document
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" formControlName="copyCalculatedFields" class="form-check-input">
+                        Copy Calculated Fields
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" formControlName="copyGridRows" class="form-check-input">
+                        Copy Grid Rows
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" formControlName="startWorkflow" class="form-check-input">
+                        Start Workflow
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" formControlName="linkDocuments" class="form-check-input">
+                        Link Documents
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" formControlName="copyMetadata" class="form-check-input">
+                        Copy Metadata
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Field Mappings -->
+                <div class="form-section">
+                  <div class="section-header">
+                    <h6>Field Mappings</h6>
+                    <button type="button" class="btn btn-sm btn-secondary" (click)="addFieldMapping(action)">
+                      <i class="pi pi-plus"></i> Add Field Mapping
+                    </button>
+                  </div>
+                  <div formArrayName="fieldMappings" class="mapping-list">
+                    <div
+                      *ngFor="let mapping of getFieldMappingsArray(action).controls; let i = index"
+                      [formGroupName]="i"
+                      class="mapping-item">
+                      <div class="mapping-row">
+                        <div class="mapping-field">
+                          <label>Source Field Code</label>
+                          <select formControlName="sourceFieldCode" class="form-control">
+                            <option value="">Select source field</option>
+                            <option *ngFor="let field of formFields" [value]="field.fieldCode">
+                              {{ field.fieldName }} ({{ field.fieldCode }})
+                            </option>
+                          </select>
+                        </div>
+                        <div class="mapping-arrow">→</div>
+                        <div class="mapping-field">
+                          <label>Target Field Code</label>
+                          <select formControlName="targetFieldCode" class="form-control">
+                            <option value="">Select target field</option>
+                            <option *ngFor="let field of targetFormFields" [value]="field.fieldCode">
+                              {{ field.fieldName }} ({{ field.fieldCode }})
+                            </option>
+                          </select>
+                        </div>
+                        <div class="mapping-actions">
+                          <button type="button" class="btn btn-sm btn-danger" (click)="removeFieldMapping(action, i)">
+                            <i class="pi pi-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div *ngIf="getFieldMappingsArray(action).length === 0" class="empty-state-small">
+                      <p>No field mappings. Click "Add Field Mapping" to add one.</p>
+                    </div>
+                  </div>
+                </div
+              ></div>
+
+              <!-- Grid Mappings -->
+              <div class="form-section">
+                <div class="section-header">
+                  <h6>Grid Mappings</h6>
+                </div>
+                <div class="mapping-list">
+                  <div 
+                    *ngFor="let gridMapping of getGridMappings(action); let i = index" 
+                    class="mapping-item">
+                    <div class="mapping-row">
+                      <div class="mapping-field">
+                        <label>Source Grid Code</label>
+                        <input type="text" [value]="gridMapping.source" readonly class="form-control">
+                      </div>
+                      <div class="mapping-arrow">→</div>
+                      <div class="mapping-field">
+                        <label>Target Grid Code</label>
+                        <input type="text" [value]="gridMapping.target" readonly class="form-control">
+                      </div>
+                      <div class="mapping-actions">
+                        <button type="button" class="btn btn-sm btn-danger" (click)="removeGridMapping(action, gridMapping.source)">
+                          <i class="pi pi-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="add-grid-mapping-form">
+                    <div class="form-row">
+                      <div class="form-group">
+                        <input 
+                          type="text" 
+                          #sourceGridInput
+                          placeholder="Source Grid Code" 
+                          class="form-control">
+                      </div>
+                      <div class="form-group">
+                        <input 
+                          type="text" 
+                          #targetGridInput
+                          placeholder="Target Grid Code" 
+                          class="form-control">
+                      </div>
+                      <div class="form-group">
+                        <button 
+                          type="button" 
+                          class="btn btn-sm btn-secondary"
+                          (click)="addGridMapping(action, sourceGridInput.value, targetGridInput.value); sourceGridInput.value=''; targetGridInput.value=''">
+                          <i class="pi pi-plus"></i> Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Metadata Fields (shown only if copyMetadata is checked) -->
+              <div class="form-section" *ngIf="action.get('copyToDocumentConfig')?.get('copyMetadata')?.value">
+                <div class="section-header">
+                  <h6>Metadata Fields</h6>
+                  <button type="button" class="btn btn-sm btn-secondary" (click)="addMetadataField(action)">
+                    <i class="pi pi-plus"></i> Add Metadata Field
+                  </button>
+                </div>
+                <div formGroupName="copyToDocumentConfig">
+                  <div formArrayName="metadataFields" class="metadata-list">
+                    <div *ngFor="let _ of getMetadataFieldsArray(action).controls; let i = index" class="metadata-item">
+                      <div class="metadata-row">
+                        <input type="text" [formControlName]="i" class="form-control" placeholder="Metadata field name">
+                        <button type="button" class="btn btn-sm btn-danger" (click)="removeMetadataField(action, i)">
+                          <i class="pi pi-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

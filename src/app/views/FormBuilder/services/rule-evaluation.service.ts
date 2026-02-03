@@ -251,6 +251,13 @@ export class RuleEvaluationService {
   ): void {
     console.log(`[RuleEvaluationService] Applying action: type="${action.type}", fieldCode="${action.fieldCode}", value=${action.value}`);
     
+    // Skip CopyToDocument actions - they are executed automatically by the system when events occur
+    // They don't affect UI field states
+    if (action.type === 'CopyToDocument') {
+      console.log(`[RuleEvaluationService] Skipping CopyToDocument action - will be executed automatically by system when event occurs`);
+      return;
+    }
+
     if (!fieldStates[action.fieldCode]) {
       // Initialize field state if not exists
       fieldStates[action.fieldCode] = {
