@@ -358,6 +358,7 @@ export interface CopyToDocumentConfig {
   targetDocumentTypeId: number;
   targetFormId: number;
   createNewDocument: boolean;
+  targetDocumentId?: number | null; // Required when createNewDocument is false
   fieldMappings?: FieldMapping[]; // Array format: [{ sourceFieldCode, targetFieldCode }]
   fieldMapping?: { [key: string]: string }; // Object format: { "SOURCE_FIELD": "TARGET_FIELD" } - for API compatibility
   gridMapping?: { [key: string]: string }; // Object format: { "SOURCE_GRID": "TARGET_GRID" }
@@ -378,6 +379,7 @@ export interface CopyToDocumentRequestDto {
     targetDocumentTypeId: number;
     targetFormId: number;
     createNewDocument: boolean;
+    targetDocumentId?: number | null; // Required when createNewDocument is false
     fieldMapping?: { [key: string]: string }; // Object format: { "SOURCE_FIELD": "TARGET_FIELD" }
     fieldMappings?: FieldMapping[]; // Array format: [{ sourceFieldCode, targetFieldCode }]
     gridMapping?: { [key: string]: string }; // Object format: { "SOURCE_GRID": "TARGET_GRID" }

@@ -458,6 +458,30 @@ export class PermissionService {
       })
     );
   }
+
+  /**
+   * Sync permissions for a user group (bulk replace)
+   * PUT /api/UserGroupPermissions/by-group/{userGroupId}/sync
+   *
+   * Note: Backend contract may accept either:
+   * - Array of permission strings: ["Dashboard_Allow_View", ...]
+   * - Object wrapper: { permissions: [...] }
+   *
+   * We send the object wrapper to match common backend contracts.
+   */
+  syncPermissionsForGroup(userGroupId: number, permissions: string[]): Observable<boolean> {
+    const normalized = [...new Set((permissions || []).map(p => (p || '').trim()).filter(Boolean))];
+    return this.http.put<any>(
+      `${this.userGroupPermissionsUrl}/by-group/${userGroupId}/sync`,
+      { permissions: normalized }
+    ).pipe(
+      map(() => true),
+      catchError((error) => {
+        console.error('[PermissionService] Error syncing group permissions:', error);
+        return of(false);
+      })
+    );
+  }
   
   // ==================== Document Permission Helpers ====================
   // Convenience methods for checking Document-specific permissions

@@ -52,16 +52,22 @@ export class UsersService {
         alternativeUserGroups: this.alternativeUserGroupsUrl
       });
 
-      // Test API connectivity
-      this.checkApiHealth();
+      // Note: Health check removed to avoid console errors
+      // API connectivity is verified through actual API calls
     }
   }
 
   /**
    * Check if API server is accessible
    * This helps diagnose 404 errors
+   * Note: This is a non-critical diagnostic check that fails silently
    */
   private checkApiHealth(): void {
+    // Skip health check if not in debug mode to avoid unnecessary requests
+    if (!environment.config?.enableDebug) {
+      return;
+    }
+
     // Try to access Swagger UI or a known endpoint
     const swaggerUrl = environment.links?.apiDocs || 'https://localhost:7276/swagger';
     const healthCheckUrl = `${environment.apiUrl.replace('/api', '')}/swagger/v1/swagger.json`;
@@ -70,16 +76,26 @@ export class UsersService {
     console.log('[UsersService] Swagger URL:', swaggerUrl);
     console.log('[UsersService] Health check URL:', healthCheckUrl);
 
+    // Use a timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
     // Try to fetch Swagger JSON (doesn't require auth)
-    fetch(healthCheckUrl, { method: 'HEAD', mode: 'no-cors' })
+    // This check is optional and failures are expected if Swagger is disabled
+    fetch(healthCheckUrl, { 
+      method: 'HEAD',
+      signal: controller.signal,
+      cache: 'no-cache'
+    })
       .then(() => {
+        clearTimeout(timeoutId);
         console.log('[UsersService] ✅ API server appears to be running');
       })
       .catch(() => {
-        console.warn('[UsersService] ⚠️ Could not reach API server. Please verify:');
-        console.warn('  1. API server is running on', environment.apiUrl.replace('/api', ''));
-        console.warn('  2. Swagger UI is accessible at', swaggerUrl);
-        console.warn('  3. CORS is properly configured');
+        clearTimeout(timeoutId);
+        // Silently ignore errors - this is just a diagnostic check
+        // The actual API calls will show real errors if there are connectivity issues
+        // Swagger endpoint may not be available, which is fine
       });
   }
 

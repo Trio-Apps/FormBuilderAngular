@@ -776,6 +776,7 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         targetDocumentTypeId: null,
         targetFormId: null,
         createNewDocument: true,
+        targetDocumentId: null,
         fieldMappings: [],
         gridMapping: {},
         copyCalculatedFields: false,
@@ -787,10 +788,11 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
       };
 
       // copyToDocumentConfig is added dynamically, so cast to any to satisfy strict typing
-      (actionGroup as any).addControl('copyToDocumentConfig', this.fb.group({
+      const copyToDocumentConfigGroup = this.fb.group({
         targetDocumentTypeId: [copyToDocumentConfig.targetDocumentTypeId, Validators.required],
         targetFormId: [copyToDocumentConfig.targetFormId, Validators.required],
         createNewDocument: [copyToDocumentConfig.createNewDocument !== undefined ? copyToDocumentConfig.createNewDocument : true],
+        targetDocumentId: [copyToDocumentConfig.targetDocumentId || null],
         fieldMappings: this.fb.array(
           (copyToDocumentConfig.fieldMappings || []).map((fm: FieldMapping) => 
             this.fb.group({
@@ -808,7 +810,21 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         metadataFields: this.fb.array(
           (copyToDocumentConfig.metadataFields || []).map((mf: string) => this.fb.control(mf))
         )
-      }));
+      });
+
+      // Add conditional validation for targetDocumentId
+      copyToDocumentConfigGroup.get('createNewDocument')?.valueChanges.subscribe(createNew => {
+        const targetDocumentIdControl = copyToDocumentConfigGroup.get('targetDocumentId');
+        if (!createNew) {
+          targetDocumentIdControl?.setValidators([Validators.required]);
+        } else {
+          targetDocumentIdControl?.clearValidators();
+          targetDocumentIdControl?.setValue(null);
+        }
+        targetDocumentIdControl?.updateValueAndValidity();
+      });
+
+      (actionGroup as any).addControl('copyToDocumentConfig', copyToDocumentConfigGroup);
     }
 
     return actionGroup;
@@ -1085,6 +1101,7 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
               targetDocumentTypeId: a.copyToDocumentConfig.targetDocumentTypeId,
               targetFormId: a.copyToDocumentConfig.targetFormId,
               createNewDocument: a.copyToDocumentConfig.createNewDocument !== undefined ? a.copyToDocumentConfig.createNewDocument : true,
+              targetDocumentId: !a.copyToDocumentConfig.createNewDocument ? a.copyToDocumentConfig.targetDocumentId : null,
               fieldMappings: fieldMappings.length > 0 ? fieldMappings : undefined,
               gridMapping: a.copyToDocumentConfig.gridMapping && Object.keys(a.copyToDocumentConfig.gridMapping).length > 0 
                 ? a.copyToDocumentConfig.gridMapping 
@@ -1137,6 +1154,7 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
                   targetDocumentTypeId: a.copyToDocumentConfig.targetDocumentTypeId,
                   targetFormId: a.copyToDocumentConfig.targetFormId,
                   createNewDocument: a.copyToDocumentConfig.createNewDocument !== undefined ? a.copyToDocumentConfig.createNewDocument : true,
+                  targetDocumentId: !a.copyToDocumentConfig.createNewDocument ? a.copyToDocumentConfig.targetDocumentId : null,
                   fieldMappings: fieldMappings.length > 0 ? fieldMappings : undefined,
                   gridMapping: a.copyToDocumentConfig.gridMapping && Object.keys(a.copyToDocumentConfig.gridMapping).length > 0 
                     ? a.copyToDocumentConfig.gridMapping 

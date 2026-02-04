@@ -17,6 +17,11 @@ export const routes: Routes = [
           .then(m => m.FormsListComponent)
       },
       {
+        path: 'permissions',
+        loadComponent: () => import('../../permissions/permissions-list/permissions-list.component')
+          .then(m => m.PermissionsListComponent)
+      },
+      {
         path: 'tabs/:formId',
         loadComponent: () => import('../../tabs/tabs-list/tabs-list.component')
           .then(m => m.TabsListComponent)

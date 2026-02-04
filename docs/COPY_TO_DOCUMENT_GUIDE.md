@@ -7,7 +7,11 @@
 4. [الوظائف الرئيسية](#الوظائف-الرئيسية)
 5. [التكامل مع النظام](#التكامل-مع-النظام)
 6. [أمثلة الاستخدام](#أمثلة-الاستخدام)
-7. [الخلاصة](#الخلاصة)
+7. [مرجع API (API Reference)](#مرجع-api-api-reference)
+8. [الميزات](#الميزات)
+9. [الخلاصة](#الخلاصة)
+10. [ملاحظات إضافية](#ملاحظات-إضافية)
+11. [المراجع](#المراجع)
 
 ---
 
@@ -30,15 +34,21 @@
 #### 1. CopyToDocumentActionDto - إعدادات الإجراء
 
 ```typescript
-interface CopyToDocumentConfig {
-  targetDocumentTypeId: number;      // ID نوع المستند الهدف (مطلوب)
-  targetFormId: number;              // ID الـ Form الهدف (مطلوب)
-  createNewDocument: boolean;         // إنشاء مستند جديد أم تحديث موجود
-  fieldMappings?: FieldMapping[];     // خريطة نسخ الحقول
-  copyCalculatedFields?: boolean;     // نسخ الحقول المحسوبة
-  copyGridRows?: boolean;             // نسخ صفوف الـ Grid
-  startWorkflow?: boolean;            // بدء الـ Workflow للمستند الهدف
-  parentDocumentId?: number;          // ربط المستندات (ParentDocumentId)
+interface CopyToDocumentActionDto {
+  sourceFormId?: number | null;
+  sourceSubmissionId?: number | null;
+  targetDocumentTypeId: number;       // ID نوع المستند الهدف (مطلوب)
+  targetFormId: number;               // ID الـ Form الهدف (مطلوب)
+  createNewDocument: boolean;          // إنشاء مستند جديد أم تحديث موجود
+  targetDocumentId?: number | null;    // مطلوب عند createNewDocument = false
+  fieldMapping?: { [sourceFieldCode: string]: string }; // Mapping بالـ FieldCode
+  gridMapping?: { [sourceGridCode: string]: string };   // Mapping بالـ GridCode
+  copyCalculatedFields?: boolean;      // نسخ الحقول المحسوبة
+  copyGridRows?: boolean;              // نسخ صفوف الـ Grid
+  startWorkflow?: boolean;             // بدء الـ Workflow للمستند الهدف
+  linkDocuments?: boolean;             // ربط Source و Target عبر ParentDocumentId
+  copyMetadata?: boolean;              // نسخ Metadata
+  metadataFields?: string[];           // مفاتيح Metadata المطلوب نسخها
 }
 ```
 
@@ -46,13 +56,17 @@ interface CopyToDocumentConfig {
 - `targetDocumentTypeId`: معرف نوع المستند الهدف (مطلوب)
 - `targetFormId`: معرف النموذج الهدف (مطلوب)
 - `createNewDocument`: `true` لإنشاء مستند جديد، `false` لتحديث مستند موجود
-- `fieldMappings`: مصفوفة من `FieldMapping` لتعيين الحقول من المصدر إلى الهدف
+- `targetDocumentId`: مطلوب عند `createNewDocument = false`
+- `fieldMapping`: Object لتعيين الحقول باستخدام `FieldCode`
+- `gridMapping`: Object لتعيين الجداول باستخدام `GridCode`
 - `copyCalculatedFields`: نسخ الحقول المحسوبة (اختياري)
 - `copyGridRows`: نسخ صفوف الجداول (اختياري)
 - `startWorkflow`: بدء سير عمل الموافقة تلقائياً (اختياري)
-- `parentDocumentId`: ربط المستند الهدف بالمستند المصدر (اختياري)
+- `linkDocuments`: ربط المستندات عبر `ParentDocumentId` (اختياري)
+- `copyMetadata`: نسخ Metadata (اختياري)
+- `metadataFields`: مفاتيح الـ Metadata المطلوب نسخها
 
-#### 2. FieldMapping - خريطة الحقول
+#### 2. FieldMapping - خريطة الحقول (واجهة المستخدم)
 
 ```typescript
 interface FieldMapping {
@@ -60,6 +74,7 @@ interface FieldMapping {
   targetFieldCode: string; // كود الحقل في المستند الهدف
 }
 ```
+**ملاحظة:** واجهة المستخدم قد تستخدم `fieldMappings` كـ Array، بينما الـ API يعتمد `fieldMapping` بصيغة Object.
 
 #### 3. CopyToDocumentResultDto - نتيجة التنفيذ
 
@@ -71,6 +86,7 @@ interface CopyToDocumentResultDto {
   errorMessage?: string;              // رسالة الخطأ إن وجدت
   fieldsCopied?: number;              // عدد الحقول المنسوخة
   gridRowsCopied?: number;            // عدد صفوف الـ Grid المنسوخة
+  actionId?: number | null;           // ID الإجراء (إن وجد)
   sourceSubmissionId?: number;        // ID الـ Submission المصدر
 }
 ```
@@ -400,7 +416,7 @@ const rule: FormRule = {
         copyCalculatedFields: true,
         copyGridRows: true,
         startWorkflow: true,
-        parentDocumentId: undefined // Will be set automatically
+        linkDocuments: true // Link source/target via ParentDocumentId
       }
     }
   ],
@@ -411,7 +427,203 @@ const rule: FormRule = {
 
 ---
 
-## 7. الميزات
+## 7. مرجع API (API Reference)
+
+## Purpose
+CopyToDocument is a built-in action that copies data from a source form submission
+to a target document. It can create a new target document or update an existing
+one, based on configuration.
+
+## API Endpoints
+
+### Execute CopyToDocument
+`POST /api/CopyToDocument/execute`
+
+Executes the action manually (same path used by the Actions Engine).
+
+### Audit Records
+- `GET /api/CopyToDocument/audit`
+- `GET /api/CopyToDocument/audit/{id}`
+- `GET /api/CopyToDocument/audit/submission/{submissionId}`
+- `GET /api/CopyToDocument/audit/target/{targetDocumentId}`
+
+## Request DTOs
+
+### ExecuteCopyToDocumentRequestDto
+```
+{
+  "config": { ...CopyToDocumentActionDto... },
+  "sourceSubmissionId": 115,
+  "actionId": null,
+  "ruleId": null
+}
+```
+
+### CopyToDocumentActionDto
+```
+{
+  "sourceFormId": null,
+  "sourceSubmissionId": null,
+  "targetDocumentTypeId": 1,
+  "targetFormId": 1,
+  "createNewDocument": true,
+  "targetDocumentId": null,
+  "fieldMapping": { "TOTAL_AMOUNT": "CONTRACT_VALUE" },
+  "gridMapping": { "ITEMS": "CONTRACT_ITEMS" },
+  "copyCalculatedFields": true,
+  "copyGridRows": true,
+  "startWorkflow": false,
+  "linkDocuments": true,
+  "copyMetadata": false,
+  "metadataFields": []
+}
+```
+
+## Response DTO
+
+### CopyToDocumentResultDto
+```
+{
+  "success": true,
+  "targetDocumentId": 116,
+  "targetDocumentNumber": "ser-000113",
+  "errorMessage": null,
+  "fieldsCopied": 1,
+  "gridRowsCopied": 1,
+  "actionId": null,
+  "sourceSubmissionId": 115
+}
+```
+
+## JSON Examples
+
+### Create New Document (fields + grid)
+```
+{
+  "config": {
+    "targetDocumentTypeId": 1,
+    "targetFormId": 1,
+    "createNewDocument": true,
+    "targetDocumentId": null,
+    "fieldMapping": { "F": "F" },
+    "gridMapping": { "GRID1": "GRID1" },
+    "copyCalculatedFields": true,
+    "copyGridRows": true,
+    "startWorkflow": false,
+    "linkDocuments": true,
+    "copyMetadata": false,
+    "metadataFields": []
+  },
+  "sourceSubmissionId": 115
+}
+```
+
+### Update Existing Document
+```
+{
+  "config": {
+    "targetDocumentTypeId": 1,
+    "targetFormId": 1,
+    "createNewDocument": false,
+    "targetDocumentId": 116,
+    "fieldMapping": { "F": "F" },
+    "gridMapping": { "GRID1": "GRID1" },
+    "copyCalculatedFields": true,
+    "copyGridRows": true,
+    "startWorkflow": false,
+    "linkDocuments": false,
+    "copyMetadata": false,
+    "metadataFields": []
+  },
+  "sourceSubmissionId": 115
+}
+```
+
+### Start Workflow on Target
+```
+{
+  "config": {
+    "targetDocumentTypeId": 1,
+    "targetFormId": 1,
+    "createNewDocument": false,
+    "targetDocumentId": 116,
+    "fieldMapping": {},
+    "gridMapping": {},
+    "copyCalculatedFields": true,
+    "copyGridRows": false,
+    "startWorkflow": true,
+    "linkDocuments": false,
+    "copyMetadata": false,
+    "metadataFields": []
+  },
+  "sourceSubmissionId": 115
+}
+```
+
+### Copy Metadata Only
+```
+{
+  "config": {
+    "targetDocumentTypeId": 1,
+    "targetFormId": 1,
+    "createNewDocument": false,
+    "targetDocumentId": 116,
+    "fieldMapping": {},
+    "gridMapping": {},
+    "copyCalculatedFields": true,
+    "copyGridRows": false,
+    "startWorkflow": false,
+    "linkDocuments": false,
+    "copyMetadata": true,
+    "metadataFields": ["SubmittedDate", "Status"]
+  },
+  "sourceSubmissionId": 115
+}
+```
+
+## Field and Grid Mapping
+
+### Field Mapping
+- Maps source FieldCode to target FieldCode.
+- Uses `FieldCode` (not FieldId) to remain stable across versions.
+- Example: `TOTAL_AMOUNT -> CONTRACT_VALUE`.
+
+### Grid Mapping
+- Maps source GridCode to target GridCode.
+- Rows are copied; cells are mapped by ColumnCode.
+
+## Options Explained
+
+- `createNewDocument`: If true, create a new target submission. If false, update an existing one.
+- `targetDocumentId`: Required when `createNewDocument` is false.
+- `copyCalculatedFields`: If false, calculated fields are skipped.
+- `copyGridRows`: If true, grid rows are copied using GridCode mapping.
+- `startWorkflow`: If true, submits the target document after copy.
+- `linkDocuments`: Links target to source using ParentDocumentId if it exists.
+- `copyMetadata`: Copies selected metadata fields (e.g., SubmittedDate, Status).
+- `metadataFields`: List of metadata keys to copy.
+
+## Execution Flow
+1) Load source submission.
+2) Validate target form and document type.
+3) Create or load target document.
+4) Copy field values using FieldCode mapping.
+5) Copy grid rows using GridCode and ColumnCode mapping.
+6) Copy metadata if requested.
+7) Save changes and log audit.
+8) Start workflow if requested (after transaction commit).
+
+## Error Handling
+- All failures return a 500 with a meaningful message in `errorMessage`.
+- No partial data is persisted when failures occur mid-execution.
+- Audit entries are recorded for both success and failure.
+
+## Notes
+- Ensure Document Series is configured for the target document type and project.
+- For `startWorkflow` to work, approval workflow must exist for the target.
+- Linking requires `ParentDocumentId` column on `FORM_SUBMISSIONS`.
+
+## 8. الميزات
 
 ### ✅ الميزات الرئيسية
 
@@ -452,7 +664,7 @@ const rule: FormRule = {
 
 ---
 
-## 8. الخلاصة
+## 9. الخلاصة
 
 تم تنفيذ نظام CopyToDocument بالكامل مع:
 
@@ -484,7 +696,7 @@ const rule: FormRule = {
 
 ---
 
-## 9. ملاحظات إضافية
+## 10. ملاحظات إضافية
 
 ### أفضل الممارسات
 
@@ -501,7 +713,7 @@ const rule: FormRule = {
    - تأكد من وجود Workflow للمستند الهدف
 
 4. **ربط المستندات**
-   - استخدم `parentDocumentId` لربط المستندات
+   - استخدم `linkDocuments` لربط المستندات
    - يساعد في تتبع العلاقات بين المستندات
 
 5. **Audit Logging**
@@ -528,7 +740,7 @@ const rule: FormRule = {
 
 ---
 
-## 10. المراجع
+## 11. المراجع
 
 - [Form Rules Documentation](./form-rules.md)
 - [Document Types Documentation](./document-types.md)

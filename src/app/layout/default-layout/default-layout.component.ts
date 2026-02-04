@@ -59,6 +59,10 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   userGroups: UserGroupDto[] = [];
   currentUserGroup: UserGroupDto | null = null;
   tableMenus: TableMenuDto[] = [];
+  // Snapshot of permissions at init time - sidebar won't be affected by later permission changes
+  private permissionsSnapshot: string[] = [];
+  // Flag to prevent sidebar updates after initial load
+  private sidebarInitialized = false;
 
   constructor(
     private authService: AuthService,
@@ -70,6 +74,9 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // Take snapshot of current permissions - sidebar won't be affected by later changes
+    this.permissionsSnapshot = this.permissionService.getPermissionsSync();
+    
     // Load user groups first, then table menus, then filter nav items
     this.loadUserGroups();
     
@@ -301,6 +308,14 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   }
 
   private filterNavItemsByRole(): void {
+    // Prevent sidebar updates after initial load to avoid refresh side effects
+    // Once sidebar is initialized, never update it again (unless page reload)
+    if (this.sidebarInitialized) {
+      console.log('[DefaultLayout] filterNavItemsByRole: Sidebar already initialized, skipping update');
+      return;
+    }
+    
+    // Use snapshot taken at init - never update it here to avoid refresh side effects
     const isAdmin = this.isUserAdmin();
     
     // Helper to apply permission-based filtering (permissionCode في attributes)
@@ -310,6 +325,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
       for (const item of items) {
         const attrs: any = item.attributes || {};
         const permissionCode = attrs.permissionCode as string | undefined;
+        const itemUrl = (item as any).url as string | undefined;
 
         // فلترة الأطفال أولاً
         let children: INavData[] | undefined;
@@ -318,16 +334,24 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         }
 
         // لو في permissionCode ولازم يكون عند المستخدم صلاحية الـ view
-        if (permissionCode && !this.permissionService.hasPermission(permissionCode)) {
+        // Use snapshot instead of live permission service to avoid sidebar updates on refresh
+        const hasPermission = permissionCode ? this.permissionsSnapshot.includes(permissionCode) : true;
+        if (permissionCode && !hasPermission) {
+          // ✅ Allow Administration to always see the permissions management screen
+          // This avoids the chicken-and-egg problem where admins can't reach the screen to grant its own permission.
+          if (isAdmin && permissionCode === 'UserGroupPermission_Allow_View' && itemUrl === '/user-group-permissions') {
+            // allow
+          } else {
           // حتى لو الأطفال مسموحين، بنخفي الـ parent علشان ال sidebar يكون واضح
           continue;
+          }
         }
 
         if (children && children.length > 0) {
           result.push({ ...item, children });
         } else if (!item.children) {
           result.push(item);
-        } else if (!permissionCode || this.permissionService.hasPermission(permissionCode)) {
+        } else if (!permissionCode || this.permissionsSnapshot.includes(permissionCode)) {
           // عنصر أب بدون أطفال بعد الفلترة لكن مسموح عرضه (مثلاً عنوان section)
           result.push({ ...item, children: [] });
         }
@@ -339,6 +363,11 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     // If role is "Administration" (from UserGroups table), نطبق فلتر الـ permissions فقط
     if (isAdmin) {
       this.navItems = applyPermissionFilter(navItems);
+      // Freeze navItems to prevent any future modifications
+      Object.freeze(this.navItems);
+      // Mark sidebar as initialized to prevent future updates
+      this.sidebarInitialized = true;
+      console.log('[DefaultLayout] Sidebar initialized (Admin path), will not update again');
       return;
     }
 
@@ -444,6 +473,11 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     }
 
     this.navItems = applyPermissionFilter(filteredItems);
+    // Freeze navItems to prevent any future modifications
+    Object.freeze(this.navItems);
+    // Mark sidebar as initialized to prevent future updates
+    this.sidebarInitialized = true;
+    console.log('[DefaultLayout] Sidebar initialized (User path), will not update again');
   }
 
   /**

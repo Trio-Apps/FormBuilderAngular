@@ -561,6 +561,19 @@
                   </div>
                 </div>
 
+                <!-- Target Document ID (required when createNewDocument is false) -->
+                <div class="form-row" *ngIf="!action.get('copyToDocumentConfig')?.get('createNewDocument')?.value">
+                  <div class="form-group">
+                    <label>Target Document ID <span class="required">*</span></label>
+                    <input
+                      type="number"
+                      formControlName="targetDocumentId"
+                      class="form-control"
+                      placeholder="Enter target document ID">
+                    <small class="text-muted">Required when updating existing document</small>
+                  </div>
+                </div>
+
                 <!-- Options -->
                 <div class="form-row">
                   <div class="form-group form-group-full">

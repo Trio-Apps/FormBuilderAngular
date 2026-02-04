@@ -182,6 +182,7 @@ export class CopyToDocumentActionExecutorService {
         targetDocumentTypeId: config.targetDocumentTypeId,
         targetFormId: config.targetFormId,
         createNewDocument: config.createNewDocument !== undefined ? config.createNewDocument : true,
+        targetDocumentId: !config.createNewDocument ? config.targetDocumentId : null,
         fieldMapping: fieldMapping,
         gridMapping: config.gridMapping,
         copyCalculatedFields: config.copyCalculatedFields !== undefined ? config.copyCalculatedFields : false,
