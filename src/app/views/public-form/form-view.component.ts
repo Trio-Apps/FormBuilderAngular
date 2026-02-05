@@ -401,12 +401,14 @@ export class FormViewComponent implements OnInit {
                   
                   if (sortedOptions.length === 0 && requiresOptions) {
                     const dataSource = field.fieldDataSource;
-                    // Check if field has any DataSource (Static, Api, LookupTable, or SqlQuery)
+                    // Check if field has any DataSource (Static, Api, LookupTable, SqlQuery, or SapHana)
                     const hasDataSource = dataSource && dataSource.isActive;
+                    const isSqlQuery = dataSource?.sourceType === 'SqlQuery' || dataSource?.sourceType === 'DataSourceSqlQuery';
+                    const isSapHana = dataSource?.sourceType === 'SapHana';
                     const hasExternalDataSource = dataSource && 
                                                  dataSource.isActive && 
                                                  (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || 
-                                                  dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery');
+                                                  isSqlQuery || isSapHana);
                     // Only warn if field has NO DataSource at all (neither static nor external)
                     if (!hasDataSource) {
                       console.warn(`[FormView] WARNING: Field ${field.id} (${field.fieldCode || 'no-code'}) has NO static options and NO DataSource!`);
@@ -801,18 +803,20 @@ export class FormViewComponent implements OnInit {
       return;
     }
 
-    // For Api, LookupTable, or SqlQuery, load options dynamically
+    // For Api, LookupTable, SqlQuery, or SapHana, load options dynamically
     // Note: Backend stores SqlQuery as "DataSourceSqlQuery", so check for both
     const isSqlQuery = dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery';
+    const isSapHana = dataSource.sourceType === 'SapHana';
     console.log(`[FormView] Checking DataSource type for field ${field.id}:`, {
       sourceType: dataSource.sourceType,
       isSqlQuery: isSqlQuery,
+      isSapHana: isSapHana,
       isApi: dataSource.sourceType === 'Api',
       isLookupTable: dataSource.sourceType === 'LookupTable',
-      willLoad: dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery
+      willLoad: dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana
     });
     
-    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery) {
+    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana) {
       console.log(`[FormView] ✅ Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`, {
         sourceType: dataSource.sourceType,
         requestBodyJson: dataSource.requestBodyJson,
@@ -1094,9 +1098,11 @@ export class FormViewComponent implements OnInit {
     
     // Check if DataSource failed or returned no options
     const dataSource = field.fieldDataSource;
+    const isSqlQuery = dataSource?.sourceType === 'SqlQuery' || dataSource?.sourceType === 'DataSourceSqlQuery';
+    const isSapHana = dataSource?.sourceType === 'SapHana';
     const hasExternalDataSource = dataSource && 
                                  dataSource.isActive && 
-                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || dataSource.sourceType === 'SqlQuery');
+                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana);
     const dataSourceFailed = hasExternalDataSource && 
                             (!this.fieldDataSourceOptions[field.id] || this.fieldDataSourceOptions[field.id].length === 0);
 

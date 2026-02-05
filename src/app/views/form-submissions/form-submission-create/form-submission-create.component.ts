@@ -1713,9 +1713,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // Check if DataSource failed or returned no options
     const dataSource = field.fieldDataSource;
     const isSqlQuery = dataSource?.sourceType === 'SqlQuery' || dataSource?.sourceType === 'DataSourceSqlQuery';
+    const isSapHana = dataSource?.sourceType === 'SapHana';
     const hasExternalDataSource = dataSource && 
                                  dataSource.isActive && 
-                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery);
+                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana);
     const dataSourceFailed = hasExternalDataSource && 
                             (!this.fieldDataSourceOptions[field.id] || this.fieldDataSourceOptions[field.id].length === 0);
 
@@ -2430,10 +2431,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // For Api, LookupTable, or SqlQuery, load options dynamically
+    // For Api, LookupTable, SqlQuery, or SapHana, load options dynamically
     // Note: Backend stores SqlQuery as "DataSourceSqlQuery", so check for both
     const isSqlQuery = dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery';
-    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery) {
+    const isSapHana = dataSource.sourceType === 'SapHana';
+    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana) {
       console.log(`[FormSubmissionCreate] Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`);
       this.loadingFieldOptions[field.id] = true;
       
