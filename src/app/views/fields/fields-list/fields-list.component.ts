@@ -172,7 +172,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
 
   // Field DataSource Options
-  dataSourceType: 'Static' | 'Api' | 'LookupTable' | 'SqlQuery' = 'Static';
+  dataSourceType: 'Static' | 'Api' | 'LookupTable' | 'SqlQuery' | 'SapHana' = 'Static';
   dataSourceConfig: Partial<CreateFieldDataSourceDto> = {
     sourceType: 'Static',
     apiUrl: null,
@@ -2977,7 +2977,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           // Use the first active DataSource
           const dataSource = dataSources[0];
           this.existingDataSource = dataSource;
-          this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'SqlQuery';
+          this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'SqlQuery' | 'SapHana';
 
           // Parse LookupTable configuration
           if (dataSource.sourceType === 'LookupTable' && dataSource.apiUrl) {
@@ -3157,6 +3157,33 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               requestBodyJson: dataSource.requestBodyJson || null,
               valuePath: dataSource.valuePath || 'Id',
               textPath: dataSource.textPath || 'Name',
+              isActive: dataSource.isActive
+            };
+          } else if (dataSource.sourceType === 'SapHana') {
+            // For SapHana type, requestBodyJson already contains the SAP HANA SQL query string
+            const sqlQuery = dataSource.requestBodyJson || '';
+
+            console.log('[FieldsList] Loaded SapHana config:', {
+              sqlQuery: sqlQuery.substring(0, 80) + '...',
+              valuePath: dataSource.valuePath || 'ID',
+              textPath: dataSource.textPath || 'NAME'
+            });
+
+            // Reuse sqlQueryConfig for SapHana queries (database is ignored for SapHana)
+            this.sqlQueryConfig = {
+              sqlQuery: sqlQuery,
+              valuePath: dataSource.valuePath || 'ID',
+              textPath: dataSource.textPath || 'NAME',
+              database: 'FormBuilder'
+            };
+
+            this.dataSourceConfig = {
+              sourceType: dataSource.sourceType,
+              apiUrl: null,
+              httpMethod: null,
+              requestBodyJson: dataSource.requestBodyJson || null,
+              valuePath: this.sqlQueryConfig.valuePath,
+              textPath: this.sqlQueryConfig.textPath,
               isActive: dataSource.isActive
             };
           } else {
@@ -3342,8 +3369,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Clear static options when using DataSource
       this.clearFieldOptions();
       
-      // Load saved queries for the current database
+      // Load saved queries for the current database (only for SQL Server)
       this.loadSavedQueries();
+    } else if (this.dataSourceType === 'SapHana') {
+      // SapHana uses the same sqlQueryConfig structure but ignores database (connection comes from backend)
+      if (!this.sqlQueryConfig.sqlQuery) {
+        this.sqlQueryConfig = {
+          sqlQuery: '',
+          valuePath: 'ID',
+          textPath: 'NAME',
+          database: 'FormBuilder'
+        };
+      }
+      this.dataSourceConfig.httpMethod = null;
+      this.dataSourceConfig.apiUrl = null;
+      this.dataSourceConfig.valuePath = this.sqlQueryConfig.valuePath;
+      this.dataSourceConfig.textPath = this.sqlQueryConfig.textPath;
+      this.previewOptions = [];
+      // Clear static options when using DataSource
+      this.clearFieldOptions();
     }
 
     this.cdr.detectChanges();
@@ -4480,7 +4524,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.previewOptions = [];
 
     // Use the paths from config (now guaranteed to be set)
-    // For LookupTable, use lookupTableConfig columns; for SqlQuery, use sqlQueryConfig paths; for others, use dataSourceConfig paths
+    // For LookupTable, use lookupTableConfig columns; for SqlQuery/SapHana, use sqlQueryConfig paths; for others, use dataSourceConfig paths
     let valuePath: string;
     let textPath: string;
     
@@ -4490,10 +4534,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Sync with dataSourceConfig for consistency
       this.dataSourceConfig.valuePath = valuePath;
       this.dataSourceConfig.textPath = textPath;
-    } else if (this.dataSourceType === 'SqlQuery') {
-      // For SqlQuery, use sqlQueryConfig paths, fallback to dataSourceConfig, then defaults
-      valuePath = (this.sqlQueryConfig.valuePath || this.dataSourceConfig.valuePath || 'Id').trim();
-      textPath = (this.sqlQueryConfig.textPath || this.dataSourceConfig.textPath || 'Name').trim();
+    } else if (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') {
+      // For SqlQuery and SapHana, use sqlQueryConfig paths, fallback to dataSourceConfig, then defaults
+      const defaultId = this.dataSourceType === 'SapHana' ? 'ID' : 'Id';
+      const defaultName = this.dataSourceType === 'SapHana' ? 'NAME' : 'Name';
+      valuePath = (this.sqlQueryConfig.valuePath || this.dataSourceConfig.valuePath || defaultId).trim();
+      textPath = (this.sqlQueryConfig.textPath || this.dataSourceConfig.textPath || defaultName).trim();
       // Sync with both configs for consistency
       this.sqlQueryConfig.valuePath = valuePath;
       this.sqlQueryConfig.textPath = textPath;
@@ -4506,10 +4552,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     // For LookupTable, use table name directly for preview (backend expects table name, not JSON)
     // For Api, use the URL
-    // For SqlQuery, use undefined for apiUrl and SQL query in requestBodyJson
+    // For SqlQuery/SapHana, use undefined for apiUrl and SQL query in requestBodyJson
     const apiUrlForPreview = this.dataSourceType === 'LookupTable'
       ? this.lookupTableConfig.table
-      : (this.dataSourceType === 'SqlQuery' ? undefined : (this.dataSourceConfig.apiUrl || undefined));
+      : ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') ? undefined : (this.dataSourceConfig.apiUrl || undefined));
 
     // For SqlQuery, use SQL query and database in requestBodyJson as JSON object
     // For LookupTable, include database in requestBodyJson as JSON object
@@ -4541,6 +4587,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         console.log('[FieldsList] ConfigurationJson (with database):', configurationJsonForPreview);
       }
       console.log('[FieldsList] SqlQuery RequestBodyJson (SQL string):', requestBodyJsonForPreview);
+    } else if (this.dataSourceType === 'SapHana') {
+      // For SapHana, backend expects the SQL query string directly in RequestBodyJson
+      requestBodyJsonForPreview = this.sqlQueryConfig.sqlQuery ? this.sqlQueryConfig.sqlQuery.trim() : '';
+      console.log('[FieldsList] SapHana RequestBodyJson (SQL string):', requestBodyJsonForPreview);
     } else if (this.dataSourceType === 'LookupTable') {
       // For LookupTable, include database in requestBodyJson
       const lookupTablePayload: any = {};
@@ -4582,6 +4632,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       if (configurationJsonForPreview) {
         requestPayload.ConfigurationJson = configurationJsonForPreview; // PascalCase
       }
+    } else if (this.dataSourceType === 'SapHana') {
+      // For SapHana, RequestBodyJson is the SAP HANA SQL query string, SourceType is already "SapHana"
+      requestPayload.RequestBodyJson = requestBodyJsonForPreview;
     } else {
       // For other types, include apiUrl and httpMethod if needed
       if (apiUrlForPreview) {
@@ -4643,11 +4696,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         console.log('[FieldsList] Options length after extraction:', options?.length || 0);
         console.log('[FieldsList] ========== PREVIEW RESPONSE END ==========');
         
-        // Show success message with options count for SqlQuery and LookupTable
-        if ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'LookupTable') && options && options.length > 0) {
+        // Show success message with options count for SqlQuery, SapHana and LookupTable
+        if ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana' || this.dataSourceType === 'LookupTable') && options && options.length > 0) {
           this.messageService.add({
             severity: 'success',
-            summary: this.dataSourceType === 'SqlQuery' ? 'Query Executed Successfully' : 'Table Data Loaded Successfully',
+            summary: (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') ? 'Query Executed Successfully' : 'Table Data Loaded Successfully',
             detail: `${options.length} ${options.length === 1 ? 'option' : 'options'} found and will be available in the public form`,
             life: 5000
           });
@@ -5137,8 +5190,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         apiUrlValue = this.lookupTableConfig.table || null;
         valuePathValue = this.lookupTableConfig.valueColumn || null;
         textPathValue = this.lookupTableConfig.textColumn || null;
-      } else if (this.dataSourceType === 'SqlQuery') {
-        // For SqlQuery, store SQL query in requestBodyJson
+      } else if (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') {
+        // For SqlQuery and SapHana, store SQL query in requestBodyJson
         apiUrlValue = null;
         valuePathValue = this.sqlQueryConfig.valuePath || null;
         textPathValue = this.sqlQueryConfig.textPath || null;
@@ -5149,9 +5202,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         textPathValue = this.dataSourceConfig.textPath || null;
       }
 
-      // For SqlQuery, store the raw SQL query in requestBodyJson
+      // For SqlQuery/SapHana, store the raw SQL query in requestBodyJson
       let requestBodyJsonValue: string | null = null;
-      if (this.dataSourceType === 'SqlQuery') {
+      if (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') {
         // Backend currently executes requestBodyJson directly as SQL,
         // so we must save the plain SQL string without JSON wrapping.
         requestBodyJsonValue = (this.sqlQueryConfig.sqlQuery || '').trim();

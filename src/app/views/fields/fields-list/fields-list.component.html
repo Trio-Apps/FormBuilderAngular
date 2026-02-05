@@ -730,7 +730,7 @@
                   </div>
                 </label>
 
-                <!-- Option 4: SQL Query -->
+                <!-- Option 4: SQL Query (SQL Server) -->
                 <label class="data-source-option" [class.selected]="dataSourceType === 'SqlQuery'"
                   style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
                   [style.border-color]="dataSourceType === 'SqlQuery' ? '#667eea' : '#e5e7eb'"
@@ -745,6 +745,25 @@
                     </div>
                     <div style="font-size: 12px; color: #6b7280;">
                       Load options from SQL query. Column names are case-insensitive (Email, email, EMAIL all work). Please select the database to execute the query against.
+                    </div>
+                  </div>
+                </label>
+
+                <!-- Option 5: SAP HANA Query -->
+                <label class="data-source-option" [class.selected]="dataSourceType === 'SapHana'"
+                  style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                  [style.border-color]="dataSourceType === 'SapHana' ? '#059669' : '#e5e7eb'"
+                  [style.background]="dataSourceType === 'SapHana' ? '#ecfdf3' : '#f9fafb'">
+                  <input type="radio" name="dataSourceType" value="SapHana" [(ngModel)]="dataSourceType"
+                    [ngModelOptions]="{standalone: true}" (change)="onDataSourceTypeChange()"
+                    style="width: 20px; height: 20px; cursor: pointer;" />
+                  <i class="pi pi-database" style="font-size: 20px; color: #059669;"></i>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">
+                      SAP HANA Query
+                    </div>
+                    <div style="font-size: 12px; color: #6b7280;">
+                      Load options from SAP HANA SQL query using the active SAP HANA connection. Use SELECT with ID and NAME columns (e.g. AbsEntry AS ID, PeriodName AS NAME).
                     </div>
                   </div>
                 </label>
@@ -866,7 +885,7 @@
               </div>
             </div>
 
-            <!-- SQL Query Configuration -->
+            <!-- SQL Query Configuration (SQL Server) -->
             <div class="form-group" *ngIf="dataSourceType === 'SqlQuery'" style="grid-column: 1 / -1;">
               <!-- Database Selection -->
               <label class="form-label" style="margin-bottom: 8px;">
@@ -962,6 +981,57 @@
                       {{ previewOptions.length }} {{ previewOptions.length === 1 ? 'option' : 'options' }} found
                     </strong>
                     <div style="color: #047857; font-size: 12px; margin-top: 2px;">
+                      These options will be available in the public form after saving
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SAP HANA SQL Query Configuration -->
+            <div class="form-group" *ngIf="dataSourceType === 'SapHana'" style="grid-column: 1 / -1;">
+              <label class="form-label">
+                <i class="pi pi-database" style="margin-right: 6px; color: #059669;"></i>
+                SAP HANA SQL Query <span class="required">*</span>
+              </label>
+              <textarea 
+                class="form-control" 
+                rows="6" 
+                [(ngModel)]="sqlQueryConfig.sqlQuery"
+                [ngModelOptions]="{standalone: true}"
+                placeholder="SELECT DISTINCT &quot;AbsEntry&quot; AS &quot;ID&quot;, &quot;PeriodName&quot; AS &quot;NAME&quot; FROM &quot;DOKHON_LIVE14&quot;.&quot;AACP&quot; ORDER BY &quot;PeriodName&quot;"
+                style="font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;">
+              </textarea>
+              <small class="form-text text-muted" style="margin-top: 6px; display: block; color: #059669;">
+                <i class="pi pi-info-circle"></i> Connection, database and credentials are taken from the active SAP HANA configuration on the backend.
+              </small>
+
+              <!-- Run Query Button for SAP HANA -->
+              <div style="margin-top: 16px;">
+                <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
+                  <button 
+                    type="button" 
+                    class="btn btn-primary" 
+                    (click)="runSqlQuery()"
+                    [disabled]="!sqlQueryConfig.sqlQuery || loadingPreview"
+                    style="padding: 10px 20px; background: #059669; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                    <i class="pi pi-play" style="font-size: 14px;"></i>
+                    {{ translateLabel('fields.runQuery') || 'Run Query' }}
+                  </button>
+                  <span *ngIf="loadingPreview" style="margin-left: 12px; color: #059669; display: flex; align-items: center; gap: 6px;">
+                    <i class="pi pi-spin pi-spinner"></i> 
+                    <span>{{ translateLabel('fields.loading') || 'Loading...' }}</span>
+                  </span>
+                </div>
+
+                <div *ngIf="dataSourceType === 'SapHana' && previewOptions.length > 0 && !loadingPreview" 
+                  style="padding: 12px; background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
+                  <i class="pi pi-check-circle" style="color: #16a34a; font-size: 18px;"></i>
+                  <div>
+                    <strong style="color: #166534; font-size: 14px;">
+                      {{ previewOptions.length }} {{ previewOptions.length === 1 ? 'option' : 'options' }} found
+                    </strong>
+                    <div style="color: #166534; font-size: 12px; margin-top: 2px;">
                       These options will be available in the public form after saving
                     </div>
                   </div>
