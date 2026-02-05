@@ -999,7 +999,8 @@
                 rows="6" 
                 [(ngModel)]="sqlQueryConfig.sqlQuery"
                 [ngModelOptions]="{standalone: true}"
-                placeholder="SELECT DISTINCT &quot;AbsEntry&quot; AS &quot;ID&quot;, &quot;PeriodName&quot; AS &quot;NAME&quot; FROM &quot;DOKHON_LIVE14&quot;.&quot;AACP&quot; ORDER BY &quot;PeriodName&quot;"
+                (ngModelChange)="onSapHanaQueryChange($event)"
+                placeholder="SELECT DISTINCT &quot;ItemCode&quot;, &quot;ItemName&quot; FROM &quot;DOKHON_LIVE14&quot;.&quot;OITM&quot; WHERE &quot;validFor&quot; = 'Y' ORDER BY &quot;ItemName&quot;"
                 style="font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;">
               </textarea>
               <small class="form-text text-muted" style="margin-top: 6px; display: block; color: #059669;">
@@ -1010,7 +1011,12 @@
                 <strong>Important:</strong> SAP HANA column names are case-sensitive! Always wrap column names, table names, and schema names in double quotes (").
                 <br>
                 <span style="font-family: 'Courier New', monospace; font-size: 11px; margin-left: 20px;">
-                  Example: SELECT "AbsEntry" AS "ID", "PeriodName" AS "NAME" FROM "DOKHON_LIVE14"."AACP"
+                  Example: SELECT "ItemCode", "ItemName" FROM "DOKHON_LIVE14"."OITM" WHERE "validFor" = 'Y'
+                </span>
+                <br>
+                <span style="font-size: 11px; margin-left: 20px; color: #059669; margin-top: 4px; display: block;">
+                  <i class="pi pi-info-circle"></i> 
+                  You don't need to write AS "ID" or AS "NAME". The system will automatically use the first column as ID and the second as NAME.
                 </span>
               </small>
 

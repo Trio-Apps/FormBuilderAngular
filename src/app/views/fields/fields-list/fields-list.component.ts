@@ -3397,10 +3397,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       if (!this.sqlQueryConfig.sqlQuery) {
         this.sqlQueryConfig = {
           sqlQuery: '',
-          valuePath: 'ID',
-          textPath: 'NAME',
+          valuePath: 'ID', // Will be auto-detected from query when user types it
+          textPath: 'NAME', // Will be auto-detected from query when user types it
           database: 'FormBuilder'
         };
+      } else {
+        // If SQL query exists, try to auto-detect columns if paths are defaults
+        if ((!this.sqlQueryConfig.valuePath || !this.sqlQueryConfig.valuePath.trim() || 
+             this.sqlQueryConfig.valuePath === 'ID') &&
+            this.sqlQueryConfig.sqlQuery.trim()) {
+          this.autoDetectColumnsFromQuery();
+        }
       }
       this.dataSourceConfig.httpMethod = null;
       this.dataSourceConfig.apiUrl = null;
@@ -3668,6 +3675,94 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Auto-detect columns from SQL query and set valuePath/textPath
+   * This is called when user types a query without AS aliases
+   */
+  private autoDetectColumnsFromQuery(): void {
+    if (!this.sqlQueryConfig.sqlQuery || !this.sqlQueryConfig.sqlQuery.trim()) {
+      return;
+    }
+
+    const sqlQuery = this.sqlQueryConfig.sqlQuery.trim();
+    const selectMatch = sqlQuery.match(/SELECT\s+(.+?)\s+FROM\s+/i);
+    
+    if (selectMatch) {
+      const columnString = selectMatch[1].trim();
+      // Split by comma and extract column names
+      const columns = columnString.split(',').map(col => {
+        const trimmed = col.trim();
+        // Check if there's an AS alias
+        const aliasMatch = trimmed.match(/\s+AS\s+(["\']?)(\w+)\1/i);
+        if (aliasMatch) {
+          // Use the alias (without quotes)
+          return aliasMatch[2].trim();
+        }
+        // No AS alias, extract column name directly
+        let columnName = trimmed;
+        // Remove surrounding quotes
+        if ((columnName.startsWith('"') && columnName.endsWith('"')) || 
+            (columnName.startsWith("'") && columnName.endsWith("'"))) {
+          columnName = columnName.slice(1, -1);
+        }
+        return columnName.trim();
+      });
+      
+      // Remove table aliases (e.g., "schema"."table"."column" -> column)
+      const cleanColumns = columns.map(col => {
+        const parts = col.split('.');
+        let columnName = parts[parts.length - 1].trim();
+        // Remove quotes if present
+        if ((columnName.startsWith('"') && columnName.endsWith('"')) || 
+            (columnName.startsWith("'") && columnName.endsWith("'"))) {
+          columnName = columnName.slice(1, -1);
+        }
+        return columnName.trim();
+      }).filter(col => col.length > 0);
+      
+      console.log('[FieldsList] Auto-detected columns from query:', cleanColumns);
+      
+      // Set valuePath and textPath from detected columns
+      if (cleanColumns.length > 0) {
+        // First column as valuePath
+        if (!this.sqlQueryConfig.valuePath || 
+            this.sqlQueryConfig.valuePath === 'ID' || 
+            this.sqlQueryConfig.valuePath === 'Id') {
+          this.sqlQueryConfig.valuePath = cleanColumns[0];
+          this.dataSourceConfig.valuePath = cleanColumns[0];
+        }
+        
+        // Second column as textPath (if exists)
+        if (cleanColumns.length > 1) {
+          if (!this.sqlQueryConfig.textPath || 
+              this.sqlQueryConfig.textPath === 'NAME' || 
+              this.sqlQueryConfig.textPath === 'Name') {
+            this.sqlQueryConfig.textPath = cleanColumns[1];
+            this.dataSourceConfig.textPath = cleanColumns[1];
+          }
+        } else if (cleanColumns.length === 1) {
+          // If only one column, use it for both
+          if (!this.sqlQueryConfig.textPath || 
+              this.sqlQueryConfig.textPath === 'NAME' || 
+              this.sqlQueryConfig.textPath === 'Name') {
+            this.sqlQueryConfig.textPath = cleanColumns[0];
+            this.dataSourceConfig.textPath = cleanColumns[0];
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Handle SAP HANA query change - auto-detect columns
+   */
+  onSapHanaQueryChange(query: string): void {
+    if (this.dataSourceType === 'SapHana' && query && query.trim()) {
+      // Auto-detect columns from query
+      this.autoDetectColumnsFromQuery();
+    }
+  }
+
+  /**
    * Handle SQL Query Value Path blur
    */
   onSqlQueryValuePathBlur(): void {
@@ -3710,19 +3805,36 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       const columnString = selectMatch[1].trim();
       // Split by comma and handle potential AS aliases
       const columns = columnString.split(',').map(col => {
-        // Remove AS alias if present (e.g., "Id AS UserId" -> "Id")
-        const aliasMatch = col.match(/\s+AS\s+(\w+)/i);
+        const trimmed = col.trim();
+        // Check if there's an AS alias (handle both quoted and unquoted aliases)
+        // Match: "column" AS "alias" or column AS alias
+        const aliasMatch = trimmed.match(/\s+AS\s+(["\']?)(\w+)\1/i);
         if (aliasMatch) {
-          return aliasMatch[1].trim();
+          // Use the alias (without quotes)
+          return aliasMatch[2].trim();
         }
-        return col.trim();
+        // No AS alias, extract column name directly
+        // Remove quotes if present (e.g., "ItemCode" -> ItemCode)
+        let columnName = trimmed;
+        // Remove surrounding quotes
+        if ((columnName.startsWith('"') && columnName.endsWith('"')) || 
+            (columnName.startsWith("'") && columnName.endsWith("'"))) {
+          columnName = columnName.slice(1, -1);
+        }
+        return columnName.trim();
       });
       
-      // Remove table aliases (e.g., "t.Id" -> "Id")
+      // Remove table aliases (e.g., "schema"."table"."column" -> column)
       const cleanColumns = columns.map(col => {
         const parts = col.split('.');
-        // Take the last part (column name) and remove any whitespace
-        return parts[parts.length - 1].trim();
+        // Take the last part (column name) and remove any whitespace/quotes
+        let columnName = parts[parts.length - 1].trim();
+        // Remove quotes if present
+        if ((columnName.startsWith('"') && columnName.endsWith('"')) || 
+            (columnName.startsWith("'") && columnName.endsWith("'"))) {
+          columnName = columnName.slice(1, -1);
+        }
+        return columnName.trim();
       }).filter(col => col.length > 0); // Remove empty strings
       
       console.log('[FieldsList] Extracted columns from SQL:', cleanColumns);
