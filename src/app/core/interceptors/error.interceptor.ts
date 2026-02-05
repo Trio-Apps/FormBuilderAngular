@@ -149,7 +149,18 @@ function extractErrorMessage(error: HttpErrorResponse, url: string, method: stri
     case 401:
       return 'غير مصرح لك بالوصول. يرجى تسجيل الدخول مرة أخرى.';
     case 403:
-      return 'ليس لديك صلاحية للقيام بهذه العملية.';
+      // Enhanced 403 Forbidden message - check if there's a specific permission message
+      const permissionMessage = error.error?.message || error.error?.detail || error.error?.errorMessage;
+      if (permissionMessage && typeof permissionMessage === 'string') {
+        // Check if the message contains permission-related keywords
+        if (permissionMessage.toLowerCase().includes('permission') || 
+            permissionMessage.toLowerCase().includes('صلاحية') ||
+            permissionMessage.toLowerCase().includes('not authorized') ||
+            permissionMessage.toLowerCase().includes('forbidden')) {
+          return permissionMessage;
+        }
+      }
+      return 'ليس لديك صلاحية للقيام بهذه العملية. يرجى التواصل مع المسؤول للحصول على الصلاحيات المطلوبة.';
     case 404:
       return `${operationName}: العنصر المطلوب غير موجود.`;
     case 409:
