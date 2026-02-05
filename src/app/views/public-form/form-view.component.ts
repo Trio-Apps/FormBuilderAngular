@@ -1062,7 +1062,8 @@ export class FormViewComponent implements OnInit {
             foreignOptionText: displayText, // DataSource doesn't provide separate Arabic text
             isActive: true
           };
-        });
+        })
+        .reverse(); // Reverse options order for display
     }
 
     // Otherwise, use static options from field.fieldOptions
@@ -1125,7 +1126,8 @@ export class FormViewComponent implements OnInit {
         }
 
         return option;
-      });
+      })
+      .reverse(); // Reverse options order for display
 
     // Removed verbose logging
 

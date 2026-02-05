@@ -1697,7 +1697,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             foreignOptionText: optAny.foreignOptionText || text || String(index),
             isActive: true
           };
-        });
+        })
+        .reverse(); // Reverse options order for display
       
       // Cache the mapped options to avoid recreating array on every call
       this._cachedMappedOptions[field.id] = mappedOptions;
@@ -1779,7 +1780,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         }
 
         return option;
-      });
+      })
+      .reverse(); // Reverse options order for display
 
     // Cache the processed options to avoid recreating array on every call
     this._cachedStaticOptions[field.id] = processedOptions;
