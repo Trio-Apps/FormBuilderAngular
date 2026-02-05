@@ -1033,15 +1033,66 @@
                 </div>
 
                 <div *ngIf="dataSourceType === 'SapHana' && previewOptions.length > 0 && !loadingPreview" 
-                  style="padding: 12px; background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
-                  <i class="pi pi-check-circle" style="color: #16a34a; font-size: 18px;"></i>
-                  <div>
-                    <strong style="color: #166534; font-size: 14px;">
-                      {{ previewOptions.length }} {{ previewOptions.length === 1 ? 'option' : 'options' }} found
-                    </strong>
-                    <div style="color: #166534; font-size: 12px; margin-top: 2px;">
-                      These options will be available in the public form after saving
+                  style="margin-top: 16px;">
+                  <!-- Success Message -->
+                  <div style="padding: 12px; background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                    <i class="pi pi-check-circle" style="color: #16a34a; font-size: 18px;"></i>
+                    <div>
+                      <strong style="color: #166534; font-size: 14px;">
+                        {{ previewOptions.length }} {{ previewOptions.length === 1 ? 'option' : 'options' }} found
+                      </strong>
+                      <div style="color: #166534; font-size: 12px; margin-top: 2px;">
+                        These options will be available in the public form after saving
+                      </div>
                     </div>
+                  </div>
+
+                  <!-- Options Table -->
+                  <div style="margin-top: 12px;">
+                    <label class="form-label" style="margin-bottom: 8px; font-weight: 600; color: #374151;">
+                      <i class="pi pi-list" style="margin-right: 6px; color: #059669;"></i>
+                      Preview Options ({{ previewOptions.length }})
+                    </label>
+                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; background: white;">
+                      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead style="background: #f9fafb; position: sticky; top: 0; z-index: 10;">
+                          <tr>
+                            <th style="padding: 10px 12px; text-align: left; border-bottom: 2px solid #e5e7eb; font-weight: 600; color: #374151; width: 50px;">
+                              #
+                            </th>
+                            <th style="padding: 10px 12px; text-align: left; border-bottom: 2px solid #e5e7eb; font-weight: 600; color: #374151;">
+                              Value (ID)
+                            </th>
+                            <th style="padding: 10px 12px; text-align: left; border-bottom: 2px solid #e5e7eb; font-weight: 600; color: #374151;">
+                              Text (NAME)
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let option of previewOptions; let i = index" 
+                              [style.background]="i % 2 === 0 ? '#ffffff' : '#f9fafb'"
+                              style="border-bottom: 1px solid #e5e7eb;">
+                            <td style="padding: 10px 12px; color: #6b7280; font-weight: 500;">
+                              {{ i + 1 }}
+                            </td>
+                            <td style="padding: 10px 12px; color: #111827; font-family: 'Courier New', monospace; font-size: 12px;">
+                              {{ option.value }}
+                            </td>
+                            <td style="padding: 10px 12px; color: #111827;">
+                              <span *ngIf="option.text && option.text.trim().length > 0">{{ option.text }}</span>
+                              <span *ngIf="!option.text || option.text.trim().length === 0" style="color: #9ca3af; font-style: italic;">
+                                <i class="pi pi-info-circle" style="margin-right: 4px;"></i>
+                                (Empty - will use value as display text)
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <small class="form-text text-muted" style="margin-top: 8px; display: block; color: #6b7280; font-size: 12px;">
+                      <i class="pi pi-info-circle"></i> 
+                      This is a preview of the options that will be available in the dropdown when the form is displayed to users.
+                    </small>
                   </div>
                 </div>
               </div>

@@ -3161,7 +3161,28 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             };
           } else if (dataSource.sourceType === 'SapHana') {
             // For SapHana type, requestBodyJson already contains the SAP HANA SQL query string
-            const sqlQuery = dataSource.requestBodyJson || '';
+            let sqlQuery = dataSource.requestBodyJson || '';
+
+            // Auto-fix: Try to add double quotes to identifiers if missing (for SAP HANA case-sensitivity)
+            // Only attempt this if the query doesn't already have quotes around identifiers
+            if (sqlQuery && !sqlQuery.includes('"')) {
+              console.warn('[FieldsList] ⚠️ SAP HANA query missing double quotes. Attempting auto-fix...');
+              sqlQuery = this.autoFixSapHanaQuery(sqlQuery);
+              
+              // If auto-fix was applied and we have a DataSource ID, offer to save the fixed version
+              if (sqlQuery !== dataSource.requestBodyJson && dataSource.id) {
+                console.log('[FieldsList] 💡 Auto-fixed SAP HANA query. User should review and save.');
+                // Show info message to user
+                setTimeout(() => {
+                  this.messageService.add({
+                    severity: 'info',
+                    summary: 'SAP HANA Query Auto-Fixed',
+                    detail: 'Double quotes have been added to identifiers. Please review the query and click "Run Query" to test, then save.',
+                    life: 8000
+                  });
+                }, 500);
+              }
+            }
 
             console.log('[FieldsList] Loaded SapHana config:', {
               sqlQuery: sqlQuery.substring(0, 80) + '...',
@@ -3181,7 +3202,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               sourceType: dataSource.sourceType,
               apiUrl: null,
               httpMethod: null,
-              requestBodyJson: dataSource.requestBodyJson || null,
+              requestBodyJson: sqlQuery, // Use the (possibly fixed) query
               valuePath: this.sqlQueryConfig.valuePath,
               textPath: this.sqlQueryConfig.textPath,
               isActive: dataSource.isActive
@@ -3511,6 +3532,109 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  /**
+   * Auto-fix SAP HANA query by adding double quotes around identifiers
+   * This is a simple heuristic that attempts to wrap column names, table names, and schema names
+   */
+  private autoFixSapHanaQuery(query: string): string {
+    if (!query || !query.trim()) {
+      return query;
+    }
+
+    try {
+      // Simple regex-based approach for common SAP HANA query patterns
+      // Pattern 1: SELECT column1, column2 FROM schema.table
+      // Pattern 2: SELECT column1 AS alias1, column2 AS alias2 FROM schema.table
+      
+      let fixedQuery = query.trim();
+      
+      // Match SELECT ... FROM pattern
+      const selectFromMatch = fixedQuery.match(/SELECT\s+(.+?)\s+FROM\s+(.+?)(?:\s+ORDER\s+BY|\s+WHERE|\s+GROUP\s+BY|$)/i);
+      
+      if (selectFromMatch) {
+        const selectPart = selectFromMatch[1].trim();
+        const fromPart = selectFromMatch[2].trim();
+        const restOfQuery = fixedQuery.substring(selectFromMatch[0].length);
+        
+        // Fix FROM part: schema.table -> "schema"."table"
+        let fixedFromPart = fromPart
+          .split('.')
+          .map(part => {
+            const trimmed = part.trim();
+            // If already quoted, keep as is
+            if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+              return trimmed;
+            }
+            // Otherwise, add quotes
+            return `"${trimmed}"`;
+          })
+          .join('.');
+        
+        // Fix SELECT part: column AS alias -> "column" AS "alias"
+        let fixedSelectPart = selectPart
+          .split(',')
+          .map(col => {
+            const trimmed = col.trim();
+            // Handle AS alias
+            if (trimmed.toUpperCase().includes(' AS ')) {
+              const parts = trimmed.split(/\s+AS\s+/i);
+              const column = parts[0].trim();
+              const alias = parts[1]?.trim() || '';
+              
+              // Quote column name if not already quoted
+              let quotedColumn = column;
+              if (!column.startsWith('"') && !column.endsWith('"')) {
+                // Remove any table prefix (e.g., "table.column" -> "column")
+                const columnName = column.includes('.') ? column.split('.').pop() : column;
+                quotedColumn = columnName ? `"${columnName.trim()}"` : column;
+              }
+              
+              // Quote alias if not already quoted
+              let quotedAlias = alias;
+              if (alias && !alias.startsWith('"') && !alias.endsWith('"')) {
+                quotedAlias = `"${alias}"`;
+              }
+              
+              return alias ? `${quotedColumn} AS ${quotedAlias}` : quotedColumn;
+            } else {
+              // No AS clause, just quote the column name
+              if (!trimmed.startsWith('"') && !trimmed.endsWith('"')) {
+                const columnName = trimmed.includes('.') ? trimmed.split('.').pop() : trimmed;
+                return columnName ? `"${columnName.trim()}"` : trimmed;
+              }
+              return trimmed;
+            }
+          })
+          .join(', ');
+        
+        // Reconstruct query
+        fixedQuery = `SELECT ${fixedSelectPart} FROM ${fixedFromPart}${restOfQuery}`;
+        
+        // Fix ORDER BY if present
+        if (fixedQuery.toUpperCase().includes('ORDER BY')) {
+          fixedQuery = fixedQuery.replace(/ORDER\s+BY\s+([^\s,]+)/gi, (match, column) => {
+            const trimmed = column.trim();
+            if (!trimmed.startsWith('"') && !trimmed.endsWith('"')) {
+              return `ORDER BY "${trimmed}"`;
+            }
+            return match;
+          });
+        }
+      }
+      
+      console.log('[FieldsList] Auto-fixed SAP HANA query:', {
+        original: query.substring(0, 100) + '...',
+        fixed: fixedQuery.substring(0, 100) + '...'
+      });
+      
+      return fixedQuery;
+    } catch (error) {
+      console.warn('[FieldsList] Failed to auto-fix SAP HANA query:', error);
+      // Return original query if auto-fix fails
+      return query;
+    }
   }
 
   /**
@@ -4705,10 +4829,24 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         
         // Show success message with options count for SqlQuery, SapHana and LookupTable
         if ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana' || this.dataSourceType === 'LookupTable') && options && options.length > 0) {
+          // Count options with valid text (for SAP HANA, some might have empty text)
+          const validOptionsCount = options.filter((opt: any) => {
+            const text = String(opt.text || '').trim();
+            return text.length > 0 || (this.dataSourceType === 'SapHana' && opt.value);
+          }).length;
+          
+          const emptyTextCount = options.length - validOptionsCount;
+          
+          let detailMessage = `${validOptionsCount} ${validOptionsCount === 1 ? 'option' : 'options'} found`;
+          if (emptyTextCount > 0 && this.dataSourceType === 'SapHana') {
+            detailMessage += ` (${emptyTextCount} ${emptyTextCount === 1 ? 'option' : 'options'} with empty text will use value as display text)`;
+          }
+          detailMessage += ' and will be available in the public form';
+          
           this.messageService.add({
             severity: 'success',
             summary: (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') ? 'Query Executed Successfully' : 'Table Data Loaded Successfully',
-            detail: `${options.length} ${options.length === 1 ? 'option' : 'options'} found and will be available in the public form`,
+            detail: detailMessage,
             life: 5000
           });
         }
@@ -4799,14 +4937,51 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             textValue = String(textValue);
           }
 
+          // Clean up text value: handle NULL, empty strings, and weird escaped quotes
+          if (textValue === null || textValue === undefined) {
+            textValue = '';
+          } else if (typeof textValue === 'string') {
+            // Trim whitespace
+            textValue = textValue.trim();
+            
+            // Handle weird escaped quote patterns from SAP HANA (e.g., "\" ." or "' '")
+            // These are likely NULL values that got escaped incorrectly
+            if (textValue === '\\" .' || textValue === '\' \'' || textValue === '\\" :' || 
+                textValue === '\" .' || textValue === '\" :' || 
+                textValue.match(/^["']\s*["']$/) || textValue.match(/^\\["']\s*[.:]$/)) {
+              textValue = '';
+            }
+            
+            // If text is empty or just whitespace/escaped characters, use value as fallback
+            if (!textValue || textValue.length === 0) {
+              // For SAP HANA, if text is empty, use value as display text
+              if (this.dataSourceType === 'SapHana' && opt.value) {
+                textValue = String(opt.value);
+              } else {
+                textValue = '';
+              }
+            }
+          }
+
           return {
             ...opt,
             text: textValue || ''
           };
         });
 
+        // Filter out options with empty text (unless it's intentional)
+        // For SAP HANA, we might want to keep options even if text is empty (use value as text)
+        let optionsToFilter = processedOptions;
+        if (this.dataSourceType !== 'SapHana') {
+          // For non-SAP HANA sources, filter out empty text options
+          optionsToFilter = processedOptions.filter((opt: FieldOptionResponse) => {
+            const text = String(opt.text || '').trim();
+            return text.length > 0;
+          });
+        }
+
         // Filter out "Select All" options (in both English and Arabic)
-        const filteredOptions = processedOptions.filter((opt: FieldOptionResponse) => {
+        const filteredOptions = optionsToFilter.filter((opt: FieldOptionResponse) => {
           const text = String(opt.text || '').toLowerCase().trim();
           const value = String(opt.value || '').toLowerCase().trim();
 
