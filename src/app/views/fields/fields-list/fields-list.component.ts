@@ -4661,6 +4661,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       console.log('[FieldsList] RequestBodyJson type:', typeof requestBodyJsonForPreview);
       console.log('[FieldsList] SourceType:', requestPayload.sourceType);
       console.log('[FieldsList] Full request object keys:', Object.keys(requestPayload));
+    } else if (this.dataSourceType === 'SapHana') {
+      console.log('[FieldsList] SAP HANA Query:', this.sqlQueryConfig.sqlQuery);
+      console.log('[FieldsList] Value Path:', valuePath);
+      console.log('[FieldsList] Text Path:', textPath);
+      console.log('[FieldsList] RequestBodyJson (SAP HANA SQL string):', requestBodyJsonForPreview);
+      console.log('[FieldsList] SourceType:', requestPayload.SourceType || requestPayload.sourceType);
+      console.log('[FieldsList] ⚠️ Remember: SAP HANA requires double quotes around identifiers!');
     } else if (this.dataSourceType === 'LookupTable') {
       console.log('[FieldsList] Table:', this.lookupTableConfig.table);
       console.log('[FieldsList] Database:', this.lookupTableConfig.database);
@@ -4880,6 +4887,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               detail: 'SQL query executed but returned no options. Please check your query and column names (case-insensitive).',
               life: 5000
             });
+          } else if (this.dataSourceType === 'SapHana') {
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'No Results',
+              detail: 'SAP HANA query executed but returned no options. Please check your query and ensure column names are wrapped in double quotes (").',
+              life: 5000
+            });
           } else {
             this.messageService.add({
               severity: 'warn',
@@ -4940,6 +4954,33 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 if (this.dataSourceType === 'SqlQuery') {
                   errorDetail += `\n\nCurrent SQL Query: ${this.sqlQueryConfig.sqlQuery}`;
                   errorDetail += `\nSelected Database: ${this.sqlQueryConfig.database || 'Auto'}`;
+                }
+              }
+            }
+            
+            // Check for SAP HANA specific errors
+            if (error.error.message.includes('SAP HANA') || error.error.message.includes('invalid column name') || error.error.message.includes('HDBODBC')) {
+              errorMessage = 'SAP HANA Query Error';
+              errorDetail = error.error.message || 'SAP HANA query execution failed.';
+              
+              // Check for column name errors
+              if (error.error.message.includes('invalid column name')) {
+                const columnMatch = error.error.message.match(/invalid column name:\s*([A-Z_]+)/i);
+                if (columnMatch) {
+                  const columnName = columnMatch[1];
+                  errorDetail = `Invalid column name: "${columnName}".\n\n`;
+                  errorDetail += `⚠️ IMPORTANT: In SAP HANA, column names are case-sensitive!\n\n`;
+                  errorDetail += `Solution: Wrap all column names, table names, and schema names in double quotes (").\n\n`;
+                  errorDetail += `❌ Wrong:\n`;
+                  errorDetail += `SELECT AbsEntry AS Id, PeriodName AS Name FROM DOKHON_LIVE14.AACP\n\n`;
+                  errorDetail += `✅ Correct:\n`;
+                  errorDetail += `SELECT "AbsEntry" AS "ID", "PeriodName" AS "NAME" FROM "DOKHON_LIVE14"."AACP"\n\n`;
+                  errorDetail += `Current Query:\n${this.sqlQueryConfig.sqlQuery || 'N/A'}`;
+                } else {
+                  errorDetail = `SAP HANA query error: ${error.error.message}\n\n`;
+                  errorDetail += `⚠️ Make sure to wrap all identifiers (columns, tables, schemas) in double quotes (").\n\n`;
+                  errorDetail += `Example:\n`;
+                  errorDetail += `SELECT "AbsEntry" AS "ID", "PeriodName" AS "NAME" FROM "DOKHON_LIVE14"."AACP"`;
                 }
               }
             }

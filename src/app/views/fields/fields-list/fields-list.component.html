@@ -1005,6 +1005,14 @@
               <small class="form-text text-muted" style="margin-top: 6px; display: block; color: #059669;">
                 <i class="pi pi-info-circle"></i> Connection, database and credentials are taken from the active SAP HANA configuration on the backend.
               </small>
+              <small class="form-text text-warning" style="margin-top: 8px; display: block; color: #f59e0b; font-weight: 500;">
+                <i class="pi pi-exclamation-triangle"></i> 
+                <strong>Important:</strong> SAP HANA column names are case-sensitive! Always wrap column names, table names, and schema names in double quotes (").
+                <br>
+                <span style="font-family: 'Courier New', monospace; font-size: 11px; margin-left: 20px;">
+                  Example: SELECT "AbsEntry" AS "ID", "PeriodName" AS "NAME" FROM "DOKHON_LIVE14"."AACP"
+                </span>
+              </small>
 
               <!-- Run Query Button for SAP HANA -->
               <div style="margin-top: 16px;">
