@@ -138,6 +138,7 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
       createNewDocument: [true],
       targetDocumentId: [null],
       initialStatus: ['Draft'], // Default: 'Draft'
+      triggerEvent: ['OnRuleMatched'], // Default: 'OnRuleMatched'
       copyCalculatedFields: [true],
       copyGridRows: [false], // Default: false as per API example
       startWorkflow: [true], // Default: true as per API example
@@ -637,6 +638,7 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
         
         // الحقل الجديد
         initialStatus: formValue.initialStatus || 'Draft',
+        triggerEvent: formValue.triggerEvent || 'OnRuleMatched',
         
         fieldMapping: Object.keys(fieldMapping).length > 0 ? fieldMapping : {},
         gridMapping: Object.keys(gridMapping).length > 0 ? gridMapping : {},

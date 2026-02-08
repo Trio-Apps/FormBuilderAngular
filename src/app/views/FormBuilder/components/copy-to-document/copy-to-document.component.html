@@ -75,6 +75,23 @@
         <small class="text-muted">The initial status of the target document</small>
       </div>
 
+      <!-- Execution Trigger -->
+      <div class="form-group">
+        <label for="triggerEvent">
+          Execution Trigger
+        </label>
+        <select
+          id="triggerEvent"
+          formControlName="triggerEvent"
+          class="form-control">
+          <option value="OnRuleMatched">On Rule Matched</option>
+          <option value="OnFormSubmitted">On Form Submitted</option>
+          <option value="OnApprovalCompleted">On Approval Completed</option>
+          <option value="OnDocumentApproved">On Document Approved</option>
+        </select>
+        <small class="text-muted">When to execute the CopyToDocument action</small>
+      </div>
+
       <!-- Target Document ID (required when createNewDocument is false) -->
       <div class="form-group" *ngIf="!copyForm.get('createNewDocument')?.value">
         <label for="targetDocumentId">
