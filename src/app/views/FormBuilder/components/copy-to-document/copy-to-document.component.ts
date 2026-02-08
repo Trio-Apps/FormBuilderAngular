@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
 import { forkJoin, of } from 'rxjs';
@@ -21,6 +21,7 @@ import { DocumentType } from '../../form-builder/models/document-types.model';
 import { FormBuilderDto } from '../../form-builder/models/form-builder-dto.model';
 import { FormGridDto } from '../../form-builder/models/grid-dto.model';
 import { MessageService } from 'primeng/api';
+import { PermissionService } from '../../../../services/permission.service';
 
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
@@ -54,7 +55,7 @@ import { TooltipModule } from 'primeng/tooltip';
   templateUrl: './copy-to-document.component.html',
   styleUrls: ['./copy-to-document.component.scss']
 })
-export class CopyToDocumentComponent implements OnInit {
+export class CopyToDocumentComponent implements OnInit, AfterViewInit {
   copyForm!: FormGroup;
   loading = false;
   result: CopyToDocumentResultDto | null = null;
@@ -72,11 +73,14 @@ export class CopyToDocumentComponent implements OnInit {
   
   // Audit records
   showAuditDialog = false;
+  showAuditPanel = true; // Show audit records panel on main page
   auditRecords: CopyToDocumentAuditDto[] = [];
+  auditTotalRecords = 0;
   auditLoading = false;
+  auditInitialized = false; // Flag to prevent multiple initial loads
   auditParams: CopyToDocumentAuditQueryParams = {
     page: 1,
-    pageSize: 10
+    pageSize: 50
   };
 
   constructor(
@@ -88,29 +92,59 @@ export class CopyToDocumentComponent implements OnInit {
     private fieldsService: FieldsService,
     private gridService: GridService,
     private tabsService: TabsService,
-    private messageService: MessageService
+    private messageService: MessageService,
+    private permissionService: PermissionService
   ) {
     this.initForm();
   }
 
   ngOnInit(): void {
-    this.loadDocumentTypes();
+    // Check permissions before loading data
+    const canViewDocuments = this.permissionService.canViewDocuments();
+    console.log('[CopyToDocument] User can view documents:', canViewDocuments);
+    
+    if (canViewDocuments) {
+      this.loadDocumentTypes();
+    } else {
+      console.warn('[CopyToDocument] User does not have Document_Allow_View permission');
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Required',
+        detail: 'You do not have permission to view document types. Please contact administrator.'
+      });
+    }
+    
     this.loadTargetForms();
     this.loadSubmissions();
+  }
+
+  ngAfterViewInit(): void {
+    // Load audit records after view is initialized
+    if (this.showAuditPanel && !this.auditInitialized) {
+      // Small delay to ensure table is fully rendered
+      setTimeout(() => {
+        this.loadAuditRecords();
+      }, 100);
+    }
   }
 
   initForm(): void {
     this.copyForm = this.fb.group({
       sourceSubmissionId: [null, Validators.required],
+      sourceDocumentTypeId: [null], // Will be set from submission
+      sourceFormId: [null], // Will be set from submission
       targetDocumentTypeId: [null, Validators.required],
       targetFormId: [null, Validators.required],
       createNewDocument: [true],
       targetDocumentId: [null],
+      initialStatus: ['Draft'], // Default: 'Draft'
       copyCalculatedFields: [true],
-      copyGridRows: [true],
-      startWorkflow: [false],
+      copyGridRows: [false], // Default: false as per API example
+      startWorkflow: [true], // Default: true as per API example
       linkDocuments: [true],
+      copyAttachments: [false], // New field
       copyMetadata: [false],
+      overrideTargetDefaults: [false], // New field
       fieldMappings: this.fb.array([]),
       gridMappings: this.fb.array([]),
       metadataFields: this.fb.array([])
@@ -132,10 +166,28 @@ export class CopyToDocumentComponent implements OnInit {
     this.copyForm.get('sourceSubmissionId')?.valueChanges.subscribe(submissionId => {
       console.log('[CopyToDocument] Source submission ID changed:', submissionId);
       if (submissionId) {
+        // Set sourceDocumentTypeId and sourceFormId from submission
+        const sourceSubmission = this.submissions.find(s => s.id === submissionId);
+        if (sourceSubmission) {
+          if (sourceSubmission.documentTypeId) {
+            this.copyForm.patchValue({
+              sourceDocumentTypeId: sourceSubmission.documentTypeId
+            });
+          }
+          if (sourceSubmission.formBuilderId) {
+            this.copyForm.patchValue({
+              sourceFormId: sourceSubmission.formBuilderId
+            });
+          }
+        }
         this.loadSourceFieldsAndGrids(submissionId);
       } else {
         this.sourceFields = [];
         this.sourceGrids = [];
+        this.copyForm.patchValue({
+          sourceDocumentTypeId: null,
+          sourceFormId: null
+        });
       }
     });
 
@@ -164,16 +216,76 @@ export class CopyToDocumentComponent implements OnInit {
   }
 
   loadDocumentTypes(): void {
+    console.log('[CopyToDocument] Loading document types...');
     this.documentTypesService.getActiveDocumentTypes().subscribe({
       next: (types) => {
+        console.log('[CopyToDocument] Document types loaded:', types?.length || 0, 'types');
         this.documentTypes = types || [];
+        
+        if (this.documentTypes.length === 0) {
+          console.warn('[CopyToDocument] No document types found. Trying fallback...');
+          // Fallback: try getAllDocumentTypes
+          this.documentTypesService.getAllDocumentTypes().subscribe({
+            next: (allTypes) => {
+              console.log('[CopyToDocument] Fallback: Loaded all document types:', allTypes?.length || 0);
+              // Filter active and non-deleted types
+              this.documentTypes = (allTypes || []).filter((t: DocumentType) => 
+                t.isActive && !t.isDeleted
+              );
+              console.log('[CopyToDocument] After filtering:', this.documentTypes.length, 'active types');
+              
+              if (this.documentTypes.length === 0) {
+                this.messageService.add({
+                  severity: 'warn',
+                  summary: 'Warning',
+                  detail: 'No active document types found. Please contact administrator.'
+                });
+              }
+            },
+            error: (fallbackError) => {
+              console.error('[CopyToDocument] Fallback error:', fallbackError);
+              this.messageService.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to load document types. Please check your permissions or contact administrator.'
+              });
+            }
+          });
+        }
       },
       error: (error) => {
-        console.error('Error loading document types:', error);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to load document types'
+        console.error('[CopyToDocument] Error loading document types:', error);
+        console.error('[CopyToDocument] Error details:', {
+          status: error?.status,
+          statusText: error?.statusText,
+          message: error?.message,
+          error: error?.error
+        });
+        
+        // Try fallback
+        this.documentTypesService.getAllDocumentTypes().subscribe({
+          next: (allTypes) => {
+            console.log('[CopyToDocument] Fallback: Loaded all document types:', allTypes?.length || 0);
+            this.documentTypes = (allTypes || []).filter((t: DocumentType) => 
+              t.isActive && !t.isDeleted
+            );
+            
+            if (this.documentTypes.length === 0) {
+              this.messageService.add({
+                severity: 'warn',
+                summary: 'Warning',
+                detail: 'No active document types found. Please contact administrator.'
+              });
+            }
+          },
+          error: (fallbackError) => {
+            console.error('[CopyToDocument] Fallback error:', fallbackError);
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Failed to load document types. Please check your permissions (Document_Allow_View) or contact administrator.'
+            });
+          }
         });
       }
     });
@@ -433,6 +545,69 @@ export class CopyToDocumentComponent implements OnInit {
 
     const formValue = this.copyForm.value;
 
+    // Get source submission to extract sourceDocumentTypeId and sourceFormId
+    const sourceSubmission = this.submissions.find(s => s.id === formValue.sourceSubmissionId);
+    if (!sourceSubmission) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Source submission not found'
+      });
+      this.loading = false;
+      return;
+    }
+
+    // Validate required source fields
+    if (!sourceSubmission.formBuilderId) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Source submission is missing form information'
+      });
+      this.loading = false;
+      return;
+    }
+
+    // Get documentTypeId - if not in submission, load it from form
+    let sourceDocumentTypeId = sourceSubmission.documentTypeId;
+    if (!sourceDocumentTypeId && sourceSubmission.formBuilderId) {
+      // Try to load documentTypeId from form
+      this.documentTypesService.getDocumentTypeByFormId(sourceSubmission.formBuilderId).subscribe({
+        next: (documentType) => {
+          if (documentType && documentType.id) {
+            sourceDocumentTypeId = documentType.id;
+            this.executeCopyWithDocumentType(sourceDocumentTypeId, sourceSubmission, formValue);
+          } else {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Could not determine document type for source form'
+            });
+            this.loading = false;
+          }
+        },
+        error: (error) => {
+          console.error('[CopyToDocument] Error loading document type:', error);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load document type for source form'
+          });
+          this.loading = false;
+        }
+      });
+      return; // Exit early, will continue in callback
+    }
+
+    // If documentTypeId is available, proceed directly
+    this.executeCopyWithDocumentType(sourceDocumentTypeId, sourceSubmission, formValue);
+  }
+
+  private executeCopyWithDocumentType(
+    sourceDocumentTypeId: number,
+    sourceSubmission: FormSubmissionDto,
+    formValue: any
+  ): void {
     // Convert field mappings array to object
     const fieldMapping: { [key: string]: string } = {};
     formValue.fieldMappings.forEach((mapping: any) => {
@@ -451,18 +626,30 @@ export class CopyToDocumentComponent implements OnInit {
 
     const request: CopyToDocumentRequestDto = {
       config: {
+        // الحقول المطلوبة الجديدة - استخدام القيم من form أو fallback
+        sourceDocumentTypeId: formValue.sourceDocumentTypeId || sourceDocumentTypeId,
+        sourceFormId: formValue.sourceFormId || sourceSubmission.formBuilderId,
+        
         targetDocumentTypeId: formValue.targetDocumentTypeId,
         targetFormId: formValue.targetFormId,
         createNewDocument: formValue.createNewDocument,
-        targetDocumentId: !formValue.createNewDocument ? formValue.targetDocumentId : null,
-        fieldMapping: Object.keys(fieldMapping).length > 0 ? fieldMapping : undefined,
-        gridMapping: Object.keys(gridMapping).length > 0 ? gridMapping : undefined,
+        ...(formValue.createNewDocument ? {} : { targetDocumentId: formValue.targetDocumentId }),
+        
+        // الحقل الجديد
+        initialStatus: formValue.initialStatus || 'Draft',
+        
+        fieldMapping: Object.keys(fieldMapping).length > 0 ? fieldMapping : {},
+        gridMapping: Object.keys(gridMapping).length > 0 ? gridMapping : {},
         copyCalculatedFields: formValue.copyCalculatedFields,
         copyGridRows: formValue.copyGridRows,
         startWorkflow: formValue.startWorkflow,
         linkDocuments: formValue.linkDocuments,
+        copyAttachments: formValue.copyAttachments || false,
         copyMetadata: formValue.copyMetadata,
-        metadataFields: formValue.metadataFields.filter((f: string) => f && f.trim() !== '')
+        overrideTargetDefaults: formValue.overrideTargetDefaults || false,
+        metadataFields: formValue.metadataFields && formValue.metadataFields.length > 0 
+          ? formValue.metadataFields.filter((f: string) => f && f.trim() !== '') 
+          : []
       },
       sourceSubmissionId: formValue.sourceSubmissionId,
       actionId: null,
@@ -512,18 +699,29 @@ export class CopyToDocumentComponent implements OnInit {
 
   openAuditDialog(): void {
     this.showAuditDialog = true;
-    this.loadAuditRecords();
+    // Only load if not already loaded or if data is stale
+    if (!this.auditInitialized || this.auditRecords.length === 0) {
+      this.loadAuditRecords();
+    }
   }
 
   loadAuditRecords(): void {
+    // Prevent multiple simultaneous requests
+    if (this.auditLoading) {
+      console.log('[CopyToDocument] Audit records already loading, skipping...');
+      return;
+    }
+
     this.auditLoading = true;
     console.log('[CopyToDocument] Loading audit records with params:', this.auditParams);
     this.copyToDocumentService.getAuditRecords(this.auditParams).subscribe({
       next: (response) => {
         this.auditLoading = false;
+        this.auditInitialized = true;
         console.log('[CopyToDocument] Audit records response:', response);
         this.auditRecords = response.items || [];
-        console.log('[CopyToDocument] Loaded audit records:', this.auditRecords.length);
+        this.auditTotalRecords = response.totalCount || 0;
+        console.log('[CopyToDocument] Loaded audit records:', this.auditRecords.length, 'Total:', this.auditTotalRecords);
         
         if (this.auditRecords.length === 0) {
           console.log('[CopyToDocument] No audit records found. Response:', response);
@@ -532,13 +730,33 @@ export class CopyToDocumentComponent implements OnInit {
       error: (error) => {
         this.auditLoading = false;
         console.error('[CopyToDocument] Error loading audit records:', error);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to load audit records'
-        });
+        // Only show error message if it's not a 401 (unauthorized) - that's handled by auth interceptor
+        if (error.status !== 401 && error.status !== 0) {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load audit records'
+          });
+        }
       }
     });
+  }
+
+  onAuditPageChange(event: any): void {
+    // Calculate page number from PrimeNG event
+    const newPage = Math.floor(event.first / event.rows) + 1;
+    const newPageSize = event.rows;
+    
+    // Only reload if page or pageSize actually changed
+    if (this.auditParams.page !== newPage || this.auditParams.pageSize !== newPageSize) {
+      this.auditParams.page = newPage;
+      this.auditParams.pageSize = newPageSize;
+      this.loadAuditRecords();
+    }
+  }
+
+  closeAuditPanel(): void {
+    this.showAuditPanel = false;
   }
 
   loadAuditBySubmission(): void {

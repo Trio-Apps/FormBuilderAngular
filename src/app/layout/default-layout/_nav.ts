@@ -52,13 +52,13 @@ export const navItems: INavData[] = [
     name: 'Document Types',
     url: '/document-types',
     iconComponent: { name: 'cil-file' },
-    attributes: { permissionCode: 'DocumentType_Allow_View' },
+    attributes: { permissionCode: 'Document_Allow_View' }, // Changed from DocumentType_Allow_View to Document_Allow_View
     children: [
       {
         name: 'Manage Document Types',
         url: '/document-types',
         iconComponent: { name: 'cil-list' },
-        attributes: { permissionCode: 'DocumentType_Allow_View' }
+        attributes: { permissionCode: 'Document_Allow_View' } // Changed from DocumentType_Allow_View to Document_Allow_View
       }
     ]
   },

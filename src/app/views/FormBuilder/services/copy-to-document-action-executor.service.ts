@@ -10,6 +10,7 @@ import {
   FormRule
 } from '../form-builder/models/form-builder-dto.model';
 import { MessageService } from 'primeng/api';
+import { FormSubmissionsService, FormSubmissionDto } from '../../form-submissions/services/form-submissions.service';
 
 /**
  * Trigger Event Types for CopyToDocument Action
@@ -39,6 +40,7 @@ export class CopyToDocumentActionExecutorService {
   constructor(
     private copyToDocumentService: CopyToDocumentService,
     private formRulesService: FormRulesService,
+    private formSubmissionsService: FormSubmissionsService,
     private messageService: MessageService
   ) {}
 
@@ -65,11 +67,10 @@ export class CopyToDocumentActionExecutorService {
     console.log(`[CopyToDocumentActionExecutor] Executing CopyToDocument actions for event: ${eventType}, submissionId: ${submissionId}, formBuilderId: ${formBuilderId}`);
 
     // Step 1: Load active rules for the form
-    return this.formRulesService.getFormRules(formBuilderId).pipe(
-      switchMap((rules: FormRule[]) => {
-        // Step 2: Filter active rules
-        const activeRules = rules.filter(rule => rule.isActive);
-        console.log(`[CopyToDocumentActionExecutor] Found ${activeRules.length} active rules out of ${rules.length} total rules`);
+    return this.formRulesService.getActiveRulesByFormId(formBuilderId).pipe(
+      switchMap((activeRules: FormRule[]) => {
+        // Rules are already filtered to active ones
+        console.log(`[CopyToDocumentActionExecutor] Found ${activeRules.length} active rules`);
 
         // Step 3: Find CopyToDocument actions
         const copyToDocumentActions: Array<{ rule: FormRule; action: Action; actionIndex: number }> = [];
@@ -83,7 +84,13 @@ export class CopyToDocumentActionExecutorService {
           if (rule.actions && rule.actions.length > 0) {
             rule.actions.forEach((action, index) => {
               if (action.type === 'CopyToDocument' && action.copyToDocumentConfig) {
-                copyToDocumentActions.push({ rule, action, actionIndex: index });
+                // Filter by triggerEvent if specified in config
+                const actionTriggerEvent = action.copyToDocumentConfig.triggerEvent || 'OnRuleMatched';
+                if (actionTriggerEvent === eventType || eventType === 'OnRuleMatched') {
+                  copyToDocumentActions.push({ rule, action, actionIndex: index });
+                } else {
+                  console.log(`[CopyToDocumentActionExecutor] Skipping action - triggerEvent mismatch. Action: ${actionTriggerEvent}, Event: ${eventType}`);
+                }
               }
             });
           }
@@ -92,7 +99,13 @@ export class CopyToDocumentActionExecutorService {
           if (rule.elseActions && rule.elseActions.length > 0) {
             rule.elseActions.forEach((action, index) => {
               if (action.type === 'CopyToDocument' && action.copyToDocumentConfig) {
-                copyToDocumentActions.push({ rule, action, actionIndex: index });
+                // Filter by triggerEvent if specified in config
+                const actionTriggerEvent = action.copyToDocumentConfig.triggerEvent || 'OnRuleMatched';
+                if (actionTriggerEvent === eventType || eventType === 'OnRuleMatched') {
+                  copyToDocumentActions.push({ rule, action, actionIndex: index });
+                } else {
+                  console.log(`[CopyToDocumentActionExecutor] Skipping elseAction - triggerEvent mismatch. Action: ${actionTriggerEvent}, Event: ${eventType}`);
+                }
               }
             });
           }
@@ -163,55 +176,108 @@ export class CopyToDocumentActionExecutorService {
       return throwError(() => new Error('CopyToDocument action missing required configuration (targetDocumentTypeId or targetFormId)'));
     }
 
-    // Convert fieldMappings array to object format if needed
-    let fieldMapping: { [key: string]: string } | undefined;
-    if (config.fieldMappings && config.fieldMappings.length > 0) {
-      fieldMapping = {};
-      config.fieldMappings.forEach(mapping => {
-        if (mapping.sourceFieldCode && mapping.targetFieldCode) {
-          fieldMapping![mapping.sourceFieldCode] = mapping.targetFieldCode;
+    // Get source submission to extract sourceDocumentTypeId and sourceFormId if not provided
+    return this.formSubmissionsService.getSubmissionById(sourceSubmissionId).pipe(
+      switchMap((submission: FormSubmissionDto) => {
+        // Extract sourceDocumentTypeId and sourceFormId from submission or config
+        const sourceDocumentTypeId = config.sourceDocumentTypeId || submission.documentTypeId || null;
+        const sourceFormId = config.sourceFormId || submission.formBuilderId || null;
+
+        if (!sourceDocumentTypeId || !sourceFormId) {
+          console.error('[CopyToDocumentActionExecutor] Missing sourceDocumentTypeId or sourceFormId');
+          return throwError(() => new Error('Missing sourceDocumentTypeId or sourceFormId. Please ensure the submission has documentTypeId and formBuilderId.'));
         }
-      });
-    } else if (config.fieldMapping) {
-      fieldMapping = config.fieldMapping;
-    }
 
-    // Prepare the request
-    const request: CopyToDocumentRequestDto = {
-      config: {
-        targetDocumentTypeId: config.targetDocumentTypeId,
-        targetFormId: config.targetFormId,
-        createNewDocument: config.createNewDocument !== undefined ? config.createNewDocument : true,
-        targetDocumentId: !config.createNewDocument ? config.targetDocumentId : null,
-        fieldMapping: fieldMapping,
-        gridMapping: config.gridMapping,
-        copyCalculatedFields: config.copyCalculatedFields !== undefined ? config.copyCalculatedFields : false,
-        copyGridRows: config.copyGridRows !== undefined ? config.copyGridRows : false,
-        startWorkflow: config.startWorkflow !== undefined ? config.startWorkflow : false,
-        linkDocuments: config.linkDocuments !== undefined ? config.linkDocuments : false,
-        copyMetadata: config.copyMetadata !== undefined ? config.copyMetadata : false,
-        metadataFields: config.metadataFields
-      },
-      sourceSubmissionId: sourceSubmissionId,
-      actionId: actionId,
-      ruleId: ruleId
-    };
-
-    console.log(`[CopyToDocumentActionExecutor] Executing CopyToDocument action:`, request);
-
-    // Execute the CopyToDocument action
-    return this.copyToDocumentService.executeCopyToDocument(request).pipe(
-      map((result: CopyToDocumentResultDto) => {
-        if (result.success) {
-          console.log(`[CopyToDocumentActionExecutor] ✅ CopyToDocument action executed successfully. Target Document: ${result.targetDocumentNumber} (ID: ${result.targetDocumentId})`);
-        } else {
-          console.warn(`[CopyToDocumentActionExecutor] ⚠️ CopyToDocument action completed with errors: ${result.errorMessage}`);
+        // Convert fieldMappings array to object format if needed
+        let fieldMapping: { [key: string]: string } | undefined;
+        if (config.fieldMappings && config.fieldMappings.length > 0) {
+          fieldMapping = {};
+          config.fieldMappings.forEach(mapping => {
+            if (mapping.sourceFieldCode && mapping.targetFieldCode) {
+              fieldMapping![mapping.sourceFieldCode] = mapping.targetFieldCode;
+            }
+          });
+        } else if (config.fieldMapping) {
+          fieldMapping = config.fieldMapping;
         }
-        return result;
+
+        // Prepare the request with all required fields
+        const request: CopyToDocumentRequestDto = {
+          config: {
+            // Required fields - new
+            sourceDocumentTypeId: sourceDocumentTypeId,
+            sourceFormId: sourceFormId,
+            
+            // Target configuration
+            targetDocumentTypeId: config.targetDocumentTypeId,
+            targetFormId: config.targetFormId,
+            createNewDocument: config.createNewDocument !== undefined ? config.createNewDocument : true,
+            targetDocumentId: !config.createNewDocument ? config.targetDocumentId : null,
+            
+            // Initial status - new
+            initialStatus: config.initialStatus || 'Draft',
+            
+            // Field and grid mappings
+            fieldMapping: fieldMapping,
+            gridMapping: config.gridMapping,
+            
+            // Copy options
+            copyCalculatedFields: config.copyCalculatedFields !== undefined ? config.copyCalculatedFields : false,
+            copyGridRows: config.copyGridRows !== undefined ? config.copyGridRows : false,
+            copyAttachments: config.copyAttachments !== undefined ? config.copyAttachments : false,
+            copyMetadata: config.copyMetadata !== undefined ? config.copyMetadata : false,
+            metadataFields: config.metadataFields,
+            
+            // Workflow and linking options
+            startWorkflow: config.startWorkflow !== undefined ? config.startWorkflow : false,
+            linkDocuments: config.linkDocuments !== undefined ? config.linkDocuments : false,
+            
+            // Override target defaults
+            overrideTargetDefaults: config.overrideTargetDefaults !== undefined ? config.overrideTargetDefaults : false
+          },
+          sourceSubmissionId: sourceSubmissionId,
+          actionId: actionId,
+          ruleId: ruleId
+        };
+
+        console.log(`[CopyToDocumentActionExecutor] Executing CopyToDocument action:`, {
+          sourceSubmissionId,
+          sourceDocumentTypeId,
+          sourceFormId,
+          targetDocumentTypeId: config.targetDocumentTypeId,
+          targetFormId: config.targetFormId,
+          createNewDocument: request.config.createNewDocument,
+          startWorkflow: request.config.startWorkflow,
+          linkDocuments: request.config.linkDocuments,
+          copyAttachments: request.config.copyAttachments,
+          copyGridRows: request.config.copyGridRows
+        });
+
+        // Execute the CopyToDocument action
+        return this.copyToDocumentService.executeCopyToDocument(request).pipe(
+          map((result: CopyToDocumentResultDto) => {
+            if (result.success) {
+              console.log(`[CopyToDocumentActionExecutor] ✅ CopyToDocument action executed successfully. Target Document: ${result.targetDocumentNumber} (ID: ${result.targetDocumentId})`);
+              if (request.config.linkDocuments) {
+                console.log(`[CopyToDocumentActionExecutor] Documents linked: Source (${sourceSubmissionId}) -> Target (${result.targetDocumentId})`);
+              }
+              if (request.config.startWorkflow) {
+                console.log(`[CopyToDocumentActionExecutor] Workflow started for target document: ${result.targetDocumentId}`);
+              }
+            } else {
+              console.warn(`[CopyToDocumentActionExecutor] ⚠️ CopyToDocument action completed with errors: ${result.errorMessage}`);
+            }
+            return result;
+          }),
+          catchError((error) => {
+            console.error(`[CopyToDocumentActionExecutor] ❌ Error executing CopyToDocument action:`, error);
+            return throwError(() => error);
+          })
+        );
       }),
       catchError((error) => {
-        console.error(`[CopyToDocumentActionExecutor] ❌ Error executing CopyToDocument action:`, error);
-        return throwError(() => error);
+        console.error(`[CopyToDocumentActionExecutor] ❌ Error loading source submission ${sourceSubmissionId}:`, error);
+        return throwError(() => new Error(`Failed to load source submission: ${error?.message || 'Unknown error'}`));
       })
     );
   }

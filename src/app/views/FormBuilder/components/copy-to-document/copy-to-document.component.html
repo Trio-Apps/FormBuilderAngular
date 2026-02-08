@@ -60,6 +60,21 @@
         </small>
       </div>
 
+      <!-- Initial Status -->
+      <div class="form-group">
+        <label for="initialStatus">
+          Initial Status
+        </label>
+        <select
+          id="initialStatus"
+          formControlName="initialStatus"
+          class="form-control">
+          <option value="Draft">Draft</option>
+          <option value="Submitted">Submitted</option>
+        </select>
+        <small class="text-muted">The initial status of the target document</small>
+      </div>
+
       <!-- Target Document ID (required when createNewDocument is false) -->
       <div class="form-group" *ngIf="!copyForm.get('createNewDocument')?.value">
         <label for="targetDocumentId">
@@ -106,6 +121,14 @@
           <div class="checkbox-item">
             <p-checkbox formControlName="copyMetadata" label="Copy Metadata" binary="true" inputId="copyMetadata"></p-checkbox>
             <span class="checkbox-description">Copy metadata fields from source document</span>
+          </div>
+          <div class="checkbox-item">
+            <p-checkbox formControlName="copyAttachments" label="Copy Attachments" binary="true" inputId="copyAttachments"></p-checkbox>
+            <span class="checkbox-description">Copy attachments from source to target document</span>
+          </div>
+          <div class="checkbox-item">
+            <p-checkbox formControlName="overrideTargetDefaults" label="Override Target Defaults" binary="true" inputId="overrideTargetDefaults"></p-checkbox>
+            <span class="checkbox-description">Override target document default values</span>
           </div>
         </div>
       </div>
@@ -281,6 +304,71 @@
         </p-button>
       </div>
     </form>
+  </p-card>
+
+  <!-- Audit Records Panel (Main Page) -->
+  <p-card *ngIf="showAuditPanel" [style]="{ margin: '20px' }">
+    <ng-template pTemplate="header">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: #10B981; color: white;">
+        <h3 style="margin: 0; color: white;">Audit Records</h3>
+        <button 
+          (click)="closeAuditPanel()" 
+          style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">
+          ×
+        </button>
+      </div>
+    </ng-template>
+    <div *ngIf="auditLoading" class="loading-container" style="text-align: center; padding: 20px;">
+      <p>Loading audit records...</p>
+    </div>
+    <p-table 
+      [value]="auditRecords" 
+      [paginator]="true" 
+      [rows]="auditParams.pageSize"
+      [totalRecords]="auditTotalRecords"
+      [lazy]="true"
+      [loading]="auditLoading"
+      (onLazyLoad)="onAuditPageChange($event)"
+      [showCurrentPageReport]="true"
+      currentPageReportTemplate="Showing {first} to {last} of {totalRecords} entries"
+      [rowsPerPageOptions]="[10, 25, 50, 100]"
+      [first]="((auditParams?.page || 1) - 1) * (auditParams?.pageSize || 50)">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>ID</th>
+          <th>SOURCE SUBMISSION</th>
+          <th>TARGET DOCUMENT</th>
+          <th>DOCUMENT NUMBER</th>
+          <th>SUCCESS</th>
+          <th>FIELDS COPIED</th>
+          <th>GRID ROWS COPIED</th>
+          <th>EXECUTION</th>
+          <th>ERROR MESSAGE</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-audit>
+        <tr>
+          <td>{{ audit.id }}</td>
+          <td>{{ audit.sourceSubmissionId }}</td>
+          <td>{{ audit.targetDocumentId || 'N/A' }}</td>
+          <td>{{ audit.targetDocumentNumber || 'N/A' }}</td>
+          <td>
+            <span [class]="audit.success ? 'badge-success' : 'badge-error'">
+              {{ audit.success ? 'Yes' : 'No' }}
+            </span>
+          </td>
+          <td>{{ audit.fieldsCopied || 0 }}</td>
+          <td>{{ audit.gridRowsCopied || 0 }}</td>
+          <td>{{ audit.executionDate | date:'short' }}</td>
+          <td>{{ audit.errorMessage || '-' }}</td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="9">No audit records found</td>
+        </tr>
+      </ng-template>
+    </p-table>
   </p-card>
 
   <!-- Audit Records Dialog -->

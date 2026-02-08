@@ -74,11 +74,38 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // Take snapshot of current permissions - sidebar won't be affected by later changes
-    this.permissionsSnapshot = this.permissionService.getPermissionsSync();
+    console.log('[DefaultLayout] ngOnInit started');
+    console.log('[DefaultLayout] Permissions loaded:', this.permissionService.loaded());
+    console.log('[DefaultLayout] Current permissions count:', this.permissionService.getPermissionsSync().length);
     
-    // Load user groups first, then table menus, then filter nav items
-    this.loadUserGroups();
+    // Ensure permissions are loaded before taking snapshot
+    if (!this.permissionService.loaded()) {
+      console.log('[DefaultLayout] Permissions not loaded yet, loading from API...');
+      this.permissionService.loadUserPermissions().subscribe({
+        next: (permissions) => {
+          console.log('[DefaultLayout] Permissions loaded from API:', permissions?.length || 0, 'permissions');
+          // Take snapshot after permissions are loaded
+          this.permissionsSnapshot = this.permissionService.getPermissionsSync();
+          console.log('[DefaultLayout] Permissions snapshot taken:', this.permissionsSnapshot.length, 'permissions');
+          console.log('[DefaultLayout] Has Document_Allow_View:', this.permissionsSnapshot.includes('Document_Allow_View'));
+          // Load user groups and filter nav items after permissions are ready
+          this.loadUserGroups();
+        },
+        error: (error) => {
+          console.error('[DefaultLayout] Error loading permissions:', error);
+          // Still take snapshot even if loading fails (might have cached permissions)
+          this.permissionsSnapshot = this.permissionService.getPermissionsSync();
+          this.loadUserGroups();
+        }
+      });
+    } else {
+      // Permissions already loaded, take snapshot immediately
+      this.permissionsSnapshot = this.permissionService.getPermissionsSync();
+      console.log('[DefaultLayout] Permissions already loaded, snapshot taken:', this.permissionsSnapshot.length, 'permissions');
+      console.log('[DefaultLayout] Has Document_Allow_View:', this.permissionsSnapshot.includes('Document_Allow_View'));
+      // Load user groups first, then table menus, then filter nav items
+      this.loadUserGroups();
+    }
     
     // Redirect to dashboard if Admin and on root/document-types
     this.routerSubscription = this.router.events

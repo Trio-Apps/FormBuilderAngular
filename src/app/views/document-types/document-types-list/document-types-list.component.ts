@@ -137,6 +137,8 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     private confirmationService: ConfirmationService,
     public translationService: TranslationService
   ) {
+    console.log('[DocumentTypesList] ========== CONSTRUCTOR CALLED ==========');
+    console.log('[DocumentTypesList] Component instance created');
     // Initialize the form
     this.documentTypeForm = this.fb.group({
       formBuilderId: [null, [Validators.required]], // Form selection is required
@@ -160,14 +162,38 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    console.log('[DocumentTypesList] ========== ngOnInit STARTED ==========');
     const role = this.authService.role() || 'User';
     this.isAdmin = ['administration', 'admin'].includes(role.toLowerCase());
+    console.log('[DocumentTypesList] Initializing, role:', role, 'isAdmin:', this.isAdmin);
+    console.log('[DocumentTypesList] PermissionService available:', !!this.permissionService);
 
-    // Load permissions initially
+    // Load permissions first - ensure they are loaded before loading data
     this.loadPermissions();
+    
+    // Also ensure permissions are loaded from API if not already loaded
+    if (!this.permissionService.loaded()) {
+      console.log('[DocumentTypesList] Permissions not loaded yet, loading from API...');
+      this.permissionService.loadUserPermissions().subscribe({
+        next: (permissions) => {
+          console.log('[DocumentTypesList] Permissions loaded from API:', permissions?.length || 0, 'permissions');
+          this.loadPermissions();
+          this.loadDataAfterPermissions();
+        },
+        error: (error) => {
+          console.error('[DocumentTypesList] Error loading permissions:', error);
+          // Still try to load data even if permissions fail
+          this.loadDataAfterPermissions();
+        }
+      });
+    } else {
+      console.log('[DocumentTypesList] Permissions already loaded');
+      this.loadDataAfterPermissions();
+    }
 
     // Subscribe to permission changes
     this.permissionsSubscription = this.permissionService.permissions$.subscribe(() => {
+      console.log('[DocumentTypesList] Permissions changed, reloading...');
       this.loadPermissions();
       this.cdr.detectChanges();
     });
@@ -182,27 +208,58 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     
     // Load deleted document type IDs from localStorage to persist across sessions
     this.loadDeletedDocumentTypeIds();
+  }
+
+  /**
+   * Load data after permissions are ready
+   */
+  private loadDataAfterPermissions(): void {
+    console.log('[DocumentTypesList] ========== loadDataAfterPermissions STARTED ==========');
+    console.log('[DocumentTypesList] Loading data after permissions check...');
+    console.log('[DocumentTypesList] Current permissions:', {
+      canViewDocuments: this.canViewDocuments,
+      canManageDocuments: this.canManageDocuments,
+      permissionServiceCanView: this.permissionService.canViewDocuments(),
+      permissionServiceCanManage: this.permissionService.canManageDocuments()
+    });
     
     // Load all forms, document types, and projects
+    console.log('[DocumentTypesList] Calling loadForms()...');
     this.loadForms();
+    
+    console.log('[DocumentTypesList] Calling loadDocumentTypes()...');
     this.loadDocumentTypes();
+    
     // Projects / workflows are admin-only features (series/workflow management)
     if (this.isAdmin) {
+      console.log('[DocumentTypesList] Admin user, loading projects...');
       this.loadProjects();
     }
     
-    // No need to get formId from route anymore
+    console.log('[DocumentTypesList] ========== loadDataAfterPermissions COMPLETED ==========');
   }
 
   /**
    * Load user permissions for document operations
    */
   private loadPermissions(): void {
+    console.log('[DocumentTypesList] loadPermissions called');
+    console.log('[DocumentTypesList] PermissionService state:', {
+      loaded: this.permissionService.loaded(),
+      permissionsCount: this.permissionService.permissions().length,
+      allPermissions: this.permissionService.permissions()
+    });
+    
     this.canViewDocuments = this.permissionService.canViewDocuments();
     this.canCreateDocuments = this.permissionService.canCreateDocuments();
     this.canEditDocuments = this.permissionService.canEditDocuments();
     this.canDeleteDocuments = this.permissionService.canDeleteDocuments();
     this.canManageDocuments = this.permissionService.canManageDocuments();
+    
+    // Check specific permission
+    const hasDocumentView = this.permissionService.hasPermission('Document_Allow_View');
+    const hasDocumentManage = this.permissionService.hasPermission('Document_Allow_Manage');
+    const hasDocumentViewAll = this.permissionService.hasPermission('Document_Allow_ViewAll');
     
     // Debug log
     console.log('[DocumentTypesList] Permissions loaded:', {
@@ -210,7 +267,11 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       canCreateDocuments: this.canCreateDocuments,
       canEditDocuments: this.canEditDocuments,
       canDeleteDocuments: this.canDeleteDocuments,
-      canManageDocuments: this.canManageDocuments
+      canManageDocuments: this.canManageDocuments,
+      hasDocumentView: hasDocumentView,
+      hasDocumentManage: hasDocumentManage,
+      hasDocumentViewAll: hasDocumentViewAll,
+      allDocumentPermissions: this.permissionService.permissions().filter(p => p.startsWith('Document_'))
     });
   }
 
@@ -278,77 +339,195 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   }
 
   loadDocumentTypes(): void {
+    console.log('[DocumentTypesList] ========== loadDocumentTypes STARTED ==========');
+    console.log('[DocumentTypesList] Permission check:', {
+      canViewDocuments: this.canViewDocuments,
+      canManageDocuments: this.canManageDocuments,
+      permissionServiceCanView: this.permissionService.canViewDocuments(),
+      permissionServiceCanManage: this.permissionService.canManageDocuments()
+    });
+    
+    // Check permissions - but don't block loading
+    // API will handle permission checks on backend
+    const hasPermission = this.canViewDocuments || this.canManageDocuments || 
+                         this.permissionService.canViewDocuments() || 
+                         this.permissionService.canManageDocuments();
+    
+    console.log('[DocumentTypesList] Permission check result:', {
+      hasPermission: hasPermission,
+      canViewDocuments: this.canViewDocuments,
+      canManageDocuments: this.canManageDocuments,
+      serviceCanView: this.permissionService.canViewDocuments(),
+      serviceCanManage: this.permissionService.canManageDocuments(),
+      allDocumentPermissions: this.permissionService.permissions().filter(p => p.toLowerCase().includes('document'))
+    });
+    
+    if (!hasPermission) {
+      console.warn('[DocumentTypesList] ⚠️ User does not have Document_Allow_View permission');
+      console.warn('[DocumentTypesList] Available permissions:', this.permissionService.permissions());
+      console.warn('[DocumentTypesList] Document-related permissions:', 
+        this.permissionService.permissions().filter(p => p.toLowerCase().includes('document')));
+      console.warn('[DocumentTypesList] ⚠️ Proceeding to load anyway - API will handle permission check');
+      
+      // Show warning but don't block - let API decide
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Warning',
+        detail: 'You may not have permission to view document types. If you see no data, please contact administrator to grant Document_Allow_View permission.',
+        life: 5000
+      });
+    } else {
+      console.log('[DocumentTypesList] ✅ User has permission, proceeding to load document types...');
+    }
+
     // Load all document types (not filtered by form)
     this.loading.documentTypes = true;
+    console.log('[DocumentTypesList] Loading document types...');
+    
     this.documentTypesService.getAllDocumentTypes().subscribe({
       next: (types: DocumentType[]) => {
+        console.log('[DocumentTypesList] Document types loaded from API:', types?.length || 0, 'types');
         const allTypes = types || [];
         
-        // Filter out deleted document types before processing
-        const activeTypes = allTypes.filter(type => !this.deletedDocumentTypeIds.has(type.id!));
-
-        // Clean up deletedDocumentTypeIds - remove IDs that are no longer in the API response
-        const apiTypeIds = new Set(allTypes.map(t => t.id));
-        const idsToRemove: number[] = [];
-        this.deletedDocumentTypeIds.forEach(deletedId => {
-          const typeInApi = allTypes.find(t => t.id === deletedId);
-          if (!typeInApi) {
-            // Document type not in API response - it was hard deleted from server, remove from tracking
-            idsToRemove.push(deletedId);
-          } else if (typeInApi.isActive !== false) {
-            // Document type is back in API and active again (might have been reactivated)
-            idsToRemove.push(deletedId);
-            console.log('[DocumentTypesList] Document type was reactivated, removing from deleted tracking:', deletedId);
-          }
-        });
-        if (idsToRemove.length > 0) {
-          idsToRemove.forEach(id => this.deletedDocumentTypeIds.delete(id));
-          this.saveDeletedDocumentTypeIds();
-          console.log('[DocumentTypesList] Cleaned up deleted document type IDs:', idsToRemove);
+        if (allTypes.length === 0) {
+          console.warn('[DocumentTypesList] No document types returned from API');
+          // Try fallback: getActiveDocumentTypes
+          this.documentTypesService.getActiveDocumentTypes().subscribe({
+            next: (activeTypes) => {
+              console.log('[DocumentTypesList] Fallback: Loaded active document types:', activeTypes?.length || 0);
+              this.processDocumentTypes(activeTypes || []);
+            },
+            error: (fallbackError) => {
+              console.error('[DocumentTypesList] Fallback error:', fallbackError);
+              this.handleLoadError(fallbackError);
+            }
+          });
+          return;
         }
-
-        // Show all document types (including inactive ones) - don't filter by isActive
-        // User can see inactive types and reactivate them
-        const visibleTypes = activeTypes; // Keep all types, including inactive ones
         
-        this.documentTypes = visibleTypes;
-        this.filteredDocumentTypes = [...this.documentTypes];
-        this.totalRecords = this.filteredDocumentTypes.length;
-        this.loading.documentTypes = false;
-        this.cdr.detectChanges();
+        this.processDocumentTypes(allTypes);
       },
       error: (error: any) => {
-        console.error('Error loading document types:', error);
-        this.documentTypes = [];
-        this.filteredDocumentTypes = [];
-        this.loading.documentTypes = false;
-        
-        let errorMessage = 'Failed to load document types';
-        if (error?.error?.message) {
-          errorMessage = error.error.message;
-        } else if (error?.error?.detail) {
-          errorMessage = error.error.detail;
-        } else if (error?.message) {
-          errorMessage = error.message;
-        }
-        
-        if (error?.status === 400) {
-          errorMessage = 'Bad request. Please check the API endpoint configuration.';
-        } else if (error?.status === 404) {
-          errorMessage = 'Document types endpoint not found.';
-        } else if (error?.status === 0) {
-          errorMessage = 'Cannot connect to server. Please ensure the backend server is running.';
-        }
-        
-        this.messageService.add({ 
-          severity: 'error', 
-          summary: `Error (${error?.status || 'Unknown'})`, 
-          detail: errorMessage,
-          life: 8000
-        });
-        this.cdr.detectChanges();
+        console.error('[DocumentTypesList] Error loading document types:', error);
+        this.handleLoadError(error);
       }
     });
+  }
+
+  /**
+   * Process document types after loading from API
+   */
+  private processDocumentTypes(allTypes: DocumentType[]): void {
+    console.log('[DocumentTypesList] Processing document types:', {
+      totalFromAPI: allTypes.length,
+      deletedTracking: this.deletedDocumentTypeIds.size,
+      deletedIds: Array.from(this.deletedDocumentTypeIds)
+    });
+    
+    // Filter out deleted document types before processing
+    const activeTypes = allTypes.filter(type => {
+      const isDeleted = this.deletedDocumentTypeIds.has(type.id!);
+      if (isDeleted) {
+        console.log('[DocumentTypesList] Filtering out deleted document type:', type.id, type.name);
+      }
+      return !isDeleted;
+    });
+
+    // Clean up deletedDocumentTypeIds - remove IDs that are no longer in the API response
+    const apiTypeIds = new Set(allTypes.map(t => t.id));
+    const idsToRemove: number[] = [];
+    this.deletedDocumentTypeIds.forEach(deletedId => {
+      const typeInApi = allTypes.find(t => t.id === deletedId);
+      if (!typeInApi) {
+        // Document type not in API response - it was hard deleted from server, remove from tracking
+        idsToRemove.push(deletedId);
+      } else if (typeInApi.isActive !== false) {
+        // Document type is back in API and active again (might have been reactivated)
+        idsToRemove.push(deletedId);
+        console.log('[DocumentTypesList] Document type was reactivated, removing from deleted tracking:', deletedId);
+      }
+    });
+    if (idsToRemove.length > 0) {
+      idsToRemove.forEach(id => this.deletedDocumentTypeIds.delete(id));
+      this.saveDeletedDocumentTypeIds();
+      console.log('[DocumentTypesList] Cleaned up deleted document type IDs:', idsToRemove);
+    }
+
+    // Show all document types (including inactive ones) - don't filter by isActive
+    // User can see inactive types and reactivate them
+    const visibleTypes = activeTypes; // Keep all types, including inactive ones
+    
+    this.documentTypes = visibleTypes;
+    this.filteredDocumentTypes = [...this.documentTypes];
+    this.totalRecords = this.filteredDocumentTypes.length;
+    this.loading.documentTypes = false;
+    
+    console.log('[DocumentTypesList] Processed document types:', {
+      totalFromAPI: allTypes.length,
+      afterFiltering: activeTypes.length,
+      visible: visibleTypes.length,
+      documentTypesArray: this.documentTypes.length,
+      filteredDocumentTypesArray: this.filteredDocumentTypes.length,
+      totalRecords: this.totalRecords,
+      deleted: this.deletedDocumentTypeIds.size
+    });
+    
+    // Log first few document types for debugging
+    if (this.documentTypes.length > 0) {
+      console.log('[DocumentTypesList] First 3 document types:', this.documentTypes.slice(0, 3).map(t => ({
+        id: t.id,
+        name: t.name,
+        code: t.code,
+        isActive: t.isActive
+      })));
+    } else {
+      console.warn('[DocumentTypesList] No document types to display after processing!');
+    }
+    
+    this.cdr.detectChanges();
+  }
+
+  /**
+   * Handle errors when loading document types
+   */
+  private handleLoadError(error: any): void {
+    this.documentTypes = [];
+    this.filteredDocumentTypes = [];
+    this.loading.documentTypes = false;
+    
+    let errorMessage = 'Failed to load document types';
+    if (error?.error?.message) {
+      errorMessage = error.error.message;
+    } else if (error?.error?.detail) {
+      errorMessage = error.error.detail;
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
+    
+    if (error?.status === 400) {
+      errorMessage = 'Bad request. Please check the API endpoint configuration.';
+    } else if (error?.status === 401 || error?.status === 403) {
+      errorMessage = 'Access denied. Please check your permissions (Document_Allow_View).';
+    } else if (error?.status === 404) {
+      errorMessage = 'Document types endpoint not found.';
+    } else if (error?.status === 0) {
+      errorMessage = 'Cannot connect to server. Please ensure the backend server is running.';
+    }
+    
+    console.error('[DocumentTypesList] Load error details:', {
+      status: error?.status,
+      statusText: error?.statusText,
+      message: errorMessage,
+      error: error?.error
+    });
+    
+    this.messageService.add({ 
+      severity: 'error', 
+      summary: `Error (${error?.status || 'Unknown'})`, 
+      detail: errorMessage,
+      life: 8000
+    });
+    this.cdr.detectChanges();
   }
 
   filterDocumentTypes(): void {

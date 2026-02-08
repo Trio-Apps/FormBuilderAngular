@@ -8,6 +8,8 @@ import {
   CopyToDocumentAuditDto,
   CopyToDocumentAuditQueryParams,
   CopyToDocumentAuditResponse,
+  ExecuteCopyToDocumentRequestDto,
+  ExecuteCopyToDocumentByCodesRequestDto,
   ApiResponse
 } from '../form-builder/models/form-builder-dto.model';
 import { environment } from '../../../environments/environment';
@@ -23,8 +25,9 @@ export class CopyToDocumentService {
   /**
    * تنفيذ CopyToDocument
    * POST /api/CopyToDocument/execute
+   * ✅ Updated: Supports new API structure with sourceDocumentTypeId, sourceFormId, initialStatus
    */
-  executeCopyToDocument(request: CopyToDocumentRequestDto): Observable<CopyToDocumentResultDto> {
+  executeCopyToDocument(request: CopyToDocumentRequestDto | ExecuteCopyToDocumentRequestDto): Observable<CopyToDocumentResultDto> {
     console.log('[CopyToDocumentService] Executing CopyToDocument:', request);
     
     return this.http.post<ApiResponse<CopyToDocumentResultDto>>(
@@ -40,6 +43,32 @@ export class CopyToDocumentService {
       }),
       catchError((error) => {
         console.error('[CopyToDocumentService] Error executing CopyToDocument:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * تنفيذ CopyToDocument باستخدام Codes
+   * POST /api/CopyToDocument/execute-by-codes
+   * ✅ New: Added for Codes-based API
+   */
+  executeCopyToDocumentByCodes(request: ExecuteCopyToDocumentByCodesRequestDto): Observable<CopyToDocumentResultDto> {
+    console.log('[CopyToDocumentService] Executing CopyToDocument by Codes:', request);
+    
+    return this.http.post<ApiResponse<CopyToDocumentResultDto>>(
+      `${this.baseUrl}/execute-by-codes`,
+      request
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentResultDto>) => {
+        if (response.data) {
+          return response.data;
+        }
+        // Fallback: إذا كانت الاستجابة مباشرة بدون wrapper
+        return response as any as CopyToDocumentResultDto;
+      }),
+      catchError((error) => {
+        console.error('[CopyToDocumentService] Error executing CopyToDocument by Codes:', error);
         return throwError(() => error);
       })
     );
@@ -82,7 +111,20 @@ export class CopyToDocumentService {
     ).pipe(
       map((response: ApiResponse<CopyToDocumentAuditResponse>) => {
         if (response.data) {
-          return response.data;
+          // Handle nested data structure: response.data.data contains the actual response
+          const auditResponse = response.data as any;
+          if (auditResponse.data && Array.isArray(auditResponse.data)) {
+            // API returns { data: { data: [...], totalCount, ... } }
+            return {
+              items: auditResponse.data,
+              totalCount: auditResponse.totalCount || 0,
+              page: auditResponse.page || 1,
+              pageSize: auditResponse.pageSize || 50,
+              totalPages: auditResponse.totalPages || 1
+            } as CopyToDocumentAuditResponse;
+          }
+          // Fallback: if structure is { items: [...], totalCount, ... }
+          return auditResponse as CopyToDocumentAuditResponse;
         }
         // Fallback: إذا كانت الاستجابة مباشرة
         return response as any as CopyToDocumentAuditResponse;
@@ -155,6 +197,24 @@ export class CopyToDocumentService {
         return throwError(() => error);
       })
     );
+  }
+
+  /**
+   * الحصول على سجلات Audit لمستند مصدر محدد
+   * GET /api/CopyToDocument/audit/submission/{submissionId}
+   * ✅ Alias method for better naming consistency
+   */
+  getAuditRecordsBySubmissionId(submissionId: number): Observable<CopyToDocumentAuditDto[]> {
+    return this.getAuditRecordsBySubmission(submissionId);
+  }
+
+  /**
+   * الحصول على سجلات Audit لمستند هدف محدد
+   * GET /api/CopyToDocument/audit/target/{targetDocumentId}
+   * ✅ Alias method for better naming consistency
+   */
+  getAuditRecordsByTargetDocumentId(targetDocumentId: number): Observable<CopyToDocumentAuditDto[]> {
+    return this.getAuditRecordsByTargetDocument(targetDocumentId);
   }
 
   /**

@@ -533,6 +533,20 @@
               </div>
 
               <div formGroupName="copyToDocumentConfig">
+                <!-- Trigger Event Selection -->
+                <div class="form-row">
+                  <div class="form-group form-group-full">
+                    <label>Trigger Event * <span class="text-muted">(متى يتم تنفيذ CopyToDocument)</span></label>
+                    <select formControlName="triggerEvent" class="form-control">
+                      <option value="OnFormSubmitted">On Form Submitted (بعد إرسال الفورم)</option>
+                      <option value="OnApprovalCompleted">On Approval Completed (بعد اكتمال الموافقة)</option>
+                      <option value="OnDocumentApproved">On Document Approved (بعد موافقة المستند)</option>
+                      <option value="OnRuleMatched">On Rule Matched (عند تطابق الشرط)</option>
+                    </select>
+                    <small class="form-text">اختر متى يتم تنفيذ CopyToDocument تلقائياً</small>
+                  </div>
+                </div>
+
                 <!-- Target Document Type and Form -->
                 <div class="form-row">
                   <div class="form-group">
@@ -592,18 +606,34 @@
                         Copy Grid Rows
                       </label>
                       <label class="checkbox-label">
+                        <input type="checkbox" formControlName="copyAttachments" class="form-check-input">
+                        Copy Attachments
+                      </label>
+                      <label class="checkbox-label">
                         <input type="checkbox" formControlName="startWorkflow" class="form-check-input">
                         Start Workflow
                       </label>
                       <label class="checkbox-label">
                         <input type="checkbox" formControlName="linkDocuments" class="form-check-input">
-                        Link Documents
+                        Link Documents (ParentDocumentId = SourceDocumentId)
                       </label>
                       <label class="checkbox-label">
                         <input type="checkbox" formControlName="copyMetadata" class="form-check-input">
                         Copy Metadata
                       </label>
                     </div>
+                  </div>
+                </div>
+
+                <!-- Initial Status -->
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Initial Status</label>
+                    <select formControlName="initialStatus" class="form-control">
+                      <option value="Draft">Draft</option>
+                      <option value="Submitted">Submitted</option>
+                    </select>
+                    <small class="form-text">الحالة الأولية للمستند الجديد</small>
                   </div>
                 </div>
 

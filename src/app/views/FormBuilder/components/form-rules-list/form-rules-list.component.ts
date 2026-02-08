@@ -773,18 +773,24 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
     // We'll add it dynamically when type changes to CopyToDocument
     if (action?.type === 'CopyToDocument') {
       const copyToDocumentConfig = action?.copyToDocumentConfig || {
+        sourceDocumentTypeId: this.form?.documentTypeId || 0,
+        sourceFormId: this.formId || 0,
         targetDocumentTypeId: null,
         targetFormId: null,
         createNewDocument: true,
         targetDocumentId: null,
+        triggerEvent: 'OnRuleMatched' as const,
+        initialStatus: 'Draft' as const,
         fieldMappings: [],
         gridMapping: {},
         copyCalculatedFields: false,
         copyGridRows: false,
+        copyAttachments: false,
         startWorkflow: false,
         linkDocuments: false,
         copyMetadata: false,
-        metadataFields: []
+        metadataFields: [],
+        overrideTargetDefaults: false
       };
 
       // copyToDocumentConfig is added dynamically, so cast to any to satisfy strict typing
@@ -793,6 +799,8 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         targetFormId: [copyToDocumentConfig.targetFormId, Validators.required],
         createNewDocument: [copyToDocumentConfig.createNewDocument !== undefined ? copyToDocumentConfig.createNewDocument : true],
         targetDocumentId: [copyToDocumentConfig.targetDocumentId || null],
+        triggerEvent: [copyToDocumentConfig.triggerEvent || 'OnRuleMatched', Validators.required], // Trigger event selection
+        initialStatus: [copyToDocumentConfig.initialStatus || 'Draft'],
         fieldMappings: this.fb.array(
           (copyToDocumentConfig.fieldMappings || []).map((fm: FieldMapping) => 
             this.fb.group({
@@ -804,12 +812,14 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
         gridMapping: [copyToDocumentConfig.gridMapping || {}],
         copyCalculatedFields: [copyToDocumentConfig.copyCalculatedFields || false],
         copyGridRows: [copyToDocumentConfig.copyGridRows || false],
+        copyAttachments: [copyToDocumentConfig.copyAttachments || false],
         startWorkflow: [copyToDocumentConfig.startWorkflow || false],
         linkDocuments: [copyToDocumentConfig.linkDocuments || false],
         copyMetadata: [copyToDocumentConfig.copyMetadata || false],
         metadataFields: this.fb.array(
           (copyToDocumentConfig.metadataFields || []).map((mf: string) => this.fb.control(mf))
-        )
+        ),
+        overrideTargetDefaults: [copyToDocumentConfig.overrideTargetDefaults || false]
       });
 
       // Add conditional validation for targetDocumentId
@@ -1097,21 +1107,40 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
               .map((mf: string) => mf?.trim())
               .filter((mf: string) => mf);
 
+            // Get sourceDocumentTypeId and sourceFormId from form context
+            const sourceDocumentTypeId = this.form?.documentTypeId || a.copyToDocumentConfig.sourceDocumentTypeId;
+            const sourceFormId = this.formId || a.copyToDocumentConfig.sourceFormId;
+
+            if (!sourceDocumentTypeId || !sourceFormId) {
+              console.warn('[FormRulesList] Missing sourceDocumentTypeId or sourceFormId for CopyToDocument action');
+            }
+
             action.copyToDocumentConfig = {
+              // الحقول المطلوبة الجديدة
+              sourceDocumentTypeId: sourceDocumentTypeId || 0, // Fallback to 0 if not available (will be validated by backend)
+              sourceFormId: sourceFormId || 0, // Fallback to 0 if not available (will be validated by backend)
+              
               targetDocumentTypeId: a.copyToDocumentConfig.targetDocumentTypeId,
               targetFormId: a.copyToDocumentConfig.targetFormId,
               createNewDocument: a.copyToDocumentConfig.createNewDocument !== undefined ? a.copyToDocumentConfig.createNewDocument : true,
               targetDocumentId: !a.copyToDocumentConfig.createNewDocument ? a.copyToDocumentConfig.targetDocumentId : null,
+              
+              // الحقول الجديدة
+              initialStatus: a.copyToDocumentConfig.initialStatus || 'Draft',
+              triggerEvent: a.copyToDocumentConfig.triggerEvent || 'OnRuleMatched', // Trigger event selection
+              
               fieldMappings: fieldMappings.length > 0 ? fieldMappings : undefined,
               gridMapping: a.copyToDocumentConfig.gridMapping && Object.keys(a.copyToDocumentConfig.gridMapping).length > 0 
                 ? a.copyToDocumentConfig.gridMapping 
                 : undefined,
               copyCalculatedFields: a.copyToDocumentConfig.copyCalculatedFields || false,
               copyGridRows: a.copyToDocumentConfig.copyGridRows || false,
+              copyAttachments: a.copyToDocumentConfig.copyAttachments || false,
               startWorkflow: a.copyToDocumentConfig.startWorkflow || false,
               linkDocuments: a.copyToDocumentConfig.linkDocuments || false,
               copyMetadata: a.copyToDocumentConfig.copyMetadata || false,
-              metadataFields: metadataFields.length > 0 ? metadataFields : undefined
+              metadataFields: metadataFields.length > 0 ? metadataFields : undefined,
+              overrideTargetDefaults: a.copyToDocumentConfig.overrideTargetDefaults || false
             };
           } else {
             if (a.value && a.value.toString().trim() !== '') {
@@ -1150,11 +1179,27 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
                   .map((mf: string) => mf?.trim())
                   .filter((mf: string) => mf);
 
+                // Get sourceDocumentTypeId and sourceFormId from form context
+                const sourceDocumentTypeId = this.form?.documentTypeId || a.copyToDocumentConfig.sourceDocumentTypeId;
+                const sourceFormId = this.formId || a.copyToDocumentConfig.sourceFormId;
+
+                if (!sourceDocumentTypeId || !sourceFormId) {
+                  console.warn('[FormRulesList] Missing sourceDocumentTypeId or sourceFormId for CopyToDocument action');
+                }
+
                 action.copyToDocumentConfig = {
+                  // الحقول المطلوبة الجديدة
+                  sourceDocumentTypeId: sourceDocumentTypeId || 0, // Fallback to 0 if not available (will be validated by backend)
+                  sourceFormId: sourceFormId || 0, // Fallback to 0 if not available (will be validated by backend)
+                  
                   targetDocumentTypeId: a.copyToDocumentConfig.targetDocumentTypeId,
                   targetFormId: a.copyToDocumentConfig.targetFormId,
                   createNewDocument: a.copyToDocumentConfig.createNewDocument !== undefined ? a.copyToDocumentConfig.createNewDocument : true,
                   targetDocumentId: !a.copyToDocumentConfig.createNewDocument ? a.copyToDocumentConfig.targetDocumentId : null,
+                  
+                  // الحقل الجديد
+                  initialStatus: a.copyToDocumentConfig.initialStatus || 'Draft',
+                  
                   fieldMappings: fieldMappings.length > 0 ? fieldMappings : undefined,
                   gridMapping: a.copyToDocumentConfig.gridMapping && Object.keys(a.copyToDocumentConfig.gridMapping).length > 0 
                     ? a.copyToDocumentConfig.gridMapping 
@@ -1164,7 +1209,8 @@ export class FormRulesListComponent implements OnInit, OnDestroy {
                   startWorkflow: a.copyToDocumentConfig.startWorkflow || false,
                   linkDocuments: a.copyToDocumentConfig.linkDocuments || false,
                   copyMetadata: a.copyToDocumentConfig.copyMetadata || false,
-                  metadataFields: metadataFields.length > 0 ? metadataFields : undefined
+                  metadataFields: metadataFields.length > 0 ? metadataFields : undefined,
+                  overrideTargetDefaults: a.copyToDocumentConfig.overrideTargetDefaults || false
                 };
               } else {
                 if (a.value && a.value.toString().trim() !== '') {

@@ -353,42 +353,70 @@ export interface FieldMapping {
 /**
  * CopyToDocument Action Configuration
  * ✅ Updated: Added support for gridMapping, linkDocuments, copyMetadata, metadataFields
+ * ✅ Updated: Added sourceDocumentTypeId, sourceFormId, initialStatus (new required fields)
  */
 export interface CopyToDocumentConfig {
+  // الحقول المطلوبة الجديدة
+  sourceDocumentTypeId: number;  // مطلوب - جديد
+  sourceFormId: number;          // مطلوب - كان اختياري
+  
   targetDocumentTypeId: number;
   targetFormId: number;
   createNewDocument: boolean;
   targetDocumentId?: number | null; // Required when createNewDocument is false
+  
+  // الحقل الجديد
+  initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
+  
+  // Trigger Event - متى يتم تنفيذ الـ CopyToDocument
+  triggerEvent?: 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentApproved' | 'OnRuleMatched'; // جديد - القيمة الافتراضية: 'OnRuleMatched'
+  
   fieldMappings?: FieldMapping[]; // Array format: [{ sourceFieldCode, targetFieldCode }]
   fieldMapping?: { [key: string]: string }; // Object format: { "SOURCE_FIELD": "TARGET_FIELD" } - for API compatibility
   gridMapping?: { [key: string]: string }; // Object format: { "SOURCE_GRID": "TARGET_GRID" }
   copyCalculatedFields?: boolean;
   copyGridRows?: boolean;
+  copyAttachments?: boolean; // Copy attachments from source to target document
   startWorkflow?: boolean;
-  linkDocuments?: boolean; // Link source and target documents
+  linkDocuments?: boolean; // Link source and target documents (sets ParentDocumentId = SourceDocumentId)
   parentDocumentId?: number; // For linking source and target documents (legacy, use linkDocuments instead)
   copyMetadata?: boolean; // Copy metadata fields
   metadataFields?: string[]; // List of metadata fields to copy
+  overrideTargetDefaults?: boolean; // Override target document defaults
 }
 
 /**
  * CopyToDocument Request DTO - للاستخدام مع API
+ * ✅ Updated: Added sourceDocumentTypeId, sourceFormId, initialStatus, overrideTargetDefaults
  */
 export interface CopyToDocumentRequestDto {
   config: {
+    // الحقول المطلوبة الجديدة
+    sourceDocumentTypeId: number;  // مطلوب - جديد
+    sourceFormId: number;          // مطلوب - كان اختياري
+    
     targetDocumentTypeId: number;
     targetFormId: number;
     createNewDocument: boolean;
     targetDocumentId?: number | null; // Required when createNewDocument is false
+    
+    // الحقل الجديد
+    initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
+    
+    // Trigger Event - متى يتم تنفيذ الـ CopyToDocument
+    triggerEvent?: 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentApproved' | 'OnRuleMatched'; // جديد - القيمة الافتراضية: 'OnRuleMatched'
+    
     fieldMapping?: { [key: string]: string }; // Object format: { "SOURCE_FIELD": "TARGET_FIELD" }
     fieldMappings?: FieldMapping[]; // Array format: [{ sourceFieldCode, targetFieldCode }]
     gridMapping?: { [key: string]: string }; // Object format: { "SOURCE_GRID": "TARGET_GRID" }
     copyCalculatedFields?: boolean;
     copyGridRows?: boolean;
+    copyAttachments?: boolean; // Copy attachments from source to target document
     startWorkflow?: boolean;
-    linkDocuments?: boolean;
+    linkDocuments?: boolean; // Link source and target documents (sets ParentDocumentId = SourceDocumentId)
     copyMetadata?: boolean;
     metadataFields?: string[];
+    overrideTargetDefaults?: boolean;
   };
   sourceSubmissionId: number;
   actionId?: number | null;
@@ -397,6 +425,7 @@ export interface CopyToDocumentRequestDto {
 
 /**
  * CopyToDocument Result DTO - نتيجة التنفيذ
+ * ✅ Updated: Added actionId field
  */
 export interface CopyToDocumentResultDto {
   success: boolean;
@@ -406,6 +435,87 @@ export interface CopyToDocumentResultDto {
   fieldsCopied?: number;
   gridRowsCopied?: number;
   sourceSubmissionId?: number;
+  actionId?: number;
+}
+
+/**
+ * CopyToDocument Action DTO - للاستخدام المباشر مع API (بدون wrapper)
+ * ✅ New: Added for direct API usage
+ */
+export interface CopyToDocumentActionDto {
+  // الحقول المطلوبة الجديدة
+  sourceDocumentTypeId: number;  // مطلوب - جديد
+  sourceFormId: number;          // مطلوب - كان اختياري
+  
+  // الحقول الموجودة
+  sourceSubmissionId?: number;
+  targetDocumentTypeId: number;
+  targetFormId: number;
+  createNewDocument: boolean;
+  targetDocumentId?: number;
+  
+  // الحقل الجديد
+  initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
+  
+  // Field Mapping
+  fieldMapping: { [sourceFieldCode: string]: string };  // SourceFieldCode -> TargetFieldCode
+  gridMapping?: { [sourceGridCode: string]: string };
+  
+  // Options
+  copyCalculatedFields: boolean;
+  copyGridRows: boolean;
+  startWorkflow: boolean;
+  linkDocuments: boolean;
+  copyAttachments: boolean;
+  copyMetadata: boolean;
+  overrideTargetDefaults: boolean;
+  metadataFields?: string[];
+}
+
+/**
+ * Execute CopyToDocument Request DTO - للاستخدام بـ IDs
+ * ✅ New: Added for new API structure
+ */
+export interface ExecuteCopyToDocumentRequestDto {
+  config: CopyToDocumentActionDto;
+  sourceSubmissionId: number;
+  actionId?: number;
+  ruleId?: number;
+}
+
+/**
+ * CopyToDocument Action By Codes DTO - للاستخدام بـ Codes
+ * ✅ New: Added for Codes-based API
+ */
+export interface CopyToDocumentActionByCodesDto {
+  sourceDocumentTypeCode: string;  // جديد - مطلوب
+  sourceFormCode: string;           // جديد - مطلوب
+  targetDocumentTypeCode: string;
+  targetFormCode: string;
+  createNewDocument: boolean;
+  targetDocumentId?: number;
+  initialStatus?: 'Draft' | 'Submitted';  // جديد
+  fieldMapping?: { [key: string]: string };
+  gridMapping?: { [key: string]: string };
+  copyCalculatedFields: boolean;
+  copyGridRows: boolean;
+  startWorkflow: boolean;
+  linkDocuments: boolean;
+  copyAttachments: boolean;
+  copyMetadata: boolean;
+  overrideTargetDefaults: boolean;
+  metadataFields?: string[];
+}
+
+/**
+ * Execute CopyToDocument By Codes Request DTO
+ * ✅ New: Added for Codes-based API
+ */
+export interface ExecuteCopyToDocumentByCodesRequestDto {
+  config: CopyToDocumentActionByCodesDto;
+  sourceSubmissionId: number;
+  actionId?: number;
+  ruleId?: number;
 }
 
 /**
@@ -682,11 +792,19 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     // ✅ Updated: Added support for gridMapping, linkDocuments, copyMetadata, metadataFields
     if (action.type === 'CopyToDocument' && action.copyToDocumentConfig) {
       cleanAction.copyToDocumentConfig = {
+        // الحقول المطلوبة الجديدة - يجب أن تكون متاحة من form-rules-list.component
+        sourceDocumentTypeId: action.copyToDocumentConfig.sourceDocumentTypeId || 0,
+        sourceFormId: action.copyToDocumentConfig.sourceFormId || formBuilderId, // Fallback to formBuilderId
+        
         targetDocumentTypeId: action.copyToDocumentConfig.targetDocumentTypeId,
         targetFormId: action.copyToDocumentConfig.targetFormId,
         createNewDocument: action.copyToDocumentConfig.createNewDocument !== undefined 
           ? action.copyToDocumentConfig.createNewDocument 
           : true,
+        
+        // الحقل الجديد
+        initialStatus: action.copyToDocumentConfig.initialStatus || 'Draft',
+        
         fieldMappings: action.copyToDocumentConfig.fieldMappings || [],
         fieldMapping: action.copyToDocumentConfig.fieldMapping, // Object format for API compatibility
         gridMapping: action.copyToDocumentConfig.gridMapping,
@@ -696,7 +814,8 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
         linkDocuments: action.copyToDocumentConfig.linkDocuments,
         parentDocumentId: action.copyToDocumentConfig.parentDocumentId, // Legacy support
         copyMetadata: action.copyToDocumentConfig.copyMetadata,
-        metadataFields: action.copyToDocumentConfig.metadataFields || []
+        metadataFields: action.copyToDocumentConfig.metadataFields || [],
+        overrideTargetDefaults: action.copyToDocumentConfig.overrideTargetDefaults
       };
     }
     // Ensure 'id' is not included (Action interface doesn't have 'id', but we explicitly exclude it)
@@ -725,11 +844,19 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
     // ✅ Updated: Added support for gridMapping, linkDocuments, copyMetadata, metadataFields
     if (action.type === 'CopyToDocument' && action.copyToDocumentConfig) {
       cleanAction.copyToDocumentConfig = {
+        // الحقول المطلوبة الجديدة - يجب أن تكون متاحة من form-rules-list.component
+        sourceDocumentTypeId: action.copyToDocumentConfig.sourceDocumentTypeId || 0,
+        sourceFormId: action.copyToDocumentConfig.sourceFormId || formBuilderId, // Fallback to formBuilderId
+        
         targetDocumentTypeId: action.copyToDocumentConfig.targetDocumentTypeId,
         targetFormId: action.copyToDocumentConfig.targetFormId,
         createNewDocument: action.copyToDocumentConfig.createNewDocument !== undefined 
           ? action.copyToDocumentConfig.createNewDocument 
           : true,
+        
+        // الحقل الجديد
+        initialStatus: action.copyToDocumentConfig.initialStatus || 'Draft',
+        
         fieldMappings: action.copyToDocumentConfig.fieldMappings || [],
         fieldMapping: action.copyToDocumentConfig.fieldMapping, // Object format for API compatibility
         gridMapping: action.copyToDocumentConfig.gridMapping,
@@ -739,7 +866,8 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
         linkDocuments: action.copyToDocumentConfig.linkDocuments,
         parentDocumentId: action.copyToDocumentConfig.parentDocumentId, // Legacy support
         copyMetadata: action.copyToDocumentConfig.copyMetadata,
-        metadataFields: action.copyToDocumentConfig.metadataFields || []
+        metadataFields: action.copyToDocumentConfig.metadataFields || [],
+        overrideTargetDefaults: action.copyToDocumentConfig.overrideTargetDefaults
       };
     }
     // Ensure 'id' is not included (Action interface doesn't have 'id', but we explicitly exclude it)
