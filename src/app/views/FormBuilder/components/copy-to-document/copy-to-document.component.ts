@@ -533,7 +533,7 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
 
     this.executeCopyWithDocumentType(formValue.sourceDocumentTypeId, formValue);
   }
-
+////
   private executeCopyWithDocumentType(
     sourceDocumentTypeId: number,
     formValue: any
