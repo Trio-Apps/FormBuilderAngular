@@ -11,7 +11,6 @@ export interface CopyToDocumentActionDto {
   sourceFormId: number;          // مطلوب - كان اختياري
   
   // الحقول الموجودة
-  sourceSubmissionId?: number;
   targetDocumentTypeId: number;
   targetFormId: number;
   createNewDocument: boolean;
@@ -54,7 +53,7 @@ export interface CopyToDocumentResultDto {
  */
 export interface ExecuteCopyToDocumentRequestDto {
   config: CopyToDocumentActionDto;
-  sourceSubmissionId: number;
+  sourceSubmissionId?: number;
   actionId?: number;
   ruleId?: number;
 }
@@ -87,7 +86,7 @@ export interface CopyToDocumentActionByCodesDto {
  */
 export interface ExecuteCopyToDocumentByCodesRequestDto {
   config: CopyToDocumentActionByCodesDto;
-  sourceSubmissionId: number;
+  sourceSubmissionId?: number;
   actionId?: number;
   ruleId?: number;
 }

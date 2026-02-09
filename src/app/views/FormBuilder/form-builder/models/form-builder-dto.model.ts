@@ -418,7 +418,7 @@ export interface CopyToDocumentRequestDto {
     metadataFields?: string[];
     overrideTargetDefaults?: boolean;
   };
-  sourceSubmissionId: number;
+  sourceSubmissionId?: number;
   actionId?: number | null;
   ruleId?: number | null;
 }
@@ -434,7 +434,6 @@ export interface CopyToDocumentResultDto {
   errorMessage?: string;
   fieldsCopied?: number;
   gridRowsCopied?: number;
-  sourceSubmissionId?: number;
   actionId?: number;
 }
 
@@ -448,7 +447,6 @@ export interface CopyToDocumentActionDto {
   sourceFormId: number;          // مطلوب - كان اختياري
   
   // الحقول الموجودة
-  sourceSubmissionId?: number;
   targetDocumentTypeId: number;
   targetFormId: number;
   createNewDocument: boolean;
@@ -478,7 +476,7 @@ export interface CopyToDocumentActionDto {
  */
 export interface ExecuteCopyToDocumentRequestDto {
   config: CopyToDocumentActionDto;
-  sourceSubmissionId: number;
+  sourceSubmissionId?: number;
   actionId?: number;
   ruleId?: number;
 }
@@ -513,7 +511,7 @@ export interface CopyToDocumentActionByCodesDto {
  */
 export interface ExecuteCopyToDocumentByCodesRequestDto {
   config: CopyToDocumentActionByCodesDto;
-  sourceSubmissionId: number;
+  sourceSubmissionId?: number;
   actionId?: number;
   ruleId?: number;
 }
@@ -548,7 +546,6 @@ export interface CopyToDocumentAuditDto {
 export interface CopyToDocumentAuditQueryParams {
   page?: number;
   pageSize?: number;
-  sourceSubmissionId?: number;
   targetDocumentId?: number;
   success?: boolean;
   startDate?: string;

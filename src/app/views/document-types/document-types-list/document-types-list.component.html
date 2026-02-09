@@ -131,6 +131,14 @@
                     [title]="'Manage Series'">
                     <i class="pi pi-list"></i>
                   </button>
+                  <button
+                    *appHasPermission="'FormRule_Allow_View'"
+                    class="action-btn action-rules"
+                    [routerLink]="['/form-builder/rules', documentType.formBuilderId]"
+                    [disabled]="!documentType.formBuilderId || (!permissionService.canViewFormRules() && !permissionService.canManageFormRules())"
+                    [title]="permissionService.canViewFormRules() || permissionService.canManageFormRules() ? 'Copy To Document Mapping' : 'You do not have permission to view form rules'">
+                    <i class="pi pi-share-alt"></i>
+                  </button>
                   <button 
                     *appHasPermission="'Document_Allow_Manage'"
                     class="action-btn action-rules"
@@ -611,7 +619,6 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
 
 
 

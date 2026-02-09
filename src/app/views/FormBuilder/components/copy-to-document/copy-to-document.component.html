@@ -2,23 +2,41 @@
   <p-card header="Copy To Document" [style]="{ margin: '20px' }">
     <form [formGroup]="copyForm" (ngSubmit)="executeCopy()">
       
-      <!-- Source Submission ID -->
+      <!-- Source Document Type -->
       <div class="form-group">
-        <label for="sourceSubmissionId">
-          Source Submission ID <span class="required">*</span>
+        <label for="sourceDocumentTypeId">
+          Source Document Type <span class="required">*</span>
         </label>
         <select
-          id="sourceSubmissionId"
-          formControlName="sourceSubmissionId"
-          class="form-control"
-          (change)="onSourceSubmissionChange($event)">
-          <option value="">Select source submission</option>
-          <option *ngFor="let submission of submissions" [value]="submission.id">
-            Submission #{{ submission.id }} - {{ submission.documentNumber || 'N/A' }}{{ submission.formName ? ' (' + submission.formName + ')' : '' }}{{ submission.documentTypeName ? ' - ' + submission.documentTypeName : '' }}
+          id="sourceDocumentTypeId"
+          formControlName="sourceDocumentTypeId"
+          class="form-control">
+          <option value="">Select source document type</option>
+          <option *ngFor="let docType of documentTypes" [value]="docType.id">
+            {{ docType.name }}
           </option>
         </select>
-        <small class="text-danger" *ngIf="copyForm.get('sourceSubmissionId')?.invalid && copyForm.get('sourceSubmissionId')?.touched">
-          Source Submission ID is required
+        <small class="text-danger" *ngIf="copyForm.get('sourceDocumentTypeId')?.invalid && copyForm.get('sourceDocumentTypeId')?.touched">
+          Source Document Type is required
+        </small>
+      </div>
+
+      <!-- Source Form -->
+      <div class="form-group">
+        <label for="sourceFormId">
+          Source Form <span class="required">*</span>
+        </label>
+        <select
+          id="sourceFormId"
+          formControlName="sourceFormId"
+          class="form-control">
+          <option value="">Select source form</option>
+          <option *ngFor="let form of sourceForms" [value]="form.id">
+            {{ form.formName }}
+          </option>
+        </select>
+        <small class="text-danger" *ngIf="copyForm.get('sourceFormId')?.invalid && copyForm.get('sourceFormId')?.touched">
+          Source Form is required
         </small>
       </div>
 
@@ -307,13 +325,6 @@
         </p-button>
         
         <p-button 
-          label="Load Audit by Submission" 
-          icon="pi pi-search" 
-          (onClick)="loadAuditBySubmission()"
-          [styleClass]="'p-button-info'">
-        </p-button>
-        
-        <p-button 
           label="Reset" 
           icon="pi pi-refresh" 
           (onClick)="resetForm()"
@@ -445,4 +456,3 @@
 
   <p-toast></p-toast>
 </div>
-

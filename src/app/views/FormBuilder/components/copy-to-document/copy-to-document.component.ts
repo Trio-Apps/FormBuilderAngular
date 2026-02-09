@@ -6,7 +6,6 @@ import { map, catchError } from 'rxjs/operators';
 import { CopyToDocumentService } from '../../services/copy-to-document.service';
 import { DocumentTypesService } from '../../services/document-types.service';
 import { FormsService } from '../../services/forms.service';
-import { FormSubmissionsService, FormSubmissionDto } from '../../../form-submissions/services/form-submissions.service';
 import { FieldsService } from '../../services/fields.service';
 import { GridService } from '../../services/grid.service';
 import { TabsService } from '../../services/tabs.service';
@@ -62,8 +61,8 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
   
   // Dropdowns data
   documentTypes: DocumentType[] = [];
+  sourceForms: FormBuilderDto[] = [];
   targetForms: FormBuilderDto[] = [];
-  submissions: FormSubmissionDto[] = [];
   
   // Fields and Grids data
   sourceFields: FormFieldDto[] = [];
@@ -88,7 +87,6 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
     private copyToDocumentService: CopyToDocumentService,
     private documentTypesService: DocumentTypesService,
     private formsService: FormsService,
-    private formSubmissionsService: FormSubmissionsService,
     private fieldsService: FieldsService,
     private gridService: GridService,
     private tabsService: TabsService,
@@ -99,23 +97,16 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
   }
 
   ngOnInit(): void {
-    // Check permissions before loading data
-    const canViewDocuments = this.permissionService.canViewDocuments();
-    console.log('[CopyToDocument] User can view documents:', canViewDocuments);
-    
-    if (canViewDocuments) {
-      this.loadDocumentTypes();
-    } else {
-      console.warn('[CopyToDocument] User does not have Document_Allow_View permission');
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Permission Required',
-        detail: 'You do not have permission to view document types. Please contact administrator.'
-      });
-    }
-    
-    this.loadTargetForms();
-    this.loadSubmissions();
+    // Ensure permissions are loaded before gating data loads
+    this.permissionService.refreshPermissions().subscribe({
+      next: () => {
+        this.loadInitialData();
+      },
+      error: (error) => {
+        console.error('[CopyToDocument] Failed to refresh permissions, continuing with existing permissions', error);
+        this.loadInitialData();
+      }
+    });
   }
 
   ngAfterViewInit(): void {
@@ -130,9 +121,8 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
 
   initForm(): void {
     this.copyForm = this.fb.group({
-      sourceSubmissionId: [null, Validators.required],
-      sourceDocumentTypeId: [null], // Will be set from submission
-      sourceFormId: [null], // Will be set from submission
+      sourceDocumentTypeId: [null, Validators.required],
+      sourceFormId: [null, Validators.required],
       targetDocumentTypeId: [null, Validators.required],
       targetFormId: [null, Validators.required],
       createNewDocument: [true],
@@ -163,32 +153,28 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
       targetDocumentIdControl?.updateValueAndValidity();
     });
 
-    // Load source fields and grids when sourceSubmissionId changes
-    this.copyForm.get('sourceSubmissionId')?.valueChanges.subscribe(submissionId => {
-      console.log('[CopyToDocument] Source submission ID changed:', submissionId);
-      if (submissionId) {
-        // Set sourceDocumentTypeId and sourceFormId from submission
-        const sourceSubmission = this.submissions.find(s => s.id === submissionId);
-        if (sourceSubmission) {
-          if (sourceSubmission.documentTypeId) {
-            this.copyForm.patchValue({
-              sourceDocumentTypeId: sourceSubmission.documentTypeId
-            });
-          }
-          if (sourceSubmission.formBuilderId) {
-            this.copyForm.patchValue({
-              sourceFormId: sourceSubmission.formBuilderId
-            });
-          }
-        }
-        this.loadSourceFieldsAndGrids(submissionId);
+    // Load source forms when source document type changes
+    this.copyForm.get('sourceDocumentTypeId')?.valueChanges.subscribe(docTypeId => {
+      console.log('[CopyToDocument] Source document type changed:', docTypeId);
+      this.copyForm.patchValue({ sourceFormId: null }, { emitEvent: false });
+      this.sourceFields = [];
+      this.sourceGrids = [];
+      if (docTypeId) {
+        this.loadSourceForms(docTypeId);
+      } else {
+        this.sourceForms = [];
+      }
+    });
+
+    // Load source fields and grids when sourceFormId changes
+    this.copyForm.get('sourceFormId')?.valueChanges.subscribe(formId => {
+      console.log('[CopyToDocument] Source form ID changed:', formId);
+      if (formId) {
+        this.loadFieldsForForm(formId, 'source');
+        this.loadGridsForForm(formId, 'source');
       } else {
         this.sourceFields = [];
         this.sourceGrids = [];
-        this.copyForm.patchValue({
-          sourceDocumentTypeId: null,
-          sourceFormId: null
-        });
       }
     });
 
@@ -200,6 +186,19 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
       } else {
         this.targetFields = [];
         this.targetGrids = [];
+      }
+    });
+
+    // Filter target forms when target document type changes
+    this.copyForm.get('targetDocumentTypeId')?.valueChanges.subscribe(docTypeId => {
+      console.log('[CopyToDocument] Target document type changed:', docTypeId);
+      this.copyForm.patchValue({ targetFormId: null }, { emitEvent: false });
+      this.targetFields = [];
+      this.targetGrids = [];
+      if (docTypeId) {
+        this.loadTargetForms(docTypeId);
+      } else {
+        this.loadTargetForms();
       }
     });
   }
@@ -220,20 +219,25 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
     console.log('[CopyToDocument] Loading document types...');
     this.documentTypesService.getActiveDocumentTypes().subscribe({
       next: (types) => {
-        console.log('[CopyToDocument] Document types loaded:', types?.length || 0, 'types');
-        this.documentTypes = types || [];
+        const normalized = this.normalizeDocumentTypes(types || []);
+        console.log('[CopyToDocument] Document types loaded:', normalized.length, 'types');
+        const activeTypes = normalized.filter((t: DocumentType) => 
+          this.toBoolean(t.isActive, true) && !this.toBoolean(t.isDeleted, false)
+        );
+        this.documentTypes = activeTypes.length > 0 ? activeTypes : normalized;
         
         if (this.documentTypes.length === 0) {
           console.warn('[CopyToDocument] No document types found. Trying fallback...');
           // Fallback: try getAllDocumentTypes
           this.documentTypesService.getAllDocumentTypes().subscribe({
             next: (allTypes) => {
-              console.log('[CopyToDocument] Fallback: Loaded all document types:', allTypes?.length || 0);
-              // Filter active and non-deleted types
-              this.documentTypes = (allTypes || []).filter((t: DocumentType) => 
-                t.isActive && !t.isDeleted
+              const normalizedAll = this.normalizeDocumentTypes(allTypes || []);
+              console.log('[CopyToDocument] Fallback: Loaded all document types:', normalizedAll.length);
+              const activeAll = normalizedAll.filter((t: DocumentType) => 
+                this.toBoolean(t.isActive, true) && !this.toBoolean(t.isDeleted, false)
               );
-              console.log('[CopyToDocument] After filtering:', this.documentTypes.length, 'active types');
+              this.documentTypes = activeAll.length > 0 ? activeAll : normalizedAll;
+              console.log('[CopyToDocument] After filtering:', this.documentTypes.length, 'document types');
               
               if (this.documentTypes.length === 0) {
                 this.messageService.add({
@@ -266,10 +270,12 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
         // Try fallback
         this.documentTypesService.getAllDocumentTypes().subscribe({
           next: (allTypes) => {
-            console.log('[CopyToDocument] Fallback: Loaded all document types:', allTypes?.length || 0);
-            this.documentTypes = (allTypes || []).filter((t: DocumentType) => 
-              t.isActive && !t.isDeleted
+            const normalizedAll = this.normalizeDocumentTypes(allTypes || []);
+            console.log('[CopyToDocument] Fallback: Loaded all document types:', normalizedAll.length);
+            const activeAll = normalizedAll.filter((t: DocumentType) => 
+              this.toBoolean(t.isActive, true) && !this.toBoolean(t.isDeleted, false)
             );
+            this.documentTypes = activeAll.length > 0 ? activeAll : normalizedAll;
             
             if (this.documentTypes.length === 0) {
               this.messageService.add({
@@ -292,107 +298,76 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
     });
   }
 
-  loadTargetForms(): void {
+  loadSourceForms(documentTypeId?: number): void {
     this.formsService.getForms(1, 1000).subscribe({
       next: (result) => {
-        this.targetForms = (result.items || []).filter((f: FormBuilderDto) => f.isPublished && f.isActive);
-      },
-      error: (error) => {
-        console.error('Error loading forms:', error);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to load forms'
-        });
-      }
-    });
-  }
+        const allForms = this.normalizeFormsResult(result);
+        let forms = allForms.filter((f: FormBuilderDto) => 
+          this.toBoolean(f.isPublished, true) && this.toBoolean(f.isActive, true)
+        );
 
-  loadSubmissions(): void {
-    this.formSubmissionsService.getAllSubmissions().subscribe({
-      next: (submissions) => {
-        // Sort by ID descending (newest first)
-        this.submissions = (submissions || []).sort((a, b) => b.id - a.id);
-        console.log('[CopyToDocument] Loaded submissions:', this.submissions.length);
-      },
-      error: (error) => {
-        console.error('Error loading submissions:', error);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to load submissions'
-        });
-      }
-    });
-  }
-
-  onSourceSubmissionChange(event: any): void {
-    const submissionId = event.target.value ? parseInt(event.target.value, 10) : null;
-    console.log('[CopyToDocument] onSourceSubmissionChange called with ID:', submissionId);
-    if (submissionId) {
-      // Also update the form control value to ensure consistency
-      this.copyForm.patchValue({ sourceSubmissionId: submissionId }, { emitEvent: false });
-      this.loadSourceFieldsAndGrids(submissionId);
-    } else {
-      this.sourceFields = [];
-      this.sourceGrids = [];
-    }
-  }
-
-  loadSourceFieldsAndGrids(submissionId: number | string): void {
-    // Convert to number if string
-    const id = typeof submissionId === 'string' ? parseInt(submissionId, 10) : submissionId;
-    console.log('[CopyToDocument] Loading source fields and grids for submission:', id);
-    
-    // Get submission to find form ID
-    const submission = this.submissions.find(s => s.id === id);
-    console.log('[CopyToDocument] Found submission:', submission);
-    
-    if (!submission) {
-      console.warn('[CopyToDocument] Submission not found in local array, trying to load from API');
-      // Try to load submission from API if not found locally
-      this.formSubmissionsService.getSubmissionById(id).subscribe({
-        next: (sub) => {
-          if (sub && sub.formBuilderId) {
-            console.log('[CopyToDocument] Loaded submission from API, formBuilderId:', sub.formBuilderId);
-            this.loadFieldsForForm(sub.formBuilderId, 'source');
-            this.loadGridsForForm(sub.formBuilderId, 'source');
-          } else {
-            console.error('[CopyToDocument] Submission has no formBuilderId');
-            this.sourceFields = [];
-            this.sourceGrids = [];
-            this.messageService.add({
-              severity: 'warn',
-              summary: 'Warning',
-              detail: 'Source submission does not have a form ID'
-            });
-          }
-        },
-        error: (error) => {
-          console.error('[CopyToDocument] Error loading submission:', error);
-          this.sourceFields = [];
-          this.sourceGrids = [];
+        if (forms.length === 0 && allForms.length > 0) {
+          console.warn('[CopyToDocument] No published/active source forms found. Using all forms.');
+          forms = allForms;
         }
-      });
-      return;
-    }
 
-    if (!submission.formBuilderId) {
-      console.error('[CopyToDocument] Submission has no formBuilderId');
-      this.sourceFields = [];
-      this.sourceGrids = [];
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Warning',
-        detail: 'Source submission does not have a form ID'
-      });
-      return;
-    }
+        if (documentTypeId) {
+          const hasDocType = forms.some((f: FormBuilderDto) => f.documentTypeId !== undefined && f.documentTypeId !== null);
+          if (hasDocType) {
+            const docTypeIdNum = Number(documentTypeId);
+            forms = forms.filter((f: FormBuilderDto) => Number(f.documentTypeId) === docTypeIdNum);
+          } else {
+            console.warn('[CopyToDocument] Forms are missing documentTypeId. Skipping document type filter.');
+          }
+        }
 
-    const formId = submission.formBuilderId;
-    console.log('[CopyToDocument] Loading fields and grids for form ID:', formId);
-    this.loadFieldsForForm(formId, 'source');
-    this.loadGridsForForm(formId, 'source');
+        this.sourceForms = forms;
+      },
+      error: (error) => {
+        console.error('Error loading source forms:', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load source forms'
+        });
+      }
+    });
+  }
+
+  loadTargetForms(documentTypeId?: number): void {
+    this.formsService.getForms(1, 1000).subscribe({
+      next: (result) => {
+        const allForms = this.normalizeFormsResult(result);
+        let forms = allForms.filter((f: FormBuilderDto) => 
+          this.toBoolean(f.isPublished, true) && this.toBoolean(f.isActive, true)
+        );
+
+        if (forms.length === 0 && allForms.length > 0) {
+          console.warn('[CopyToDocument] No published/active target forms found. Using all forms.');
+          forms = allForms;
+        }
+
+        if (documentTypeId) {
+          const hasDocType = forms.some((f: FormBuilderDto) => f.documentTypeId !== undefined && f.documentTypeId !== null);
+          if (hasDocType) {
+            const docTypeIdNum = Number(documentTypeId);
+            forms = forms.filter((f: FormBuilderDto) => Number(f.documentTypeId) === docTypeIdNum);
+          } else {
+            console.warn('[CopyToDocument] Forms are missing documentTypeId. Skipping document type filter.');
+          }
+        }
+
+        this.targetForms = forms;
+      },
+      error: (error) => {
+        console.error('Error loading target forms:', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load target forms'
+        });
+      }
+    });
   }
 
   loadTargetFieldsAndGrids(formId: number): void {
@@ -546,67 +521,21 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
 
     const formValue = this.copyForm.value;
 
-    // Get source submission to extract sourceDocumentTypeId and sourceFormId
-    const sourceSubmission = this.submissions.find(s => s.id === formValue.sourceSubmissionId);
-    if (!sourceSubmission) {
+    if (!formValue.sourceDocumentTypeId || !formValue.sourceFormId) {
       this.messageService.add({
         severity: 'error',
         summary: 'Error',
-        detail: 'Source submission not found'
+        detail: 'Source document type and source form are required'
       });
       this.loading = false;
       return;
     }
 
-    // Validate required source fields
-    if (!sourceSubmission.formBuilderId) {
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Source submission is missing form information'
-      });
-      this.loading = false;
-      return;
-    }
-
-    // Get documentTypeId - if not in submission, load it from form
-    let sourceDocumentTypeId = sourceSubmission.documentTypeId;
-    if (!sourceDocumentTypeId && sourceSubmission.formBuilderId) {
-      // Try to load documentTypeId from form
-      this.documentTypesService.getDocumentTypeByFormId(sourceSubmission.formBuilderId).subscribe({
-        next: (documentType) => {
-          if (documentType && documentType.id) {
-            sourceDocumentTypeId = documentType.id;
-            this.executeCopyWithDocumentType(sourceDocumentTypeId, sourceSubmission, formValue);
-          } else {
-            this.messageService.add({
-              severity: 'error',
-              summary: 'Error',
-              detail: 'Could not determine document type for source form'
-            });
-            this.loading = false;
-          }
-        },
-        error: (error) => {
-          console.error('[CopyToDocument] Error loading document type:', error);
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load document type for source form'
-          });
-          this.loading = false;
-        }
-      });
-      return; // Exit early, will continue in callback
-    }
-
-    // If documentTypeId is available, proceed directly
-    this.executeCopyWithDocumentType(sourceDocumentTypeId, sourceSubmission, formValue);
+    this.executeCopyWithDocumentType(formValue.sourceDocumentTypeId, formValue);
   }
 
   private executeCopyWithDocumentType(
     sourceDocumentTypeId: number,
-    sourceSubmission: FormSubmissionDto,
     formValue: any
   ): void {
     // Convert field mappings array to object
@@ -629,7 +558,7 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
       config: {
         // الحقول المطلوبة الجديدة - استخدام القيم من form أو fallback
         sourceDocumentTypeId: formValue.sourceDocumentTypeId || sourceDocumentTypeId,
-        sourceFormId: formValue.sourceFormId || sourceSubmission.formBuilderId,
+        sourceFormId: formValue.sourceFormId,
         
         targetDocumentTypeId: formValue.targetDocumentTypeId,
         targetFormId: formValue.targetFormId,
@@ -653,7 +582,6 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
           ? formValue.metadataFields.filter((f: string) => f && f.trim() !== '') 
           : []
       },
-      sourceSubmissionId: formValue.sourceSubmissionId,
       actionId: null,
       ruleId: null
     };
@@ -761,39 +689,10 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
     this.showAuditPanel = false;
   }
 
-  loadAuditBySubmission(): void {
-    const submissionId = this.copyForm.get('sourceSubmissionId')?.value;
-    if (!submissionId) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Warning',
-        detail: 'Please enter source submission ID'
-      });
-      return;
-    }
-
-    this.auditLoading = true;
-    this.copyToDocumentService.getAuditRecordsBySubmission(submissionId).subscribe({
-      next: (audits) => {
-        this.auditLoading = false;
-        this.auditRecords = audits;
-        this.showAuditDialog = true;
-      },
-      error: (error) => {
-        this.auditLoading = false;
-        console.error('Error loading audit records:', error);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to load audit records'
-        });
-      }
-    });
-  }
-
   resetForm(): void {
     this.copyForm.reset({
-      sourceSubmissionId: null,
+      sourceDocumentTypeId: null,
+      sourceFormId: null,
       createNewDocument: true,
       targetDocumentId: null,
       copyCalculatedFields: true,
@@ -807,5 +706,97 @@ export class CopyToDocumentComponent implements OnInit, AfterViewInit {
     this.metadataFieldsArray.clear();
     this.result = null;
   }
-}
 
+  private loadInitialData(): void {
+    // Check permissions before loading data
+    const canViewDocuments = this.permissionService.canViewDocuments() || this.permissionService.canManageDocuments();
+    const canViewForms = this.permissionService.canViewForms() || this.permissionService.canViewAllForms() || this.permissionService.canManageForms();
+
+    console.log('[CopyToDocument] Permissions:', { canViewDocuments, canViewForms });
+
+    if (canViewDocuments) {
+      this.loadDocumentTypes();
+    } else {
+      console.warn('[CopyToDocument] User does not have Document_Allow_View permission');
+      this.documentTypes = [];
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Required',
+        detail: 'You do not have permission to view document types. Please contact administrator.'
+      });
+    }
+
+    if (canViewForms) {
+      this.loadSourceForms();
+      this.loadTargetForms();
+    } else {
+      console.warn('[CopyToDocument] User does not have FormBuilder_Allow_View permission');
+      this.sourceForms = [];
+      this.targetForms = [];
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Permission Required',
+        detail: 'You do not have permission to view forms. Please contact administrator.'
+      });
+    }
+  }
+
+  private normalizeFormsResult(result: any): FormBuilderDto[] {
+    const items = this.extractList(result);
+    return items.map((raw: any) => this.normalizeForm(raw));
+  }
+
+  private normalizeForm(raw: any): FormBuilderDto {
+    return {
+      ...raw,
+      id: raw?.id ?? raw?.Id,
+      formName: raw?.formName ?? raw?.FormName ?? raw?.name ?? raw?.Name ?? '',
+      foreignFormName: raw?.foreignFormName ?? raw?.ForeignFormName,
+      formCode: raw?.formCode ?? raw?.FormCode ?? raw?.code ?? raw?.Code ?? '',
+      documentTypeId: raw?.documentTypeId ?? raw?.DocumentTypeId ?? raw?.documentTypeID ?? raw?.DocumentTypeID,
+      description: raw?.description ?? raw?.Description,
+      foreignDescription: raw?.foreignDescription ?? raw?.ForeignDescription,
+      isPublished: raw?.isPublished ?? raw?.IsPublished,
+      isActive: raw?.isActive ?? raw?.IsActive,
+      isDeleted: raw?.isDeleted ?? raw?.IsDeleted,
+      version: raw?.version ?? raw?.Version
+    } as FormBuilderDto;
+  }
+
+  private normalizeDocumentTypes(types: any[]): DocumentType[] {
+    return (types || []).map((raw: any) => ({
+      ...raw,
+      id: raw?.id ?? raw?.Id,
+      name: raw?.name ?? raw?.Name ?? raw?.documentTypeName ?? raw?.DocumentTypeName ?? raw?.menuCaption ?? raw?.MenuCaption ?? '',
+      code: raw?.code ?? raw?.Code ?? '',
+      formBuilderId: raw?.formBuilderId ?? raw?.FormBuilderId,
+      menuCaption: raw?.menuCaption ?? raw?.MenuCaption ?? '',
+      menuOrder: raw?.menuOrder ?? raw?.MenuOrder ?? 0,
+      parentMenuId: raw?.parentMenuId ?? raw?.ParentMenuId ?? null,
+      isActive: raw?.isActive ?? raw?.IsActive,
+      isDeleted: raw?.isDeleted ?? raw?.IsDeleted
+    } as DocumentType));
+  }
+
+  private extractList(result: any): any[] {
+    if (!result) return [];
+    if (Array.isArray(result)) return result;
+    if (Array.isArray(result.items)) return result.items;
+    if (Array.isArray(result.data)) return result.data;
+    if (Array.isArray(result.result)) return result.result;
+    if (Array.isArray(result.results)) return result.results;
+    if (result.data && Array.isArray(result.data.items)) return result.data.items;
+    if (result.data && Array.isArray(result.data.data)) return result.data.data;
+    return [];
+  }
+
+  private toBoolean(value: any, defaultValue: boolean): boolean {
+    if (value === undefined || value === null) return defaultValue;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true') return true;
+      if (normalized === 'false') return false;
+    }
+    return Boolean(value);
+  }
+}

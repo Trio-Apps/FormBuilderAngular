@@ -88,9 +88,6 @@ export class CopyToDocumentService {
       if (params.pageSize !== undefined) {
         httpParams = httpParams.set('pageSize', params.pageSize.toString());
       }
-      if (params.sourceSubmissionId !== undefined) {
-        httpParams = httpParams.set('sourceSubmissionId', params.sourceSubmissionId.toString());
-      }
       if (params.targetDocumentId !== undefined) {
         httpParams = httpParams.set('targetDocumentId', params.targetDocumentId.toString());
       }
@@ -238,4 +235,3 @@ export class CopyToDocumentService {
     return result;
   }
 }
-
