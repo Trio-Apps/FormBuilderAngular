@@ -1,3 +1,6 @@
+export type DocumentSeriesResetPolicy = 'None' | 'Yearly' | 'Monthly' | 'Daily';
+export type DocumentSeriesGenerateOn = 'Submit' | 'Approval';
+
 // Document Series Models
 
 /**
@@ -12,17 +15,31 @@ export interface DocumentSeries {
   documentTypeName: string | null; // Can be null from backend
   projectId: number;
   projectName: string | null; // Can be null from backend
+  seriesName?: string;
+  template?: string;
   seriesCode: string;
+  sequenceStart?: number;
+  sequencePadding?: number;
+  resetPolicy?: DocumentSeriesResetPolicy;
+  generateOn?: DocumentSeriesGenerateOn;
   nextNumber: number;
   isDefault: boolean;
   isActive: boolean; // Boolean from backend
+  lastGeneratedAt?: string;
+  lastGeneratedNumber?: string;
   // Note: isDeleted is not returned by the backend API
 }
 
 export interface CreateDocumentSeries {
   documentTypeId: number;
   projectId: number;
+  seriesName?: string;
+  template?: string;
   seriesCode: string;
+  sequenceStart?: number;
+  sequencePadding?: number;
+  resetPolicy?: DocumentSeriesResetPolicy;
+  generateOn?: DocumentSeriesGenerateOn;
   nextNumber?: number;
   isDefault?: boolean;
   isActive?: boolean;
@@ -31,7 +48,13 @@ export interface CreateDocumentSeries {
 export interface UpdateDocumentSeries {
   documentTypeId?: number;
   projectId?: number;
+  seriesName?: string;
+  template?: string;
   seriesCode?: string;
+  sequenceStart?: number;
+  sequencePadding?: number;
+  resetPolicy?: DocumentSeriesResetPolicy;
+  generateOn?: DocumentSeriesGenerateOn;
   nextNumber?: number;
   isDefault?: boolean;
   isActive?: boolean;
@@ -49,4 +72,3 @@ export interface ApiResponse<T> {
   message: string;
   data?: T;
 }
-

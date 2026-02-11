@@ -9,6 +9,22 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const storageService = inject(StorageService);
   const router = inject(Router);
   const token = storageService.getToken();
+  const forceAnonymousSubmissionEndpoint =
+    req.url.includes('/FormSubmissions/draft') ||
+    req.url.includes('/FormSubmissions/draft-or-create') ||
+    req.url.includes('/FormSubmissions/data/save') ||
+    req.url.includes('/FormSubmissions/submit');
+  const isPublicFormViewRoute = router.url.includes('/forms/view/');
+  const isPublicFormEndpoint = req.url.includes('/FormBuilder/code/') || 
+                               req.url.includes('/FormBuilder/by-code/') ||
+                               req.url.includes('/FormBuilder/public/') ||
+                               req.url.includes('/FormRules/form/') ||
+                               req.url.includes('/FormFields/tab/') ||
+                               req.url.includes('/FormGrids/') ||
+                               req.url.includes('/FormTabs/') ||
+                               // Public submission flow (draft/submit) for public forms
+                               forceAnonymousSubmissionEndpoint ||
+                               isPublicFormViewRoute;
   
   // Debug logging (only in development)
   const isDebugMode = environment.config?.enableDebug;
@@ -22,7 +38,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   }
   
   // Add token to request if available
-  if (token) {
+  if (token && !forceAnonymousSubmissionEndpoint) {
     const cloned = req.clone({
       headers: req.headers.set('Authorization', `Bearer ${token}`)
     });
@@ -67,6 +83,14 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         
         // Handle 401 Unauthorized - token expired or invalid
         if (error.status === 401) {
+          // For public form endpoints, never force redirect to login
+          if (isPublicFormEndpoint || isPublicFormViewRoute) {
+            if (isDebugMode) {
+              console.log('[AuthInterceptor] Public form endpoint - allowing 401 without redirect:', req.url);
+            }
+            return throwError(() => error);
+          }
+
           // Don't redirect if already on login page or if it's a login request
           const isLoginRequest = req.url.includes('/account/login');
           const isLoginPage = router.url.includes('/pages/login');
@@ -113,20 +137,11 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     );
   }
   
-  // No token - handle requests without authentication
-  const isPublicFormViewRoute = router.url.includes('/forms/view/');
-  const isPublicFormEndpoint = req.url.includes('/FormBuilder/code/') || 
-                               req.url.includes('/FormBuilder/by-code/') ||
-                               req.url.includes('/FormBuilder/public/') ||
-                               req.url.includes('/FormRules/form/') ||
-                               req.url.includes('/FormFields/tab/') ||
-                               req.url.includes('/FormGrids/') ||
-                               req.url.includes('/FormTabs/') ||
-                               // Public submission flow (draft/submit) for public forms
-                               req.url.includes('/FormSubmissions/draft') ||
-                               req.url.includes('/FormSubmissions/submit') ||
-                               isPublicFormViewRoute;
+  if (token && forceAnonymousSubmissionEndpoint && isDebugMode) {
+    console.log('[AuthInterceptor] Skipping Authorization header for anonymous public submission endpoint:', req.url);
+  }
   
+  // No token - handle requests without authentication
   // Only warn about missing token for non-public endpoints (public forms don't need tokens)
   if (isDebugMode && !req.url.includes('/account/login') && !req.url.includes('/account/register') && !isPublicFormEndpoint) {
     console.warn('[AuthInterceptor] Request without token (non-public endpoint):', {

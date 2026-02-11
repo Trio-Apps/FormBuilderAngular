@@ -156,10 +156,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   currentUsername: string | null = null;
   
   // Permission flags
-  canViewDocuments = false;
-  canCreateDocuments = false;
-  canEditDocuments = false;
-  canDeleteDocuments = false;
+  canViewSubmissions = false;
+  canCreateSubmissions = false;
+  canEditSubmissions = false;
+  canDeleteSubmissions = false;
   statusOptions = [
     { label: 'All Statuses', value: null },
     { label: 'Draft', value: 'Draft' },
@@ -369,13 +369,14 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Load user permissions for document operations
+   * Load user permissions for submission operations.
+   * Fallback to Document_* for backward compatibility with older permission setups.
    */
   private loadPermissions(): void {
-    this.canViewDocuments = this.permissionService.canViewDocuments();
-    this.canCreateDocuments = this.permissionService.canCreateDocuments();
-    this.canEditDocuments = this.permissionService.canEditDocuments();
-    this.canDeleteDocuments = this.permissionService.canDeleteDocuments();
+    this.canViewSubmissions = this.permissionService.canViewSubmissions() || this.permissionService.canViewDocuments();
+    this.canCreateSubmissions = this.permissionService.canCreateSubmissions() || this.permissionService.canCreateDocuments();
+    this.canEditSubmissions = this.permissionService.canEditSubmissions() || this.permissionService.canEditDocuments();
+    this.canDeleteSubmissions = this.permissionService.canDeleteSubmissions() || this.permissionService.canDeleteDocuments();
   }
 
   loadSubmissions(): void {
@@ -730,7 +731,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
   openEditModal(submission: FormSubmissionDto): void {
     // Permission check
-    if (!this.canEditDocuments) {
+    if (!this.canEditSubmissions) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Permission Denied',
@@ -1986,7 +1987,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     if (!submission || !submission.id) return;
 
     // Permission check
-    if (!this.canDeleteDocuments) {
+    if (!this.canDeleteSubmissions) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Permission Denied',
@@ -2795,7 +2796,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
   createSubmission(): void {
     // Permission check
-    if (!this.canCreateDocuments) {
+    if (!this.canCreateSubmissions) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Permission Denied',
@@ -4096,7 +4097,6 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 }
-
 
 
 

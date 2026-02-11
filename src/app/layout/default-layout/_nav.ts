@@ -59,6 +59,12 @@ export const navItems: INavData[] = [
         url: '/document-types',
         iconComponent: { name: 'cil-list' },
         attributes: { permissionCode: 'Document_Allow_View' } // Changed from DocumentType_Allow_View to Document_Allow_View
+      },
+      {
+        name: 'Document Series',
+        url: '/document-series',
+        iconComponent: { name: 'cil-tags' },
+        attributes: { permissionCode: 'DocumentSeries_Allow_View' }
       }
     ]
   },
@@ -142,4 +148,3 @@ export const navItems: INavData[] = [
     iconComponent: { name: 'cil-lock-locked' }
   }
 ];
-

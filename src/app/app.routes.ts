@@ -87,6 +87,14 @@ export const routes: Routes = [
         canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions
       },
 
+      // ===== Document Series =====
+      {
+        path: 'document-series',
+        loadComponent: () => import('./views/document-series/document-series-list/document-series-list.component')
+          .then(m => m.DocumentSeriesListComponent),
+        canActivate: [authGuard]
+      },
+
       // ===== Alert Rules ===== (Admin only)
       {
         path: 'alert-rules',

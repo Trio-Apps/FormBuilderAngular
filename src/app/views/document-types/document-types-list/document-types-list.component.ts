@@ -9,7 +9,16 @@ import { DocumentTypesService } from '../../FormBuilder/services/document-types.
 import { FormsService } from '../../FormBuilder/services/forms.service';
 import { ProjectsService } from '../../projects/services/projects.service';
 import { ApprovalWorkflowService, ApprovalWorkflowDto } from '../../FormBuilder/services/approval-workflow.service';
-import { DocumentType, CreateDocumentTypeDto, UpdateDocumentTypeDto, DocumentSeries, CreateDocumentSeriesDto, UpdateDocumentSeriesDto } from '../../FormBuilder/form-builder/models/document-types.model';
+import {
+  DocumentType,
+  CreateDocumentTypeDto,
+  UpdateDocumentTypeDto,
+  DocumentSeries,
+  CreateDocumentSeriesDto,
+  UpdateDocumentSeriesDto,
+  DocumentSeriesResetPolicy,
+  DocumentSeriesGenerateOn
+} from '../../FormBuilder/form-builder/models/document-types.model';
 import { ProjectDto } from '../../projects/models/project-dto.model';
 import { FormBuilderDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { MessageService, ConfirmationService } from 'primeng/api';
@@ -78,12 +87,16 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   
   // Document Series Management
   documentSeries: DocumentSeries[] = [];
+  allSeries: DocumentSeries[] = [];
   projects: ProjectDto[] = [];
   showSeriesModal = false;
   showSeriesFormModal = false;
   seriesForm!: FormGroup;
   editingSeries: DocumentSeries | null = null;
   currentDocumentTypeForSeries: DocumentType | null = null;
+  readonly supportedSeriesPlaceholders = ['{PROJECT}', '{YYYY}', '{MM}', '{DD}', '{SEQ}'];
+  readonly resetPolicyOptions: DocumentSeriesResetPolicy[] = ['None', 'Yearly', 'Monthly', 'Daily'];
+  readonly generateOnOptions: DocumentSeriesGenerateOn[] = ['Submit', 'Approval'];
 
   // Approval Workflow Management
   approvalWorkflows: ApprovalWorkflowDto[] = [];
@@ -100,7 +113,8 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     series: false,
     projects: false,
     workflows: false,
-    updateWorkflow: false
+    updateWorkflow: false,
+    allSeries: false
   };
 
   // Document Type Modal
@@ -147,6 +161,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       menuCaption: ['', [Validators.required, Validators.maxLength(200)]],
       menuOrder: [0, [Validators.min(0)]],
       parentMenuId: [null],
+      defaultSeriesId: [null],
       isActive: [true]
     });
     
@@ -154,7 +169,13 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.seriesForm = this.fb.group({
       documentTypeId: [null, [Validators.required]],
       projectId: [null, [Validators.required]],
-      seriesCode: ['', [Validators.required, Validators.minLength(1), Validators.maxLength(50)]],
+      seriesName: ['', [Validators.required, Validators.maxLength(100)]],
+      template: ['', [Validators.required, Validators.maxLength(150)]],
+      seriesCode: ['', [Validators.maxLength(50)]],
+      sequenceStart: [1, [Validators.required, Validators.min(1)]],
+      sequencePadding: [3, [Validators.required, Validators.min(1), Validators.max(10)]],
+      resetPolicy: ['Yearly' as DocumentSeriesResetPolicy, [Validators.required]],
+      generateOn: ['Submit' as DocumentSeriesGenerateOn, [Validators.required]],
       nextNumber: [1, [Validators.required, Validators.min(1)]],
       isDefault: [false],
       isActive: [true]
@@ -229,6 +250,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     
     console.log('[DocumentTypesList] Calling loadDocumentTypes()...');
     this.loadDocumentTypes();
+
+    console.log('[DocumentTypesList] Calling loadAllSeries()...');
+    this.loadAllSeries();
     
     // Projects / workflows are admin-only features (series/workflow management)
     if (this.isAdmin) {
@@ -594,6 +618,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       menuCaption: '',
       menuOrder: 0,
       parentMenuId: null,
+      defaultSeriesId: null,
       isActive: true
     });
     
@@ -624,6 +649,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       menuCaption: documentType.menuCaption || '',
       menuOrder: documentType.menuOrder || 0,
       parentMenuId: documentType.parentMenuId || null,
+      defaultSeriesId: documentType.defaultSeriesId ?? null,
       isActive: documentType.isActive !== false
     });
     
@@ -788,7 +814,8 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
         code: formData.code.trim(),
         formBuilderId: Number(formData.formBuilderId),
         menuCaption: formData.menuCaption.trim(),
-        menuOrder: formData.menuOrder !== null && formData.menuOrder !== undefined ? Number(formData.menuOrder) : 0
+        menuOrder: formData.menuOrder !== null && formData.menuOrder !== undefined ? Number(formData.menuOrder) : 0,
+        defaultSeriesId: formData.defaultSeriesId ? Number(formData.defaultSeriesId) : null
       };
       
       console.log('[DocumentTypesList] Creating document type with DTO:', createDto);
@@ -861,6 +888,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       menuCaption: formData.menuCaption?.trim() || undefined,
       menuOrder: formData.menuOrder !== null && formData.menuOrder !== undefined ? Number(formData.menuOrder) : undefined,
       parentMenuId: updateParentMenuId,
+      defaultSeriesId: formData.defaultSeriesId ? Number(formData.defaultSeriesId) : null,
       isActive: formData.isActive !== false
     };
 
@@ -1118,7 +1146,13 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.seriesForm.reset({
       documentTypeId: this.currentDocumentTypeForSeries.id,
       projectId: null,
+      seriesName: '',
+      template: '',
       seriesCode: '',
+      sequenceStart: 1,
+      sequencePadding: 3,
+      resetPolicy: 'Yearly',
+      generateOn: 'Submit',
       nextNumber: 1,
       isDefault: false,
       isActive: true
@@ -1134,7 +1168,13 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.seriesForm.patchValue({
       documentTypeId: series.documentTypeId,
       projectId: series.projectId,
+      seriesName: series.seriesName || series.seriesCode,
+      template: series.template || `${series.seriesCode}-{SEQ}`,
       seriesCode: series.seriesCode,
+      sequenceStart: series.sequenceStart || series.nextNumber || 1,
+      sequencePadding: series.sequencePadding || 3,
+      resetPolicy: series.resetPolicy || 'Yearly',
+      generateOn: series.generateOn || 'Submit',
       nextNumber: series.nextNumber || 1,
       isDefault: series.isDefault || false,
       isActive: series.isActive !== false
@@ -1154,13 +1194,46 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
 
     this.loading.series = true;
     const formData = this.seriesForm.value;
+    const template = String(formData.template || '').trim();
+    const unsupportedPlaceholders = this.getUnsupportedTemplatePlaceholders(template);
+
+    if (unsupportedPlaceholders.length > 0) {
+      this.loading.series = false;
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: `Unsupported placeholders: ${unsupportedPlaceholders.join(', ')}`
+      });
+      return;
+    }
+
+    if (!template.includes('{SEQ}')) {
+      this.loading.series = false;
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Template must include {SEQ} placeholder.'
+      });
+      return;
+    }
+
+    const sequenceStart = Number(formData.sequenceStart || 1);
+    const sequencePadding = Number(formData.sequencePadding || 3);
+    const nextNumber = Number(formData.nextNumber || sequenceStart || 1);
+    const seriesCode = this.generateSeriesCodeForCompatibility(template, formData.seriesName);
 
     if (this.editingSeries && this.editingSeries.id) {
       // Update existing series
       const updateDto: UpdateDocumentSeriesDto = {
         projectId: formData.projectId,
-        seriesCode: formData.seriesCode.trim(),
-        nextNumber: formData.nextNumber,
+        seriesName: String(formData.seriesName || '').trim(),
+        template,
+        seriesCode,
+        sequenceStart,
+        sequencePadding,
+        resetPolicy: formData.resetPolicy,
+        generateOn: formData.generateOn,
+        nextNumber,
         isDefault: formData.isDefault,
         isActive: formData.isActive
       };
@@ -1195,8 +1268,14 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       const createDto: CreateDocumentSeriesDto = {
         documentTypeId: formData.documentTypeId,
         projectId: formData.projectId,
-        seriesCode: formData.seriesCode.trim(),
-        nextNumber: formData.nextNumber || 1,
+        seriesName: String(formData.seriesName || '').trim(),
+        template,
+        seriesCode,
+        sequenceStart,
+        sequencePadding,
+        resetPolicy: formData.resetPolicy,
+        generateOn: formData.generateOn,
+        nextNumber,
         isDefault: formData.isDefault || false,
         isActive: formData.isActive !== false
       };
@@ -1355,6 +1434,87 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   getProjectName(projectId: number): string {
     const project = this.projects.find(p => p.id === projectId);
     return project ? project.name : `Project #${projectId}`;
+  }
+
+  loadAllSeries(): void {
+    this.loading.allSeries = true;
+    this.documentTypesService.getAllDocumentSeries().subscribe({
+      next: (series: DocumentSeries[]) => {
+        // Include all series in the dropdown (active and inactive)
+        this.allSeries = (series || []);
+        this.loading.allSeries = false;
+        this.cdr.detectChanges();
+      },
+      error: (error: any) => {
+        console.error('Error loading all document series:', error);
+        this.allSeries = [];
+        this.loading.allSeries = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  getSeriesDisplayName(series: DocumentSeries): string {
+    const title = series.seriesName || series.seriesCode;
+    const template = series.template || series.seriesCode;
+    const status = series.isActive === false ? ' - Inactive' : '';
+    return `${title} (${template})${status}`;
+  }
+
+  getDefaultSeriesName(seriesId?: number | null): string {
+    if (!seriesId) return '-';
+    const series = this.allSeries.find(s => s.id === seriesId);
+    return series ? (series.seriesName || series.seriesCode) : `Series #${seriesId}`;
+  }
+
+  getSeriesTemplate(series: DocumentSeries): string {
+    return series.template || `${series.seriesCode}-{SEQ}`;
+  }
+
+  getSeriesPreview(series?: DocumentSeries): string {
+    const now = new Date();
+    const year = `${now.getFullYear()}`;
+    const month = `${now.getMonth() + 1}`.padStart(2, '0');
+    const day = `${now.getDate()}`.padStart(2, '0');
+    const targetTemplate = series
+      ? this.getSeriesTemplate(series)
+      : String(this.seriesForm.get('template')?.value || '');
+
+    const projectId = Number(series?.projectId || this.seriesForm.get('projectId')?.value);
+    const project = this.projects.find(p => p.id === projectId);
+    const projectCode = (project?.code || project?.name || 'PROJECT').toUpperCase();
+
+    const padding = Number(series?.sequencePadding || this.seriesForm.get('sequencePadding')?.value || 3);
+    const seq = Number(series?.nextNumber || this.seriesForm.get('nextNumber')?.value || 1);
+    const sequenceValue = `${seq}`.padStart(Math.max(1, padding), '0');
+
+    return targetTemplate
+      .split('{PROJECT}').join(projectCode)
+      .split('{YYYY}').join(year)
+      .split('{MM}').join(month)
+      .split('{DD}').join(day)
+      .split('{SEQ}').join(sequenceValue);
+  }
+
+  getSeriesCurrentSequence(series: DocumentSeries): number {
+    return series.nextNumber || series.sequenceStart || 1;
+  }
+
+  private getUnsupportedTemplatePlaceholders(template: string): string[] {
+    const matches = template.match(/\{[A-Z]+\}/g) || [];
+    return [...new Set(matches)].filter(token => !this.supportedSeriesPlaceholders.includes(token));
+  }
+
+  private generateSeriesCodeForCompatibility(template: string, seriesName: string): string {
+    const staticPart = template.replace(/\{[A-Z]+\}/g, '').replace(/[^A-Za-z0-9\-_\/]/g, '');
+    if (staticPart) {
+      return staticPart.slice(0, 50);
+    }
+
+    return String(seriesName || 'SERIES')
+      .toUpperCase()
+      .replace(/[^A-Z0-9\-_]/g, '')
+      .slice(0, 50);
   }
 
   /**
@@ -1580,11 +1740,5 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.approvalWorkflows = [];
   }
 }
-
-
-
-
-
-
 
 

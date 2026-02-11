@@ -18,7 +18,6 @@ import { PermissionService } from '../../../services/permission.service';
 import { FieldDataSourceService } from '../../FormBuilder/services/field-data-source.service';
 import { UsersService, UserGroupDto } from '../../FormBuilder/services/users.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
-import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 
 type PermissionRow = { permission: string };
 
@@ -37,8 +36,7 @@ type PermissionRow = { permission: string };
     MultiSelectModule,
     InputTextModule,
     SelectModule,
-    TableModule,
-    HasPermissionDirective
+    TableModule
   ],
   templateUrl: './user-group-permissions-manage.component.html',
   styleUrls: ['./user-group-permissions-manage.component.scss'],
@@ -562,5 +560,4 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
     this.loadGroupPermissions(this.selectedGroupId);
   }
 }
-
 

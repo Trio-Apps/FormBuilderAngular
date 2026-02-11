@@ -16,10 +16,10 @@
           <i class="pi pi-refresh"></i>
         </button>
         <button class="btn-primary" 
-                *appHasPermission="'Document_Allow_Create'"
+                *appHasPermission="['Submission_Allow_Create', 'Document_Allow_Create']"
                 [routerLink]="['/document-types', documentTypeId, 'submissions', 'new']" 
                 [disabled]="loading.submissions || !documentType"
-                [title]="canCreateDocuments ? '' : 'You do not have permission to create submissions'">
+                [title]="canCreateSubmissions ? '' : 'You do not have permission to create submissions'">
           <i class="pi pi-plus"></i>
           <span>New Submission</span>
         </button>
@@ -84,13 +84,13 @@
         <h4>No Form Submissions Found</h4>
         <p>There are no form submissions for this document type yet.</p>
         <button pButton 
-          *appHasPermission="'Document_Allow_Create'"
+          *appHasPermission="['Submission_Allow_Create', 'Document_Allow_Create']"
           label="Create New Submission" 
           icon="pi pi-plus" 
           class="p-button-primary btn-primary" 
           [routerLink]="['/document-types', documentTypeId, 'submissions', 'new']"
           [disabled]="loading.submissions || !documentType"
-          [title]="canCreateDocuments ? '' : 'You do not have permission to create submissions'">
+          [title]="canCreateSubmissions ? '' : 'You do not have permission to create submissions'">
         </button>
       </div>
 
@@ -149,13 +149,13 @@
                   pTooltip="View Details"
                   tooltipPosition="top"></button>
                 <button pButton 
-                  *appHasPermission="'Document_Allow_Edit'"
+                  *appHasPermission="['Submission_Allow_Edit', 'Document_Allow_Edit']"
                   icon="pi pi-pencil" 
                   class="p-button-text p-button-sm action-btn" 
                   (click)="openEditModal(submission)"
                   pTooltip="Edit"
                   tooltipPosition="top"
-                  [title]="canEditDocuments ? 'Edit' : 'No permission to edit'"></button>
+                  [title]="canEditSubmissions ? 'Edit' : 'No permission to edit'"></button>
                 <button pButton 
                   *ngIf="canApproveReject(submission)"
                   icon="pi pi-check" 
@@ -171,13 +171,13 @@
                   pTooltip="Reject"
                   tooltipPosition="top"></button>
                 <button pButton 
-                  *appHasPermission="'Document_Allow_Delete'"
+                  *appHasPermission="['Submission_Allow_Delete', 'Document_Allow_Delete']"
                   icon="pi pi-trash" 
                   class="p-button-text p-button-sm action-btn action-btn-danger" 
                   (click)="deleteSubmission(submission)"
                   pTooltip="Delete"
                   tooltipPosition="top"
-                  [title]="canDeleteDocuments ? 'Delete' : 'No permission to delete'"></button>
+                  [title]="canDeleteSubmissions ? 'Delete' : 'No permission to delete'"></button>
               </app-table-actions>
 </td>
           </tr>
@@ -997,7 +997,6 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
 
 
 

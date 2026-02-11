@@ -165,6 +165,37 @@ export class FormSubmissionsService {
   }
 
   /**
+   * Get latest non-draft document number for a specific form
+   */
+  getLatestDocumentNumberByFormBuilderId(formBuilderId: number): Observable<string | null> {
+    return this.getAllSubmissions().pipe(
+      map((submissions: FormSubmissionDto[]) => {
+        const matching = (submissions || []).filter((s) => {
+          if (!s || s.formBuilderId !== formBuilderId) return false;
+          const docNo = (s.documentNumber || '').trim();
+          if (!docNo) return false;
+          if (docNo.startsWith('DRAFT-')) return false;
+          return true;
+        });
+
+        if (matching.length === 0) return null;
+
+        matching.sort((a, b) => {
+          const aDate = new Date((a.lastUpdatedDate || a.submittedDate || a.createdDate) as any).getTime() || 0;
+          const bDate = new Date((b.lastUpdatedDate || b.submittedDate || b.createdDate) as any).getTime() || 0;
+          return bDate - aDate;
+        });
+
+        return matching[0].documentNumber?.trim() || null;
+      }),
+      catchError((error) => {
+        console.error(`Error fetching latest document number for form ${formBuilderId}:`, error);
+        return of(null);
+      })
+    );
+  }
+
+  /**
    * Get form submissions by Document Type ID
    */
   getSubmissionsByDocumentTypeId(documentTypeId: number): Observable<FormSubmissionDto[]> {
@@ -929,4 +960,3 @@ export class FormSubmissionsService {
     });
   }
 }
-

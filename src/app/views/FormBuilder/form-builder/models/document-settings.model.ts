@@ -1,3 +1,6 @@
+export type DocumentSeriesResetPolicy = 'None' | 'Yearly' | 'Monthly' | 'Daily';
+export type DocumentSeriesGenerateOn = 'Submit' | 'Approval';
+
 // Document Settings Models
 
 /**
@@ -31,10 +34,18 @@ export interface DocumentSeries {
   id?: number;
   documentSettingsId?: number;
   projectId: number;
+  seriesName?: string;
+  template?: string;
   seriesCode: string; // Prefix
+  sequenceStart?: number;
+  sequencePadding?: number;
+  resetPolicy?: DocumentSeriesResetPolicy;
+  generateOn?: DocumentSeriesGenerateOn;
   nextNumber: number;
   isDefault: boolean;
   isActive: boolean;
+  lastGeneratedAt?: string;
+  lastGeneratedNumber?: string;
 }
 
 /**
@@ -79,9 +90,14 @@ export interface UpdateDocumentSettingsDto {
  */
 export interface CreateDocumentSeriesDto {
   projectId: number;
+  seriesName?: string;
+  template?: string;
   seriesCode: string;
+  sequenceStart?: number;
+  sequencePadding?: number;
+  resetPolicy?: DocumentSeriesResetPolicy;
+  generateOn?: DocumentSeriesGenerateOn;
   nextNumber: number;
   isDefault: boolean;
   isActive: boolean;
 }
-

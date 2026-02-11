@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslationService } from '../../../core/services/translation.service';
 import { ButtonModule } from 'primeng/button';
+import { FormSubmissionsService } from '../../form-submissions/services/form-submissions.service';
 
 @Component({
   selector: 'app-form-submission-success',
@@ -19,7 +20,8 @@ export class FormSubmissionSuccessComponent implements OnInit {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    private formSubmissionsService: FormSubmissionsService
   ) {}
 
   ngOnInit(): void {
@@ -29,12 +31,45 @@ export class FormSubmissionSuccessComponent implements OnInit {
       : null;
     this.formCode = this.route.snapshot.queryParams['formCode'] || null;
     this.documentNumber = this.route.snapshot.queryParams['documentNumber'] || null;
+
+    // Always refresh document number from backend if submissionId is available.
+    // This avoids showing stale value from query params in race conditions.
+    if (this.submissionId && this.submissionId > 0) {
+      this.formSubmissionsService.getSubmissionById(this.submissionId).subscribe({
+        next: (submission) => {
+          if (submission?.documentNumber) {
+            this.documentNumber = submission.documentNumber;
+          }
+        },
+        error: () => {
+          // Keep existing value from query params as fallback.
+        }
+      });
+    }
   }
 
   goBack(): void {
     // Go back to form view if formCode is available
     if (this.formCode) {
-      this.router.navigate(['/forms/view', this.formCode]);
+      const queryParams: any = {};
+
+      if (this.submissionId) {
+        queryParams.submissionId = this.submissionId;
+      }
+      if (this.documentNumber) {
+        queryParams.documentNumber = this.documentNumber;
+      }
+
+      // Preserve original context if present.
+      const passthroughParams = ['documentTypeId', 'projectId', 'seriesId', 'userId', 'lang'];
+      for (const key of passthroughParams) {
+        const value = this.route.snapshot.queryParams[key];
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams[key] = value;
+        }
+      }
+
+      this.router.navigate(['/forms/view', this.formCode], { queryParams });
     } else {
       // Otherwise go to home
       this.router.navigate(['/']);
@@ -59,4 +94,3 @@ export class FormSubmissionSuccessComponent implements OnInit {
     }
   }
 }
-

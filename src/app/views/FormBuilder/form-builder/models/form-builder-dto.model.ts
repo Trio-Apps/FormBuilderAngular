@@ -281,10 +281,14 @@ export interface CreateFieldDataSourceDto {
   fieldId: number; // Required
   sourceType: string; // Required: 'Static' | 'Api' | 'LookupTable' | 'Custom'
   apiUrl?: string | null; // Optional, max 500 chars
+  apiPath?: string | null;
   httpMethod?: string | null; // Optional, max 10 chars ('GET' | 'POST')
   requestBodyJson?: string | null; // Optional
+  sqlQuery?: string | null;
   valuePath?: string | null; // Optional, max 200 chars
   textPath?: string | null; // Optional, max 200 chars
+  configurationJson?: string | null;
+  arrayPropertyNames?: string[] | null;
   isActive?: boolean;
   isDeleted?: boolean; // Default: false
 }
@@ -292,10 +296,14 @@ export interface CreateFieldDataSourceDto {
 export interface UpdateFieldDataSourceDto {
   sourceType: string; // Required
   apiUrl?: string | null;
+  apiPath?: string | null;
   httpMethod?: string | null;
   requestBodyJson?: string | null;
+  sqlQuery?: string | null;
   valuePath?: string | null;
   textPath?: string | null;
+  configurationJson?: string | null;
+  arrayPropertyNames?: string[] | null;
   isActive?: boolean;
   isDeleted: boolean; // Required
 }

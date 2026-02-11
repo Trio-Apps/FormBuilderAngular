@@ -715,11 +715,6 @@ export class ApprovalInboxComponent implements OnInit {
    */
   canApproveReject(item: ApprovalInboxItemDto | null): boolean {
     if (!item) return false;
-
-    // Permission check: user must have at least Approve or Reject permission
-    if (!this.permissionService.canApproveSubmissions() && !this.permissionService.canRejectSubmissions()) {
-      return false;
-    }
     
     // Admin can always approve
     if (this.isAdmin) {
@@ -801,70 +796,20 @@ export class ApprovalInboxComponent implements OnInit {
   canApproveRejectSubmission(submission: FormSubmissionDto | null): boolean {
     if (!submission) return false;
 
-    // Permission check: user must have at least Approve or Reject permission
-    if (!this.permissionService.canApproveSubmissions() && !this.permissionService.canRejectSubmissions()) {
-      return false;
-    }
-    
     // Admin can always approve
     if (this.isAdmin) {
       return true;
     }
-    
-    // Non-admin users can approve if:
-    // 1. There's a corresponding inbox item, OR
-    // 2. User has active delegation that covers this submission
-    
-    // Check if submission exists in inboxItems
+
+    // Non-admin users can approve ONLY if submission exists in inboxItems.
+    // Delegation handling is already resolved while loading inboxItems.
     const hasInboxItem = this.inboxItems.some(item => {
-      // Compare both as numbers and strings to handle type mismatches
       const itemSubId = Number(item.submissionId);
       const subId = Number(submission.id);
       return itemSubId === subId || String(item.submissionId) === String(submission.id);
     });
-    
-    if (hasInboxItem) {
-      return true;
-    }
-    
-    // Check if user has active delegation that covers this submission
-    if (this.activeDelegations && this.activeDelegations.length > 0) {
-      const now = new Date();
-      const hasActiveDelegation = this.activeDelegations.some(delegation => {
-        // Check if delegation is active and within date range
-        if (delegation.isActive === false) return false;
-        const startDate = new Date(delegation.startDate);
-        const endDate = new Date(delegation.endDate);
-        if (now < startDate || now > endDate) return false;
-        
-        // Check scope type
-        if (delegation.scopeType === 'Global') {
-          // Global delegation - can approve all submissions
-          return true;
-        } else if (delegation.scopeType === 'Workflow') {
-          // Workflow-specific delegation - check if submission's workflow matches
-          // Note: We need workflowId from submission to check this
-          // For now, if user has workflow delegation, allow it
-          return true;
-        } else if (delegation.scopeType === 'Document') {
-          // Document-specific delegation - check if submission's id matches
-          const delegationScopeId = delegation.scopeId ? Number(delegation.scopeId) : null;
-          const submissionId = submission.id ? Number(submission.id) : null;
-          return delegationScopeId !== null && submissionId !== null && delegationScopeId === submissionId;
-        }
-        
-        return false;
-      });
-      
-      if (hasActiveDelegation) {
-        console.log('[ApprovalInbox] ✅ Permission granted via delegation for submission:', {
-          submissionId: submission.id
-        });
-        return true;
-      }
-    }
-    
-    return false;
+
+    return hasInboxItem;
   }
 
   openActionModal(item: ApprovalInboxItemDto, actionType: 'Approved' | 'Rejected' | 'Returned'): void {
@@ -1591,11 +1536,6 @@ export class ApprovalInboxComponent implements OnInit {
       return false;
     }
 
-    // Also disable if user has no approve permission
-    if (!this.permissionService.canApproveSubmissions()) {
-      return true;
-    }
-
     return this.loading.action || !this.isAmountValid;
   }
 
@@ -1816,6 +1756,7 @@ export class ApprovalInboxComponent implements OnInit {
     this.actionForm.reset();
   }
 }
+
 
 
 

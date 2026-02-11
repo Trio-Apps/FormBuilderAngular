@@ -442,9 +442,10 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         continue;
       }
 
-      // Skip Document Types - replaced with table menus
+      // Hide static Document Types/Document Series tree for non-admin users.
+      // Users should access submissions through dynamic table menus only.
       if (item.name === 'Document Types') {
-        continue; // Skip Document Types
+        continue;
       }
 
       // Show Manage Table Menus based on roles from UserGroups table
@@ -499,7 +500,9 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
       }
     }
 
-    this.navItems = applyPermissionFilter(filteredItems);
+    // For non-admin users, show the curated navigation by default
+    // without permission-code filtering.
+    this.navItems = filteredItems;
     // Freeze navItems to prevent any future modifications
     Object.freeze(this.navItems);
     // Mark sidebar as initialized to prevent future updates
@@ -513,12 +516,14 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   private addTableMenusToSidebar(filteredItems: INavData[]): void {
     const userRole = this.authService.role();
     const userRoleLower = userRole?.toLowerCase() || '';
+    const isAdmin = this.isUserAdmin();
+    const bypassPermissionChecksForUser = !isAdmin;
 
     console.log('[DefaultLayout] Adding table menus to sidebar:', this.tableMenus.length, 'menus');
 
     this.tableMenus.forEach(menu => {
       // Check if user has permission to view this menu
-      const hasPermission = !menu.permissions || menu.permissions.length === 0 || 
+      const hasPermission = bypassPermissionChecksForUser || !menu.permissions || menu.permissions.length === 0 || 
         (this.currentUserGroup && menu.permissions.some(perm => 
           perm.toLowerCase() === this.currentUserGroup?.name?.toLowerCase() ||
           perm.toLowerCase() === this.currentUserGroup?.foreignName?.toLowerCase() ||
@@ -535,7 +540,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
             .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
             .forEach(subMenu => {
               // Check sub menu permissions
-              const subMenuHasPermission = !subMenu.permissions || subMenu.permissions.length === 0 ||
+              const subMenuHasPermission = bypassPermissionChecksForUser || !subMenu.permissions || subMenu.permissions.length === 0 ||
                 (this.currentUserGroup && subMenu.permissions.some(perm =>
                   perm.toLowerCase() === this.currentUserGroup?.name?.toLowerCase() ||
                   perm.toLowerCase() === this.currentUserGroup?.foreignName?.toLowerCase() ||
@@ -552,7 +557,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
                     .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
                     .forEach(doc => {
                       // Check document permissions
-                      const docHasPermission = !doc.permissions || doc.permissions.length === 0 ||
+                      const docHasPermission = bypassPermissionChecksForUser || !doc.permissions || doc.permissions.length === 0 ||
                         (this.currentUserGroup && doc.permissions.some(perm =>
                           perm.toLowerCase() === this.currentUserGroup?.name?.toLowerCase() ||
                           perm.toLowerCase() === this.currentUserGroup?.foreignName?.toLowerCase() ||
@@ -598,7 +603,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
             .filter(doc => doc.isActive && (!doc.subMenuId || doc.subMenuId === 0))
             .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
             .forEach(doc => {
-              const docHasPermission = !doc.permissions || doc.permissions.length === 0 ||
+              const docHasPermission = bypassPermissionChecksForUser || !doc.permissions || doc.permissions.length === 0 ||
                 (this.currentUserGroup && doc.permissions.some(perm =>
                   perm.toLowerCase() === this.currentUserGroup?.name?.toLowerCase() ||
                   perm.toLowerCase() === this.currentUserGroup?.foreignName?.toLowerCase() ||

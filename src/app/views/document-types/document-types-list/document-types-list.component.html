@@ -83,6 +83,7 @@
               <th>Document Code</th>
               <th>Menu Caption</th>
               <th>Form</th>
+              <th>Default Series</th>
               <th>Parent Menu</th>
               <th>Menu Order</th>
               <th>Status</th>
@@ -101,6 +102,7 @@
               <td><code>{{ documentType.code }}</code></td>
               <td>{{ documentType.menuCaption || '-' }}</td>
               <td>{{ getFormName(documentType.formBuilderId) }}</td>
+              <td>{{ getDefaultSeriesName(documentType.defaultSeriesId) }}</td>
               <td>{{ getParentMenuName(documentType.parentMenuId) }}</td>
               <td>{{ documentType.menuOrder || 0 }}</td>
               <td>
@@ -124,13 +126,6 @@
                   </button>
 
                   <!-- Permission-based management -->
-                  <button 
-                    *appHasPermission="'Document_Allow_Manage'"
-                    class="action-btn action-duplicate"
-                    (click)="openManageSeriesModal(documentType)"
-                    [title]="'Manage Series'">
-                    <i class="pi pi-list"></i>
-                  </button>
                   <button
                     *appHasPermission="'FormRule_Allow_View'"
                     class="action-btn action-rules"
@@ -269,6 +264,22 @@
         </small>
       </div>
 
+      <div class="form-group">
+        <label for="defaultSeriesId">Default Series</label>
+        <select
+          id="defaultSeriesId"
+          formControlName="defaultSeriesId"
+          class="p-inputtext w-full">
+          <option [ngValue]="null">No Default Series</option>
+          <option *ngFor="let series of allSeries" [ngValue]="series.id">
+            {{ getSeriesDisplayName(series) }}
+          </option>
+        </select>
+        <small class="form-text text-muted" *ngIf="loading.allSeries">
+          <i class="pi pi-spin pi-spinner"></i> Loading document series...
+        </small>
+      </div>
+
       <div class="form-group active-status-group">
         <label class="active-status-label">ACTIVE STATUS</label>
         <div class="toggle-switch-wrapper">
@@ -289,15 +300,6 @@
 
     <div class="dialog-footer">
       <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeModal()" [disabled]="loading.save"></button>
-      <button 
-        *ngIf="editingDocumentType && editingDocumentType.id" 
-        type="button" 
-        pButton 
-        label="Manage Series" 
-        icon="pi pi-list" 
-        class="p-button-info" 
-        (click)="openManageSeriesModal(editingDocumentType)"
-        [disabled]="loading.save"></button>
       <button type="submit" pButton 
         [label]="(editingDocumentType ? 'Update' : 'Create') + ' Document Type'" 
         [icon]="editingDocumentType ? 'pi pi-save' : 'pi pi-plus'"
@@ -351,9 +353,12 @@
         styleClass="p-datatable-sm">
         <ng-template pTemplate="header">
           <tr>
-            <th>Series Code</th>
+            <th>Series</th>
+            <th>Template</th>
             <th>Project</th>
-            <th>Next Number</th>
+            <th>Next Seq</th>
+            <th>Reset</th>
+            <th>Generate On</th>
             <th>Default</th>
             <th>Status</th>
             <th>Actions</th>
@@ -361,9 +366,15 @@
         </ng-template>
         <ng-template pTemplate="body" let-series>
           <tr>
-            <td><code>{{ series.seriesCode }}</code></td>
-            <td>{{ getProjectName(series.projectId) }}</td>
-            <td>{{ series.nextNumber || 1 }}</td>
+            <td><strong>{{ series.seriesName || series.seriesCode }}</strong></td>
+            <td>
+              <code>{{ getSeriesTemplate(series) }}</code>
+              <div class="form-text">Preview: {{ getSeriesPreview(series) }}</div>
+            </td>
+            <td>{{ getSeriesProjectName(series) }}</td>
+            <td>{{ getSeriesCurrentSequence(series) }}</td>
+            <td>{{ series.resetPolicy || 'Yearly' }}</td>
+            <td>{{ series.generateOn || 'Submit' }}</td>
             <td>
               <span *ngIf="series.isDefault" class="badge badge-info">
                 <i class="pi pi-star"></i> Default
@@ -451,22 +462,95 @@
         </div>
 
         <div class="form-group">
-          <label for="seriesCode">Series Code <span class="required">*</span></label>
+          <label for="seriesName">Series Name <span class="required">*</span></label>
           <input
-            id="seriesCode"
+            id="seriesName"
             type="text"
             pInputText
-            formControlName="seriesCode"
-            placeholder="Enter series code (e.g., LC-AND1-2025)"
-            [class.ng-invalid]="seriesForm.get('seriesCode')?.invalid && seriesForm.get('seriesCode')?.touched"
+            formControlName="seriesName"
+            placeholder="Enter series name (e.g., Project Requests)"
+            [class.ng-invalid]="seriesForm.get('seriesName')?.invalid && seriesForm.get('seriesName')?.touched"
           />
-          <small class="p-error" *ngIf="seriesForm.get('seriesCode')?.invalid && seriesForm.get('seriesCode')?.touched">
-            Series code is required (max 50 characters)
+          <small class="p-error" *ngIf="seriesForm.get('seriesName')?.invalid && seriesForm.get('seriesName')?.touched">
+            Series name is required (max 100 characters)
           </small>
         </div>
 
         <div class="form-group">
-          <label for="nextNumber">Next Number <span class="required">*</span></label>
+          <label for="template">Template <span class="required">*</span></label>
+          <input
+            id="template"
+            type="text"
+            pInputText
+            formControlName="template"
+            placeholder="PR-{PROJECT}-{YYYY}-{SEQ}"
+            [class.ng-invalid]="seriesForm.get('template')?.invalid && seriesForm.get('template')?.touched"
+          />
+          <small class="p-error" *ngIf="seriesForm.get('template')?.invalid && seriesForm.get('template')?.touched">
+            Template is required and must include {{ '{SEQ}' }}
+          </small>
+          <small class="form-text">
+            Supported placeholders: {{ supportedSeriesPlaceholders.join(', ') }}
+          </small>
+          <small class="form-text" *ngIf="seriesForm.get('template')?.value">
+            Preview: {{ getSeriesPreview() }}
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="sequenceStart">Sequence Start <span class="required">*</span></label>
+          <p-inputNumber
+            id="sequenceStart"
+            formControlName="sequenceStart"
+            [min]="1"
+            [max]="999999"
+            [showButtons]="true"
+            [class.ng-invalid]="seriesForm.get('sequenceStart')?.invalid && seriesForm.get('sequenceStart')?.touched"
+          ></p-inputNumber>
+          <small class="p-error" *ngIf="seriesForm.get('sequenceStart')?.invalid && seriesForm.get('sequenceStart')?.touched">
+            Sequence start is required (minimum 1)
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="sequencePadding">Sequence Padding <span class="required">*</span></label>
+          <p-inputNumber
+            id="sequencePadding"
+            formControlName="sequencePadding"
+            [min]="1"
+            [max]="10"
+            [showButtons]="true"
+            [class.ng-invalid]="seriesForm.get('sequencePadding')?.invalid && seriesForm.get('sequencePadding')?.touched"
+          ></p-inputNumber>
+          <small class="p-error" *ngIf="seriesForm.get('sequencePadding')?.invalid && seriesForm.get('sequencePadding')?.touched">
+            Sequence padding must be between 1 and 10
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="resetPolicy">Reset Policy <span class="required">*</span></label>
+          <select
+            id="resetPolicy"
+            formControlName="resetPolicy"
+            class="p-inputtext w-full"
+            [class.ng-invalid]="seriesForm.get('resetPolicy')?.invalid && seriesForm.get('resetPolicy')?.touched">
+            <option *ngFor="let option of resetPolicyOptions" [ngValue]="option">{{ option }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="generateOn">Generate On <span class="required">*</span></label>
+          <select
+            id="generateOn"
+            formControlName="generateOn"
+            class="p-inputtext w-full"
+            [class.ng-invalid]="seriesForm.get('generateOn')?.invalid && seriesForm.get('generateOn')?.touched">
+            <option *ngFor="let option of generateOnOptions" [ngValue]="option">{{ option }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="nextNumber">Current Next Sequence <span class="required">*</span></label>
           <p-inputNumber
             id="nextNumber"
             formControlName="nextNumber"
@@ -476,7 +560,7 @@
             [class.ng-invalid]="seriesForm.get('nextNumber')?.invalid && seriesForm.get('nextNumber')?.touched"
           ></p-inputNumber>
           <small class="p-error" *ngIf="seriesForm.get('nextNumber')?.invalid && seriesForm.get('nextNumber')?.touched">
-            Next number is required (minimum 1)
+            Current next sequence is required (minimum 1)
           </small>
         </div>
 
@@ -619,8 +703,3 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
-
-
-
-

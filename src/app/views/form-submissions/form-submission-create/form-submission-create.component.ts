@@ -4076,8 +4076,49 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
         // Save all data (field values, attachments, grid data) using saveSubmissionData endpoint
         await this.saveSubmissionDataDirectlyAsync(this.submissionId, submissionStatus);
-        console.log('[FormSubmissionCreate] ✅ Data saved successfully after create, proceeding with final submit...');
+        console.log('[FormSubmissionCreate] Data saved successfully after create, proceeding with final submit...');
 
+        // Some backend paths create submissions directly in Submitted status.
+        // In this case, calling /submit again causes 400 "already submitted".
+        const createdStatus = (newSubmission.status || '').toLowerCase();
+        if (createdStatus === 'submitted' || createdStatus === 'approved') {
+          console.warn('[FormSubmissionCreate] Submission is already in final status after create. Skipping extra submit call.', {
+            submissionId: this.submissionId,
+            status: newSubmission.status
+          });
+
+          this.isDraftMode = false;
+          this.currentSubmission = { ...newSubmission, status: 'Submitted' };
+
+          const currentLang = this.translationService.getCurrentLanguage();
+          const statusMessage = currentLang === 'ar'
+            ? 'ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨ Ù„Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©'
+            : 'Request submitted for review';
+
+          this.messageService.add({
+            severity: 'success',
+            summary: currentLang === 'ar' ? 'ØªÙ… Ø¨Ù†Ø¬Ø§Ø­' : 'Success',
+            detail: statusMessage,
+            life: 5000
+          });
+
+          this.isSubmitting = false;
+          this.loading.create = false;
+
+          // Keep stage activation behavior for submitted documents
+          this.approvalWorkflowRuntimeService.activateStage(this.submissionId!).subscribe({
+            next: () => {
+              console.log('[FormSubmissionCreate] activate-stage succeeded in background (already submitted after create)');
+            },
+            error: (activateError) => {
+              console.warn('[FormSubmissionCreate] Failed to activate workflow stage in background (already submitted after create):', activateError);
+            }
+          });
+
+          this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
+          this.cdr.detectChanges();
+          return;
+        }
         // Now perform the same final submit logic as for existing submissions
         const submitUserIdAfterCreate = this.authService.userName();
         if (!submitUserIdAfterCreate) {
@@ -4222,6 +4263,49 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
               this.isSubmitting = false;
               this.loading.create = false;
+              this.cdr.detectChanges();
+              return;
+            }
+
+            // If backend indicates submission is already submitted, treat as success.
+            const backendMsg: string = (error?.error?.message || error?.message || '').toString();
+            const isAlreadySubmitted = backendMsg.toLowerCase().includes('already submitted');
+            if (isAlreadySubmitted && this.submissionId) {
+              console.warn('[FormSubmissionCreate] Submit after create returned "already submitted". Continuing as success.', {
+                submissionId: this.submissionId,
+                message: backendMsg
+              });
+
+              this.isDraftMode = false;
+              if (this.currentSubmission) {
+                this.currentSubmission.status = 'Submitted';
+              }
+
+              const currentLang = this.translationService.getCurrentLanguage();
+              const statusMessage = currentLang === 'ar'
+                ? 'ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨ Ù„Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©'
+                : 'Request submitted for review';
+
+              this.messageService.add({
+                severity: 'success',
+                summary: currentLang === 'ar' ? 'ØªÙ… Ø¨Ù†Ø¬Ø§Ø­' : 'Success',
+                detail: statusMessage,
+                life: 5000
+              });
+
+              this.isSubmitting = false;
+              this.loading.create = false;
+
+              this.approvalWorkflowRuntimeService.activateStage(this.submissionId).subscribe({
+                next: () => {
+                  console.log('[FormSubmissionCreate] activate-stage succeeded after already-submitted response');
+                },
+                error: (activateError) => {
+                  console.warn('[FormSubmissionCreate] Failed to activate workflow stage after already-submitted response:', activateError);
+                }
+              });
+
+              this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
               this.cdr.detectChanges();
               return;
             }

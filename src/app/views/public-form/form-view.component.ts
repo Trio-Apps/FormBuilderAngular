@@ -65,10 +65,35 @@ export class FormViewComponent implements OnInit {
   
   // Submission approval/reject state
   currentSubmission: FormSubmissionDto | null = null;
+  queryDocumentNumber: string | null = null;
+  previewDocumentNumber: string | null = null;
   isApproving = false;
   isRejecting = false;
   approveRejectComments: string = '';
   showApproveRejectModal = false;
+
+  get displayedDocumentNumber(): string | null {
+    const submissionNumber = (this.currentSubmission?.documentNumber || '').trim();
+    if (submissionNumber && !submissionNumber.startsWith('DRAFT-')) {
+      return submissionNumber;
+    }
+
+    const queryParamDocumentNumber = (this.route.snapshot.queryParams['documentNumber'] || '').trim();
+    if (queryParamDocumentNumber && !queryParamDocumentNumber.startsWith('DRAFT-')) {
+      return queryParamDocumentNumber;
+    }
+
+    if (this.previewDocumentNumber) {
+      return this.previewDocumentNumber;
+    }
+
+    const cachedNumber = (this.queryDocumentNumber || '').trim();
+    if (cachedNumber && !cachedNumber.startsWith('DRAFT-')) {
+      return cachedNumber;
+    }
+
+    return null;
+  }
 
   // File upload state
   uploadingFiles: { [fieldId: number]: boolean } = {};
@@ -160,9 +185,11 @@ export class FormViewComponent implements OnInit {
           const decoded = decodeURIComponent(code);
           // Trim whitespace and normalize
           this.formCode = decoded.trim();
+          this.loadCachedDocumentNumber();
         } catch (e) {
           // If decoding fails, use the original code trimmed
           this.formCode = code.trim();
+          this.loadCachedDocumentNumber();
         }
         
         if (!this.formCode) {
@@ -178,6 +205,12 @@ export class FormViewComponent implements OnInit {
 
     // Check for submissionId in query params (for draft/edit mode)
     this.route.queryParams.subscribe(params => {
+      this.queryDocumentNumber = params['documentNumber'] || null;
+      if (!this.queryDocumentNumber) {
+        this.loadCachedDocumentNumber();
+      } else {
+        this.cacheDocumentNumber(this.queryDocumentNumber);
+      }
       if (params['submissionId']) {
         this.submissionId = +params['submissionId'];
         // Load submission data to check status and enable approve/reject
@@ -332,6 +365,7 @@ export class FormViewComponent implements OnInit {
         }
 
         this.form = form;
+        this.loadLatestDocumentNumberForForm();
         
         // Check if rules are included with form (from backend)
         if (form.formRules && form.formRules.length > 0) {
@@ -3200,6 +3234,7 @@ export class FormViewComponent implements OnInit {
         const queryParams = this.route.snapshot.queryParams;
         const documentTypeId = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1;
         const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 6; // Default to 6 if not provided (most common project)
+        const selectedSeriesId = queryParams['seriesId'] ? +queryParams['seriesId'] : 0;
         const submittedByUserId = queryParams['userId'] || 'public-user';
 
         // PUBLIC FORM: Always use 'public-user' - never use stored admin credentials
@@ -3228,10 +3263,15 @@ export class FormViewComponent implements OnInit {
             throw new Error('No active document series found');
           }
           
-          const defaultSeries = activeSeries.find((s: DocumentSeries) => s.isDefault) || activeSeries[0];
-          const seriesId = defaultSeries?.id;
+          const selectedSeries = selectedSeriesId > 0
+            ? activeSeries.find((s: DocumentSeries) => s.id === selectedSeriesId)
+            : activeSeries[0];
+          const seriesId = selectedSeries?.id;
           
           if (!seriesId || seriesId <= 0) {
+            if (selectedSeriesId > 0) {
+              throw new Error(`Selected seriesId ${selectedSeriesId} is invalid, inactive, or does not belong to the selected project`);
+            }
             throw new Error('No valid seriesId found');
           }
           
@@ -3391,6 +3431,7 @@ export class FormViewComponent implements OnInit {
         const queryParams = this.route.snapshot.queryParams;
         const documentTypeId = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1;
         const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 6; // Default to 6 if not provided (most common project)
+        const selectedSeriesId = queryParams['seriesId'] ? +queryParams['seriesId'] : 0;
         const submittedByUserId = queryParams['userId'] || 'public-user';
 
         // PUBLIC FORM: Always use 'public-user' - never use stored admin credentials
@@ -3419,10 +3460,15 @@ export class FormViewComponent implements OnInit {
             throw new Error('No active document series found');
           }
           
-          const defaultSeries = activeSeries.find((s: DocumentSeries) => s.isDefault) || activeSeries[0];
-          const seriesId = defaultSeries?.id;
+          const selectedSeries = selectedSeriesId > 0
+            ? activeSeries.find((s: DocumentSeries) => s.id === selectedSeriesId)
+            : activeSeries[0];
+          const seriesId = selectedSeries?.id;
           
           if (!seriesId || seriesId <= 0) {
+            if (selectedSeriesId > 0) {
+              throw new Error(`Selected seriesId ${selectedSeriesId} is invalid, inactive, or does not belong to the selected project`);
+            }
             throw new Error('No valid seriesId found');
           }
           
@@ -4066,6 +4112,8 @@ export class FormViewComponent implements OnInit {
 
       // Create a const with correct type for TypeScript
       const finalProjectId: number = projectId;
+      const queryParams = this.route.snapshot.queryParams;
+      const selectedSeriesId = queryParams['seriesId'] ? +queryParams['seriesId'] : 0;
 
       console.log('[FormView] Creating draft submission on load:', {
         formBuilderId: this.form!.id!,
@@ -4137,11 +4185,20 @@ export class FormViewComponent implements OnInit {
           return;
         }
 
-        // Use default series or first available active series
-        const defaultSeries = activeSeries.find((s: DocumentSeries) => s.isDefault) || activeSeries[0];
-        const seriesId = defaultSeries?.id;
+        const selectedSeries = selectedSeriesId > 0
+          ? activeSeries.find((s: DocumentSeries) => s.id === selectedSeriesId)
+          : activeSeries[0];
+        this.updatePreviewDocumentNumber(selectedSeries);
+        const seriesId = selectedSeries?.id;
 
         if (!seriesId || seriesId <= 0) {
+          if (selectedSeriesId > 0) {
+            console.warn('[FormView] Selected seriesId is invalid, inactive, or not in this project:', {
+              selectedSeriesId,
+              projectId: finalProjectId,
+              documentTypeId
+            });
+          }
           console.warn('[FormView] No valid seriesId found, cannot create draft on load');
           return;
         }
@@ -4532,7 +4589,19 @@ export class FormViewComponent implements OnInit {
       const routeQueryParams = this.route.snapshot.queryParams;
       let documentTypeId: number | null = routeQueryParams['documentTypeId'] ? +routeQueryParams['documentTypeId'] : null;
       
-      // If documentTypeId not in query params, try to get it from form
+      // If documentTypeId not in query params, try to get it directly from loaded form payload first
+      if (!documentTypeId && this.form) {
+        const formDocumentTypeId = Number(
+          (this.form as any).documentTypeId ??
+          (this.form as any).DocumentTypeId ??
+          0
+        );
+        if (Number.isFinite(formDocumentTypeId) && formDocumentTypeId > 0) {
+          documentTypeId = formDocumentTypeId;
+        }
+      }
+
+      // If still missing, try to resolve from DocumentTypes service by form ID
       if (!documentTypeId && this.form && this.form.id) {
         try {
           const documentType = await this.documentTypesService.getDocumentTypeByFormId(this.form.id).toPromise();
@@ -4746,6 +4815,7 @@ export class FormViewComponent implements OnInit {
               
               // If seriesId is provided in query params, verify it's valid for this project
               let selectedSeries: DocumentSeries | undefined;
+              const hasRequestedSeries = !!(seriesId && seriesId > 0);
               if (seriesId && seriesId > 0) {
                 const queryParamSeries = activeSeries.find((s: DocumentSeries) => s.id === seriesId);
                 if (queryParamSeries && queryParamSeries.projectId === projectId) {
@@ -4762,14 +4832,24 @@ export class FormViewComponent implements OnInit {
                 }
               }
               
-              // Use selected series, or default series, or first available active series
-              if (!selectedSeries) {
-                selectedSeries = activeSeries.find((s: DocumentSeries) => s.isDefault) || activeSeries[0];
+              // Use only explicitly requested series when provided.
+              // Fallback to first active series only when no seriesId was provided.
+              if (!selectedSeries && !hasRequestedSeries) {
+                selectedSeries = activeSeries[0];
               }
               
               if (selectedSeries && selectedSeries.id) {
                 actualSeriesId = selectedSeries.id;
+                this.updatePreviewDocumentNumber(selectedSeries);
                 console.log('[FormView] Selected active series:', { id: actualSeriesId, code: selectedSeries.seriesCode, projectId: selectedSeries.projectId });
+              } else if (hasRequestedSeries) {
+                actualSeriesId = null;
+                hasActiveSeries = false;
+                console.warn('[FormView] Requested seriesId was not found as active for this project; not using fallback series.', {
+                  seriesId,
+                  projectId,
+                  documentTypeId
+                });
               }
             } else {
               // Check if there are any series at all (even inactive)
@@ -4911,13 +4991,14 @@ export class FormViewComponent implements OnInit {
       
       // Check if we have a series before proceeding
       // Allow auto-selection if 404 was intentionally ignored from query params
-      if ((!actualSeriesId || actualSeriesId <= 0 || !hasActiveSeries) && !shouldAllowAutoSelectSeries) {
+      if (false && ((((actualSeriesId ?? 0) <= 0) || !hasActiveSeries) && !shouldAllowAutoSelectSeries)) {
         // Ensure projectId is not null before building error message
         if (!projectId) {
           try {
             const projects = await this.projectsService.getActiveProjects().toPromise();
-            if (projects && projects.length > 0 && projects[0]?.id) {
-              projectId = projects[0].id;
+            const activeProjects = projects ?? [];
+            if (activeProjects.length > 0 && activeProjects[0]?.id) {
+              projectId = activeProjects[0].id;
               console.log('[FormView] projectId was null before error message, using first active project from API:', projectId);
             } else {
               projectId = 1; // Fallback
@@ -5021,7 +5102,7 @@ export class FormViewComponent implements OnInit {
           
           // First attempt with the selected seriesId
           // Ensure we have a valid seriesId and projectId before attempting to create draft
-          if (!actualSeriesId || actualSeriesId <= 0) {
+          if (false && ((actualSeriesId ?? 0) <= 0)) {
             const currentLang = this.translationService.getCurrentLanguage();
             const message = currentLang === 'ar'
               ? `لا توجد سلسلة مستندات صالحة. لا يمكن إنشاء مسودة بدون سلسلة مستندات.`
@@ -5057,7 +5138,7 @@ export class FormViewComponent implements OnInit {
           try {
             console.log('[FormView] Attempting to create draft with seriesId:', actualSeriesId);
             submission = await new Promise<FormSubmissionDto>((resolve, reject) => {
-              this.formSubmissionsService.createDraft(this.form!.id!, projectId!, finalUserId, actualSeriesId!).subscribe({
+              this.formSubmissionsService.createDraft(this.form!.id!, projectId!, finalUserId, actualSeriesId || undefined).subscribe({
                 next: (result) => {
                   console.log('[FormView] Draft created successfully:', result);
                   resolve(result);
@@ -5092,6 +5173,7 @@ export class FormViewComponent implements OnInit {
               if (otherActiveSeries.length > 0 && projectId) {
                 const alternativeSeries = otherActiveSeries[0];
                 console.log('[FormView] Retrying with alternative active series:', { id: alternativeSeries.id, code: alternativeSeries.seriesCode });
+                this.updatePreviewDocumentNumber(alternativeSeries);
                 
                 try {
                   submission = await new Promise<FormSubmissionDto>((resolve, reject) => {
@@ -6123,6 +6205,12 @@ export class FormViewComponent implements OnInit {
     this.formSubmissionsService.getSubmissionById(this.submissionId).subscribe({
       next: (submission: FormSubmissionDetailDto) => {
         this.currentSubmission = submission;
+        if (submission?.documentNumber) {
+          this.cacheDocumentNumber(submission.documentNumber);
+          if (!this.queryDocumentNumber) {
+            this.queryDocumentNumber = submission.documentNumber;
+          }
+        }
         
         // Load grid data from submission response if available
         if (submission.gridData && submission.gridData.length > 0) {
@@ -6176,6 +6264,77 @@ export class FormViewComponent implements OnInit {
     });
   }
 
+  private updatePreviewDocumentNumber(series: DocumentSeries | null | undefined): void {
+    if (!series) return;
+
+    const template = (series.template || '').trim() || `${series.seriesCode || 'SERIES'}-{SEQ}`;
+    const now = new Date();
+    const year = `${now.getFullYear()}`;
+    const month = `${now.getMonth() + 1}`.padStart(2, '0');
+    const day = `${now.getDate()}`.padStart(2, '0');
+    const sequencePadding = Math.max(1, Number(series.sequencePadding || 3));
+    const sequenceNumber = Math.max(1, Number(series.nextNumber || series.sequenceStart || 1));
+    const sequenceValue = `${sequenceNumber}`.padStart(sequencePadding, '0');
+    const projectToken = String(series.projectName || `PROJECT${series.projectId || ''}`).trim().toUpperCase();
+
+    const preview = template
+      .split('{PROJECT}').join(projectToken)
+      .split('{YYYY}').join(year)
+      .split('{MM}').join(month)
+      .split('{DD}').join(day)
+      .split('{SEQ}').join(sequenceValue);
+
+    this.previewDocumentNumber = preview || null;
+  }
+
+  private getDocumentNumberCacheKey(): string | null {
+    const code = (this.formCode || '').trim();
+    if (!code) return null;
+    return `public-form:last-document-number:${code}`;
+  }
+
+  private cacheDocumentNumber(documentNumber: string): void {
+    const normalized = (documentNumber || '').trim();
+    if (!normalized) return;
+    const cacheKey = this.getDocumentNumberCacheKey();
+    if (!cacheKey) return;
+    try {
+      localStorage.setItem(cacheKey, normalized);
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  private loadCachedDocumentNumber(): void {
+    const cacheKey = this.getDocumentNumberCacheKey();
+    if (!cacheKey) return;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached && !this.queryDocumentNumber) {
+        this.queryDocumentNumber = cached;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  private loadLatestDocumentNumberForForm(): void {
+    if (this.queryDocumentNumber) return;
+    if (!this.form?.id) return;
+
+    this.formSubmissionsService.getLatestDocumentNumberByFormBuilderId(this.form.id).subscribe({
+      next: (documentNumber) => {
+        if (!documentNumber || this.queryDocumentNumber) return;
+        this.queryDocumentNumber = documentNumber;
+        this.cacheDocumentNumber(documentNumber);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        // Keep page working silently if endpoint fails.
+      }
+    });
+  }
+
   /**
    * Check if submission can be approved/rejected
    */
@@ -6198,5 +6357,3 @@ export class FormViewComponent implements OnInit {
     }
   }
 }
-
-

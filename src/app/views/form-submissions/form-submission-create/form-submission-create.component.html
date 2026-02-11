@@ -62,7 +62,7 @@
             <h2 class="form-title">{{ getFormName(selectedFormId) }}</h2>
             
             <!-- Document Number Badge -->
-            <div class="document-number-badge" *ngIf="currentSubmission?.documentNumber">
+            <div class="document-number-badge" *ngIf="currentSubmission?.documentNumber && !currentSubmission?.documentNumber?.startsWith('DRAFT-')">
               <span class="document-number-label">
                 {{ translationService.getCurrentLanguage() === 'ar' ? 'رقم المستند:' : 'Document Number:' }}
               </span>

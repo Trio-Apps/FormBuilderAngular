@@ -34,11 +34,11 @@
     <p class="form-description" *ngIf="getFormDescription(form)">{{ getFormDescription(form) }}</p>
     
     <!-- Document Number Badge -->
-    <div class="document-number-badge" *ngIf="currentSubmission?.documentNumber">
+    <div class="document-number-badge" *ngIf="displayedDocumentNumber as documentNumber">
       <span class="document-number-label">
         {{ translationService.getCurrentLanguage() === 'ar' ? 'رقم المستند:' : 'Document Number:' }}
       </span>
-      <span class="document-number-value">{{ currentSubmission?.documentNumber }}</span>
+      <span class="document-number-value">{{ documentNumber }}</span>
     </div>
   </div>
 

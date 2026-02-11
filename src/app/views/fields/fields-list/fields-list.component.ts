@@ -2914,13 +2914,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       next: (updatedField) => {
         const selectedFieldType = this.fieldTypes.find(t => t.id === Number(fieldData.fieldTypeId));
         if (selectedFieldType?.hasOptions) {
-          // Check if field has DataSource - only save options if DataSource is Static or doesn't exist
-          const fieldDataSource = updatedField.fieldDataSource;
-          const dataSourceType = fieldDataSource?.sourceType || 'Static';
-          
-          // IMPORTANT: Only save options for Static DataSource
-          // For Api or LookupTable, options come from external source and should NOT be saved
-          if (dataSourceType === 'Static') {
+          // Use currently selected DataSource type from editor state.
+          // API update response may not include fieldDataSource, which could incorrectly fallback to "Static".
+          if (this.dataSourceType === 'Static') {
           this.saveFieldOptions(this.editingField!.id);
           } else {
             // For Api/LookupTable, ensure no options are saved
@@ -2981,6 +2977,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
           // Parse LookupTable configuration
           if (dataSource.sourceType === 'LookupTable' && dataSource.apiUrl) {
+            let lookupDatabase: 'FormBuilder' | 'AkhmanageIt' = 'FormBuilder';
+            if (dataSource.requestBodyJson) {
+              try {
+                const requestBodyParsed = JSON.parse(dataSource.requestBodyJson);
+                const dbValue = requestBodyParsed?.database;
+                if (typeof dbValue === 'string' && dbValue.trim()) {
+                  lookupDatabase = dbValue.trim() === 'AKHManageIT' ? 'AkhmanageIt' : dbValue.trim() as 'FormBuilder' | 'AkhmanageIt';
+                }
+              } catch {
+                // Keep default database when payload is not JSON
+              }
+            }
             try {
               // Try to parse as JSON first (for backwards compatibility with old data)
               const configJson = JSON.parse(dataSource.apiUrl);
@@ -2990,13 +2998,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                   table: configJson.table,
                   valueColumn: configJson.valueColumn,
                   textColumn: configJson.textColumn,
-                  database: 'FormBuilder'
+                  database: lookupDatabase
                 };
                 this.dataSourceConfig = {
                   sourceType: dataSource.sourceType,
                   apiUrl: configJson.table, // Use table name only
                   httpMethod: null,
-                  requestBodyJson: null,
+                  requestBodyJson: dataSource.requestBodyJson || null,
                   valuePath: configJson.valueColumn,
                   textPath: configJson.textColumn,
                   isActive: dataSource.isActive
@@ -3007,13 +3015,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                   table: dataSource.apiUrl,
                   valueColumn: dataSource.valuePath || 'Id',
                   textColumn: dataSource.textPath || 'Name',
-                  database: 'FormBuilder'
+                  database: lookupDatabase
                 };
                 this.dataSourceConfig = {
                   sourceType: dataSource.sourceType,
                   apiUrl: dataSource.apiUrl,
                   httpMethod: null,
-                  requestBodyJson: null,
+                  requestBodyJson: dataSource.requestBodyJson || null,
                   valuePath: dataSource.valuePath || 'Id',
                   textPath: dataSource.textPath || 'Name',
                   isActive: dataSource.isActive
@@ -3025,13 +3033,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 table: dataSource.apiUrl,
                 valueColumn: dataSource.valuePath || 'Id',
                 textColumn: dataSource.textPath || 'Name',
-                database: 'FormBuilder'
+                database: lookupDatabase
               };
               this.dataSourceConfig = {
                 sourceType: dataSource.sourceType,
                 apiUrl: dataSource.apiUrl,
                 httpMethod: null,
-                requestBodyJson: null,
+                requestBodyJson: dataSource.requestBodyJson || null,
                 valuePath: dataSource.valuePath || 'Id',
                 textPath: dataSource.textPath || 'Name',
                 isActive: dataSource.isActive
@@ -4845,11 +4853,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
 
     // Prepare request payload
-    // For SqlQuery, match the exact format that works in API test tool:
-    // { "SourceType": "DataSourceSqlQuery", "RequestBodyJson": "select id, TypeName from FIELD_TYPES", "ValuePath": "Id", "TextPath": "TypeName" }
     // Note: fieldId is optional for preview (use 0 if not editing an existing field)
     const requestPayload: any = {
-      SourceType: this.dataSourceType === 'SqlQuery' ? 'DataSourceSqlQuery' : this.dataSourceType, // Backend expects PascalCase
+      SourceType: this.dataSourceType, // Keep canonical source type names
       ValuePath: valuePath, // Backend expects PascalCase
       TextPath: textPath    // Backend expects PascalCase
     };
@@ -5532,12 +5538,29 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
       // For SqlQuery/SapHana, store the raw SQL query in requestBodyJson
       let requestBodyJsonValue: string | null = null;
+      let configurationJsonValue: string | null = null;
       if (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') {
         // Backend currently executes requestBodyJson directly as SQL,
         // so we must save the plain SQL string without JSON wrapping.
         requestBodyJsonValue = (this.sqlQueryConfig.sqlQuery || '').trim();
+        if (this.dataSourceType === 'SqlQuery' && this.sqlQueryConfig.database) {
+          configurationJsonValue = JSON.stringify({
+            sqlQuery: requestBodyJsonValue,
+            valueColumn: valuePathValue || 'Id',
+            textColumn: textPathValue || 'Name',
+            database: this.sqlQueryConfig.database
+          });
+        }
         console.log('[FieldsList] Saving raw SqlQuery (no JSON wrapper) for execution:', {
           length: requestBodyJsonValue.length
+        });
+      } else if (this.dataSourceType === 'LookupTable') {
+        const selectedDatabase = this.lookupTableConfig.database || 'FormBuilder';
+        const normalizedDatabase = selectedDatabase.toLowerCase() === 'akhmanageit'
+          ? 'AkhmanageIt'
+          : selectedDatabase;
+        requestBodyJsonValue = JSON.stringify({
+          database: normalizedDatabase
         });
       } else {
         requestBodyJsonValue = this.dataSourceConfig.requestBodyJson || null;
@@ -5551,6 +5574,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         requestBodyJson: requestBodyJsonValue,
         valuePath: valuePathValue,
         textPath: textPathValue,
+        configurationJson: configurationJsonValue,
         isActive: this.dataSourceConfig.isActive !== false
       };
 
@@ -5768,10 +5792,5 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     return environment.apiUrl;
   }
 }
-
-
-
-
-
 
 

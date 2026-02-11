@@ -64,15 +64,7 @@
                 <span class="badge badge-info">{{ submission.status }}</span>
               </td>
               <td>
-                <!-- ✅ Show Approve/Reject buttons if user can approve (Admin or assigned as Stage Assignee) -->
-                <app-table-actions *ngIf="canApproveRejectSubmission(submission)">
-                  <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" 
-                    (click)="openActionModalForSubmission(submission, 'Approved')" pTooltip="Approve"></button>
-                  <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" 
-                    (click)="openActionModalForSubmission(submission, 'Rejected')" pTooltip="Reject"></button>
-                </app-table-actions>
-                <!-- ✅ Show View Only if user cannot approve -->
-                <span *ngIf="!canApproveRejectSubmission(submission)" class="view-only-text">View Only</span>
+                <span class="view-only-text">View Only</span>
               </td>
             </tr>
           </ng-template>
@@ -186,6 +178,5 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
 
 

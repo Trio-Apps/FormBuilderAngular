@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, switchMap } from 'rxjs/operators';
 import {
   DocumentType,
   CreateDocumentTypeDto,
@@ -30,18 +30,7 @@ export class DocumentTypesService {
    */
   getAllDocumentTypes(): Observable<DocumentType[]> {
     return this.http.get<any>(this.baseUrl).pipe(
-      map((response: any) => {
-        // Handle ServiceResult<T> response
-        if (response && typeof response === 'object' && !Array.isArray(response)) {
-          if (response.success !== undefined) {
-            // ServiceResult format
-            return response.data || [];
-          }
-          // ApiResponse format (fallback)
-          return response.data || response.items || response.result || [];
-        }
-        return Array.isArray(response) ? response : [];
-      }),
+      map((response: any) => this.extractArrayPayload<DocumentType>(response)),
       catchError((error) => {
         console.error('Error fetching document types:', error);
         // Return empty array instead of throwing to prevent breaking the app
@@ -57,23 +46,51 @@ export class DocumentTypesService {
    */
   getActiveDocumentTypes(): Observable<DocumentType[]> {
     return this.http.get<any>(`${this.baseUrl}/active`).pipe(
-      map((response: any) => {
-        // Handle ServiceResult<T> response
-        if (response && typeof response === 'object' && !Array.isArray(response)) {
-          if (response.success !== undefined) {
-            // ServiceResult format
-            return response.data || [];
-          }
-          // ApiResponse format (fallback)
-          return response.data || response.items || response.result || [];
-        }
-        return Array.isArray(response) ? response : [];
-      }),
+      map((response: any) => this.extractArrayPayload<DocumentType>(response)),
       catchError((error) => {
         console.error('Error fetching active document types:', error);
         return of([]);
       })
     );
+  }
+
+  private extractArrayPayload<T>(response: any): T[] {
+    if (Array.isArray(response)) {
+      return response as T[];
+    }
+
+    if (!response || typeof response !== 'object') {
+      return [];
+    }
+
+    const candidates = [
+      response.data,
+      response.items,
+      response.result,
+      response.value,
+      response.values,
+      response.$values,
+      response.data?.data,
+      response.data?.items,
+      response.data?.result,
+      response.data?.value,
+      response.data?.values,
+      response.data?.$values,
+      response.result?.data,
+      response.result?.items,
+      response.result?.$values
+    ];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        return candidate as T[];
+      }
+      if (candidate && typeof candidate === 'object' && Array.isArray(candidate.$values)) {
+        return candidate.$values as T[];
+      }
+    }
+
+    return [];
   }
 
   /**
@@ -82,9 +99,26 @@ export class DocumentTypesService {
    */
   getDocumentTypeByFormId(formBuilderId: number): Observable<DocumentType | null> {
     return this.getActiveDocumentTypes().pipe(
-      map((types: DocumentType[]) => {
-        const docType = types.find(t => t.formBuilderId === formBuilderId && t.isActive && !t.isDeleted);
-        return docType || null;
+      switchMap((types: DocumentType[]) => {
+        const docType = this.findByFormBuilderId(types, formBuilderId, true);
+        if (docType) {
+          return of(docType);
+        }
+
+        return this.getAllDocumentTypes().pipe(
+          switchMap((allTypes: DocumentType[]) => {
+            const fallbackDocType = this.findByFormBuilderId(allTypes, formBuilderId, false);
+            if (fallbackDocType) {
+              return of(fallbackDocType);
+            }
+
+            // Final fallback: read from FormBuilderDocumentSettings endpoint directly.
+            return this.http.get<any>(`${environment.apiUrl}/FormBuilderDocumentSettings/form/${formBuilderId}`).pipe(
+              map((response: any) => this.extractDocumentTypeFromSettingsResponse(response, formBuilderId)),
+              catchError(() => of(null))
+            );
+          })
+        );
       }),
       catchError((error) => {
         console.error(`Error fetching document type for FormBuilderId ${formBuilderId}:`, error);
@@ -180,18 +214,52 @@ export class DocumentTypesService {
    * This returns the active document type associated with the form
    */
   getDocumentTypeByFormBuilderId(formBuilderId: number): Observable<DocumentType | null> {
-    // Import DocumentSettingsService dynamically to avoid circular dependency
-    // For now, we'll use getActiveDocumentTypes and filter by formBuilderId
-    return this.getActiveDocumentTypes().pipe(
-      map((types: DocumentType[]) => {
-        const docType = types.find(t => t.formBuilderId === formBuilderId && t.isActive && !t.isDeleted);
-        return docType || null;
-      }),
-      catchError((error) => {
-        console.error(`Error fetching document type for FormBuilderId ${formBuilderId}:`, error);
-        return of(null);
-      })
-    );
+    return this.getDocumentTypeByFormId(formBuilderId);
+  }
+
+  private findByFormBuilderId(types: DocumentType[], formBuilderId: number, activeOnly: boolean): DocumentType | null {
+    const targetId = Number(formBuilderId);
+    if (!Number.isFinite(targetId) || targetId <= 0) {
+      return null;
+    }
+
+    const match = (types || []).find((t: any) => {
+      const typeFormBuilderId = Number(t?.formBuilderId ?? t?.FormBuilderId ?? 0);
+      if (typeFormBuilderId !== targetId) return false;
+      if (!activeOnly) return true;
+
+      const isActive = t?.isActive !== false && t?.IsActive !== false;
+      const isDeleted = t?.isDeleted === true || t?.IsDeleted === true;
+      return isActive && !isDeleted;
+    });
+
+    return match || null;
+  }
+
+  private extractDocumentTypeFromSettingsResponse(response: any, formBuilderId: number): DocumentType | null {
+    const payload = response?.data ?? response?.result ?? response;
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const id = Number(payload.documentTypeId ?? payload.DocumentTypeId ?? 0);
+    if (!Number.isFinite(id) || id <= 0) {
+      return null;
+    }
+
+    const documentName = String(payload.documentName ?? payload.DocumentName ?? '').trim();
+    const documentCode = String(payload.documentCode ?? payload.DocumentCode ?? '').trim();
+
+    return {
+      id,
+      name: documentName || `Document ${id}`,
+      code: documentCode || `DOC-${id}`,
+      formBuilderId,
+      menuCaption: documentName || `Document ${id}`,
+      menuOrder: Number(payload.menuOrder ?? payload.MenuOrder ?? 0),
+      isActive: payload.isActive !== false && payload.IsActive !== false,
+      isDeleted: false
+    };
   }
 
   /**
@@ -284,10 +352,20 @@ export class DocumentTypesService {
       delete cleanDto.approvalWorkflowId;
     }
 
+    // Explicitly handle defaultSeriesId
+    if (dto.defaultSeriesId === null) {
+      cleanDto.defaultSeriesId = null;
+    } else if (dto.defaultSeriesId === 0) {
+      cleanDto.defaultSeriesId = null;
+    } else if (dto.defaultSeriesId === undefined) {
+      delete cleanDto.defaultSeriesId;
+    }
+
     console.log('[DocumentTypesService] Updating document type:', { id: documentTypeId, dto: cleanDto });
     console.log('[DocumentTypesService] DTO JSON:', JSON.stringify(cleanDto, null, 2));
     console.log('[DocumentTypesService] parentMenuId value:', cleanDto.parentMenuId, 'type:', typeof cleanDto.parentMenuId);
     console.log('[DocumentTypesService] approvalWorkflowId value:', cleanDto.approvalWorkflowId, 'type:', typeof cleanDto.approvalWorkflowId);
+    console.log('[DocumentTypesService] defaultSeriesId value:', cleanDto.defaultSeriesId, 'type:', typeof cleanDto.defaultSeriesId);
 
     return this.http.put<any>(`${this.baseUrl}/${documentTypeId}`, cleanDto, {
       headers: { 'Content-Type': 'application/json' }
@@ -643,30 +721,35 @@ export class DocumentTypesService {
    */
   createDocumentSeries(dto: CreateDocumentSeriesDto): Observable<DocumentSeries> {
     // Validate required fields
-    if (!dto.documentTypeId || dto.documentTypeId <= 0) {
-      return new Observable(observer => {
-        observer.error(new Error('Document type ID is required'));
-      });
-    }
-
     if (!dto.projectId || dto.projectId <= 0) {
       return new Observable(observer => {
         observer.error(new Error('Project ID is required'));
       });
     }
 
-    if (!dto.seriesCode || dto.seriesCode.trim() === '') {
+    if ((!dto.seriesCode || dto.seriesCode.trim() === '') && (!dto.template || dto.template.trim() === '')) {
       return new Observable(observer => {
-        observer.error(new Error('Series code is required'));
+        observer.error(new Error('Series code or template is required'));
       });
     }
 
+    const normalizedTemplate = dto.template?.trim();
+    const normalizedSeriesCode = dto.seriesCode?.trim() || normalizedTemplate || '';
+    const normalizedSequenceStart = dto.sequenceStart !== undefined && dto.sequenceStart !== null
+      ? dto.sequenceStart
+      : (dto.nextNumber !== undefined && dto.nextNumber !== null ? dto.nextNumber : 1);
+
     // Set defaults according to API documentation
     const createDto: CreateDocumentSeriesDto = {
-      documentTypeId: dto.documentTypeId,
       projectId: dto.projectId,
-      seriesCode: dto.seriesCode.trim(),
-      nextNumber: dto.nextNumber !== undefined && dto.nextNumber !== null ? dto.nextNumber : 1,
+      seriesName: dto.seriesName?.trim(),
+      template: normalizedTemplate,
+      seriesCode: normalizedSeriesCode,
+      sequenceStart: normalizedSequenceStart,
+      sequencePadding: dto.sequencePadding,
+      resetPolicy: dto.resetPolicy,
+      generateOn: dto.generateOn,
+      nextNumber: dto.nextNumber !== undefined && dto.nextNumber !== null ? dto.nextNumber : normalizedSequenceStart,
       isDefault: dto.isDefault !== undefined ? dto.isDefault : false,
       isActive: dto.isActive !== undefined ? dto.isActive : true
     };
@@ -754,7 +837,7 @@ export class DocumentTypesService {
         // Duplicate code
         if (errorText.includes('duplicate') || errorText.includes('already exists') || 
             (errorText.includes('code') && (errorText.includes('exists') || errorText.includes('duplicate')))) {
-          errorMessage = 'A document series with this code already exists for this document type and project. Please use a different code.';
+          errorMessage = 'A document series with this code already exists for this project. Please use a different code.';
         }
         
         // Invalid project
@@ -780,9 +863,16 @@ export class DocumentTypesService {
       });
     }
 
-    console.log('[DocumentTypesService] Updating document series:', { id: seriesId, dto });
+    const updateDto: UpdateDocumentSeriesDto = {
+      ...dto,
+      seriesName: dto.seriesName?.trim(),
+      template: dto.template?.trim(),
+      seriesCode: dto.seriesCode?.trim()
+    };
 
-    return this.http.put<any>(`${this.documentSeriesUrl}/${seriesId}`, dto).pipe(
+    console.log('[DocumentTypesService] Updating document series:', { id: seriesId, dto: updateDto });
+
+    return this.http.put<any>(`${this.documentSeriesUrl}/${seriesId}`, updateDto).pipe(
       map(() => {
         console.log('[DocumentTypesService] Document series updated successfully');
         return;
@@ -820,7 +910,7 @@ export class DocumentTypesService {
         
         // Duplicate code
         if (errorText.includes('duplicate') || errorText.includes('already exists') || errorText.includes('code')) {
-          errorMessage = 'A document series with this code already exists for this document type and project. Please use a different code.';
+          errorMessage = 'A document series with this code already exists for this project. Please use a different code.';
         }
         
         // Invalid project
@@ -1163,4 +1253,3 @@ export class DocumentTypesService {
     return series.isActive === true;
   }
 }
-
