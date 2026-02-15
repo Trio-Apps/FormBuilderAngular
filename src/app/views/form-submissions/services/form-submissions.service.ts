@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
 import { catchError, map, timeout } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
@@ -19,6 +19,10 @@ export interface FormSubmissionDto {
   submittedByUserName?: string;
   submittedDate: Date;
   status: string;
+  stageId?: number | null;
+  signatureStatus?: 'not_required' | 'pending' | 'signed' | string;
+  docuSignEnvelopeId?: string | null;
+  signedAt?: Date | null;
   createdDate: Date;
   lastUpdatedDate: Date;
 }
@@ -138,6 +142,13 @@ export interface SubmitFormDto {
   submittedByUserId: string;
 }
 
+export interface SubmitFormResponseDto {
+  submitted: boolean;
+  signatureRequired: boolean;
+  signatureStatus: 'not_required' | 'pending' | 'signed' | string;
+  signingUrl: string | null;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -146,16 +157,53 @@ export class FormSubmissionsService {
 
   constructor(private http: HttpClient) {}
 
+  private buildDocuSignHeaders(): HttpHeaders {
+    const token = localStorage.getItem('docusign_access_token');
+    let headers = new HttpHeaders();
+    if (token && token.trim().length > 0) {
+      headers = headers.set('X-DocuSign-Access-Token', token.trim());
+    }
+    return headers;
+  }
+
+  private normalizeSubmissionDto(item: any): FormSubmissionDto {
+    return {
+      ...item,
+      id: Number(item?.id ?? item?.Id ?? 0),
+      formBuilderId: Number(item?.formBuilderId ?? item?.FormBuilderId ?? 0),
+      documentTypeId: Number(item?.documentTypeId ?? item?.DocumentTypeId ?? 0),
+      seriesId: Number(item?.seriesId ?? item?.SeriesId ?? 0),
+      status: item?.status ?? item?.Status ?? '',
+      stageId: item?.stageId ?? item?.StageId ?? null,
+      signatureStatus: item?.signatureStatus ?? item?.SignatureStatus ?? 'not_required',
+      docuSignEnvelopeId: item?.docuSignEnvelopeId ?? item?.DocuSignEnvelopeId ?? null,
+      signedAt: item?.signedAt ?? item?.SignedAt ?? null,
+      submittedByUserId: item?.submittedByUserId ?? item?.SubmittedByUserId ?? '',
+      submittedByUserName: item?.submittedByUserName ?? item?.SubmittedByUserName ?? '',
+      documentNumber: item?.documentNumber ?? item?.DocumentNumber ?? '',
+      formName: item?.formName ?? item?.FormName ?? '',
+      documentTypeName: item?.documentTypeName ?? item?.DocumentTypeName ?? '',
+      seriesCode: item?.seriesCode ?? item?.SeriesCode ?? '',
+      submittedDate: item?.submittedDate ?? item?.SubmittedDate ?? null,
+      createdDate: item?.createdDate ?? item?.CreatedDate ?? null,
+      lastUpdatedDate: item?.lastUpdatedDate ?? item?.LastUpdatedDate ?? null,
+      version: Number(item?.version ?? item?.Version ?? 1)
+    } as FormSubmissionDto;
+  }
+
   /**
    * Get all form submissions
    */
   getAllSubmissions(): Observable<FormSubmissionDto[]> {
     return this.http.get<any>(this.baseUrl).pipe(
       map((response: any) => {
+        let items: any[] = [];
         if (response && typeof response === 'object' && !Array.isArray(response)) {
-          return response.data || response.items || response.result || [];
+          items = response.data || response.items || response.result || [];
+        } else {
+          items = Array.isArray(response) ? response : [];
         }
-        return Array.isArray(response) ? response : [];
+        return (items || []).map((item: any) => this.normalizeSubmissionDto(item));
       }),
       catchError((error) => {
         console.error('Error fetching form submissions:', error);
@@ -203,10 +251,13 @@ export class FormSubmissionsService {
       // Prevent infinite loading if backend/network hangs
       timeout(15000),
       map((response: any) => {
+        let items: any[] = [];
         if (response && typeof response === 'object' && !Array.isArray(response)) {
-          return response.data || response.items || response.result || [];
+          items = response.data || response.items || response.result || [];
+        } else {
+          items = Array.isArray(response) ? response : [];
         }
-        return Array.isArray(response) ? response : [];
+        return (items || []).map((item: any) => this.normalizeSubmissionDto(item));
       }),
       catchError((error) => {
         console.error(`Error fetching form submissions for document type ${documentTypeId}:`, error);
@@ -691,6 +742,56 @@ export class FormSubmissionsService {
         }
 
         throw new Error(errorMessage);
+      })
+    );
+  }
+
+  /**
+   * Submit by submission id and return signature flow response.
+   * POST /api/submissions/{id}/submit
+   */
+  submitSubmissionById(submissionId: number): Observable<SubmitFormResponseDto> {
+    return this.http.post<any>(`${environment.apiUrl}/submissions/${submissionId}/submit`, {}, {
+      headers: this.buildDocuSignHeaders()
+    }).pipe(
+      map((response: any) => {
+        const payload = response?.data || response?.result || response || {};
+
+        return {
+          submitted: Boolean(payload.submitted ?? payload.Submitted),
+          signatureRequired: Boolean(payload.signatureRequired ?? payload.SignatureRequired),
+          signatureStatus: (payload.signatureStatus ?? payload.SignatureStatus ?? 'not_required') as any,
+          signingUrl: (payload.signingUrl ?? payload.SigningUrl ?? null) as string | null
+        };
+      }),
+      catchError((error) => {
+        console.error(`[FormSubmissionsService] Error submitting by id ${submissionId}:`, error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * Get embedded signing URL for a pending-signature submission.
+   * POST /api/submissions/{id}/signing-url
+   */
+  getSubmissionSigningUrlById(submissionId: number): Observable<SubmitFormResponseDto> {
+    return this.http.post<any>(`${environment.apiUrl}/submissions/${submissionId}/signing-url`, {}, {
+      headers: this.buildDocuSignHeaders()
+    }).pipe(
+      map((response: any) => {
+        const payload = response?.data || response?.result || response || {};
+
+        return {
+          submitted: Boolean(payload.submitted ?? payload.Submitted),
+          signatureRequired: Boolean(payload.signatureRequired ?? payload.SignatureRequired),
+          signatureStatus: (payload.signatureStatus ?? payload.SignatureStatus ?? 'not_required') as any,
+          signingUrl: (payload.signingUrl ?? payload.SigningUrl ?? null) as string | null
+        };
+      }),
+      catchError((error) => {
+        console.error(`[FormSubmissionsService] Error getting signing url by id ${submissionId}:`, error);
+        return throwError(() => error);
       })
     );
   }

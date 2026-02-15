@@ -62,6 +62,7 @@ import { TooltipModule } from 'primeng/tooltip';
   providers: [MessageService, ConfirmationService]
 })
 export class GridColumnsListComponent implements OnInit, OnDestroy {
+  private readonly lookupTablesDatabase = 'AkhmanageIt';
   tabId!: number;
   gridId!: number;
   formBuilderId!: number;
@@ -740,7 +741,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.fieldDataSourceService.getAvailableLookupTables().subscribe({
+    this.fieldDataSourceService.getAvailableLookupTables(this.lookupTablesDatabase).subscribe({
       next: (tables: string[]) => {
         this.availableLookupTables = tables || [];
         this.cdr.detectChanges();
@@ -776,7 +777,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.fieldDataSourceService.getTableColumns(tableName).subscribe({
+    this.fieldDataSourceService.getTableColumns(tableName, this.lookupTablesDatabase).subscribe({
       next: (columns: string[]) => {
         this.availableColumns = columns.sort();
         this.updatePathControlsState();
@@ -1444,7 +1445,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
    * Load lookup tables for Column Modal
    */
   loadColumnLookupTables(): void {
-    this.fieldDataSourceService.getAvailableLookupTables().subscribe({
+    this.fieldDataSourceService.getAvailableLookupTables(this.lookupTablesDatabase).subscribe({
       next: (tables: string[]) => {
         this.availableLookupTables = tables || [];
         this.cdr.detectChanges();
@@ -1475,7 +1476,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
    * Load columns from selected table for Column Modal
    */
   loadColumnTableColumns(tableName: string): void {
-    this.fieldDataSourceService.getTableColumns(tableName).subscribe({
+    this.fieldDataSourceService.getTableColumns(tableName, this.lookupTablesDatabase).subscribe({
       next: (columns: string[]) => {
         this.availableColumns = columns || [];
         // Auto-set value and text columns if not set
@@ -2860,7 +2861,6 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   }
 
 }
-
 
 
 

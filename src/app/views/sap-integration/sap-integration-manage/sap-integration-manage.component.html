@@ -1,0 +1,138 @@
+<p-toast></p-toast>
+
+<div class="page-container">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/dashboard" title="Back">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Integration Settings</h1>
+          <p class="page-subtitle">SAP Business One Service Layer connection details</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadConnections()" [disabled]="loading.list" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <app-table-shell title="SAP Business One" icon="pi pi-database">
+      <div table-actions class="settings-grid">
+        <div class="field-group">
+          <label class="form-label">Connection Name *</label>
+          <input pInputText type="text" [(ngModel)]="connectionForm.name" placeholder="e.g. SAP DEV Service Layer" />
+        </div>
+
+        <div class="field-group">
+          <label class="form-label">Service Layer URL *</label>
+          <input pInputText type="text" [(ngModel)]="connectionForm.baseUrl" placeholder="https://host:50000/b1s/v1" />
+        </div>
+
+        <div class="field-group">
+          <label class="form-label">Company DB *</label>
+          <input pInputText type="text" [(ngModel)]="connectionForm.companyDb" placeholder="DOKHON_DEV" />
+        </div>
+
+        <div class="field-group">
+          <label class="form-label">Username *</label>
+          <input pInputText type="text" [(ngModel)]="connectionForm.userName" placeholder="manager" />
+        </div>
+
+        <div class="field-group">
+          <label class="form-label">Password {{ editingConnectionId ? '(optional)' : '*' }}</label>
+          <input pInputText type="password" [(ngModel)]="connectionForm.password" [placeholder]="editingConnectionId ? 'Leave empty to keep current password' : 'Enter password'" />
+        </div>
+
+        <div class="field-group">
+          <label class="form-label">Authentication Method</label>
+          <p-select
+            [options]="[{label:'Session',value:'Session'},{label:'Token',value:'Token'}]"
+            optionLabel="label"
+            optionValue="value"
+            [(ngModel)]="connectionForm.authenticationMethod"
+            [style]="{ width: '100%' }"
+          ></p-select>
+        </div>
+
+        <div class="field-group inline-check">
+          <p-checkbox [(ngModel)]="connectionForm.verifySsl" [binary]="true" inputId="verifySsl"></p-checkbox>
+          <label for="verifySsl" class="checkbox-label">Verify SSL certificate</label>
+        </div>
+
+        <div class="field-group inline-check">
+          <p-checkbox [(ngModel)]="connectionForm.isActive" [binary]="true" inputId="connIsActive"></p-checkbox>
+          <label for="connIsActive" class="checkbox-label">Active</label>
+        </div>
+      </div>
+
+      <div class="actions-row">
+        <button class="btn-primary" (click)="saveConnection()" [disabled]="loading.save">
+          <i class="pi pi-save"></i>
+          <span>{{ loading.save ? 'Saving...' : 'Save' }}</span>
+        </button>
+
+        <button class="btn-secondary" (click)="testConnection()" [disabled]="loading.test || !editingConnectionId">
+          <i class="pi pi-check"></i>
+          <span>{{ loading.test ? 'Testing...' : 'Test Connection' }}</span>
+        </button>
+
+        <button class="btn-light" (click)="resetForm()">
+          <i class="pi pi-plus"></i>
+          <span>New</span>
+        </button>
+      </div>
+    </app-table-shell>
+
+    <div class="saved-count">Saved connections: <strong>{{ sapConfigs.length }}</strong></div>
+
+    <app-table-shell title="Saved Connections" icon="pi pi-table">
+      <p-table [value]="sapConfigs" [loading]="loading.list" [paginator]="true" [rows]="10" [rowsPerPageOptions]="[10,20,50]" styleClass="p-datatable-striped">
+        <ng-template pTemplate="header">
+          <tr>
+            <th style="width:70px">ID</th>
+            <th>Name</th>
+            <th>Base URL</th>
+            <th>Company DB</th>
+            <th>Username</th>
+            <th style="width:120px">Status</th>
+            <th style="width:140px">Actions</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-row>
+          <tr>
+            <td><code>#{{ row.id }}</code></td>
+            <td>{{ row.name }}</td>
+            <td><code>{{ row.baseUrl }}</code></td>
+            <td>{{ row.companyDb }}</td>
+            <td>{{ row.userName }}</td>
+            <td>
+              <span [class]="row.isActive ? 'status-badge active' : 'status-badge inactive'">
+                {{ row.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            <td>
+              <button class="btn-icon" (click)="editConnection(row)" title="Edit">
+                <i class="pi pi-pencil"></i>
+              </button>
+              <button class="btn-icon danger" (click)="deleteConnection(row)" title="Delete" [disabled]="loading.delete">
+                <i class="pi pi-trash"></i>
+              </button>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="7" class="empty-message">No SAP connections found.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </app-table-shell>
+  </div>
+</div>

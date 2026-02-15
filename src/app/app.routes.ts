@@ -26,6 +26,11 @@ export const routes: Routes = [
     loadComponent: () => import('./views/public-form/form-submission-success/form-submission-success.component')
       .then(m => m.FormSubmissionSuccessComponent)
   },
+  {
+    path: 'docusign/callback',
+    loadComponent: () => import('./views/pages/docusign-callback/docusign-callback.component')
+      .then(m => m.DocuSignCallbackComponent)
+  },
   
   // ===== صفحة رفض الوصول (Access Denied) =====
   {
@@ -108,6 +113,14 @@ export const routes: Routes = [
         path: 'smtp-configs',
         loadComponent: () => import('./views/smtp-configs/smtp-configs-manage/smtp-configs-manage.component')
           .then(m => m.SmtpConfigsManageComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      // ===== SAP Integration ===== (Admin only)
+      {
+        path: 'sap-integration',
+        loadComponent: () => import('./views/sap-integration/sap-integration-manage/sap-integration-manage.component')
+          .then(m => m.SapIntegrationManageComponent),
         canActivate: [authGuard, adminGuard]
       },
 

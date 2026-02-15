@@ -170,6 +170,15 @@
                   (click)="openApproveRejectModal(submission, 'reject')"
                   pTooltip="Reject"
                   tooltipPosition="top"></button>
+                <button pButton
+                  *ngIf="canRequestSignature(submission)"
+                  icon="pi pi-file-edit"
+                  class="p-button-text p-button-sm action-btn"
+                  [loading]="loadingSignatureSubmissionId === submission.id"
+                  [disabled]="loadingSignatureSubmissionId === submission.id"
+                  (click)="requestSignature(submission)"
+                  pTooltip="Request Signature"
+                  tooltipPosition="top"></button>
                 <button pButton 
                   *appHasPermission="['Submission_Allow_Delete', 'Document_Allow_Delete']"
                   icon="pi pi-trash" 
@@ -997,7 +1006,6 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
 
 
 

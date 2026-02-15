@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChildren, QueryLis
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto, FormSubmissionDetailDto, FormSubmissionGridDto, SaveFormSubmissionDataDto, SaveFormSubmissionValueDto, SaveFormSubmissionAttachmentDto, SaveFormSubmissionGridDto } from '../services/form-submissions.service';
+import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto, FormSubmissionDetailDto, FormSubmissionGridDto, SaveFormSubmissionDataDto, SaveFormSubmissionValueDto, SaveFormSubmissionAttachmentDto, SaveFormSubmissionGridDto, SubmitFormResponseDto } from '../services/form-submissions.service';
 // Approve/Reject imports removed - only available in admin dashboard
 import { FormSubmissionValuesService, BulkFormSubmissionValuesDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto } from '../services/form-submission-values.service';
 import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
@@ -72,6 +72,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   hasDraft = false; // Whether a draft has been created
   isDraftMode = true; // Whether we're in draft mode (before final submit)
   isSubmitting = false; // Whether final submit is in progress
+  signatureRequired = false;
+  signatureStatus: 'not_required' | 'pending' | 'signed' | string = 'not_required';
+  signingUrl: string | null = null;
   
   // Submission approval/reject state
   currentSubmission: FormSubmissionDto | null = null;
@@ -3384,6 +3387,38 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
   }
 
+  get canShowSignNow(): boolean {
+    return this.signatureRequired && this.signatureStatus === 'pending' && !!this.signingUrl;
+  }
+
+  openSigningUrl(): void {
+    if (!this.signingUrl) {
+      return;
+    }
+
+    window.open(this.signingUrl, '_blank', 'noopener,noreferrer');
+  }
+
+  private applySubmitSignatureState(response: SubmitFormResponseDto): boolean {
+    this.signatureRequired = !!response.signatureRequired;
+    this.signatureStatus = response.signatureStatus || 'not_required';
+    this.signingUrl = response.signingUrl || null;
+
+    if (!this.canShowSignNow) {
+      return false;
+    }
+
+    const currentLang = this.translationService.getCurrentLanguage();
+    this.messageService.add({
+      severity: 'info',
+      summary: currentLang === 'ar' ? 'التوقيع مطلوب' : 'Signature Required',
+      detail: currentLang === 'ar' ? 'تم الإرسال. اضغط Sign now لإكمال التوقيع.' : 'Submission completed. Click Sign now to complete signing.',
+      life: 7000
+    });
+
+    return true;
+  }
+
   /**
    * Load submission data for edit mode
    */
@@ -3414,6 +3449,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Store current submission for approve/reject
         this.currentSubmission = submission;
         this.currentSubmissionDetail = submission; // Store full detail with gridData
+        this.signatureStatus = submission.signatureStatus || 'not_required';
+        this.signatureRequired = this.signatureStatus !== 'not_required';
+        this.signingUrl = null;
         // Store current status
         (this as any)._currentSubmissionStatus = submission.status;
         // Update form with current status
@@ -4132,40 +4170,16 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           return;
         }
 
-        const submitPayloadAfterCreate = {
-          submissionId: this.submissionId!,
-          submittedByUserId: submitUserIdAfterCreate
-        };
-        console.log('[FormSubmissionCreate] Performing final submit after create with payload:', submitPayloadAfterCreate);
+        const submitSubmissionIdAfterCreate = this.submissionId!;
+        console.log('[FormSubmissionCreate] Performing final submit after create with submissionId:', submitSubmissionIdAfterCreate);
 
-        this.formSubmissionsService.submitSubmission(submitPayloadAfterCreate).subscribe({
-          next: (submittedSubmission) => {
-            console.log('[FormSubmissionCreate] ✅ Submission (after create) completed successfully:', submittedSubmission);
-            console.log('[FormSubmissionCreate] Backend status after submit:', submittedSubmission.status);
+        this.formSubmissionsService.submitSubmissionById(submitSubmissionIdAfterCreate).subscribe({
+          next: (submitResult) => {
+            console.log('[FormSubmissionCreate] ✅ Submission (after create) completed successfully:', submitResult);
 
             this.isDraftMode = false;
-            this.currentSubmission = submittedSubmission;
-
-            // Ensure status is Submitted (same behavior as existing path)
-            if (submittedSubmission.status !== 'Submitted') {
-              console.log('[FormSubmissionCreate] Status is not Submitted, updating to Submitted in background (after create)...');
-              this.formSubmissionsService.updateSubmission(submittedSubmission.id, { status: 'Submitted' }).subscribe({
-                next: () => {
-                  console.log('[FormSubmissionCreate] ✅ Status updated to Submitted in background (after create)');
-                  submittedSubmission.status = 'Submitted';
-                  if (this.currentSubmission) {
-                    this.currentSubmission.status = 'Submitted';
-                  }
-                },
-                error: (updateError) => {
-                  console.warn('[FormSubmissionCreate] Failed to update status to Submitted in background (after create):', updateError);
-                }
-              });
-            } else {
-              submittedSubmission.status = 'Submitted';
-              if (this.currentSubmission) {
-                this.currentSubmission.status = 'Submitted';
-              }
+            if (this.currentSubmission) {
+              this.currentSubmission.status = 'Submitted';
             }
 
             const currentLang = this.translationService.getCurrentLanguage();
@@ -4180,8 +4194,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               life: 5000
             });
 
+            const waitForSignature = this.applySubmitSignatureState(submitResult);
             this.isSubmitting = false;
             this.loading.create = false;
+
+            if (waitForSignature) {
+              this.cdr.detectChanges();
+              return;
+            }
 
             // Navigate to submissions list page
             this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
@@ -4373,46 +4393,20 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       console.log('[FormSubmissionCreate] ✅ Data saved successfully, proceeding with submit...');
       
       // Then submit the submission
-      const submitPayload = {
-        submissionId: this.submissionId!,
-        submittedByUserId: submitUserId
-      };
-      console.log('[FormSubmissionCreate] Performing final submit with payload:', submitPayload);
+      const submitSubmissionId = this.submissionId!;
+      console.log('[FormSubmissionCreate] Performing final submit with submissionId:', submitSubmissionId);
       
-      this.formSubmissionsService.submitSubmission(submitPayload).subscribe({
-      next: (submittedSubmission) => {
-        console.log('[FormSubmissionCreate] ✅ Submission completed successfully:', submittedSubmission);
-        console.log('[FormSubmissionCreate] Backend status after submit:', submittedSubmission.status);
+      this.formSubmissionsService.submitSubmissionById(submitSubmissionId).subscribe({
+      next: (submitResult) => {
+        console.log('[FormSubmissionCreate] ✅ Submission completed successfully:', submitResult);
+        
 
         this.isDraftMode = false;
-        this.currentSubmission = submittedSubmission;
-
-        // Always update status to "Submitted" regardless of backend response
-        // This ensures consistency - user wants status to always be "Submitted" after submission
-        // Do this in background to avoid blocking navigation
-        if (submittedSubmission.status !== 'Submitted') {
-          console.log('[FormSubmissionCreate] Status is not Submitted, updating to Submitted in background...');
-          this.formSubmissionsService.updateSubmission(submittedSubmission.id, { status: 'Submitted' }).subscribe({
-            next: () => {
-              console.log('[FormSubmissionCreate] ✅ Status updated to Submitted in background');
-              submittedSubmission.status = 'Submitted';
-              if (this.currentSubmission) {
-                this.currentSubmission.status = 'Submitted';
-              }
-            },
-            error: (updateError) => {
-              console.warn('[FormSubmissionCreate] Failed to update status to Submitted in background:', updateError);
+        if (this.currentSubmission) {
+              this.currentSubmission.status = 'Submitted';
             }
-          });
-        } else {
-          // If status is already Submitted, update local reference
-          submittedSubmission.status = 'Submitted';
-          if (this.currentSubmission) {
-            this.currentSubmission.status = 'Submitted';
-          }
-        }
 
-        const currentLang = this.translationService.getCurrentLanguage();
+            const currentLang = this.translationService.getCurrentLanguage();
         const statusMessage = currentLang === 'ar' ? 'تم إرسال الطلب للمراجعة' : 'Request submitted for review';
 
         this.messageService.add({
@@ -4425,15 +4419,21 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Note: Status is already updated to "Submitted" above, so we don't need to handle "Approved" case separately
         // The code above ensures status is always "Submitted" after submission
 
-        this.isSubmitting = false;
-        this.loading.create = false;
+        const waitForSignature = this.applySubmitSignatureState(submitResult);
+            this.isSubmitting = false;
+            this.loading.create = false;
 
-        // Navigate to submissions list page immediately
+            if (waitForSignature) {
+              this.cdr.detectChanges();
+              return;
+            }
+
+            // Navigate to submissions list page immediately
         this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
 
         // Activate workflow stage in background (don't wait for it)
-        if (submittedSubmission.status === 'Submitted') {
-          this.approvalWorkflowRuntimeService.activateStage(submittedSubmission.id).subscribe({
+        if (this.submissionId) {
+          this.approvalWorkflowRuntimeService.activateStage(this.submissionId).subscribe({
             next: () => {
               console.log('[FormSubmissionCreate] ✅ activate-stage succeeded in background');
             },
@@ -4525,7 +4525,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         
         // If backend says it's already submitted, don't stop the flow; just activate stage directly.
         const backendMsg: string = (error?.error?.message || error?.message || '').toString();
-        console.error('[FormSubmissionCreate] ❌ Error during final submit. Payload:', submitPayload, 'Error:', error);
+        console.error('[FormSubmissionCreate] ❌ Error during final submit. SubmissionId:', submitSubmissionId, 'Error:', error);
         const isAlreadySubmitted = backendMsg.toLowerCase().includes('already submitted');
 
         if (isAlreadySubmitted && this.submissionId) {
@@ -6391,3 +6391,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     return this.getFieldType(field) === 'grid';
   }
 }
+
+
+
+
+

@@ -55,6 +55,7 @@ import { TranslatePipe } from '../../../core/pipes/translate.pipe';
   providers: [MessageService, ConfirmationService]
 })
 export class GridColumnDataSourcesListComponent implements OnInit, OnDestroy {
+  private readonly lookupTablesDatabase = 'AkhmanageIt';
   dataSources: GridColumnDataSourceDto[] = [];
   filteredDataSources: GridColumnDataSourceDto[] = [];
   searchTerm = '';
@@ -407,7 +408,7 @@ export class GridColumnDataSourcesListComponent implements OnInit, OnDestroy {
   }
 
   loadLookupTables(): void {
-    this.fieldDataSourceService.getAvailableLookupTables().subscribe({
+    this.fieldDataSourceService.getAvailableLookupTables(this.lookupTablesDatabase).subscribe({
       next: (tables: string[]) => {
         this.availableLookupTables = tables || [];
         this.cdr.detectChanges();
@@ -430,7 +431,7 @@ export class GridColumnDataSourcesListComponent implements OnInit, OnDestroy {
   }
 
   loadTableColumns(tableName: string): void {
-    this.fieldDataSourceService.getTableColumns(tableName).subscribe({
+    this.fieldDataSourceService.getTableColumns(tableName, this.lookupTablesDatabase).subscribe({
       next: (columns: string[]) => {
         this.availableColumns = columns || [];
         if (!this.lookupTableConfig.valueColumn && this.availableColumns.length > 0) {
@@ -819,7 +820,6 @@ export class GridColumnDataSourcesListComponent implements OnInit, OnDestroy {
     return 'badge-secondary';
   }
 }
-
 
 
 

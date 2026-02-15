@@ -1,0 +1,10 @@
+<div class="oauth-callback-container">
+  <div class="oauth-card">
+    <h3>DocuSign OAuth</h3>
+    <p [class.success]="success" [class.error]="!success && !loading">
+      {{ message }}
+    </p>
+    <div *ngIf="loading" class="spinner"></div>
+  </div>
+</div>
+

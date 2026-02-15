@@ -81,6 +81,12 @@ export const navItems: INavData[] = [
     attributes: { roles: ['Administration'], permissionCode: 'SmtpConfig_Allow_View' } // Admin + permission
   },
   {
+    name: 'SAP Integration',
+    url: '/sap-integration',
+    iconComponent: { name: 'cil-cloud-upload' },
+    attributes: { roles: ['Administration'], permissionCode: 'SapHanaConfig_Allow_View' }
+  },
+  {
     name: 'Email Templates',
     url: '/email-templates',
     iconComponent: { name: 'cil-envelope-open' },

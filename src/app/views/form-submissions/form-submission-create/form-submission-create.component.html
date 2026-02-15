@@ -482,6 +482,14 @@
               <i class="pi pi-spin pi-spinner"></i> Submitting...
             </span>
           </button>
+
+          <button
+            *ngIf="canShowSignNow"
+            type="button"
+            class="btn-submit"
+            (click)="openSigningUrl()">
+            <i class="pi pi-file-edit"></i> Sign now
+          </button>
         </div>
       </form>
     </div>

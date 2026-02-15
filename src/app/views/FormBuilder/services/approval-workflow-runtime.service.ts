@@ -16,6 +16,12 @@ export interface ProcessApprovalActionDto {
   comments?: string | null;
 }
 
+export interface RequestStageSignatureDto {
+  submissionId: number;
+  stageId: number;
+  requestedByUserId?: string | null;
+}
+
 export interface ApprovalInboxItemDto {
   submissionId: number;
   stageId: number;
@@ -265,6 +271,40 @@ export class ApprovalWorkflowRuntimeService {
   }
 
   /**
+   * Request DocuSign envelope for current stage
+   * POST /api/ApprovalWorkflowRuntime/request-signature
+   */
+  requestStageSignature(dto: RequestStageSignatureDto): Observable<void> {
+    if (!dto.submissionId || dto.submissionId <= 0) {
+      return throwError(() => new Error('Submission ID is required'));
+    }
+
+    if (!dto.stageId || dto.stageId <= 0) {
+      return throwError(() => new Error('Stage ID is required'));
+    }
+
+    const payload: RequestStageSignatureDto = {
+      submissionId: dto.submissionId,
+      stageId: dto.stageId
+    };
+
+    if (dto.requestedByUserId !== undefined) {
+      payload.requestedByUserId = dto.requestedByUserId;
+    }
+
+    return this.http.post<any>(`${this.baseUrl}/request-signature`, payload).pipe(
+      map(() => {
+        return;
+      }),
+      catchError((error) => {
+        console.error('[ApprovalWorkflowRuntimeService] Error requesting stage signature:', error);
+        const errorMessage = this.extractErrorMessage(error);
+        throw new Error(errorMessage);
+      })
+    );
+  }
+
+  /**
    * Get approval inbox for user
    * GET /api/ApprovalWorkflowRuntime/inbox/{userId}
    * Returns list of pending approvals for a user
@@ -388,4 +428,3 @@ export class ApprovalWorkflowRuntimeService {
     return errorMessage;
   }
 }
-

@@ -1,9 +1,10 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+﻿import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FormSubmissionsService, FormSubmissionDto } from '../form-submissions/services/form-submissions.service';
 import { StorageService } from '../../auth/storage.service';
 import { AuthService } from '../../auth/auth.service';
+import { DocuSignOAuthService } from '../../auth/docusign-oauth.service';
 import { TranslationService } from '../../core/services/translation.service';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -31,6 +32,8 @@ import { PaginatorModule } from 'primeng/paginator';
   providers: [MessageService]
 })
 export class MySubmissionsComponent implements OnInit {
+  private readonly pendingSubmissionStorageKey = 'docusign_pending_submission_id';
+
   submissions: FormSubmissionDto[] = [];
   filteredSubmissions: FormSubmissionDto[] = [];
   currentUserId: string | null = null;
@@ -38,7 +41,8 @@ export class MySubmissionsComponent implements OnInit {
 
   loading = false;
   searchTerm = '';
-  
+  loadingSignatureSubmissionId: number | null = null;
+
   // Pagination
   first = 0;
   rows = 10;
@@ -48,6 +52,7 @@ export class MySubmissionsComponent implements OnInit {
     private formSubmissionsService: FormSubmissionsService,
     private storageService: StorageService,
     private authService: AuthService,
+    private docusignOAuthService: DocuSignOAuthService,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
     public translationService: TranslationService
@@ -85,8 +90,8 @@ export class MySubmissionsComponent implements OnInit {
           const submittedBy = sub.submittedByUserId?.trim().toLowerCase();
           const currentUser = this.currentUsername?.trim().toLowerCase();
           const currentId = this.currentUserId?.trim().toLowerCase();
-          
-          return submittedBy === currentUser || 
+
+          return submittedBy === currentUser ||
                  submittedBy === currentId ||
                  submittedBy === `${currentUser} ` || // Handle trailing space
                  submittedBy === `${currentId} `;
@@ -102,6 +107,7 @@ export class MySubmissionsComponent implements OnInit {
           username: this.currentUsername
         });
 
+        this.tryResumePendingSignNow();
         this.cdr.detectChanges();
       },
       error: (error) => {
@@ -170,5 +176,88 @@ export class MySubmissionsComponent implements OnInit {
       default: return 'status-default';
     }
   }
-}
 
+  canShowSignNow(submission: FormSubmissionDto): boolean {
+    const normalizedStatus = (submission?.status || '').trim().toLowerCase();
+    const normalizedSignatureStatus = (submission?.signatureStatus || '').trim().toLowerCase();
+
+    // Show action for submitted requests or explicit pending-signature state.
+    return normalizedStatus === 'submitted' || normalizedSignatureStatus === 'pending';
+  }
+
+  openSignNow(submission: FormSubmissionDto): void {
+    if (!submission?.id) {
+      return;
+    }
+
+    const docuSignAccessToken = localStorage.getItem('docusign_access_token');
+    if (!docuSignAccessToken || !docuSignAccessToken.trim()) {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'DocuSign',
+        detail: this.translationService.getCurrentLanguage() === 'ar'
+          ? 'جاري تحويلك إلى DocuSign لإتمام تسجيل الدخول ثم المتابعة.'
+          : 'Redirecting to DocuSign to authenticate and continue signing.'
+      });
+
+      localStorage.setItem(this.pendingSubmissionStorageKey, submission.id.toString());
+      this.docusignOAuthService.startLogin('signature', '/my-submissions', submission.id);
+      return;
+    }
+
+    this.loadingSignatureSubmissionId = submission.id;
+    this.formSubmissionsService.getSubmissionSigningUrlById(submission.id).subscribe({
+      next: (response) => {
+        this.loadingSignatureSubmissionId = null;
+        const signingUrl = response?.signingUrl || null;
+        if (signingUrl) {
+          window.open(signingUrl, '_blank', 'noopener,noreferrer');
+          return;
+        }
+
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Warning',
+          detail: 'Signing URL is not available for this submission.'
+        });
+      },
+      error: (error) => {
+        this.loadingSignatureSubmissionId = null;
+        const errorMessage = error?.error?.message || error?.message || 'Failed to open signing page.';
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: errorMessage
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  private tryResumePendingSignNow(): void {
+    const pendingSubmissionIdText = localStorage.getItem(this.pendingSubmissionStorageKey);
+    if (!pendingSubmissionIdText) {
+      return;
+    }
+
+    const token = localStorage.getItem('docusign_access_token');
+    if (!token || !token.trim()) {
+      return;
+    }
+
+    const pendingSubmissionId = Number(pendingSubmissionIdText);
+    if (!pendingSubmissionId || pendingSubmissionId <= 0) {
+      localStorage.removeItem(this.pendingSubmissionStorageKey);
+      return;
+    }
+
+    const pendingSubmission = this.submissions.find(x => x.id === pendingSubmissionId);
+    localStorage.removeItem(this.pendingSubmissionStorageKey);
+
+    if (!pendingSubmission) {
+      return;
+    }
+
+    setTimeout(() => this.openSignNow(pendingSubmission), 100);
+  }
+}

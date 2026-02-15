@@ -112,6 +112,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       minAmount: [null],
       maxAmount: [null],
       isFinalStage: [false],
+      requiresAdobeSign: [false],
       isActive: [true],
       minimumRequiredAssignees: [null, Validators.min(0)],
       amountFieldCode: [null]
@@ -443,6 +444,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       minAmount: null,
       maxAmount: null,
       isFinalStage: false,
+      requiresAdobeSign: false,
       isActive: true,
       minimumRequiredAssignees: null,
       amountFieldCode: null
@@ -476,6 +478,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       minAmount: stage.minAmount,
       maxAmount: stage.maxAmount,
       isFinalStage: stage.isFinalStage,
+      requiresAdobeSign: stage.requiresAdobeSign === true,
       isActive: stage.isActive !== undefined ? stage.isActive : true,
       minimumRequiredAssignees: stage.minimumRequiredAssignees,
       amountFieldCode: stage.amountFieldCode
@@ -637,6 +640,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
           ? Number(formData.maxAmount) 
           : null,
         isFinalStage: formData.isFinalStage !== undefined ? formData.isFinalStage : false,
+        requiresAdobeSign: formData.requiresAdobeSign === true,
         isActive: formData.isActive !== undefined ? formData.isActive : true,
         minimumRequiredAssignees: (formData.minimumRequiredAssignees !== null && formData.minimumRequiredAssignees !== undefined && formData.minimumRequiredAssignees !== '') 
           ? Number(formData.minimumRequiredAssignees) 
@@ -681,6 +685,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
           ? Number(formData.maxAmount) 
           : null,
         isFinalStage: formData.isFinalStage || false,
+        requiresAdobeSign: formData.requiresAdobeSign === true,
         isActive: formData.isActive !== undefined ? formData.isActive : true,
         minimumRequiredAssignees: (formData.minimumRequiredAssignees !== null && formData.minimumRequiredAssignees !== undefined && formData.minimumRequiredAssignees !== '') 
           ? Number(formData.minimumRequiredAssignees) 
@@ -889,7 +894,6 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
     // isDeleted is not managed via form - it's handled via delete/restore actions
   }
 }
-
 
 
 

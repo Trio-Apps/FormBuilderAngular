@@ -123,6 +123,7 @@
             <th>Order</th>
             <th>Stage Name</th>
             <th>Amount Range</th>
+            <th>Signature</th>
             <th>Final Stage</th>
             <th>Status</th>
             <th>Actions</th>
@@ -145,6 +146,13 @@
                 {{ formatAmount(stage.minAmount) }} - {{ formatAmount(stage.maxAmount) }}
               </span>
               <span *ngIf="(stage.minAmount === null || stage.minAmount === undefined) && (stage.maxAmount === null || stage.maxAmount === undefined)" class="text-muted">-</span>
+            </td>
+            <td>
+              <span *ngIf="stage.requiresAdobeSign" class="badge badge-warning">
+                <i class="pi pi-file-edit"></i>
+                Required
+              </span>
+              <span *ngIf="!stage.requiresAdobeSign" class="badge badge-secondary">No</span>
             </td>
             <td>
               <span *ngIf="stage.isFinalStage" class="badge badge-success">
@@ -375,6 +383,25 @@
         </div>
       </div>
 
+      <!-- Signature Required -->
+      <div class="form-field-wrapper">
+        <div class="checkbox-group">
+          <div class="checkbox-option">
+            <p-checkbox
+              formControlName="requiresAdobeSign"
+              [binary]="true"
+              inputId="requiresAdobeSign"
+              name="requiresAdobeSign">
+            </p-checkbox>
+            <label class="checkbox-label" for="requiresAdobeSign">Requires Signature After Submit</label>
+          </div>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          If enabled, submitted user must sign this stage using DocuSign.
+        </div>
+      </div>
+
       <!-- Active -->
       <div class="form-field-wrapper">
         <div class="checkbox-group">
@@ -430,7 +457,6 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
 
 
 

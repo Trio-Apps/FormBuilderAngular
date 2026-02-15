@@ -31,6 +31,7 @@ export interface ApprovalStageDto {
   isDeleted: boolean;
   minimumRequiredAssignees?: number | null;
   amountFieldCode?: string | null;
+  requiresAdobeSign?: boolean;
   workflowName?: string;
 }
 
@@ -45,6 +46,7 @@ export interface CreateApprovalStageDto {
   isDeleted?: boolean;
   minimumRequiredAssignees?: number | null;
   amountFieldCode?: string | null;
+  requiresAdobeSign?: boolean;
 }
 
 export interface UpdateApprovalStageDto {
@@ -58,6 +60,7 @@ export interface UpdateApprovalStageDto {
   isDeleted?: boolean;
   minimumRequiredAssignees?: number | null;
   amountFieldCode?: string | null;
+  requiresAdobeSign?: boolean;
 }
 
 @Injectable({
@@ -176,7 +179,8 @@ export class ApprovalStageService {
       isActive: dto.isActive !== undefined ? dto.isActive : true,
       isDeleted: dto.isDeleted !== undefined ? dto.isDeleted : false,
       minimumRequiredAssignees: dto.minimumRequiredAssignees !== undefined ? dto.minimumRequiredAssignees : null,
-      amountFieldCode: dto.amountFieldCode || null
+      amountFieldCode: dto.amountFieldCode || null,
+      requiresAdobeSign: dto.requiresAdobeSign === true
     };
 
     console.log('[ApprovalStageService] Creating approval stage:', createDto);
@@ -393,4 +397,3 @@ export class ApprovalStageService {
     return errorMessage;
   }
 }
-

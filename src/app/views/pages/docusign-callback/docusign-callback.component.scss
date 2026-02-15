@@ -1,0 +1,51 @@
+.oauth-callback-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fb;
+}
+
+.oauth-card {
+  width: min(560px, 92vw);
+  background: #fff;
+  border: 1px solid #dfe4ea;
+  border-radius: 10px;
+  padding: 24px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+h3 {
+  margin: 0 0 12px 0;
+  color: #1f2937;
+}
+
+p {
+  margin: 0;
+  color: #374151;
+}
+
+p.success {
+  color: #047857;
+}
+
+p.error {
+  color: #b91c1c;
+}
+
+.spinner {
+  margin-top: 16px;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #d1d5db;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
