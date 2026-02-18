@@ -182,6 +182,14 @@ export const routes: Routes = [
         canActivate: [authGuard]  // ✅ أي مستخدم مسجل يستطيع رؤية طلباته
       },
 
+      // ===== All Submissions =====
+      {
+        path: 'submissions',
+        loadComponent: () => import('./views/submissions/submissions-list/submissions-list.component')
+          .then(m => m.SubmissionsListComponent),
+        canActivate: [authGuard]
+      },
+
       // ===== Approval Inbox / My Submissions =====
       {
         path: 'approval-inbox',

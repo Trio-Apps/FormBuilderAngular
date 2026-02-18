@@ -8,131 +8,224 @@
           <i class="pi pi-arrow-left"></i>
         </button>
         <div class="nav-title-section">
-          <h1 class="page-title">Integration Settings</h1>
-          <p class="page-subtitle">SAP Business One Service Layer connection details</p>
+          <h1 class="page-title">SAP Integration</h1>
+          <p class="page-subtitle">Manage SAP Business One Service Layer connectivity and credentials</p>
         </div>
       </div>
       <div class="nav-right">
         <button class="btn-icon" (click)="loadConnections()" [disabled]="loading.list" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
+        <button
+          class="btn-primary"
+          (click)="openCreate()"
+          [disabled]="loading.list"
+        >
+          <i class="pi pi-plus"></i>
+          <span>New Config</span>
+        </button>
       </div>
     </div>
   </div>
 
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-database"></i>
+        <span>SAP Integration</span>
+      </span>
+    </nav>
+  </div>
+
   <div class="main-content">
-    <app-table-shell title="SAP Business One" icon="pi pi-database">
-      <div table-actions class="settings-grid">
-        <div class="field-group">
-          <label class="form-label">Connection Name *</label>
-          <input pInputText type="text" [(ngModel)]="connectionForm.name" placeholder="e.g. SAP DEV Service Layer" />
-        </div>
+    <app-table-shell title="Manage SAP Connections" icon="pi pi-table">
+      <div table-actions class="filters-row">
+        <span class="p-input-icon-left">
+          <i class="pi pi-search"></i>
+          <input
+            pInputText
+            type="text"
+            placeholder="Search (name/url/company/user)"
+            [(ngModel)]="searchTerm"
+            (input)="applyFilters()"
+            style="width: 360px"
+          />
+        </span>
 
-        <div class="field-group">
-          <label class="form-label">Service Layer URL *</label>
-          <input pInputText type="text" [(ngModel)]="connectionForm.baseUrl" placeholder="https://host:50000/b1s/v1" />
-        </div>
-
-        <div class="field-group">
-          <label class="form-label">Company DB *</label>
-          <input pInputText type="text" [(ngModel)]="connectionForm.companyDb" placeholder="DOKHON_DEV" />
-        </div>
-
-        <div class="field-group">
-          <label class="form-label">Username *</label>
-          <input pInputText type="text" [(ngModel)]="connectionForm.userName" placeholder="manager" />
-        </div>
-
-        <div class="field-group">
-          <label class="form-label">Password {{ editingConnectionId ? '(optional)' : '*' }}</label>
-          <input pInputText type="password" [(ngModel)]="connectionForm.password" [placeholder]="editingConnectionId ? 'Leave empty to keep current password' : 'Enter password'" />
-        </div>
-
-        <div class="field-group">
-          <label class="form-label">Authentication Method</label>
-          <p-select
-            [options]="[{label:'Session',value:'Session'},{label:'Token',value:'Token'}]"
-            optionLabel="label"
-            optionValue="value"
-            [(ngModel)]="connectionForm.authenticationMethod"
-            [style]="{ width: '100%' }"
-          ></p-select>
-        </div>
-
-        <div class="field-group inline-check">
-          <p-checkbox [(ngModel)]="connectionForm.verifySsl" [binary]="true" inputId="verifySsl"></p-checkbox>
-          <label for="verifySsl" class="checkbox-label">Verify SSL certificate</label>
-        </div>
-
-        <div class="field-group inline-check">
-          <p-checkbox [(ngModel)]="connectionForm.isActive" [binary]="true" inputId="connIsActive"></p-checkbox>
-          <label for="connIsActive" class="checkbox-label">Active</label>
-        </div>
+        <span class="toggle-inline">
+          <p-checkbox [(ngModel)]="includeInactive" [binary]="true" inputId="incInactiveSap" (onChange)="loadConnections()">
+          </p-checkbox>
+          <label for="incInactiveSap">Include inactive</label>
+        </span>
       </div>
 
-      <div class="actions-row">
-        <button class="btn-primary" (click)="saveConnection()" [disabled]="loading.save">
-          <i class="pi pi-save"></i>
-          <span>{{ loading.save ? 'Saving...' : 'Save' }}</span>
-        </button>
-
-        <button class="btn-secondary" (click)="testConnection()" [disabled]="loading.test || !editingConnectionId">
-          <i class="pi pi-check"></i>
-          <span>{{ loading.test ? 'Testing...' : 'Test Connection' }}</span>
-        </button>
-
-        <button class="btn-light" (click)="resetForm()">
-          <i class="pi pi-plus"></i>
-          <span>New</span>
-        </button>
-      </div>
-    </app-table-shell>
-
-    <div class="saved-count">Saved connections: <strong>{{ sapConfigs.length }}</strong></div>
-
-    <app-table-shell title="Saved Connections" icon="pi pi-table">
-      <p-table [value]="sapConfigs" [loading]="loading.list" [paginator]="true" [rows]="10" [rowsPerPageOptions]="[10,20,50]" styleClass="p-datatable-striped">
+      <p-table
+        [value]="filteredConfigs"
+        [loading]="loading.list"
+        [paginator]="true"
+        [rows]="10"
+        [rowsPerPageOptions]="[10, 20, 50]"
+        styleClass="p-datatable-striped"
+      >
         <ng-template pTemplate="header">
           <tr>
-            <th style="width:70px">ID</th>
+            <th style="width: 70px">ID</th>
             <th>Name</th>
-            <th>Base URL</th>
+            <th>Service Layer URL</th>
             <th>Company DB</th>
-            <th>Username</th>
-            <th style="width:120px">Status</th>
-            <th style="width:140px">Actions</th>
+            <th>User</th>
+            <th style="width: 120px">Auth</th>
+            <th style="width: 90px">SSL</th>
+            <th style="width: 120px">Status</th>
+            <th style="width: 180px">Actions</th>
           </tr>
         </ng-template>
 
         <ng-template pTemplate="body" let-row>
           <tr>
             <td><code>#{{ row.id }}</code></td>
-            <td>{{ row.name }}</td>
+            <td><strong>{{ row.name }}</strong></td>
             <td><code>{{ row.baseUrl }}</code></td>
             <td>{{ row.companyDb }}</td>
-            <td>{{ row.userName }}</td>
+            <td><code>{{ row.userName }}</code></td>
+            <td>{{ row.authenticationMethod || 'Session' }}</td>
+            <td>{{ row.verifySsl !== false ? 'Yes' : 'No' }}</td>
             <td>
               <span [class]="row.isActive ? 'status-badge active' : 'status-badge inactive'">
+                <i [class]="row.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
                 {{ row.isActive ? 'Active' : 'Inactive' }}
               </span>
             </td>
             <td>
-              <button class="btn-icon" (click)="editConnection(row)" title="Edit">
-                <i class="pi pi-pencil"></i>
-              </button>
-              <button class="btn-icon danger" (click)="deleteConnection(row)" title="Delete" [disabled]="loading.delete">
-                <i class="pi pi-trash"></i>
-              </button>
+              <app-table-actions>
+                <button
+                  pButton
+                  icon="pi pi-pencil"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="editConnection(row)"
+                  pTooltip="Edit"
+                  tooltipPosition="top"
+                ></button>
+                <button
+                  pButton
+                  icon="pi pi-check"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="testConnection(row)"
+                  [disabled]="loading.test"
+                  pTooltip="Test Connection"
+                  tooltipPosition="top"
+                ></button>
+                <button
+                  pButton
+                  icon="pi pi-refresh"
+                  class="p-button-text p-button-sm action-btn"
+                  (click)="reloginConnection(row)"
+                  [disabled]="loading.relogin"
+                  pTooltip="Re-Login"
+                  tooltipPosition="top"
+                ></button>
+                <button
+                  pButton
+                  icon="pi pi-trash"
+                  class="p-button-text p-button-sm p-button-danger action-btn"
+                  (click)="deleteConnection(row)"
+                  [disabled]="loading.delete"
+                  pTooltip="Delete"
+                  tooltipPosition="top"
+                ></button>
+              </app-table-actions>
             </td>
           </tr>
         </ng-template>
 
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="7" class="empty-message">No SAP connections found.</td>
+            <td colspan="9" class="empty-message">
+              <div class="empty-state">
+                <i class="pi pi-inbox"></i>
+                <p>No SAP connections found.</p>
+                <button pButton icon="pi pi-plus" label="Create Config" (click)="openCreate()"></button>
+              </div>
+            </td>
           </tr>
         </ng-template>
       </p-table>
     </app-table-shell>
   </div>
+
+  <app-dialog-shell
+    [(visible)]="showModal"
+    [header]="editingConnectionId ? 'Edit SAP Connection' : 'Create SAP Connection'"
+    [style]="{ width: '720px' }"
+    (onHide)="closeModal()"
+  >
+    <form class="form-grid">
+      <div class="form-row">
+        <label class="form-label">Connection Name *</label>
+        <input pInputText type="text" [(ngModel)]="connectionForm.name" [ngModelOptions]="{standalone:true}" placeholder="e.g. SAP DEV Service Layer" />
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Service Layer URL *</label>
+        <input pInputText type="text" [(ngModel)]="connectionForm.baseUrl" [ngModelOptions]="{standalone:true}" placeholder="https://host:50000/b1s/v1" />
+      </div>
+
+      <div class="form-row two-cols">
+        <div class="col">
+          <label class="form-label">Company DB *</label>
+          <input pInputText type="text" [(ngModel)]="connectionForm.companyDb" [ngModelOptions]="{standalone:true}" placeholder="DOKHON_DEV" />
+        </div>
+        <div class="col">
+          <label class="form-label">Username *</label>
+          <input pInputText type="text" [(ngModel)]="connectionForm.userName" [ngModelOptions]="{standalone:true}" placeholder="manager" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Password {{ editingConnectionId ? '(optional)' : '*' }}</label>
+        <input
+          pInputText
+          type="password"
+          [(ngModel)]="connectionForm.password"
+          [ngModelOptions]="{standalone:true}"
+          [placeholder]="editingConnectionId ? 'Leave empty to keep current password' : 'Enter password'"
+        />
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Authentication Method</label>
+        <p-select
+          [options]="[{label:'Session',value:'Session'},{label:'Token',value:'Token'}]"
+          optionLabel="label"
+          optionValue="value"
+          [(ngModel)]="connectionForm.authenticationMethod"
+          [ngModelOptions]="{standalone:true}"
+          [style]="{ width: '100%' }"
+        ></p-select>
+      </div>
+
+      <div class="form-row two-cols">
+        <div class="col checkbox-col">
+          <p-checkbox [(ngModel)]="connectionForm.verifySsl" [ngModelOptions]="{standalone:true}" [binary]="true" inputId="verifySsl"></p-checkbox>
+          <label for="verifySsl" class="checkbox-label">Verify SSL certificate</label>
+        </div>
+        <div class="col checkbox-col">
+          <p-checkbox [(ngModel)]="connectionForm.isActive" [ngModelOptions]="{standalone:true}" [binary]="true" inputId="connIsActive"></p-checkbox>
+          <label for="connIsActive" class="checkbox-label">Active</label>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button pButton type="button" class="p-button-text" (click)="closeModal()">Cancel</button>
+        <button pButton type="button" (click)="saveConnection()" [disabled]="loading.save">
+          <span>{{ loading.save ? 'Saving...' : (editingConnectionId ? 'Save Changes' : 'Create') }}</span>
+        </button>
+      </div>
+    </form>
+  </app-dialog-shell>
 </div>

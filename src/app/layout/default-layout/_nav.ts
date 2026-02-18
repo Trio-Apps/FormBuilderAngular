@@ -135,6 +135,12 @@ export const navItems: INavData[] = [
     ]
   },
   {
+    name: 'Submissions',
+    url: '/submissions',
+    iconComponent: { name: 'cil-description' },
+    attributes: { permissionCode: 'Submission_Allow_View' }
+  },
+  {
     title: true,
     name: 'Testing & Tools'
   },

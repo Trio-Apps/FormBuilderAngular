@@ -72,6 +72,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
   description = '';
   foreignDescription = ''; // Arabic description
   isPublished = false;
+  isSapEnabled = false;
+  sapExecutionMode: 'OnSubmit' | 'OnFinalApproval' | 'OnSpecificWorkflowStage' = 'OnSubmit';
   isActive = true;
   editingForm: FormBuilderDto | null = null;
   currentInputLanguage: 'en' | 'ar' = 'en'; // Language toggle for input fields
@@ -498,6 +500,12 @@ export class FormsListComponent implements OnInit, OnDestroy {
       this.description = form.description || '';
       this.foreignDescription = form.foreignDescription || '';
       this.isPublished = form.isPublished ?? false;
+      this.isSapEnabled = form.isSapEnabled ?? false;
+      if (form.sapExecutionMode === 'OnFinalApproval' || form.sapExecutionMode === 'OnSpecificWorkflowStage') {
+        this.sapExecutionMode = form.sapExecutionMode;
+      } else {
+        this.sapExecutionMode = 'OnSubmit';
+      }
       this.isActive = form.isActive !== false;
     } else {
       if (!this.permissionService.hasPermission('FormBuilder_Allow_Create')) {
@@ -515,6 +523,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
       this.description = '';
       this.foreignDescription = '';
       this.isPublished = true; // Default to true for new forms
+      this.isSapEnabled = false;
+      this.sapExecutionMode = 'OnSubmit';
       this.isActive = true;
     }
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
@@ -530,6 +540,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
     this.description = '';
     this.foreignDescription = '';
     this.isPublished = false;
+    this.isSapEnabled = false;
+    this.sapExecutionMode = 'OnSubmit';
     this.isActive = true;
     this.currentInputLanguage = 'en'; // Reset to English when closing modal
   }
@@ -596,6 +608,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
         description: trimmedDescription || undefined,
         foreignDescription: trimmedForeignDescription || undefined,
         isPublished: this.isPublished,
+        isSapEnabled: this.isSapEnabled,
+        sapExecutionMode: this.isSapEnabled ? this.sapExecutionMode : undefined,
         isActive: this.isActive
       };
 
@@ -637,6 +651,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
               description: trimmedDescription || undefined,
               foreignDescription: trimmedForeignDescription || undefined,
               isPublished: this.isPublished,
+              isSapEnabled: this.isSapEnabled,
+              sapExecutionMode: this.isSapEnabled ? this.sapExecutionMode : undefined,
               isActive: this.isActive
             };
             console.log('[FormsList] Local form updated:', {
@@ -656,6 +672,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
                 description: trimmedDescription || undefined,
                 foreignDescription: trimmedForeignDescription || undefined,
                 isPublished: this.isPublished,
+                isSapEnabled: this.isSapEnabled,
+                sapExecutionMode: this.isSapEnabled ? this.sapExecutionMode : undefined,
                 isActive: this.isActive
               };
               console.log('[FormsList] Filtered form updated:', {
@@ -675,6 +693,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
                 description: trimmedDescription || undefined,
                 foreignDescription: trimmedForeignDescription || undefined,
                 isPublished: this.isPublished,
+                isSapEnabled: this.isSapEnabled,
+                sapExecutionMode: this.isSapEnabled ? this.sapExecutionMode : undefined,
                 isActive: this.isActive
               };
               console.log('[FormsList] Paginated form updated:', {
@@ -825,6 +845,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
         description: trimmedDescription || undefined,
         foreignDescription: trimmedForeignDescription || undefined,
         isPublished: this.isPublished,
+        isSapEnabled: this.isSapEnabled,
+        sapExecutionMode: this.isSapEnabled ? this.sapExecutionMode : undefined,
         isActive: this.isActive
       };
 
@@ -1384,10 +1406,6 @@ export class FormsListComponent implements OnInit, OnDestroy {
     });
   }
 }
-
-
-
-
 
 
 

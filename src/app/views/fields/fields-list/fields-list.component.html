@@ -1467,6 +1467,151 @@
               [placeholder]="translateLabel('fields.enterDefaultValue')">
           </div>
         </div>
+
+        <!-- SAP Integration Section -->
+        <div class="form-section">
+          <h4 class="section-title">
+            <i class="pi pi-send"></i>
+            SAP Integration
+          </h4>
+          <div class="switches-grid">
+            <div class="switch-item">
+              <label class="switch-label">
+                <input
+                  type="checkbox"
+                  class="switch-input"
+                  [(ngModel)]="sapIntegrationEnabled"
+                  (ngModelChange)="onSapIntegrationToggle($event)"
+                  [ngModelOptions]="{standalone: true}"
+                  id="sapIntegrationEnabled">
+                <span class="switch-slider"></span>
+                <span class="switch-text">Enable SAP Mapping</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-group mt-3" *ngIf="sapIntegrationEnabled">
+            <label class="form-label">SAP Connection <span class="required">*</span></label>
+            <select
+              class="form-control"
+              [(ngModel)]="selectedSapConnectionId"
+              (ngModelChange)="onSapConnectionChange()"
+              [ngModelOptions]="{standalone: true}">
+              <option [ngValue]="null">Select SAP connection</option>
+              <option *ngFor="let conn of sapConnections" [ngValue]="conn.id">
+                {{ conn.name }}{{ conn.companyDb ? ' - ' + conn.companyDb : '' }}{{ conn.isActive ? ' (Active)' : '' }}
+              </option>
+            </select>
+            <small class="form-text text-muted" *ngIf="loadingSapConnections">
+              Loading SAP connections...
+            </small>
+            <small class="form-text text-warning" *ngIf="!loadingSapConnections && sapConnections.length === 0">
+              No SAP connections found. Please create one in SAP Integration screen.
+            </small>
+          </div>
+          <div class="form-group mt-3" *ngIf="sapIntegrationEnabled">
+            <label class="form-label">SAP Endpoint / Object <span class="required">*</span></label>
+            <div class="form-grid" style="margin-bottom: 10px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">API URL / Object</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  [(ngModel)]="sapEndpointName"
+                  (ngModelChange)="onSapEndpointChanged()"
+                  (blur)="onSapEndpointBlur()"
+                  [ngModelOptions]="{standalone: true}"
+                  placeholder="e.g. ProductionOrders or full URL">
+              </div>
+              <div class="form-group" style="display:flex; align-items:end; margin-bottom: 0;">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  (click)="onSapEndpointSend()"
+                  [disabled]="loadingSapObjectFields"
+                  style="min-width: 120px;">
+                  {{ loadingSapObjectFields ? 'Loading...' : 'Send' }}
+                </button>
+              </div>
+            </div>
+            <small class="form-text text-muted">
+              Enter object only or full URL. Example: <code>ProductionOrders</code> or <code>{{ getSelectedSapConnectionBaseUrl() }}/ProductionOrders</code>
+            </small>
+            <small class="form-text text-muted" *ngIf="getSelectedSapConnectionBaseUrl()">
+              Base URL: <code>{{ getSelectedSapConnectionBaseUrl() }}</code>
+            </small>
+            <small class="form-text text-muted" *ngIf="loadingSapEndpointOptions">
+              Loading SAP endpoint options...
+            </small>
+            <small class="form-text text-success" *ngIf="getResolvedSapEndpointUrl()">
+              Final URL: <code>{{ getResolvedSapEndpointUrl() }}</code>
+            </small>
+          </div>
+          <div class="form-group mt-3" *ngIf="sapIntegrationEnabled">
+            <label class="form-label">SAP Method <span class="required">*</span></label>
+            <select
+              class="form-control"
+              [(ngModel)]="sapHttpMethod"
+              [ngModelOptions]="{standalone: true}">
+              <option *ngFor="let method of sapHttpMethodOptions" [ngValue]="method">
+                {{ method }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group mt-3" *ngIf="sapIntegrationEnabled">
+            <label class="form-label">Send To SAP On <span class="required">*</span></label>
+            <select
+              class="form-control"
+              [(ngModel)]="sapExecutionMode"
+              (ngModelChange)="onSapExecutionModeChange()"
+              [ngModelOptions]="{standalone: true}">
+              <option *ngFor="let mode of sapExecutionModeOptions" [ngValue]="mode.value">
+                {{ mode.label }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group mt-3" *ngIf="sapIntegrationEnabled && sapExecutionMode === 'OnSpecificWorkflowStage'">
+            <label class="form-label">Workflow Stage <span class="required">*</span></label>
+            <select
+              class="form-control"
+              [(ngModel)]="sapTriggerStageId"
+              [ngModelOptions]="{standalone: true}">
+              <option [ngValue]="null">Select stage</option>
+              <option *ngFor="let stage of sapWorkflowStages" [ngValue]="stage.id">
+                #{{ stage.stageOrder }} - {{ stage.stageName }}
+              </option>
+            </select>
+            <small class="form-text text-muted" *ngIf="loadingSapWorkflowStages">
+              Loading workflow stages...
+            </small>
+            <small class="form-text text-warning" *ngIf="!loadingSapWorkflowStages && sapWorkflowStages.length === 0">
+              No active workflow stages found for this form document type.
+            </small>
+          </div>
+          <div class="form-group mt-3" *ngIf="sapIntegrationEnabled">
+            <label class="form-label">SAP Field Name <span class="required">*</span></label>
+            <select
+              class="form-control"
+              [(ngModel)]="sapFieldName"
+              [ngModelOptions]="{standalone: true}">
+              <option value="">Select SAP field from metadata</option>
+              <option *ngIf="isCurrentSapFieldMissingFromOptions()" [value]="sapFieldName">
+                {{ sapFieldName }} (Saved)
+              </option>
+              <option *ngFor="let field of sapObjectFields" [value]="field.name">
+                {{ field.name }}
+              </option>
+            </select>
+            <small class="form-text text-muted" *ngIf="loadingSapObjectFields">
+              Loading SAP fields...
+            </small>
+            <small class="form-text text-muted" *ngIf="loadingSapReLogin">
+              Re-login in progress...
+            </small>
+            <small class="form-text text-muted">
+              SAP session and metadata refresh are automatic.
+            </small>
+          </div>
+        </div>
       </div>
 
       <div class="modal-footer">
@@ -1550,8 +1695,3 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
-
-
-
-

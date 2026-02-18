@@ -36,6 +36,17 @@ import { UserQueryDto, CreateUserQueryDto } from '../../FormBuilder/form-builder
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { PermissionService } from '../../../services/permission.service';
 import { HasPermissionDirective } from '../../../directives/has-permission.directive';
+import {
+  SapIntegrationService,
+  SapHanaConfigDto,
+  SapExecutionMode,
+  SapServiceLayerEndpointDto,
+  SapServiceLayerObjectFieldDto
+} from '../../FormBuilder/services/sap-integration.service';
+import { FormsService } from '../../FormBuilder/services/forms.service';
+import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
+import { ApprovalWorkflowService } from '../../FormBuilder/services/approval-workflow.service';
+import { ApprovalStageService, ApprovalStageDto } from '../../FormBuilder/services/approval-stage.service';
 
 @Component({
   selector: 'app-fields-list',
@@ -224,6 +235,33 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   savingQuery: boolean = false;
   queryNameToSave: string = '';
   showSaveQueryDialog: boolean = false;
+  sapIntegrationEnabled: boolean = false;
+  sapFieldName: string = '';
+  sapConnections: SapHanaConfigDto[] = [];
+  selectedSapConnectionId: number | null = null;
+  loadingSapConnections: boolean = false;
+  sapEndpointOptions: SapServiceLayerEndpointDto[] = [];
+  loadingSapEndpointOptions: boolean = false;
+  sapEndpointName: string = '';
+  sapSelectedEndpointOption: string = '';
+  sapCustomEndpointMode: boolean = false;
+  sapCustomEndpointName: string = '';
+  sapObjectFields: SapServiceLayerObjectFieldDto[] = [];
+  loadingSapObjectFields: boolean = false;
+  loadingSapReLogin: boolean = false;
+  sapMetadataUrl: string = '';
+  sapDocumentTypeId: number | null = null;
+  sapHttpMethod: 'GET' | 'POST' | 'PUT' = 'POST';
+  sapHttpMethodOptions: Array<'GET' | 'POST' | 'PUT'> = ['POST', 'GET', 'PUT'];
+  sapExecutionMode: SapExecutionMode = 'OnSubmit';
+  sapExecutionModeOptions: Array<{ label: string; value: SapExecutionMode }> = [
+    { label: 'Submitted', value: 'OnSubmit' },
+    { label: 'Approval', value: 'OnFinalApproval' },
+    { label: 'Specific Workflow Stage', value: 'OnSpecificWorkflowStage' }
+  ];
+  sapWorkflowStages: ApprovalStageDto[] = [];
+  loadingSapWorkflowStages: boolean = false;
+  sapTriggerStageId: number | null = null;
 
   // Expose Array, Object, and Math to template
   Array = Array;
@@ -251,7 +289,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     private validationService: ValidationService,
     private formSubmissionService: FormSubmissionService,
     private userQueriesService: UserQueriesService,
-    public permissionService: PermissionService
+    public permissionService: PermissionService,
+    private sapIntegrationService: SapIntegrationService,
+    private formsService: FormsService,
+    private documentTypesService: DocumentTypesService,
+    private approvalWorkflowService: ApprovalWorkflowService,
+    private approvalStageService: ApprovalStageService
   ) {
     // Initialize the form
     this.fieldForm = this.fb.group({
@@ -391,6 +434,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         if (tab && tab.formBuilderId) {
           this.formBuilderId = tab.formBuilderId;
           this.tabName = tab.tabName || '';
+          this.loadFormDocumentTypeId();
           // Load fields with correct formBuilderId
           this.loadFields();
           // Load all form fields for expression builder
@@ -623,6 +667,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.existingDataSource = null; // Clear existing DataSource
     this.dataSourceType = 'Static'; // Set to Static by default for new fields
     this.resetDataSourceConfig(); // Reset DataSource config
+    this.resetSapIntegrationSelection();
+    this.loadSapConnections();
+    this.loadSapDefaults();
     
     // Load all form fields for expression builder (always load, not just for calculated fields)
     if (this.allFormFields.length === 0) {
@@ -684,6 +731,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
     
     this.showFieldModal = true;
+    this.resetSapIntegrationSelection();
+    this.loadSapConnections();
+    this.loadSapDefaults();
+    this.loadSapIntegrationMapping(field.id);
 
     // Debug: Log field data to check if expressionText is present
     console.log('[openEditFieldModal] Field data:', {
@@ -869,6 +920,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.selectedField = null;
     this.currentInputLanguage = 'en'; // Reset to English when closing modal
     this.resetDataSourceConfig(); // Reset DataSource config
+    this.resetSapIntegrationSelection();
     this.fieldForm.reset({
       isMandatory: false,
       isEditable: true,
@@ -1002,6 +1054,42 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.sapIntegrationEnabled && !(this.sapFieldName || '').trim()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'SAP Field Name is required when SAP mapping is enabled.'
+      });
+      return;
+    }
+
+    if (this.sapIntegrationEnabled && !this.selectedSapConnectionId) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please select SAP Connection when SAP mapping is enabled.'
+      });
+      return;
+    }
+
+    if (this.sapIntegrationEnabled && !this.normalizeSapEndpointName(this.sapEndpointName)) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please enter SAP endpoint/object (e.g. ProductionOrders).'
+      });
+      return;
+    }
+
+    if (this.sapIntegrationEnabled && this.sapExecutionMode === 'OnSpecificWorkflowStage' && !this.sapTriggerStageId) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please select a workflow stage for SAP execution.'
+      });
+      return;
+    }
+
     // Validate Grid selection for Grid field type
     if (this.isGridFieldType(this.fieldForm.get('fieldTypeId')?.value)) {
       if (!this.selectedGridId) {
@@ -1115,25 +1203,19 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             // Save DataSource if not Static, otherwise save static options
             if (this.dataSourceType !== 'Static') {
               this.saveDataSource(this.editingField!.id).then(() => {
-                this.loading.save = false;
-                this.loadFields();
-                this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field updated successfully' });
-                this.closeFieldModal();
-                this.cdr.detectChanges();
+                this.completeFieldModalSave(this.editingField!.id, 'Field updated successfully');
               }).catch(() => {
                 this.loading.save = false;
               });
             } else {
-              this.saveFieldOptions(this.editingField!.id);
+              this.saveFieldOptions(this.editingField!.id, () => {
+                this.completeFieldModalSave(this.editingField!.id, 'Field updated successfully');
+              });
             }
           } else {
             // Delete all options if field type doesn't support options
             this.deleteAllFieldOptions(this.editingField!.id).then(() => {
-              this.loading.save = false;
-              this.loadFields();
-              this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field updated successfully' });
-              this.closeFieldModal();
-              this.cdr.detectChanges();
+              this.completeFieldModalSave(this.editingField!.id, 'Field updated successfully');
             });
           }
         },
@@ -1190,29 +1272,19 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             // Save DataSource if not Static, otherwise save static options
             if (this.dataSourceType !== 'Static') {
               this.saveDataSource(newField.id).then(() => {
-                this.loading.save = false;
-                this.loadFields();
-                this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field created successfully' });
-                this.closeFieldModal();
-                this.cdr.detectChanges();
+                this.completeFieldModalSave(newField.id, 'Field created successfully');
               }).catch(() => {
                 this.loading.save = false;
               });
             } else if (this.fieldOptionsFormArray.length > 0) {
-              this.saveFieldOptions(newField.id);
+              this.saveFieldOptions(newField.id, () => {
+                this.completeFieldModalSave(newField.id, 'Field created successfully');
+              });
             } else {
-              this.loading.save = false;
-              this.loadFields();
-              this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field created successfully' });
-              this.closeFieldModal();
-              this.cdr.detectChanges();
+              this.completeFieldModalSave(newField.id, 'Field created successfully');
             }
           } else {
-            this.loading.save = false;
-            this.loadFields();
-            this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field created successfully' });
-            this.closeFieldModal();
-            this.cdr.detectChanges();
+            this.completeFieldModalSave(newField.id, 'Field created successfully');
           }
         },
         error: (error) => {
@@ -2374,7 +2446,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    * For Api or LookupTable DataSources, options come from external source (API/Database tables)
    * and should NOT be saved to database. They are loaded dynamically when the form is displayed.
    */
-  saveFieldOptions(fieldId: number): void {
+  saveFieldOptions(fieldId: number, onSuccess?: () => void): void {
     // IMPORTANT: Only save options for Static DataSource
     // For Api or LookupTable, options come from external source and should NOT be saved
     if (this.dataSourceType !== 'Static') {
@@ -2382,7 +2454,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.loading.save = false;
       this.loadFields();
       this.messageService.add({ severity: 'warn', summary: 'Warning', detail: 'Options are not saved for Api/LookupTable DataSources. They are loaded from external source.' });
-      this.closeFieldModal();
+      if (!onSuccess) {
+        this.closeFieldModal();
+      }
       this.cdr.detectChanges();
       return;
     }
@@ -2391,11 +2465,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     const options = optionsArray.value as FieldOptionDto[];
 
     if (options.length === 0) {
-      this.loading.save = false;
-      this.loadFields();
-      this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field saved successfully' });
-      this.closeFieldModal();
-      this.cdr.detectChanges();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        this.loading.save = false;
+        this.loadFields();
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field saved successfully' });
+        this.closeFieldModal();
+        this.cdr.detectChanges();
+      }
       return;
     }
 
@@ -2438,11 +2516,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
               this.fieldOptionsService.createBulkFieldOptions(createDtos).subscribe({
                 next: () => {
-                  this.loading.save = false;
-                  this.loadFields();
-                  this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field and options saved successfully' });
-                  this.closeFieldModal();
-                  this.cdr.detectChanges();
+                  if (onSuccess) {
+                    onSuccess();
+                  } else {
+                    this.loading.save = false;
+                    this.loadFields();
+                    this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field and options saved successfully' });
+                    this.closeFieldModal();
+                    this.cdr.detectChanges();
+                  }
                 },
                 error: () => {
                   this.loading.save = false;
@@ -2450,11 +2532,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 }
               });
             } else {
-              this.loading.save = false;
-              this.loadFields();
-              this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field and options saved successfully' });
-              this.closeFieldModal();
-              this.cdr.detectChanges();
+              if (onSuccess) {
+                onSuccess();
+              } else {
+                this.loading.save = false;
+                this.loadFields();
+                this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field and options saved successfully' });
+                this.closeFieldModal();
+                this.cdr.detectChanges();
+              }
             }
           });
         });
@@ -2472,11 +2558,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
         this.fieldOptionsService.createBulkFieldOptions(createDtos).subscribe({
           next: () => {
-            this.loading.save = false;
-            this.loadFields();
-            this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field and options saved successfully' });
-            this.closeFieldModal();
-            this.cdr.detectChanges();
+            if (onSuccess) {
+              onSuccess();
+            } else {
+              this.loading.save = false;
+              this.loadFields();
+              this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field and options saved successfully' });
+              this.closeFieldModal();
+              this.cdr.detectChanges();
+            }
           },
           error: () => {
             this.loading.save = false;
@@ -2484,6 +2574,751 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           }
         });
       }
+    });
+  }
+
+  private resetSapIntegrationSelection(): void {
+    this.sapIntegrationEnabled = false;
+    this.sapFieldName = '';
+    this.selectedSapConnectionId = null;
+    this.sapEndpointOptions = [];
+    this.loadingSapEndpointOptions = false;
+    this.sapEndpointName = '';
+    this.sapSelectedEndpointOption = '';
+    this.sapCustomEndpointMode = false;
+    this.sapCustomEndpointName = '';
+    this.sapObjectFields = [];
+    this.loadingSapObjectFields = false;
+    this.loadingSapReLogin = false;
+    this.sapMetadataUrl = '';
+    this.sapHttpMethod = 'POST';
+    this.sapExecutionMode = 'OnSubmit';
+    this.sapWorkflowStages = [];
+    this.loadingSapWorkflowStages = false;
+    this.sapTriggerStageId = null;
+  }
+
+  private loadFormDocumentTypeId(): void {
+    if (!this.formBuilderId) {
+      return;
+    }
+
+    this.formsService.getFormById(this.formBuilderId).subscribe({
+      next: (form) => {
+        const resolvedDocumentTypeId = Number(form?.documentTypeId || 0) || null;
+        this.sapDocumentTypeId = resolvedDocumentTypeId;
+        if (!this.sapDocumentTypeId) {
+          this.resolveDocumentTypeIdFallback();
+        }
+
+        const formMode = form?.sapExecutionMode;
+        if (formMode === 'OnSubmit' || formMode === 'OnFinalApproval' || formMode === 'OnSpecificWorkflowStage') {
+          this.sapExecutionMode = formMode;
+        }
+        this.loadSapWorkflowStages();
+      },
+      error: () => {
+        this.sapDocumentTypeId = null;
+        this.sapWorkflowStages = [];
+        this.sapTriggerStageId = null;
+        this.resolveDocumentTypeIdFallback();
+      }
+    });
+  }
+
+  private resolveDocumentTypeIdFallback(): void {
+    if (!this.formBuilderId) {
+      return;
+    }
+
+    this.documentTypesService.getDocumentTypeByFormId(this.formBuilderId).subscribe({
+      next: (docType) => {
+        const fallbackId = Number(docType?.id || 0) || null;
+        if (!fallbackId) {
+          return;
+        }
+
+        this.sapDocumentTypeId = fallbackId;
+        this.loadSapDefaults();
+        this.loadSapWorkflowStages();
+      },
+      error: () => {
+        // no-op: keep existing behavior if fallback also fails
+      }
+    });
+  }
+
+  private loadSapConnections(): void {
+    if (this.sapConnections.length > 0) {
+      return;
+    }
+
+    this.loadingSapConnections = true;
+    this.sapIntegrationService.getSapConfigs(true).subscribe({
+      next: (connections) => {
+        this.sapConnections = (connections || [])
+          .filter(c => c.integrationType !== 'HanaOdbc')
+          .sort((a, b) => Number(b.isActive === true) - Number(a.isActive === true));
+        this.loadingSapConnections = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.sapConnections = [];
+        this.loadingSapConnections = false;
+      }
+    });
+  }
+
+  private loadSapDefaults(): void {
+    if (!this.sapDocumentTypeId || this.sapDocumentTypeId <= 0) {
+      return;
+    }
+
+    this.sapIntegrationService.getSettings(this.sapDocumentTypeId).subscribe({
+      next: (settings) => {
+        if (!settings) {
+          return;
+        }
+
+        if (!this.selectedSapConnectionId && settings.sapConfigId) {
+          this.selectedSapConnectionId = settings.sapConfigId;
+        }
+        if (this.selectedSapConnectionId) {
+          this.loadSapEndpointOptions(this.selectedSapConnectionId);
+        }
+
+        if (!this.sapEndpointName && settings.targetEndpoint) {
+          this.sapEndpointName = this.normalizeSapEndpointName(settings.targetEndpoint);
+        }
+        this.loadSapObjectFieldsForCurrentSelection();
+
+        const method = settings.httpMethod as 'GET' | 'POST' | 'PUT' | undefined;
+        if (method && this.sapHttpMethodOptions.includes(method)) {
+          this.sapHttpMethod = method;
+        }
+
+        if (settings.executionMode) {
+          const mode = settings.executionMode as SapExecutionMode;
+          if (this.sapExecutionModeOptions.some(x => x.value === mode)) {
+            this.sapExecutionMode = mode;
+          }
+        }
+        this.sapTriggerStageId = settings.triggerStageId ?? null;
+        this.loadSapWorkflowStages();
+      },
+      error: () => {
+        // no saved settings yet
+      }
+    });
+  }
+
+  onSapIntegrationToggle(enabled: boolean): void {
+    if (enabled && !this.selectedSapConnectionId && this.sapConnections.length > 0) {
+      const active = this.sapConnections.find(c => c.isActive === true);
+      this.selectedSapConnectionId = active?.id ?? this.sapConnections[0].id;
+    }
+    if (enabled) {
+      this.onSapConnectionChange();
+      this.loadSapWorkflowStages();
+    }
+  }
+
+  onSapConnectionChange(): void {
+    if (!this.selectedSapConnectionId) {
+      this.sapEndpointOptions = [];
+      this.sapObjectFields = [];
+      this.sapSelectedEndpointOption = '';
+      this.sapCustomEndpointMode = false;
+      this.sapCustomEndpointName = '';
+      return;
+    }
+
+    this.autoReloginAndReloadSapMetadata();
+  }
+
+  onSapEndpointBlur(): void {
+    this.sapEndpointName = this.normalizeSapEndpointName(this.sapEndpointName);
+    if (this.sapCustomEndpointMode) {
+      this.sapCustomEndpointName = this.sapEndpointName;
+    }
+  }
+
+  onSapEndpointChanged(): void {
+    if (!this.selectedSapConnectionId || !this.normalizeSapEndpointName(this.sapEndpointName)) {
+      this.sapObjectFields = [];
+    }
+  }
+
+  onSapEndpointSend(): void {
+    if (!this.selectedSapConnectionId) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please select SAP connection first.'
+      });
+      return;
+    }
+
+    this.sapEndpointName = this.normalizeSapEndpointName(this.sapEndpointName);
+    if (!this.sapEndpointName) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please enter SAP API URL or object name first.'
+      });
+      return;
+    }
+
+    this.autoReloginAndReloadSapMetadata();
+  }
+
+  onSapEndpointOptionChange(): void {
+    if (this.sapSelectedEndpointOption === '__custom__') {
+      this.sapCustomEndpointMode = true;
+      this.sapEndpointName = this.normalizeSapEndpointName(this.sapCustomEndpointName);
+      this.onSapEndpointChanged();
+      return;
+    }
+
+    this.sapCustomEndpointMode = false;
+    this.sapCustomEndpointName = '';
+    this.sapEndpointName = this.normalizeSapEndpointName(this.sapSelectedEndpointOption);
+    this.onSapEndpointChanged();
+  }
+
+  onSapCustomEndpointChanged(): void {
+    this.sapEndpointName = this.normalizeSapEndpointName(this.sapCustomEndpointName);
+    this.onSapEndpointChanged();
+  }
+
+  onSapExecutionModeChange(): void {
+    if (this.sapExecutionMode === 'OnSpecificWorkflowStage') {
+      this.loadSapWorkflowStages();
+      return;
+    }
+
+    this.sapTriggerStageId = null;
+  }
+
+  getSelectedSapConnectionBaseUrl(): string {
+    const selected = this.sapConnections.find(c => c.id === this.selectedSapConnectionId);
+    return (selected?.baseUrl || '').trim();
+  }
+
+  getResolvedSapEndpointUrl(): string {
+    const baseUrl = this.getSelectedSapConnectionBaseUrl().replace(/\/+$/, '');
+    const endpoint = this.normalizeSapEndpointName(this.sapEndpointName);
+    if (!baseUrl || !endpoint) {
+      return '';
+    }
+    return `${baseUrl}/${endpoint}`;
+  }
+
+  onSapMetadataSend(): void {
+    const metadataUrl = (this.sapMetadataUrl || '').trim();
+    if (!metadataUrl) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Please enter metadata URL first.'
+      });
+      return;
+    }
+
+    if (!metadataUrl.startsWith('http://') && !metadataUrl.startsWith('https://')) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'Metadata URL must start with http:// or https://.'
+      });
+      return;
+    }
+
+    this.loadingSapObjectFields = true;
+    this.fieldDataSourceService.previewDataSource({
+      fieldId: this.editingField?.id || 0,
+      sapConfigId: this.selectedSapConnectionId ?? undefined,
+      sourceType: 'Api',
+      apiUrl: metadataUrl,
+      httpMethod: 'GET',
+      valuePath: 'Name',
+      textPath: 'Name'
+    }).subscribe({
+      next: (options) => {
+        const names = Array.from(new Set((options || [])
+          .map(x => String(x?.value ?? x?.text ?? '').trim())
+          .filter(x => !!x)))
+          .sort((a, b) => a.localeCompare(b));
+
+        this.sapObjectFields = names.map(name => ({
+          name,
+          type: '',
+          nullable: true
+        }));
+
+        if (this.sapFieldName && !names.includes(this.sapFieldName)) {
+          this.sapFieldName = '';
+        }
+
+        this.loadingSapObjectFields = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'SAP Metadata',
+          detail: `Loaded ${this.sapObjectFields.length} properties from metadata.`
+        });
+      },
+      error: (error) => {
+        this.sapObjectFields = [];
+        this.loadingSapObjectFields = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'SAP Metadata',
+          detail: this.extractErrorMessage(error) || 'Failed to load properties from metadata URL.'
+        });
+      }
+    });
+  }
+
+  onSapReLogin(): void {
+    if (!this.selectedSapConnectionId) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'SAP Integration',
+        detail: 'Please select SAP connection first.'
+      });
+      return;
+    }
+
+    this.loadingSapReLogin = true;
+    this.sapIntegrationService.reloginConnection(this.selectedSapConnectionId).subscribe({
+      next: () => {
+        this.loadingSapReLogin = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'SAP Integration',
+          detail: 'SAP re-login successful.'
+        });
+        this.loadSapEndpointOptions(this.selectedSapConnectionId!);
+        this.loadSapObjectFieldsForCurrentSelection();
+      },
+      error: (error) => {
+        this.loadingSapReLogin = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'SAP Integration',
+          detail: this.extractErrorMessage(error) || 'SAP re-login failed.'
+        });
+      }
+    });
+  }
+
+  private autoReloginAndReloadSapMetadata(): void {
+    if (!this.selectedSapConnectionId) {
+      this.sapEndpointOptions = [];
+      this.sapObjectFields = [];
+      return;
+    }
+
+    const sapConfigId = this.selectedSapConnectionId;
+    this.loadingSapReLogin = true;
+    this.sapIntegrationService.reloginConnection(sapConfigId).subscribe({
+      next: () => {
+        this.loadingSapReLogin = false;
+        this.loadSapEndpointOptions(sapConfigId);
+        this.loadSapObjectFieldsForCurrentSelection();
+      },
+      error: () => {
+        // Keep UI responsive even if relogin fails; still try to load metadata/endpoints.
+        this.loadingSapReLogin = false;
+        this.loadSapEndpointOptions(sapConfigId);
+        this.loadSapObjectFieldsForCurrentSelection();
+      }
+    });
+  }
+
+  private normalizeSapEndpointName(raw: string | null | undefined): string {
+    const value = (raw || '').trim();
+    if (!value) {
+      return '';
+    }
+
+    let cleaned = value;
+    const marker = '/b1s/v1/';
+    const markerIdx = cleaned.toLowerCase().indexOf(marker);
+    if (markerIdx >= 0) {
+      cleaned = cleaned.substring(markerIdx + marker.length);
+    }
+
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+      try {
+        const url = new URL(cleaned);
+        const path = url.pathname || '';
+        const pathMarkerIdx = path.toLowerCase().indexOf(marker);
+        cleaned = pathMarkerIdx >= 0 ? path.substring(pathMarkerIdx + marker.length) : path;
+      } catch {
+        // leave as-is
+      }
+    }
+
+    cleaned = cleaned.split('?')[0].split('#')[0];
+    cleaned = cleaned.replace(/^\/+/, '').replace(/\/+$/, '');
+    return cleaned;
+  }
+
+  private setDefaultSapMetadataUrlFromConnection(): void {
+    const base = this.getSelectedSapConnectionBaseUrl().replace(/\/+$/, '');
+    if (!base) {
+      this.sapMetadataUrl = '';
+      return;
+    }
+
+    if (!this.sapMetadataUrl || this.sapMetadataUrl.includes('$metadata')) {
+      this.sapMetadataUrl = `${base}/$metadata`;
+    }
+  }
+
+  private loadSapEndpointOptions(sapConfigId: number): void {
+    if (!sapConfigId) {
+      this.sapEndpointOptions = [];
+      return;
+    }
+
+    this.loadingSapEndpointOptions = true;
+    this.sapIntegrationService.getServiceLayerEndpoints(sapConfigId).subscribe({
+      next: (endpoints) => {
+        this.sapEndpointOptions = endpoints || [];
+        this.syncSapEndpointSelectionState();
+        this.loadingSapEndpointOptions = false;
+      },
+      error: () => {
+        this.sapEndpointOptions = [];
+        this.syncSapEndpointSelectionState();
+        this.loadingSapEndpointOptions = false;
+      }
+    });
+  }
+
+  private syncSapEndpointSelectionState(): void {
+    const normalizedCurrent = this.normalizeSapEndpointName(this.sapEndpointName);
+    if (!normalizedCurrent) {
+      this.sapSelectedEndpointOption = '';
+      this.sapCustomEndpointMode = false;
+      this.sapCustomEndpointName = '';
+      return;
+    }
+
+    const matched = this.sapEndpointOptions.find(
+      x => this.normalizeSapEndpointName(x?.name) === normalizedCurrent
+    );
+
+    if (matched?.name) {
+      this.sapSelectedEndpointOption = matched.name;
+      this.sapCustomEndpointMode = false;
+      this.sapCustomEndpointName = '';
+      this.sapEndpointName = this.normalizeSapEndpointName(matched.name);
+      return;
+    }
+
+    this.sapSelectedEndpointOption = '__custom__';
+    this.sapCustomEndpointMode = true;
+    this.sapCustomEndpointName = normalizedCurrent;
+    this.sapEndpointName = normalizedCurrent;
+  }
+
+  private loadSapObjectFieldsForCurrentSelection(): void {
+    const sapConfigId = this.selectedSapConnectionId;
+    const endpointName = this.normalizeSapEndpointName(this.sapEndpointName);
+    if (!sapConfigId || !endpointName) {
+      this.sapObjectFields = [];
+      return;
+    }
+
+    this.loadSapObjectFields(sapConfigId, endpointName);
+  }
+
+  private loadSapObjectFields(sapConfigId: number, endpointName: string): void {
+    if (!sapConfigId || !endpointName) {
+      this.sapObjectFields = [];
+      return;
+    }
+
+    this.loadingSapObjectFields = true;
+    this.sapIntegrationService.getServiceLayerObjectFields(sapConfigId, endpointName).subscribe({
+      next: (fields) => {
+        this.sapObjectFields = fields || [];
+        this.syncSapFieldNameWithOptions();
+        this.loadingSapObjectFields = false;
+      },
+      error: () => {
+        this.sapObjectFields = [];
+        this.loadingSapObjectFields = false;
+      }
+    });
+  }
+
+  private syncSapFieldNameWithOptions(): void {
+    const current = (this.sapFieldName || '').trim();
+    if (!current || !this.sapObjectFields?.length) {
+      return;
+    }
+
+    const match = this.sapObjectFields.find(
+      f => (f?.name || '').trim().toLowerCase() === current.toLowerCase()
+    );
+
+    if (match?.name && match.name !== this.sapFieldName) {
+      this.sapFieldName = match.name;
+    }
+  }
+
+  isCurrentSapFieldMissingFromOptions(): boolean {
+    const current = (this.sapFieldName || '').trim();
+    if (!current) {
+      return false;
+    }
+
+    return !this.sapObjectFields.some(
+      f => (f?.name || '').trim().toLowerCase() === current.toLowerCase()
+    );
+  }
+
+  private extractErrorMessage(error: any): string {
+    if (!error) return '';
+    if (typeof error === 'string') return error;
+    if (typeof error?.error === 'string') return error.error;
+    if (typeof error?.error?.message === 'string') return error.error.message;
+    if (typeof error?.message === 'string') return error.message;
+    return '';
+  }
+
+  private loadSapWorkflowStages(): void {
+    if (!this.sapDocumentTypeId || this.sapDocumentTypeId <= 0) {
+      this.sapWorkflowStages = [];
+      this.sapTriggerStageId = null;
+      return;
+    }
+
+    this.loadingSapWorkflowStages = true;
+    this.approvalWorkflowService.getActiveApprovalWorkflowsByDocumentTypeId(this.sapDocumentTypeId).subscribe({
+      next: (workflows) => {
+        const activeWorkflowIds = (workflows || [])
+          .filter(w => w?.id > 0 && w.isActive !== false)
+          .map(w => w.id);
+
+        if (!activeWorkflowIds.length) {
+          this.sapWorkflowStages = [];
+          this.sapTriggerStageId = null;
+          this.loadingSapWorkflowStages = false;
+          return;
+        }
+
+        const stageCalls = activeWorkflowIds.map(workflowId =>
+          this.approvalStageService.getAllByWorkflowId(workflowId).pipe(
+            catchError(() => of([] as ApprovalStageDto[]))
+          )
+        );
+
+        forkJoin(stageCalls).subscribe({
+          next: (results) => {
+            const stageMap = new Map<number, ApprovalStageDto>();
+            (results || []).flat().forEach(stage => {
+              if (!stage?.id || stage.isDeleted || stage.isActive === false) {
+                return;
+              }
+              stageMap.set(stage.id, stage);
+            });
+
+            this.sapWorkflowStages = Array.from(stageMap.values()).sort((a, b) => {
+              const orderCompare = (a.stageOrder || 0) - (b.stageOrder || 0);
+              if (orderCompare !== 0) {
+                return orderCompare;
+              }
+              return (a.stageName || '').localeCompare(b.stageName || '');
+            });
+
+            if (this.sapTriggerStageId && !this.sapWorkflowStages.some(s => s.id === this.sapTriggerStageId)) {
+              this.sapTriggerStageId = null;
+            }
+
+            this.loadingSapWorkflowStages = false;
+          },
+          error: () => {
+            this.sapWorkflowStages = [];
+            this.sapTriggerStageId = null;
+            this.loadingSapWorkflowStages = false;
+          }
+        });
+      },
+      error: () => {
+        this.sapWorkflowStages = [];
+        this.sapTriggerStageId = null;
+        this.loadingSapWorkflowStages = false;
+      }
+    });
+  }
+
+  private loadSapIntegrationMapping(fieldId?: number): void {
+    if (!fieldId || !this.formBuilderId) {
+      this.resetSapIntegrationSelection();
+      return;
+    }
+
+    this.sapIntegrationService.getFieldMappings(this.formBuilderId).subscribe({
+      next: (mappings) => {
+        const current = (mappings || []).find(m => m.formFieldId === fieldId);
+        if (current && current.sapFieldName?.trim()) {
+          this.sapIntegrationEnabled = current.isActive !== false;
+          this.sapFieldName = current.sapFieldName.trim();
+          this.selectedSapConnectionId = current.sapConfigId ?? this.selectedSapConnectionId;
+          if (!this.selectedSapConnectionId && this.sapConnections.length > 0) {
+            const active = this.sapConnections.find(c => c.isActive === true);
+            this.selectedSapConnectionId = active?.id ?? this.sapConnections[0].id;
+          }
+          if (this.selectedSapConnectionId) {
+            this.loadSapEndpointOptions(this.selectedSapConnectionId);
+            this.loadSapObjectFieldsForCurrentSelection();
+          }
+        } else {
+          this.resetSapIntegrationSelection();
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.resetSapIntegrationSelection();
+      }
+    });
+  }
+
+  private async saveSapIntegrationMapping(fieldId: number): Promise<void> {
+    if (!this.formBuilderId || !fieldId) {
+      return;
+    }
+
+    const sapFieldName = (this.sapFieldName || '').trim();
+
+    return new Promise((resolve) => {
+      this.sapIntegrationService.getFieldMappings(this.formBuilderId).subscribe({
+        next: (existingMappings) => {
+          const preservedMappings = (existingMappings || [])
+            .filter(m => m.formFieldId !== fieldId && !!m.sapFieldName?.trim())
+            .map(m => ({
+              formFieldId: m.formFieldId,
+              sapFieldName: m.sapFieldName.trim(),
+              isActive: m.isActive !== false,
+              sapConfigId: m.sapConfigId ?? undefined
+            }));
+
+          if (this.sapIntegrationEnabled && sapFieldName) {
+            preservedMappings.push({
+              formFieldId: fieldId,
+              sapFieldName,
+              isActive: true,
+              sapConfigId: this.selectedSapConnectionId ?? undefined
+            });
+          }
+
+          this.sapIntegrationService.saveFieldMappings({
+            formBuilderId: this.formBuilderId,
+            mappings: preservedMappings
+          }).subscribe({
+            next: () => resolve(),
+            error: () => {
+              this.messageService.add({
+                severity: 'warn',
+                summary: 'SAP Integration',
+                detail: 'Field saved, but SAP mapping was not updated.'
+              });
+              resolve();
+            }
+          });
+        },
+        error: () => {
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'SAP Integration',
+            detail: 'Field saved, but SAP mapping could not be loaded.'
+          });
+          resolve();
+        }
+      });
+    });
+  }
+
+  private completeFieldModalSave(fieldId: number, successMessage: string): void {
+    Promise.all([
+      this.saveSapIntegrationMapping(fieldId),
+      this.saveSapIntegrationSettings()
+    ]).finally(() => {
+        this.loading.save = false;
+        this.loadFields();
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: successMessage });
+        this.closeFieldModal();
+        this.cdr.detectChanges();
+      });
+  }
+
+  private async saveSapIntegrationSettings(): Promise<void> {
+    if (!this.sapIntegrationEnabled) {
+      return;
+    }
+
+    const endpoint = this.normalizeSapEndpointName(this.sapEndpointName);
+    if (!this.sapDocumentTypeId || !this.selectedSapConnectionId || !endpoint) {
+      return;
+    }
+    const triggerStageId = this.sapExecutionMode === 'OnSpecificWorkflowStage'
+      ? this.sapTriggerStageId
+      : null;
+
+    return new Promise((resolve) => {
+      this.sapIntegrationService.getSettings(this.sapDocumentTypeId!).subscribe({
+        next: (existing) => {
+          this.sapIntegrationService.upsertSettings({
+            documentTypeId: this.sapDocumentTypeId!,
+            sapConfigId: this.selectedSapConnectionId!,
+            targetEndpoint: endpoint,
+            httpMethod: this.sapHttpMethod,
+            targetObject: existing?.targetObject || endpoint,
+            executionMode: this.sapExecutionMode,
+            triggerStageId: triggerStageId,
+            blockWorkflowOnError: existing?.blockWorkflowOnError ?? false,
+            isActive: existing?.isActive ?? true
+          }).subscribe({
+            next: () => resolve(),
+            error: () => {
+              this.messageService.add({
+                severity: 'warn',
+                summary: 'SAP Integration',
+                detail: 'Field saved, but SAP endpoint settings were not updated.'
+              });
+              resolve();
+            }
+          });
+        },
+        error: () => {
+          this.sapIntegrationService.upsertSettings({
+            documentTypeId: this.sapDocumentTypeId!,
+            sapConfigId: this.selectedSapConnectionId!,
+            targetEndpoint: endpoint,
+            httpMethod: this.sapHttpMethod,
+            targetObject: endpoint,
+            executionMode: this.sapExecutionMode,
+            triggerStageId: triggerStageId,
+            blockWorkflowOnError: false,
+            isActive: true
+          }).subscribe({
+            next: () => resolve(),
+            error: () => {
+              this.messageService.add({
+                severity: 'warn',
+                summary: 'SAP Integration',
+                detail: 'Field saved, but SAP endpoint settings were not updated.'
+              });
+              resolve();
+            }
+          });
+        }
+      });
     });
   }
 
@@ -5792,5 +6627,3 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     return environment.apiUrl;
   }
 }
-
-

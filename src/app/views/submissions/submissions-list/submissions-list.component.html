@@ -1,1 +1,58 @@
-<p>submissions-list works!</p>
+<div class="submissions-page">
+  <div class="page-header">
+    <h2>All Submissions</h2>
+    <button class="btn-refresh" type="button" (click)="loadSubmissions()" [disabled]="loading">
+      {{ loading ? 'Loading...' : 'Refresh' }}
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="loading">Loading submissions...</div>
+
+  <div *ngIf="!loading && submissions.length === 0" class="empty">
+    No submissions found.
+  </div>
+
+  <div *ngIf="!loading && submissions.length > 0" class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Document #</th>
+          <th>Form</th>
+          <th>Document Type</th>
+          <th>Status</th>
+          <th>Last Update</th>
+          <th>SAP Test</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let s of submissions">
+          <td>{{ s.id }}</td>
+          <td>{{ s.documentNumber || '-' }}</td>
+          <td>{{ s.formName || '-' }}</td>
+          <td>{{ s.documentTypeName || s.documentTypeId }}</td>
+          <td>{{ s.status || '-' }}</td>
+          <td>{{ (s.lastUpdatedDate || s.createdDate || s.submittedDate) | date: 'yyyy-MM-dd HH:mm' }}</td>
+          <td>
+            <button
+              class="btn-exec"
+              type="button"
+              (click)="executeSap(s.id)"
+              [disabled]="executingBySubmission[s.id]">
+              {{ executingBySubmission[s.id] ? 'Executing...' : 'Execute SAP' }}
+            </button>
+          </td>
+          <td>
+            <div *ngIf="executionResultsBySubmission[s.id] as r" [class.ok]="r.success" [class.fail]="!r.success">
+              <strong>{{ r.status }}</strong>
+              <div *ngIf="r.errorMessage">{{ r.errorMessage }}</div>
+            </div>
+            <span *ngIf="!executionResultsBySubmission[s.id]">-</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+

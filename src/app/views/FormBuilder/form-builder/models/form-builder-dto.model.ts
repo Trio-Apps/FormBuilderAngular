@@ -9,6 +9,8 @@ export interface FormBuilderDto {
   description?: string;
   foreignDescription?: string; // Arabic description
   isPublished?: boolean;
+  isSapEnabled?: boolean;
+  sapExecutionMode?: 'OnSubmit' | 'OnFinalApproval' | 'OnSpecificWorkflowStage';
   isActive?: boolean;
   isDeleted?: boolean;
   version?: number;
@@ -28,6 +30,8 @@ export interface CreateFormBuilderDto {
   description?: string;
   foreignDescription?: string; // Arabic description
   isPublished?: boolean;
+  isSapEnabled?: boolean;
+  sapExecutionMode?: 'OnSubmit' | 'OnFinalApproval' | 'OnSpecificWorkflowStage';
   isActive?: boolean;
   isDeleted?: boolean;
 }
@@ -39,6 +43,8 @@ export interface UpdateFormBuilderDto {
   description?: string;
   foreignDescription?: string; // Arabic description
   isPublished?: boolean;
+  isSapEnabled?: boolean;
+  sapExecutionMode?: 'OnSubmit' | 'OnFinalApproval' | 'OnSpecificWorkflowStage';
   isActive?: boolean;
   isDeleted?: boolean;
 }
@@ -321,6 +327,7 @@ export interface GetFieldOptionsRequestDto {
 
 export interface PreviewDataSourceRequestDto {
   fieldId: number;
+  sapConfigId?: number;
   sourceType: string; // 'Api' | 'LookupTable' | 'SqlQuery' | 'DataSourceSqlQuery' | 'Custom'
   apiUrl?: string;
   httpMethod?: string;

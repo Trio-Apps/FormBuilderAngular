@@ -11,7 +11,10 @@ import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
+import { TooltipModule } from 'primeng/tooltip';
 
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
+import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { PermissionService } from '../../../services/permission.service';
 import {
@@ -34,7 +37,10 @@ import {
     CheckboxModule,
     ButtonModule,
     TableModule,
-    TableShellComponent
+    TableShellComponent,
+    TableActionsComponent,
+    DialogShellComponent,
+    TooltipModule
   ],
   templateUrl: './sap-integration-manage.component.html',
   styleUrls: ['./sap-integration-manage.component.scss'],
@@ -42,6 +48,11 @@ import {
 })
 export class SapIntegrationManageComponent implements OnInit, OnDestroy {
   sapConfigs: SapHanaConfigDto[] = [];
+  filteredConfigs: SapHanaConfigDto[] = [];
+
+  includeInactive = false;
+  searchTerm = '';
+  showModal = false;
 
   connectionForm: CreateSapConnectionDto = {
     name: '',
@@ -61,6 +72,7 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
     list: false,
     save: false,
     test: false,
+    relogin: false,
     delete: false
   };
 
@@ -89,19 +101,36 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
 
   loadConnections(): void {
     this.loading.list = true;
-    const sub = this.sapIntegrationService.getSapConfigs(true).subscribe({
+    const sub = this.sapIntegrationService.getSapConfigs(this.includeInactive).subscribe({
       next: (configs) => {
         this.sapConfigs = (configs || []).filter((c) => c.integrationType !== 'HanaOdbc');
+        this.applyFilters();
         this.loading.list = false;
         this.cdr.detectChanges();
       },
       error: () => {
         this.sapConfigs = [];
+        this.filteredConfigs = [];
         this.loading.list = false;
         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load SAP connections.' });
       }
     });
     this.subs.push(sub);
+  }
+
+  applyFilters(): void {
+    const term = (this.searchTerm || '').trim().toLowerCase();
+    if (!term) {
+      this.filteredConfigs = [...(this.sapConfigs || [])];
+      return;
+    }
+
+    this.filteredConfigs = (this.sapConfigs || []).filter((c) =>
+      String(c.name || '').toLowerCase().includes(term) ||
+      String(c.baseUrl || '').toLowerCase().includes(term) ||
+      String(c.companyDb || '').toLowerCase().includes(term) ||
+      String(c.userName || '').toLowerCase().includes(term)
+    );
   }
 
   resetForm(): void {
@@ -119,6 +148,16 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
     };
   }
 
+  openCreate(): void {
+    this.resetForm();
+    this.showModal = true;
+  }
+
+  closeModal(): void {
+    this.showModal = false;
+    this.resetForm();
+  }
+
   editConnection(row: SapHanaConfigDto): void {
     this.editingConnectionId = row.id;
     this.connectionForm = {
@@ -132,6 +171,7 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
       verifySsl: row.verifySsl !== false,
       isActive: row.isActive !== false
     };
+    this.showModal = true;
   }
 
   saveConnection(): void {
@@ -155,12 +195,17 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
       next: () => {
         this.loading.save = false;
         this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'SAP connection saved successfully.' });
+        this.showModal = false;
         this.resetForm();
         this.loadConnections();
       },
-      error: () => {
+      error: (err) => {
         this.loading.save = false;
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save SAP connection.' });
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: this.extractApiErrorMessage(err) || 'Failed to save SAP connection.'
+        });
       }
     });
     this.subs.push(sub);
@@ -177,33 +222,80 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
         }
         this.loadConnections();
       },
-      error: () => {
+      error: (err) => {
         this.loading.delete = false;
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete SAP connection.' });
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: this.extractApiErrorMessage(err) || 'Failed to delete SAP connection.'
+        });
       }
     });
 
     this.subs.push(sub);
   }
 
-  testConnection(): void {
-    if (!this.editingConnectionId) {
+  testConnection(row?: SapHanaConfigDto): void {
+    const targetId = row?.id ?? this.editingConnectionId;
+    if (!targetId) {
       this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Save connection first, then test it.' });
       return;
     }
 
     this.loading.test = true;
-    const sub = this.sapIntegrationService.getServiceLayerEndpoints(this.editingConnectionId).subscribe({
+    const sub = this.sapIntegrationService.getServiceLayerEndpoints(targetId).subscribe({
       next: () => {
         this.loading.test = false;
         this.messageService.add({ severity: 'success', summary: 'Connection OK', detail: 'SAP Service Layer connection is working.' });
       },
-      error: () => {
+      error: (err) => {
         this.loading.test = false;
-        this.messageService.add({ severity: 'error', summary: 'Connection Failed', detail: 'Unable to connect to SAP Service Layer.' });
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Connection Failed',
+          detail: this.extractApiErrorMessage(err) || 'Unable to connect to SAP Service Layer.'
+        });
       }
     });
 
     this.subs.push(sub);
+  }
+
+  reloginConnection(row?: SapHanaConfigDto): void {
+    const targetId = row?.id ?? this.editingConnectionId;
+    if (!targetId) {
+      this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Select or save connection first.' });
+      return;
+    }
+
+    this.loading.relogin = true;
+    const sub = this.sapIntegrationService.reloginConnection(targetId).subscribe({
+      next: () => {
+        this.loading.relogin = false;
+        this.messageService.add({ severity: 'success', summary: 'Re-Login OK', detail: 'SAP session refreshed successfully.' });
+      },
+      error: (err) => {
+        this.loading.relogin = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Re-Login Failed',
+          detail: this.extractApiErrorMessage(err) || 'Unable to re-login to SAP Service Layer.'
+        });
+      }
+    });
+
+    this.subs.push(sub);
+  }
+
+  private extractApiErrorMessage(error: any): string {
+    if (!error) return '';
+    if (typeof error === 'string') return error;
+
+    const payload = error.error;
+    if (typeof payload === 'string') return payload;
+    if (payload?.message && typeof payload.message === 'string') return payload.message;
+    if (payload?.error && typeof payload.error === 'string') return payload.error;
+
+    return '';
   }
 }

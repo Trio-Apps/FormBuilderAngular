@@ -11,6 +11,7 @@ export interface SapIntegrationSettingsDto {
   documentTypeId: number;
   sapConfigId: number;
   targetEndpoint: string;
+  httpMethod?: 'GET' | 'POST' | 'PUT';
   targetObject?: string | null;
   executionMode: SapExecutionMode;
   triggerStageId?: number | null;
@@ -24,6 +25,7 @@ export interface UpsertSapIntegrationSettingsDto {
   documentTypeId: number;
   sapConfigId: number;
   targetEndpoint: string;
+  httpMethod?: 'GET' | 'POST' | 'PUT';
   targetObject?: string | null;
   executionMode: SapExecutionMode;
   triggerStageId?: number | null;
@@ -43,9 +45,9 @@ export interface SapFieldMappingDto {
 
 export interface SaveSapFieldMappingItemDto {
   formFieldId: number;
-  sapConfigId: number;
   sapFieldName: string;
   isActive: boolean;
+  sapConfigId?: number;
 }
 
 export interface SaveSapFieldMappingsDto {
@@ -178,6 +180,18 @@ export class SapIntegrationService {
   getServiceLayerObjectFields(sapConfigId: number, endpointName: string): Observable<SapServiceLayerObjectFieldDto[]> {
     return this.http.get<any>(`${this.sapIntegrationUrl}/connections/${sapConfigId}/endpoints/${encodeURIComponent(endpointName)}/fields`).pipe(
       map((response) => this.extractArray<SapServiceLayerObjectFieldDto>(response))
+    );
+  }
+
+  getAllServiceLayerObjectFields(sapConfigId: number): Observable<SapServiceLayerObjectFieldDto[]> {
+    return this.http.get<any>(`${this.sapIntegrationUrl}/connections/${sapConfigId}/fields`).pipe(
+      map((response) => this.extractArray<SapServiceLayerObjectFieldDto>(response))
+    );
+  }
+
+  reloginConnection(sapConfigId: number): Observable<boolean> {
+    return this.http.post<any>(`${this.sapIntegrationUrl}/connections/${sapConfigId}/relogin`, {}).pipe(
+      map(() => true)
     );
   }
 
