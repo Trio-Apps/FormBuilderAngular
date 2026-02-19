@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { FormSubmissionsService, FormSubmissionDto } from '../form-submissions/services/form-submissions.service';
 import { StorageService } from '../../auth/storage.service';
 import { AuthService } from '../../auth/auth.service';
-import { DocuSignOAuthService } from '../../auth/docusign-oauth.service';
 import { TranslationService } from '../../core/services/translation.service';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -52,7 +51,6 @@ export class MySubmissionsComponent implements OnInit {
     private formSubmissionsService: FormSubmissionsService,
     private storageService: StorageService,
     private authService: AuthService,
-    private docusignOAuthService: DocuSignOAuthService,
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
     public translationService: TranslationService
@@ -190,21 +188,6 @@ export class MySubmissionsComponent implements OnInit {
       return;
     }
 
-    const docuSignAccessToken = localStorage.getItem('docusign_access_token');
-    if (!docuSignAccessToken || !docuSignAccessToken.trim()) {
-      this.messageService.add({
-        severity: 'info',
-        summary: 'DocuSign',
-        detail: this.translationService.getCurrentLanguage() === 'ar'
-          ? 'جاري تحويلك إلى DocuSign لإتمام تسجيل الدخول ثم المتابعة.'
-          : 'Redirecting to DocuSign to authenticate and continue signing.'
-      });
-
-      localStorage.setItem(this.pendingSubmissionStorageKey, submission.id.toString());
-      this.docusignOAuthService.startLogin('signature', '/my-submissions', submission.id);
-      return;
-    }
-
     this.loadingSignatureSubmissionId = submission.id;
     this.formSubmissionsService.getSubmissionSigningUrlById(submission.id).subscribe({
       next: (response) => {
@@ -223,7 +206,11 @@ export class MySubmissionsComponent implements OnInit {
       },
       error: (error) => {
         this.loadingSignatureSubmissionId = null;
-        const errorMessage = error?.error?.message || error?.message || 'Failed to open signing page.';
+        const errorMessage =
+          error?.error?.detail ||
+          error?.error?.message ||
+          error?.message ||
+          'Failed to open signing page.';
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
@@ -237,11 +224,6 @@ export class MySubmissionsComponent implements OnInit {
   private tryResumePendingSignNow(): void {
     const pendingSubmissionIdText = localStorage.getItem(this.pendingSubmissionStorageKey);
     if (!pendingSubmissionIdText) {
-      return;
-    }
-
-    const token = localStorage.getItem('docusign_access_token');
-    if (!token || !token.trim()) {
       return;
     }
 

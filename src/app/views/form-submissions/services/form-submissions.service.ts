@@ -158,12 +158,9 @@ export class FormSubmissionsService {
   constructor(private http: HttpClient) {}
 
   private buildDocuSignHeaders(): HttpHeaders {
-    const token = localStorage.getItem('docusign_access_token');
-    let headers = new HttpHeaders();
-    if (token && token.trim().length > 0) {
-      headers = headers.set('X-DocuSign-Access-Token', token.trim());
-    }
-    return headers;
+    // JWT server-to-server flow is the default.
+    // Do not attach browser-stored DocuSign OAuth token automatically to avoid sending stale/invalid tokens.
+    return new HttpHeaders();
   }
 
   private normalizeSubmissionDto(item: any): FormSubmissionDto {
