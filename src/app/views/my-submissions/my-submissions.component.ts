@@ -176,11 +176,16 @@ export class MySubmissionsComponent implements OnInit {
   }
 
   canShowSignNow(submission: FormSubmissionDto): boolean {
-    const normalizedStatus = (submission?.status || '').trim().toLowerCase();
-    const normalizedSignatureStatus = (submission?.signatureStatus || '').trim().toLowerCase();
+    if ((submission?.status || '').trim().toLowerCase() !== 'submitted') {
+      return false;
+    }
 
-    // Show action for submitted requests or explicit pending-signature state.
-    return normalizedStatus === 'submitted' || normalizedSignatureStatus === 'pending';
+    if (submission?.signatureRequired === false) {
+      return false;
+    }
+
+    const normalizedSignatureStatus = (submission?.signatureStatus || '').trim().toLowerCase();
+    return normalizedSignatureStatus === 'pending';
   }
 
   openSignNow(submission: FormSubmissionDto): void {
@@ -206,10 +211,22 @@ export class MySubmissionsComponent implements OnInit {
       },
       error: (error) => {
         this.loadingSignatureSubmissionId = null;
-        const errorMessage =
+        const errorMessageRaw =
           error?.error?.detail ||
           error?.error?.message ||
           error?.message ||
+          '';
+        const normalizedErrorMessage = String(errorMessageRaw).trim().toLowerCase();
+
+        if (normalizedErrorMessage.includes('signature is not required')) {
+          submission.signatureRequired = false;
+          submission.signatureStatus = 'not_required';
+          this.cdr.detectChanges();
+          return;
+        }
+
+        const errorMessage =
+          errorMessageRaw ||
           'Failed to open signing page.';
         this.messageService.add({
           severity: 'error',

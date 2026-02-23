@@ -58,7 +58,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       }),
       catchError((error: HttpErrorResponse) => {
         // Enhanced error logging
-        if (isDebugMode) {
+        if (isDebugMode && !shouldIgnore404Diagnostics(req.url, error.status)) {
           console.error('[AuthInterceptor] Request failed:', {
             url: req.url,
             method: req.method,
@@ -107,6 +107,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         
         // Log 404 errors for debugging
         if (error.status === 404 && isDebugMode) {
+          if (shouldIgnore404Diagnostics(req.url)) {
+            return throwError(() => error);
+          }
           console.error('[AuthInterceptor] ⚠️ 404 Not Found:', {
             url: req.url,
             hasToken: !!token,
@@ -192,6 +195,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       // Log 404 errors for debugging (especially for public forms)
       if (error.status === 404) {
         if (isDebugMode) {
+          if (shouldIgnore404Diagnostics(req.url)) {
+            return throwError(() => error);
+          }
           const isKnownMissing = [
             '/api/FormSubmissionGridRows/grid/',
             '/api/FormSubmissionGridRows/submission/',
@@ -236,3 +242,13 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     })
   );
 };
+
+function shouldIgnore404Diagnostics(url: string, status?: number): boolean {
+  if (status !== undefined && status !== 404) {
+    return false;
+  }
+
+  const normalizedUrl = (url || '').toLowerCase();
+  return normalizedUrl.includes('/api/crystalreports/default-layouts')
+    || normalizedUrl.includes('/api/crystalreports/default-layout/');
+}

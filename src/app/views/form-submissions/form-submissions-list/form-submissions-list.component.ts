@@ -10,6 +10,7 @@ import { FormSubmissionValuesService, FormSubmissionValueDto, CreateFormSubmissi
 import { FormSubmissionAttachmentsService, CreateFormSubmissionAttachmentDto, FormSubmissionAttachmentDto } from '../services/form-submission-attachments.service';
 import { FileUploadService } from '../../FormBuilder/services/file-upload.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
+import { CrystalReportsService } from '../../FormBuilder/services/crystal-reports.service';
 import { DocumentType, DocumentSeries } from '../../FormBuilder/form-builder/models/document-types.model';
 import { FormsService } from '../../FormBuilder/services/forms.service';
 import { FormBuilderDto, FormTabDto, FormFieldDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
@@ -39,7 +40,7 @@ import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto } from '../../Form
 import { ApprovalStageAssigneesService, ApprovalStageAssigneeDto } from '../../FormBuilder/services/approval-stage-assignees.service';
 import { ApprovalStageService } from '../../FormBuilder/services/approval-stage.service';
 import { Subscription, forkJoin, of, Observable } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, finalize, map, switchMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
@@ -109,6 +110,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   stageRequiresSignatureCache: Map<number, boolean> = new Map();
   stageSignatureConfigLoaded = false;
   loadingSignatureSubmissionId: number | null = null;
+  loadingReportSubmissionId: number | null = null;
 
   // Loading States
   loading = {
@@ -199,7 +201,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService,
     private gridService: GridService,
     private stageAssigneesService: ApprovalStageAssigneesService,
-    private stageService: ApprovalStageService
+    private stageService: ApprovalStageService,
+    private crystalReportsService: CrystalReportsService
   ) {
     // Initialize forms
     this.submissionForm = this.fb.group({
@@ -272,8 +275,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
     // ✅ Check if user is Admin
     const userRole = this.storageService.getRole() || this.authService.role();
-    const adminRoles = ['administration', 'admin'];
-    this.isAdmin = userRole ? adminRoles.includes(userRole.toLowerCase()) : false;
+    const normalizedRole = (userRole || '').toLowerCase().trim();
+    const adminRoles = ['administration', 'admin', 'administrator', 'superadmin', 'super-admin', 'systemadmin', 'system-admin'];
+    this.isAdmin = this.permissionService.isAdmin()
+      || adminRoles.includes(normalizedRole)
+      || normalizedRole.includes('admin');
     this.currentUsername = this.storageService.getUsername() || this.authService.userName();
     console.log('[FormSubmissionsList] 🔐 User Role:', userRole, '| Is Admin:', this.isAdmin);
 
@@ -3765,6 +3771,96 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     });
   }
 
+  canDownloadCrystalReport(submission: FormSubmissionDto): boolean {
+    const hasReportAccess =
+      this.isAdmin
+      || this.permissionService.canViewAllSubmissions()
+      || this.permissionService.canManageDocuments();
+
+    return hasReportAccess && !!submission?.id && (submission.documentTypeId || this.documentTypeId) > 0;
+  }
+
+  downloadCrystalReport(submission: FormSubmissionDto): void {
+    if (!this.canDownloadCrystalReport(submission)) {
+      return;
+    }
+
+    const documentTypeId = Number(submission.documentTypeId || this.documentTypeId || 0);
+    if (!documentTypeId || documentTypeId <= 0) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Document type is missing for this submission.'
+      });
+      return;
+    }
+
+    this.loadingReportSubmissionId = submission.id;
+    const fallbackFileName = this.buildCrystalFileName(submission);
+
+    this.crystalReportsService.getDefaultLayout(documentTypeId).pipe(
+      switchMap(layout => this.crystalReportsService.getLayoutPdf(layout.id, submission.id, fallbackFileName)),
+      finalize(() => {
+        this.loadingReportSubmissionId = null;
+        this.cdr.detectChanges();
+      })
+    ).subscribe({
+      next: (response) => {
+        const blob = response.body;
+        if (!blob) {
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Report content is empty.'
+          });
+          return;
+        }
+
+        const fileNameFromHeader = this.extractFileNameFromContentDisposition(
+          response.headers.get('content-disposition')
+        );
+        const finalFileName = fileNameFromHeader || `${fallbackFileName}.pdf`;
+        this.downloadBlob(blob, finalFileName);
+      },
+      error: (error) => {
+        console.error('[FormSubmissionsList] Error downloading crystal report:', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: error?.error || error?.message || 'Failed to download crystal report.'
+        });
+      }
+    });
+  }
+
+  private buildCrystalFileName(submission: FormSubmissionDto): string {
+    const baseName = submission.documentNumber || `Submission_${submission.id}`;
+    return baseName.replace(/[^\w\-]+/g, '_');
+  }
+
+  private extractFileNameFromContentDisposition(contentDisposition: string | null): string | null {
+    if (!contentDisposition) {
+      return null;
+    }
+
+    const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
+    if (utf8Match?.[1]) {
+      return decodeURIComponent(utf8Match[1]);
+    }
+
+    const asciiMatch = /filename=\"?([^\";]+)\"?/i.exec(contentDisposition);
+    return asciiMatch?.[1] ?? null;
+  }
+
+  private downloadBlob(blob: Blob, fileName: string): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   /**
    * Open approve/reject modal
    */
@@ -4270,5 +4366,3 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 }
-
-

@@ -22,6 +22,7 @@
           <th>Document Type</th>
           <th>Status</th>
           <th>Last Update</th>
+          <th>Report</th>
           <th>SAP Test</th>
           <th>Result</th>
         </tr>
@@ -34,6 +35,17 @@
           <td>{{ s.documentTypeName || s.documentTypeId }}</td>
           <td>{{ s.status || '-' }}</td>
           <td>{{ (s.lastUpdatedDate || s.createdDate || s.submittedDate) | date: 'yyyy-MM-dd HH:mm' }}</td>
+          <td>
+            <button
+              class="btn-pdf"
+              type="button"
+              (click)="downloadPdf(s)"
+              [disabled]="!canDownloadReport(s) || downloadingPdfBySubmission[s.id]"
+              [title]="getReportButtonTitle(s)">
+              {{ getReportButtonText(s) }}
+            </button>
+            <div class="pdf-error" *ngIf="pdfErrorBySubmission[s.id]">{{ pdfErrorBySubmission[s.id] }}</div>
+          </td>
           <td>
             <button
               class="btn-exec"
@@ -55,4 +67,3 @@
     </table>
   </div>
 </div>
-

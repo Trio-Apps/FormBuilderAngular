@@ -148,6 +148,15 @@
                   (click)="viewSubmissionDetails(submission)"
                   pTooltip="View Details"
                   tooltipPosition="top"></button>
+                <button pButton
+                  *ngIf="canDownloadCrystalReport(submission)"
+                  icon="pi pi-file-pdf"
+                  class="p-button-text p-button-sm action-btn"
+                  [loading]="loadingReportSubmissionId === submission.id"
+                  [disabled]="loadingReportSubmissionId === submission.id"
+                  (click)="downloadCrystalReport(submission)"
+                  pTooltip="Download Crystal Report"
+                  tooltipPosition="top"></button>
                 <button pButton 
                   *appHasPermission="['Submission_Allow_Edit', 'Document_Allow_Edit']"
                   icon="pi pi-pencil" 
@@ -1006,7 +1015,6 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
 
 
 

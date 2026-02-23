@@ -44,7 +44,8 @@ th {
 }
 
 .btn-refresh,
-.btn-exec {
+.btn-exec,
+.btn-pdf {
   border: 0;
   border-radius: 6px;
   padding: 6px 10px;
@@ -54,9 +55,18 @@ th {
 }
 
 .btn-refresh:disabled,
-.btn-exec:disabled {
+.btn-exec:disabled,
+.btn-pdf:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.pdf-error {
+  margin-top: 4px;
+  color: #991b1b;
+  font-size: 12px;
+  max-width: 220px;
+  word-break: break-word;
 }
 
 .ok {

@@ -14,6 +14,10 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
+      if (shouldIgnoreErrorToast(req.url, error.status)) {
+        return throwError(() => error);
+      }
+
       // Log error for debugging - expand error.error object
       console.log('[ErrorInterceptor] Error caught:', {
         url: req.url,
@@ -87,9 +91,30 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 };
 
 /**
+ * Suppress global toast for expected 404 checks in Crystal layout probing.
+ */
+function shouldIgnoreErrorToast(url: string, status: number): boolean {
+  if (status !== 404) {
+    return false;
+  }
+
+  const normalizedUrl = (url || '').toLowerCase();
+  return normalizedUrl.includes('/api/crystalreports/default-layouts')
+    || normalizedUrl.includes('/api/crystalreports/default-layout/');
+}
+
+/**
  * Extract error message from different response formats
  */
 function extractErrorMessage(error: HttpErrorResponse, url: string, method: string): string {
+  // Blob error payload (common with file download endpoints)
+  if (error.error instanceof Blob) {
+    if (url.toLowerCase().includes('/api/crystalreports/layout/')) {
+      return 'تعذر تنزيل التقرير. تحقق من إعداد CrystalBridge وأن خدمة التقرير تعمل.';
+    }
+    return 'حدث خطأ أثناء تنزيل الملف.';
+  }
+
   // Format 1: ProblemDetails (ASP.NET Core) - Most common format
   if (error.error?.detail) {
     return error.error.detail;
@@ -253,4 +278,3 @@ function isDuplicateError(message: string): boolean {
     messageLower.includes(keyword.toLowerCase())
   );
 }
-
