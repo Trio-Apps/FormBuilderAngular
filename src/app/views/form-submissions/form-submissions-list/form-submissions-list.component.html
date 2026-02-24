@@ -158,13 +158,13 @@
                   pTooltip="Download Crystal Report"
                   tooltipPosition="top"></button>
                 <button pButton 
-                  *appHasPermission="['Submission_Allow_Edit', 'Document_Allow_Edit']"
+                  *ngIf="canEditSubmissionRow(submission)"
                   icon="pi pi-pencil" 
                   class="p-button-text p-button-sm action-btn" 
                   (click)="openEditModal(submission)"
                   pTooltip="Edit"
                   tooltipPosition="top"
-                  [title]="canEditSubmissions ? 'Edit' : 'No permission to edit'"></button>
+                  [title]="getEditButtonTitle(submission)"></button>
                 <button pButton 
                   *ngIf="canApproveReject(submission)"
                   icon="pi pi-check" 
@@ -1015,6 +1015,5 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
 
 

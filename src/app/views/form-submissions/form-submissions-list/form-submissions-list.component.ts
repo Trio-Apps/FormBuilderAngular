@@ -490,6 +490,40 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     return this.filteredSubmissions.slice(this.first, this.first + this.rows);
   }
 
+  private normalizeUserValue(value: string | null | undefined): string {
+    return (value || '').trim().toLowerCase();
+  }
+
+  private getCurrentUserCandidates(): string[] {
+    const username = this.normalizeUserValue(this.storageService.getUsername() || this.authService.userName());
+    const userId = this.normalizeUserValue(this.storageService.getUserId()?.toString());
+    return [username, userId].filter(Boolean);
+  }
+
+  private isOwnSubmission(submission: FormSubmissionDto): boolean {
+    const candidates = this.getCurrentUserCandidates();
+    if (candidates.length === 0) {
+      return false;
+    }
+
+    const submittedById = this.normalizeUserValue(submission.submittedByUserId);
+    const submittedByName = this.normalizeUserValue(submission.submittedByUserName);
+    return candidates.includes(submittedById) || candidates.includes(submittedByName);
+  }
+
+  canEditSubmissionRow(submission: FormSubmissionDto): boolean {
+    if (this.canEditSubmissions) {
+      return true;
+    }
+
+    const status = this.normalizeUserValue(submission.status);
+    return status === 'draft' && this.isOwnSubmission(submission);
+  }
+
+  getEditButtonTitle(submission: FormSubmissionDto): string {
+    return this.canEditSubmissionRow(submission) ? 'Edit' : 'No permission to edit';
+  }
+
   /**
    * View submission details (read-only)
    */
@@ -744,12 +778,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   }
 
   openEditModal(submission: FormSubmissionDto): void {
-    // Permission check
-    if (!this.canEditSubmissions) {
+    if (!this.canEditSubmissionRow(submission)) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Permission Denied',
-        detail: 'You do not have permission to edit submissions.'
+        detail: 'You can edit only your own draft submissions.'
       });
       return;
     }

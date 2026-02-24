@@ -532,22 +532,32 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   /**
    * Create draft submission if needed (for new submissions)
    */
-  async createDraftIfNeeded(): Promise<void> {
+  async createDraftIfNeeded(): Promise<number | null> {
     // Only create draft if we have form data and no existing submission
     if (!this.selectedFormId || this.hasDraft || this.isEditMode) {
-      return;
+      return this.submissionId;
     }
+    const formBuilderId = this.selectedFormId;
 
     // Get current user ID (you might need to adjust this based on your auth service)
     const currentUserId = this.authService.userName();
     if (!currentUserId) {
       console.warn('[FormSubmissionCreate] No current user found, cannot create draft');
-      return;
+      return null;
     }
 
-    // Get project ID from query params first, then load from API (like public-form)
+    // Get project ID from query params first.
+    // If missing, try to resolve from already-loaded document series before calling Projects API
+    // (some users don't have permission to /Projects/active).
     const routeQueryParams = this.route.snapshot.queryParams;
     let projectId: number | null = routeQueryParams['projectId'] ? +routeQueryParams['projectId'] : null;
+    if (!projectId && this.documentSeries && this.documentSeries.length > 0) {
+      const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
+      if (defaultSeries?.projectId) {
+        projectId = defaultSeries.projectId;
+        console.log('[FormSubmissionCreate] Resolved projectId from loaded documentSeries:', projectId);
+      }
+    }
 
     // Validate and load active projectId if the provided one is inactive/soft-deleted (like public-form)
     const loadActiveProjectId = async (projId: number | null): Promise<number | null> => {
@@ -597,13 +607,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return projId;
     };
 
-    // Load active projectId
+    // Load active projectId (best-effort). If this fails (e.g. 403), we'll fallback to series.projectId.
     const resolvedProjectId = await loadActiveProjectId(projectId);
     if (!resolvedProjectId) {
-      console.warn('[FormSubmissionCreate] No projectId available (not in query params and API failed), cannot create draft');
-      return;
+      console.warn('[FormSubmissionCreate] Could not resolve projectId from Projects API, will try series-based fallback');
+    } else {
+      projectId = resolvedProjectId;
     }
-    projectId = resolvedProjectId;
 
     // Get seriesId from query params first, then fallback to documentSeries
     let seriesId: number | undefined;
@@ -667,6 +677,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
         if (defaultSeries && defaultSeries.id) {
           seriesId = defaultSeries.id;
+          if (!projectId && defaultSeries.projectId) {
+            projectId = defaultSeries.projectId;
+            console.log('[FormSubmissionCreate] Using projectId from defaultSeries fallback:', projectId);
+          }
         }
       }
     }
@@ -674,54 +688,73 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // If still no seriesId, allow backend to auto-select (seriesId is optional)
     // Don't show error - backend will auto-select series when seriesId is not provided
 
+    // Fallback: if seriesId exists but projectId is still missing (e.g. /Projects/active returned 403),
+    // derive projectId from loaded series list.
+    if (!projectId && seriesId && this.documentSeries?.length) {
+      const selectedSeries = this.documentSeries.find(s => s.id === seriesId);
+      if (selectedSeries?.projectId) {
+        projectId = selectedSeries.projectId;
+        console.log('[FormSubmissionCreate] Using projectId from selectedSeries fallback:', projectId);
+      }
+    }
+
     // Ensure projectId is not null (TypeScript check)
     if (!projectId) {
-      console.warn('[FormSubmissionCreate] projectId is null, cannot create draft');
-      return;
+      console.warn('[FormSubmissionCreate] projectId is null after all fallbacks, cannot create draft');
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Cannot create draft: project is not accessible for current user.'
+      });
+      return null;
     }
 
     // Create a const with correct type for TypeScript
     const finalProjectId: number = projectId;
 
     console.log('[FormSubmissionCreate] Creating draft submission:', {
-      formBuilderId: this.selectedFormId,
+      formBuilderId,
       projectId: finalProjectId,
       seriesId,
       submittedByUserId: currentUserId
     });
 
     this.loading.create = true;
-    this.formSubmissionsService.createDraft(this.selectedFormId, finalProjectId, currentUserId, seriesId).subscribe({
-      next: (draftSubmission) => {
-        console.log('[FormSubmissionCreate] Draft created successfully:', draftSubmission);
-        this.submissionId = draftSubmission.id!;
-        this.hasDraft = true;
-        this.isDraftMode = true;
-        this.currentSubmission = draftSubmission;
+    return await new Promise<number | null>((resolve) => {
+      this.formSubmissionsService.createDraft(formBuilderId, finalProjectId, currentUserId, seriesId).subscribe({
+        next: (draftSubmission) => {
+          console.log('[FormSubmissionCreate] Draft created successfully:', draftSubmission);
+          this.submissionId = draftSubmission.id!;
+          this.hasDraft = true;
+          this.isDraftMode = true;
+          this.currentSubmission = draftSubmission;
 
-        // Update submissionId in all grid components after draft is created
-        this.updateGridComponentsSubmissionId();
+          // Update submissionId in all grid components after draft is created
+          this.updateGridComponentsSubmissionId();
 
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Draft Created',
-          detail: 'Draft submission has been created successfully',
-          life: 3000
-        });
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Draft Created',
+            detail: 'Draft submission has been created successfully',
+            life: 3000
+          });
 
-        this.loading.create = false;
-        this.cdr.detectChanges();
-      },
-      error: (error) => {
-        console.error('[FormSubmissionCreate] Error creating draft:', error);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to create draft submission'
-        });
-        this.loading.create = false;
-        this.cdr.detectChanges();
-      }
+          this.loading.create = false;
+          this.cdr.detectChanges();
+          resolve(this.submissionId);
+        },
+        error: (error) => {
+          console.error('[FormSubmissionCreate] Error creating draft:', error);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error?.error?.message || 'Failed to create draft submission'
+          });
+          this.loading.create = false;
+          this.cdr.detectChanges();
+          resolve(null);
+        }
+      });
     });
   }
 
@@ -3480,19 +3513,37 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         }
         
         // Load field values
+        // Prefer explicit values endpoint, but fallback to values included in submission payload.
         this.formSubmissionValuesService.getBySubmissionId(submissionId).subscribe({
           next: (fieldValues) => {
-            console.log('[FormSubmissionCreate] Loaded field values for edit:', fieldValues);
+            const normalizedFieldValues = this.normalizeLoadedFieldValues(fieldValues);
+            const fallbackFromSubmission = this.normalizeLoadedFieldValues((submission as any)?.fieldValues);
+            const resolvedFieldValues = normalizedFieldValues.length > 0 ? normalizedFieldValues : fallbackFromSubmission;
+
+            console.log('[FormSubmissionCreate] Loaded field values for edit:', {
+              fromEndpoint: normalizedFieldValues.length,
+              fromSubmissionPayload: fallbackFromSubmission.length,
+              resolved: resolvedFieldValues.length
+            });
             // Store field values to populate form after fields are loaded
-            (this as any)._pendingFieldValues = fieldValues;
+            (this as any)._pendingFieldValues = resolvedFieldValues;
             
             // If fields are already loaded, populate form
             if (this.fields.length > 0) {
-              this.populateFormWithFieldValues(fieldValues);
+              this.populateFormWithFieldValues(resolvedFieldValues);
             }
           },
           error: (error) => {
             console.error('[FormSubmissionCreate] Error loading field values:', error);
+            // Fallback to fieldValues embedded in submission payload.
+            const fallbackFromSubmission = this.normalizeLoadedFieldValues((submission as any)?.fieldValues);
+            if (fallbackFromSubmission.length > 0) {
+              (this as any)._pendingFieldValues = fallbackFromSubmission;
+              if (this.fields.length > 0) {
+                this.populateFormWithFieldValues(fallbackFromSubmission);
+              }
+              return;
+            }
             const currentLang = this.translationService.getCurrentLanguage();
             this.messageService.add({
               severity: 'warn',
@@ -3675,10 +3726,17 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     const formValues: any = {};
     
     fieldValues.forEach(fv => {
-      const field = this.fields.find(f => f.id === fv.fieldId);
-      if (!field || !field.fieldCode) return;
+      const normalizedFieldId = this.toNumberOrNull(fv?.fieldId ?? fv?.FieldId);
+      const normalizedFieldCode = this.toStringOrNull(fv?.fieldCode ?? fv?.FieldCode);
+
+      const field = this.fields.find(f =>
+        (normalizedFieldId !== null && f.id === normalizedFieldId) ||
+        (!!normalizedFieldCode && (f.fieldCode || '').trim().toLowerCase() === normalizedFieldCode.trim().toLowerCase())
+      );
+      if (!field || !field.fieldCode || !field.id) return;
       
       let value: any = null;
+      const currentFieldType = this.getFieldType(field);
       
       // Determine value based on field type
       if (fv.valueString !== null && fv.valueString !== undefined && fv.valueString !== '') {
@@ -3687,13 +3745,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         value = fv.valueNumber;
       } else if (fv.valueDate) {
         const dateValue = new Date(fv.valueDate);
-        // Format for datetime-local input
+        // Format for date input (yyyy-MM-dd)
         const year = dateValue.getFullYear();
         const month = String(dateValue.getMonth() + 1).padStart(2, '0');
         const day = String(dateValue.getDate()).padStart(2, '0');
-        const hours = String(dateValue.getHours()).padStart(2, '0');
-        const minutes = String(dateValue.getMinutes()).padStart(2, '0');
-        value = `${year}-${month}-${day}T${hours}:${minutes}`;
+        value = `${year}-${month}-${day}`;
       } else if (fv.valueBool !== null && fv.valueBool !== undefined) {
         value = fv.valueBool;
       } else if (fv.valueJson) {
@@ -3704,8 +3760,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           value = fv.valueJson;
         }
       }
+
+      // Date fields often come as valueString from API/DB; normalize to yyyy-MM-dd.
+      if (currentFieldType === 'date' && value) {
+        const parsedDate = new Date(value);
+        if (!isNaN(parsedDate.getTime())) {
+          const year = parsedDate.getFullYear();
+          const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+          const day = String(parsedDate.getDate()).padStart(2, '0');
+          value = `${year}-${month}-${day}`;
+        }
+      }
       
-      if (value !== null && value !== undefined) {
+      if (value !== null && value !== undefined && value !== '') {
         const fieldKey = `field_${field.id}`;
         formValues[fieldKey] = value;
       }
@@ -3714,6 +3781,40 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // Patch form values
     this.fieldsForm.patchValue(formValues);
     this.cdr.detectChanges();
+  }
+
+  private toNumberOrNull(value: any): number | null {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private toStringOrNull(value: any): string | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const str = String(value).trim();
+    return str.length > 0 ? str : null;
+  }
+
+  private normalizeLoadedFieldValues(rawValues: any): any[] {
+    if (!Array.isArray(rawValues)) {
+      return [];
+    }
+
+    return rawValues.map((v: any) => ({
+      id: this.toNumberOrNull(v?.id ?? v?.Id) ?? 0,
+      submissionId: this.toNumberOrNull(v?.submissionId ?? v?.SubmissionId) ?? 0,
+      fieldId: this.toNumberOrNull(v?.fieldId ?? v?.FieldId),
+      fieldCode: this.toStringOrNull(v?.fieldCode ?? v?.FieldCode) ?? undefined,
+      valueString: v?.valueString ?? v?.ValueString ?? '',
+      valueNumber: v?.valueNumber ?? v?.ValueNumber ?? null,
+      valueDate: v?.valueDate ?? v?.ValueDate ?? null,
+      valueBool: v?.valueBool ?? v?.ValueBool ?? null,
+      valueJson: v?.valueJson ?? v?.ValueJson ?? ''
+    }));
   }
 
   /**
@@ -3736,14 +3837,16 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // If no draft exists yet, create one first
     if (!this.hasDraft) {
       console.log('[FormSubmissionCreate] No draft exists, creating draft first...');
-      this.createDraftIfNeeded();
-
-      // Wait a bit for draft creation, then save data
-      setTimeout(() => {
-        if (this.submissionId) {
-          this.saveSubmissionData(this.submissionId, 'Draft');
-        }
-      }, 1000);
+      const draftId = await this.createDraftIfNeeded();
+      if (draftId) {
+        this.saveSubmissionData(draftId, 'Draft');
+      } else {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to create draft submission'
+        });
+      }
       return;
     }
 

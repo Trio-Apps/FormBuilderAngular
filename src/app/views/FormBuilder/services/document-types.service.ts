@@ -667,7 +667,19 @@ export class DocumentTypesService {
           // Other formats
           return response.data || response.items || response.result || [];
         }
-        return Array.isArray(response) ? response : [];
+        const raw = Array.isArray(response) ? response : [];
+        return raw;
+      }),
+      map((series: any[]) => {
+        return (series || []).map((s: any) => ({
+          ...s,
+          id: s?.id ?? s?.Id,
+          projectId: s?.projectId ?? s?.ProjectId,
+          isActive: s?.isActive ?? s?.IsActive,
+          isDefault: s?.isDefault ?? s?.IsDefault,
+          seriesCode: s?.seriesCode ?? s?.SeriesCode,
+          seriesName: s?.seriesName ?? s?.SeriesName
+        })) as DocumentSeries[];
       }),
       catchError((error) => {
         console.error(`Error fetching document series for document type ${documentTypeId}:`, error);
@@ -702,7 +714,16 @@ export class DocumentTypesService {
             return response.data || response.result || response;
           }
         }
-        return response;
+        const payload = response;
+        return {
+          ...payload,
+          id: payload?.id ?? payload?.Id,
+          projectId: payload?.projectId ?? payload?.ProjectId,
+          isActive: payload?.isActive ?? payload?.IsActive,
+          isDefault: payload?.isDefault ?? payload?.IsDefault,
+          seriesCode: payload?.seriesCode ?? payload?.SeriesCode,
+          seriesName: payload?.seriesName ?? payload?.SeriesName
+        } as DocumentSeries;
       }),
       catchError((error) => {
         console.error(`Error fetching document series with ID ${id}:`, error);

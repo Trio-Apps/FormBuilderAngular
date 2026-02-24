@@ -15,7 +15,7 @@ import {
 import { NotificationService } from '../../../../services/notification.service';
 import { AuthService } from '../../../../auth/auth.service';
 import { StorageService } from '../../../../auth/storage.service';
-import { NotificationDto, getNotificationDate } from '../../../../models/notification.model';
+import { NotificationDto, parseNotificationDate } from '../../../../models/notification.model';
 
 @Component({
   selector: 'app-notification-bell',
@@ -480,11 +480,9 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
   }
 
   formatTime(notification: NotificationDto): string {
-    // Use helper to get date (handles both createdAt and createdDate)
-    const dateString = getNotificationDate(notification);
-    const date = new Date(dateString);
+    const date = parseNotificationDate(notification);
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
+    const diffMs = Math.max(0, now.getTime() - date.getTime());
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
@@ -543,4 +541,3 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
     this.router.navigate(['/notifications']);
   }
 }
-

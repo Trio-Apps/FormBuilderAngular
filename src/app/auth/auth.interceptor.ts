@@ -9,12 +9,15 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const storageService = inject(StorageService);
   const router = inject(Router);
   const token = storageService.getToken();
-  const forceAnonymousSubmissionEndpoint =
+  const isSubmissionEndpoint =
     req.url.includes('/FormSubmissions/draft') ||
     req.url.includes('/FormSubmissions/draft-or-create') ||
     req.url.includes('/FormSubmissions/data/save') ||
     req.url.includes('/FormSubmissions/submit');
   const isPublicFormViewRoute = router.url.includes('/forms/view/');
+  // Only force anonymous submission flow on public form routes.
+  // For authenticated app routes (e.g. /document-types/.../submissions/new), token must be sent.
+  const forceAnonymousSubmissionEndpoint = isSubmissionEndpoint && isPublicFormViewRoute;
   const isPublicFormEndpoint = req.url.includes('/FormBuilder/code/') || 
                                req.url.includes('/FormBuilder/by-code/') ||
                                req.url.includes('/FormBuilder/public/') ||
@@ -23,7 +26,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
                                req.url.includes('/FormGrids/') ||
                                req.url.includes('/FormTabs/') ||
                                // Public submission flow (draft/submit) for public forms
-                               forceAnonymousSubmissionEndpoint ||
+                               (isSubmissionEndpoint && isPublicFormViewRoute) ||
                                isPublicFormViewRoute;
   
   // Debug logging (only in development)

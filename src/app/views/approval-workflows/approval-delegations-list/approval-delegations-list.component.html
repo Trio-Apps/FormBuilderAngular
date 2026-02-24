@@ -18,8 +18,8 @@
         <button
           class="btn-primary"
           (click)="openAddModal()"
-          [disabled]="loading.delegations || !permissionService.canCreateApprovalDelegations()"
-          [title]="permissionService.canCreateApprovalDelegations() ? 'New Delegation' : 'You do not have permission to create delegations'"
+          [disabled]="loading.delegations"
+          title="New Delegation"
         >
           <i class="pi pi-plus"></i>
           <span>New Delegation</span>
@@ -113,16 +113,15 @@
                   icon="pi pi-pencil"
                   class="p-button-text p-button-sm action-btn"
                   (click)="openEditModal(delegation)"
-                  [pTooltip]="permissionService.canEditApprovalDelegations() ? 'Edit' : 'You do not have permission to edit delegations'"
-                  [disabled]="!permissionService.canEditApprovalDelegations()"
+                  pTooltip="Edit"
                 ></button>
                 <button
                   pButton
                   icon="pi pi-trash"
                   class="p-button-text p-button-sm action-btn action-btn-danger"
                   (click)="deleteDelegation(delegation)"
-                  [pTooltip]="permissionService.canDeleteApprovalDelegations() ? 'Delete' : 'You do not have permission to delete delegations'"
-                  [disabled]="loading.delete || !permissionService.canDeleteApprovalDelegations()"
+                  pTooltip="Delete"
+                  [disabled]="loading.delete"
                 ></button>
               </app-table-actions>
             </td>
@@ -374,7 +373,6 @@
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
 
 
 
