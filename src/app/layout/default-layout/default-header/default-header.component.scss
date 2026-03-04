@@ -1,0 +1,116 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.header-container {
+  width: 100%;
+  flex: 1 1 auto;
+  display: block;
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid #e2e8f0;
+  backdrop-filter: blur(14px);
+}
+
+.header-shell {
+  width: 100%;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.header-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  margin-inline-start: auto;
+  width: 100%;
+}
+
+.header-bell-nav,
+.header-user-nav {
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.user-menu-trigger {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 0.35rem 0.45rem 0.35rem 0.35rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #334155;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.user-menu-trigger:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.user-avatar-fallback {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.user-name {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.user-menu-dropdown {
+  min-width: 12rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+}
+
+.user-menu-header {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 700;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+@media (max-width: 767.98px) {
+  .header-container {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .header-shell {
+    min-height: 60px;
+  }
+
+  .header-actions {
+    gap: 0.5rem;
+  }
+
+  .user-menu-trigger {
+    padding-right: 0.35rem;
+  }
+
+  .user-name {
+    display: none;
+  }
+}

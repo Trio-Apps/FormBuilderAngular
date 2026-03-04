@@ -25,7 +25,7 @@ export const navItems: INavData[] = [
       {
         name: 'Forms',
         url: '/form-builder/forms',
-        iconComponent: { name: 'cil-description' },
+        iconComponent: { name: 'cil-spreadsheet' },
         attributes: { permissionCode: 'FormBuilder_Allow_View' }
       },
       {
@@ -37,7 +37,7 @@ export const navItems: INavData[] = [
       {
         name: 'Copy To Document',
         url: '/form-builder/copy-to-document',
-        iconComponent: { name: 'cil-copy' },
+        iconComponent: { name: 'cil-share-boxed' },
         attributes: { permissionCode: 'FormBuilder_Allow_View' }
       },
       
@@ -51,7 +51,7 @@ export const navItems: INavData[] = [
   {
     name: 'Document Types',
     url: '/document-types',
-    iconComponent: { name: 'cil-file' },
+    iconComponent: { name: 'cil-notes' },
     attributes: { permissionCode: 'Document_Allow_View' }, // Changed from DocumentType_Allow_View to Document_Allow_View
     children: [
       {
@@ -63,51 +63,27 @@ export const navItems: INavData[] = [
       {
         name: 'Document Series',
         url: '/document-series',
-        iconComponent: { name: 'cil-tags' },
+        iconComponent: { name: 'cil-list-numbered' },
         attributes: { permissionCode: 'DocumentSeries_Allow_View' }
       }
     ]
   },
   {
-    name: 'Alert Rules',
-    url: '/alert-rules',
-    iconComponent: { name: 'cil-bell' },
-    attributes: { roles: ['Administration'], permissionCode: 'AlertRule_Allow_View' } // Admin + permission
-  },
-  {
-    name: 'SMTP Configs',
-    url: '/smtp-configs',
-    iconComponent: { name: 'cil-envelope-closed' },
-    attributes: { roles: ['Administration'], permissionCode: 'SmtpConfig_Allow_View' } // Admin + permission
-  },
-  {
-    name: 'SAP Integration',
-    url: '/sap-integration',
-    iconComponent: { name: 'cil-cloud-upload' },
-    attributes: { roles: ['Administration'], permissionCode: 'SapHanaConfig_Allow_View' }
-  },
-  {
-    name: 'Email Templates',
-    url: '/email-templates',
-    iconComponent: { name: 'cil-envelope-open' },
-    attributes: { roles: ['Administration'], permissionCode: 'EmailTemplate_Allow_View' } // Admin + permission
-  },
-  {
-    name: 'Manage Table Menus',
-    url: '/table-menus',
-    iconComponent: { name: 'cil-menu' },
-    attributes: { roles: ['Administration'], permissionCode: 'TableMenu_Allow_View' } // Admin + permission
+    name: 'Submissions',
+    url: '/submissions',
+    iconComponent: { name: 'cil-description' },
+    attributes: { permissionCode: 'Submission_Allow_View' }
   },
   {
     name: 'Approval Workflows',
     url: '/approval-workflows',
-    iconComponent: { name: 'cil-sitemap' },
+    iconComponent: { name: 'cil-task' },
     attributes: { permissionCode: 'ApprovalWorkflow_Allow_View' },
     children: [
       {
         name: 'Manage Workflows',
         url: '/approval-workflows',
-        iconComponent: { name: 'cil-list' },
+        iconComponent: { name: 'cil-settings' },
         attributes: { permissionCode: 'ApprovalWorkflow_Allow_View' }
       },
       {
@@ -123,7 +99,7 @@ export const navItems: INavData[] = [
       {
         name: 'Delegations',
         url: '/approval-delegations',
-        iconComponent: { name: 'cil-user' },
+        iconComponent: { name: 'cil-share-all' },
         attributes: { permissionCode: 'ApprovalDelegation_Allow_View' }
       },
       {
@@ -135,14 +111,38 @@ export const navItems: INavData[] = [
     ]
   },
   {
-    name: 'Submissions',
-    url: '/submissions',
-    iconComponent: { name: 'cil-description' },
-    attributes: { permissionCode: 'Submission_Allow_View' }
+    title: true,
+    name: 'Administration'
   },
   {
-    title: true,
-    name: 'Testing & Tools'
+    name: 'Alert Rules',
+    url: '/alert-rules',
+    iconComponent: { name: 'cil-bell' },
+    attributes: { roles: ['Administration'], permissionCode: 'AlertRule_Allow_View' } // Admin + permission
+  },
+  {
+    name: 'Email Templates',
+    url: '/email-templates',
+    iconComponent: { name: 'cil-envelope-open' },
+    attributes: { roles: ['Administration'], permissionCode: 'EmailTemplate_Allow_View' } // Admin + permission
+  },
+  {
+    name: 'SMTP Configs',
+    url: '/smtp-configs',
+    iconComponent: { name: 'cil-envelope-closed' },
+    attributes: { roles: ['Administration'], permissionCode: 'SmtpConfig_Allow_View' } // Admin + permission
+  },
+  {
+    name: 'SAP Integration',
+    url: '/sap-integration',
+    iconComponent: { name: 'cil-applications-settings' },
+    attributes: { roles: ['Administration'], permissionCode: 'SapHanaConfig_Allow_View' }
+  },
+  {
+    name: 'Manage Table Menus',
+    url: '/table-menus',
+    iconComponent: { name: 'cil-layers' },
+    attributes: { roles: ['Administration'], permissionCode: 'TableMenu_Allow_View' } // Admin + permission
   },
   {
     title: true,
@@ -157,6 +157,6 @@ export const navItems: INavData[] = [
   {
     name: 'Logout',
     url: '/logout',
-    iconComponent: { name: 'cil-lock-locked' }
+    iconComponent: { name: 'cil-account-logout' }
   }
 ];

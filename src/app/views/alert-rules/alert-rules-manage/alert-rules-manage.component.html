@@ -195,43 +195,42 @@
   <app-dialog-shell
     [(visible)]="showCreateModal"
     header="Create Alert Rule (Email)"
-    [style]="{ width: '680px' }"
+    [style]="{ width: '760px', maxWidth: '96vw' }"
+    [draggable]="false"
+    [resizable]="false"
+    [dismissableMask]="true"
+    [closeOnEscape]="true"
+    styleClass="alert-rule-dialog"
   >
-    <form class="form-grid" [formGroup]="createForm">
+    <form class="form-grid alert-rule-form" [formGroup]="createForm">
       <div class="form-row">
         <label>Document Type</label>
-        <p-select
-          [options]="documentTypes"
-          optionLabel="name"
-          optionValue="id"
-          placeholder="Select Document Type"
-          formControlName="documentTypeId"
-          [style]="{ width: '100%' }"
-        ></p-select>
+        <select class="form-control" formControlName="documentTypeId">
+          <option [ngValue]="null">Select Document Type</option>
+          <option *ngFor="let documentType of documentTypes" [ngValue]="documentType.id">
+            {{ documentType.name }}
+          </option>
+        </select>
       </div>
 
       <div class="form-row">
         <label>Trigger Type</label>
-        <p-select
-          [options]="triggerOptions"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="Select Trigger Type"
-          formControlName="triggerType"
-          [style]="{ width: '100%' }"
-        ></p-select>
+        <select class="form-control" formControlName="triggerType">
+          <option [ngValue]="null">Select Trigger Type</option>
+          <option *ngFor="let triggerOption of triggerOptions" [ngValue]="triggerOption.value">
+            {{ triggerOption.label }}
+          </option>
+        </select>
       </div>
 
       <div class="form-row">
         <label>Notification Type</label>
-        <p-select
-          [options]="notificationOptions"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="Select Notification Type"
-          formControlName="notificationType"
-          [style]="{ width: '100%' }"
-        ></p-select>
+        <select class="form-control" formControlName="notificationType">
+          <option [ngValue]="null">Select Notification Type</option>
+          <option *ngFor="let notificationOption of notificationOptions" [ngValue]="notificationOption.value">
+            {{ notificationOption.label }}
+          </option>
+        </select>
       </div>
 
       <div class="form-row">
@@ -241,41 +240,22 @@
 
       <div class="form-row">
         <label>Email Template (optional)</label>
-        <p-select
-          [options]="emailTemplateOptionsForSelectedDocType"
-          optionLabel="templateName"
-          optionValue="id"
-          [showClear]="true"
-          placeholder="Without Template"
-          formControlName="emailTemplateId"
-          [style]="{ width: '100%' }"
-        ></p-select>
+        <select class="form-control" formControlName="emailTemplateId">
+          <option [ngValue]="null">Without Template</option>
+          <option *ngFor="let emailTemplate of emailTemplateOptionsForSelectedDocType" [ngValue]="emailTemplate.id">
+            {{ emailTemplate.templateName }}
+          </option>
+        </select>
       </div>
 
       <div class="form-row">
         <label>Target User (optional)</label>
-        <p-select
-          [options]="users"
-          optionLabel="username"
-          optionValue="username"
-          [showClear]="true"
-          placeholder="Select user (from Tbl_User)"
-          formControlName="targetUserId"
-          [style]="{ width: '100%' }"
-        >
-          <ng-template let-user pTemplate="item">
-            <div class="user-option">
-              <div class="user-name">{{ user.name || user.username }}</div>
-              <div class="user-meta">
-                <span class="user-username">{{ user.username }}</span>
-                <span class="user-email" *ngIf="user.email"> - {{ user.email }}</span>
-              </div>
-            </div>
-          </ng-template>
-          <ng-template let-user pTemplate="selectedItem">
-            <span>{{ user?.name || user?.username }}</span>
-          </ng-template>
-        </p-select>
+        <select class="form-control" formControlName="targetUserId">
+          <option [ngValue]="null">Select user (from Tbl_User)</option>
+          <option *ngFor="let user of users" [ngValue]="user.username">
+            {{ user.name || user.username }} ({{ user.username }}){{ user.email ? ' - ' + user.email : '' }}
+          </option>
+        </select>
       </div>
 
       <div class="form-row">

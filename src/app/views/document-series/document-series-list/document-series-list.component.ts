@@ -3,7 +3,6 @@ import { Component, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
-import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -12,6 +11,8 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { MessageService, ConfirmationService } from 'primeng/api';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import {
   DocumentSeries,
@@ -32,7 +33,6 @@ import { catchError, of } from 'rxjs';
     RouterLink,
     TableModule,
     ButtonModule,
-    DialogModule,
     InputTextModule,
     InputNumberModule,
     CheckboxModule,
@@ -40,7 +40,9 @@ import { catchError, of } from 'rxjs';
     ReactiveFormsModule,
     ToastModule,
     ConfirmDialogModule,
-    TooltipModule
+    TooltipModule,
+    DialogShellComponent,
+    TableShellComponent
   ],
   templateUrl: './document-series-list.component.html',
   styleUrls: ['./document-series-list.component.scss'],
@@ -87,6 +89,10 @@ export class DocumentSeriesListComponent implements OnInit {
       nextNumber: [1, [Validators.required, Validators.min(1)]],
       isDefault: [false],
       isActive: [true]
+    });
+
+    this.seriesForm.get('templatePreset')?.valueChanges.subscribe(value => {
+      this.onTemplatePresetChange(value);
     });
   }
 
@@ -375,10 +381,18 @@ export class DocumentSeriesListComponent implements OnInit {
   }
 
   private generateSeriesCodeForCompatibility(template: string, seriesName: string): string {
-    const staticPart = template.replace(/\{[A-Z]+\}/g, '').replace(/[^A-Za-z0-9\-_\/]/g, '');
+    const staticPart = template
+      .replace(/\{[A-Z]+\}/g, '')
+      .replace(/[^A-Za-z0-9\-_\/]/g, '')
+      .replace(/-{2,}/g, '-')
+      .replace(/_{2,}/g, '_')
+      .replace(/\/{2,}/g, '/')
+      .replace(/^[-_/]+|[-_/]+$/g, '');
+
     if (staticPart) {
       return staticPart.slice(0, 50);
     }
+
     return String(seriesName || 'SERIES').toUpperCase().replace(/[^A-Z0-9\-_]/g, '').slice(0, 50);
   }
 }

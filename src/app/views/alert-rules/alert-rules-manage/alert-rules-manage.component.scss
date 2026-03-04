@@ -234,10 +234,14 @@
   gap: 1rem 1.25rem;
 }
 
+.alert-rule-form {
+  gap: 1rem 1.25rem;
+}
+
 .form-row {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.45rem;
 }
 
 .form-row label {
@@ -262,6 +266,8 @@
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 0.75rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .user-option {
@@ -287,6 +293,15 @@
 
 .user-email {
   margin-left: 0.25rem;
+}
+
+:host ::ng-deep .alert-rule-dialog.p-dialog .p-dialog-content {
+  padding: 1.2rem 1.25rem 1.25rem !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .form-control,
+:host ::ng-deep .alert-rule-dialog .p-inputtext {
+  width: 100%;
 }
 
 @media (max-width: 900px) {

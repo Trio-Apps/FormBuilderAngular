@@ -8,6 +8,9 @@ import {
   CopyToDocumentAuditDto,
   CopyToDocumentAuditQueryParams,
   CopyToDocumentAuditResponse,
+  CopyToDocumentSetupDto,
+  CreateCopyToDocumentSetupRequestDto,
+  UpdateCopyToDocumentSetupRequestDto,
   ExecuteCopyToDocumentRequestDto,
   ExecuteCopyToDocumentByCodesRequestDto,
   ApiResponse
@@ -233,5 +236,67 @@ export class CopyToDocumentService {
       result[mapping.sourceFieldCode] = mapping.targetFieldCode;
     });
     return result;
+  }
+
+  getSetups(): Observable<CopyToDocumentSetupDto[]> {
+    return this.http.get<ApiResponse<CopyToDocumentSetupDto[]>>(
+      `${this.baseUrl}/setups`
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentSetupDto[]>) => response.data ?? (response as any as CopyToDocumentSetupDto[])),
+      catchError((error) => {
+        console.error('[CopyToDocumentService] Error fetching setups:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  getSetupById(id: number): Observable<CopyToDocumentSetupDto> {
+    return this.http.get<ApiResponse<CopyToDocumentSetupDto>>(
+      `${this.baseUrl}/setups/${id}`
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentSetupDto>) => response.data ?? (response as any as CopyToDocumentSetupDto)),
+      catchError((error) => {
+        console.error(`[CopyToDocumentService] Error fetching setup ${id}:`, error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  createSetup(request: CreateCopyToDocumentSetupRequestDto): Observable<CopyToDocumentSetupDto> {
+    return this.http.post<ApiResponse<CopyToDocumentSetupDto>>(
+      `${this.baseUrl}/setups`,
+      request
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentSetupDto>) => response.data ?? (response as any as CopyToDocumentSetupDto)),
+      catchError((error) => {
+        console.error('[CopyToDocumentService] Error creating setup:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  updateSetup(id: number, request: UpdateCopyToDocumentSetupRequestDto): Observable<CopyToDocumentSetupDto> {
+    return this.http.put<ApiResponse<CopyToDocumentSetupDto>>(
+      `${this.baseUrl}/setups/${id}`,
+      request
+    ).pipe(
+      map((response: ApiResponse<CopyToDocumentSetupDto>) => response.data ?? (response as any as CopyToDocumentSetupDto)),
+      catchError((error) => {
+        console.error(`[CopyToDocumentService] Error updating setup ${id}:`, error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  deleteSetup(id: number): Observable<void> {
+    return this.http.delete<ApiResponse<any>>(
+      `${this.baseUrl}/setups/${id}`
+    ).pipe(
+      map(() => void 0),
+      catchError((error) => {
+        console.error(`[CopyToDocumentService] Error deleting setup ${id}:`, error);
+        return throwError(() => error);
+      })
+    );
   }
 }

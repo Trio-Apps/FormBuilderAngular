@@ -6,10 +6,7 @@ import {
   DropdownComponent,
   DropdownToggleDirective,
   DropdownMenuDirective,
-  DropdownItemDirective,
   DropdownHeaderDirective,
-  DropdownDividerDirective,
-  BadgeComponent
 } from '@coreui/angular';
 
 import { NotificationService } from '../../../../services/notification.service';
@@ -25,10 +22,7 @@ import { NotificationDto, parseNotificationDate } from '../../../../models/notif
     DropdownComponent,
     DropdownToggleDirective,
     DropdownMenuDirective,
-    DropdownItemDirective,
-    DropdownHeaderDirective,
-    DropdownDividerDirective,
-    BadgeComponent
+    DropdownHeaderDirective
   ],
   template: `
     <c-dropdown [popperOptions]="{ placement: 'bottom-end' }" variant="nav-item">
@@ -141,20 +135,24 @@ import { NotificationDto, parseNotificationDate } from '../../../../models/notif
   `,
   styles: [`
     .notification-bell-btn {
-      background: none;
-      border: none;
-      padding: 8px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      padding: 0;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 8px;
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
       transition: all 0.2s ease;
-      color: var(--cui-body-color, #4f5d73);
+      color: #334155;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
     }
 
     .notification-bell-btn:hover {
-      background: var(--cui-tertiary-bg, #f0f4f8);
+      background: #f8fafc;
+      border-color: #cbd5e1;
     }
 
     .notification-icon {
@@ -204,7 +202,7 @@ import { NotificationDto, parseNotificationDate } from '../../../../models/notif
       justify-content: space-between;
       align-items: center;
       padding: 16px 20px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
       color: white;
       border-bottom: none;
     }

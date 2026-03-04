@@ -1,14 +1,15 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
-import { FormSubmissionDto, FormSubmissionsService } from '../../form-submissions/services/form-submissions.service';
+import { finalize } from 'rxjs/operators';
 import { CrystalLayoutByDocumentTypeDto, CrystalReportsService } from '../../FormBuilder/services/crystal-reports.service';
 import { SapIntegrationExecuteResultDto, SapIntegrationService } from '../../FormBuilder/services/sap-integration.service';
-import { finalize } from 'rxjs/operators';
+import { FormSubmissionDto, FormSubmissionsService } from '../../form-submissions/services/form-submissions.service';
+import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 
 @Component({
   selector: 'app-submissions-list',
   standalone: true,
-  imports: [CommonModule, DatePipe],
+  imports: [CommonModule, DatePipe, TableShellComponent],
   templateUrl: './submissions-list.component.html',
   styleUrl: './submissions-list.component.scss'
 })
@@ -16,6 +17,7 @@ export class SubmissionsListComponent implements OnInit {
   private readonly unavailableLayoutsStorageKey = 'submissions_unavailable_crystal_layout_doc_types';
   submissions: FormSubmissionDto[] = [];
   loading = false;
+  pageError = '';
   executingBySubmission: Record<number, boolean> = {};
   executionResultsBySubmission: Record<number, SapIntegrationExecuteResultDto> = {};
   downloadingPdfBySubmission: Record<number, boolean> = {};
@@ -35,8 +37,22 @@ export class SubmissionsListComponent implements OnInit {
     this.loadSubmissions();
   }
 
+  get totalSubmissions(): number {
+    return this.submissions.length;
+  }
+
+  get sapReadyCount(): number {
+    return this.submissions.filter((submission) => submission.sapIntegrationEnabled).length;
+  }
+
+  get sapDisabledCount(): number {
+    return this.submissions.filter((submission) => !submission.sapIntegrationEnabled).length;
+  }
+
   loadSubmissions(): void {
     this.loading = true;
+    this.pageError = '';
+
     this.formSubmissionsService.getAllSubmissions().subscribe({
       next: (list) => {
         this.submissions = (list || []).sort((a, b) => {
@@ -44,18 +60,21 @@ export class SubmissionsListComponent implements OnInit {
           const bTime = new Date((b.lastUpdatedDate || b.createdDate || b.submittedDate) as any).getTime() || 0;
           return bTime - aTime;
         });
+
         this.prefetchAvailableLayouts();
         this.loading = false;
       },
       error: () => {
         this.submissions = [];
+        this.pageError = 'Unable to load submissions right now.';
         this.loading = false;
       }
     });
   }
 
-  executeSap(submissionId: number): void {
-    if (!submissionId || this.executingBySubmission[submissionId]) {
+  executeSap(submission: FormSubmissionDto): void {
+    const submissionId = Number(submission?.id || 0);
+    if (!submissionId || this.executingBySubmission[submissionId] || !this.canExecuteSap(submission)) {
       return;
     }
 
@@ -68,7 +87,7 @@ export class SubmissionsListComponent implements OnInit {
       error: () => {
         this.executionResultsBySubmission[submissionId] = {
           success: false,
-          formId: 0,
+          formId: submission.formBuilderId || 0,
           submissionId,
           sapConfigId: 0,
           endpoint: '',
@@ -80,6 +99,46 @@ export class SubmissionsListComponent implements OnInit {
         this.executingBySubmission[submissionId] = false;
       }
     });
+  }
+
+  canExecuteSap(submission: FormSubmissionDto): boolean {
+    return !!submission?.sapIntegrationEnabled;
+  }
+
+  getSapButtonText(submission: FormSubmissionDto): string {
+    const submissionId = Number(submission?.id || 0);
+
+    if (this.executingBySubmission[submissionId]) {
+      return 'Executing...';
+    }
+
+    return this.canExecuteSap(submission) ? 'Execute SAP' : 'SAP Disabled';
+  }
+
+  getSapButtonTitle(submission: FormSubmissionDto): string {
+    if (this.canExecuteSap(submission)) {
+      return 'Run the configured SAP integration for this submission.';
+    }
+
+    return 'SAP integration is not enabled for this submission.';
+  }
+
+  getStatusClass(status: string | null | undefined): string {
+    const normalized = (status || '').trim().toLowerCase();
+
+    if (normalized === 'approved') {
+      return 'status-chip--approved';
+    }
+
+    if (normalized === 'rejected') {
+      return 'status-chip--rejected';
+    }
+
+    if (normalized === 'draft') {
+      return 'status-chip--draft';
+    }
+
+    return 'status-chip--submitted';
   }
 
   canShowPdfButton(submission: FormSubmissionDto): boolean {
@@ -111,10 +170,10 @@ export class SubmissionsListComponent implements OnInit {
     }
 
     if (!this.isCrystalBridgeAvailable) {
-      return 'Report Unavailable';
+      return 'Unavailable';
     }
 
-    return this.canDownloadReport(submission) ? 'Report' : 'No Report';
+    return this.canDownloadReport(submission) ? 'Download' : 'No Report';
   }
 
   getReportButtonTitle(submission: FormSubmissionDto): string {
@@ -180,7 +239,7 @@ export class SubmissionsListComponent implements OnInit {
           this.pdfErrorBySubmission[submissionId] = 'Report service is currently unavailable.';
         }
 
-        if (String(message).toLowerCase().includes('no active crystal layout')) {
+        if (normalizedMessage.includes('no active crystal layout')) {
           this.defaultLayoutByDocumentType[documentTypeId] = null;
           this.unavailableLayoutDocumentTypeIds.add(documentTypeId);
           this.persistUnavailableLayoutDocTypes();
@@ -189,13 +248,17 @@ export class SubmissionsListComponent implements OnInit {
     });
   }
 
+  trackBySubmissionId(_: number, submission: FormSubmissionDto): number {
+    return submission.id;
+  }
+
   private prefetchAvailableLayouts(): void {
     const nextMap: Record<number, CrystalLayoutByDocumentTypeDto | null> = {};
     const documentTypeIds = Array.from(
       new Set(
         (this.submissions || [])
-          .map(x => Number(x?.documentTypeId || 0))
-          .filter(x => x > 0 && !this.unavailableLayoutDocumentTypeIds.has(x))
+          .map((submission) => Number(submission?.documentTypeId || 0))
+          .filter((documentTypeId) => documentTypeId > 0 && !this.unavailableLayoutDocumentTypeIds.has(documentTypeId))
       )
     );
 
@@ -221,16 +284,16 @@ export class SubmissionsListComponent implements OnInit {
             this.unavailableLayoutDocumentTypeIds.add(id);
           }
         }
-        this.persistUnavailableLayoutDocTypes();
 
+        this.persistUnavailableLayoutDocTypes();
         this.defaultLayoutByDocumentType = nextMap;
       },
       error: () => {
-        // If layouts check fails, keep all as unavailable to avoid repeated failing calls.
         for (const id of documentTypeIds) {
           nextMap[id] = null;
           this.unavailableLayoutDocumentTypeIds.add(id);
         }
+
         this.persistUnavailableLayoutDocTypes();
         this.defaultLayoutByDocumentType = nextMap;
       }
@@ -306,8 +369,8 @@ export class SubmissionsListComponent implements OnInit {
 
       this.unavailableLayoutDocumentTypeIds = new Set(
         parsed
-          .map((x: unknown) => Number(x))
-          .filter((x: number) => Number.isFinite(x) && x > 0)
+          .map((value: unknown) => Number(value))
+          .filter((value: number) => Number.isFinite(value) && value > 0)
       );
     } catch {
       this.unavailableLayoutDocumentTypeIds = new Set<number>();

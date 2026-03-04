@@ -1,458 +1,343 @@
-<div class="copy-to-document-container">
-  <p-card header="Copy To Document" [style]="{ margin: '20px' }">
-    <form [formGroup]="copyForm" (ngSubmit)="executeCopy()">
-      
-      <!-- Source Document Type -->
-      <div class="form-group">
-        <label for="sourceDocumentTypeId">
-          Source Document Type <span class="required">*</span>
-        </label>
-        <select
-          id="sourceDocumentTypeId"
-          formControlName="sourceDocumentTypeId"
-          class="form-control">
-          <option value="">Select source document type</option>
-          <option *ngFor="let docType of documentTypes" [value]="docType.id">
-            {{ docType.name }}
-          </option>
-        </select>
-        <small class="text-danger" *ngIf="copyForm.get('sourceDocumentTypeId')?.invalid && copyForm.get('sourceDocumentTypeId')?.touched">
-          Source Document Type is required
-        </small>
+<div class="ctd-page">
+  <section class="ctd-hero">
+    <div class="ctd-hero-content">
+      <div class="ctd-hero-copy">
+        <h1>Copy To Document</h1>
+        <p>Create and manage reusable copy setups. Each setup defines the source, target, mappings, and trigger.</p>
       </div>
 
-      <!-- Source Form -->
-      <div class="form-group">
-        <label for="sourceFormId">
-          Source Form <span class="required">*</span>
-        </label>
-        <select
-          id="sourceFormId"
-          formControlName="sourceFormId"
-          class="form-control">
-          <option value="">Select source form</option>
-          <option *ngFor="let form of sourceForms" [value]="form.id">
-            {{ form.formName }}
-          </option>
-        </select>
-        <small class="text-danger" *ngIf="copyForm.get('sourceFormId')?.invalid && copyForm.get('sourceFormId')?.touched">
-          Source Form is required
-        </small>
-      </div>
+      <div class="ctd-hero-actions">
+        <button type="button" class="ctd-btn ctd-btn-secondary" (click)="loadSetups()" [disabled]="setupsLoading">
+          <i class="pi pi-refresh"></i>
+          <span>Refresh</span>
+        </button>
 
-      <!-- Target Document Type -->
-      <div class="form-group">
-        <label for="targetDocumentTypeId">
-          Target Document Type <span class="required">*</span>
-        </label>
-        <select
-          id="targetDocumentTypeId"
-          formControlName="targetDocumentTypeId"
-          class="form-control">
-          <option value="">Select target document type</option>
-          <option *ngFor="let docType of documentTypes" [value]="docType.id">
-            {{ docType.name }}
-          </option>
-        </select>
-        <small class="text-danger" *ngIf="copyForm.get('targetDocumentTypeId')?.invalid && copyForm.get('targetDocumentTypeId')?.touched">
-          Target Document Type is required
-        </small>
-      </div>
-
-      <!-- Target Form -->
-      <div class="form-group">
-        <label for="targetFormId">
-          Target Form <span class="required">*</span>
-        </label>
-        <select
-          id="targetFormId"
-          formControlName="targetFormId"
-          class="form-control">
-          <option value="">Select target form</option>
-          <option *ngFor="let form of targetForms" [value]="form.id">
-            {{ form.formName }}
-          </option>
-        </select>
-        <small class="text-danger" *ngIf="copyForm.get('targetFormId')?.invalid && copyForm.get('targetFormId')?.touched">
-          Target Form is required
-        </small>
-      </div>
-
-      <!-- Initial Status -->
-      <div class="form-group">
-        <label for="initialStatus">
-          Initial Status
-        </label>
-        <select
-          id="initialStatus"
-          formControlName="initialStatus"
-          class="form-control">
-          <option value="Draft">Draft</option>
-          <option value="Submitted">Submitted</option>
-        </select>
-        <small class="text-muted">The initial status of the target document</small>
-      </div>
-
-      <!-- Execution Trigger -->
-      <div class="form-group">
-        <label for="triggerEvent">
-          Execution Trigger
-        </label>
-        <select
-          id="triggerEvent"
-          formControlName="triggerEvent"
-          class="form-control">
-          <option value="OnRuleMatched">On Rule Matched</option>
-          <option value="OnFormSubmitted">On Form Submitted</option>
-          <option value="OnApprovalCompleted">On Approval Completed</option>
-          <option value="OnDocumentApproved">On Document Approved</option>
-        </select>
-        <small class="text-muted">When to execute the CopyToDocument action</small>
-      </div>
-
-      <!-- Target Document ID (required when createNewDocument is false) -->
-      <div class="form-group" *ngIf="!copyForm.get('createNewDocument')?.value">
-        <label for="targetDocumentId">
-          Target Document ID <span class="required">*</span>
-        </label>
-        <input
-          type="number"
-          id="targetDocumentId"
-          formControlName="targetDocumentId"
-          class="form-control"
-          placeholder="Enter target document ID">
-        <small class="text-danger" *ngIf="copyForm.get('targetDocumentId')?.invalid && copyForm.get('targetDocumentId')?.touched">
-          Target Document ID is required when updating existing document
-        </small>
-        <small class="text-muted" *ngIf="copyForm.get('targetDocumentId')?.valid">
-          Enter the ID of the existing document to update
-        </small>
-      </div>
-
-      <!-- Options -->
-      <div class="form-group">
-        <label class="options-label">Options</label>
-        <div class="checkbox-group">
-          <div class="checkbox-item">
-            <p-checkbox formControlName="createNewDocument" label="Create New Document" binary="true" inputId="createNewDocument"></p-checkbox>
-            <span class="checkbox-description">Create a new document from the source submission</span>
-          </div>
-          <div class="checkbox-item">
-            <p-checkbox formControlName="copyCalculatedFields" label="Copy Calculated Fields" binary="true" inputId="copyCalculatedFields"></p-checkbox>
-            <span class="checkbox-description">Include calculated field values in the copy</span>
-          </div>
-          <div class="checkbox-item">
-            <p-checkbox formControlName="copyGridRows" label="Copy Grid Rows" binary="true" inputId="copyGridRows"></p-checkbox>
-            <span class="checkbox-description">Copy all grid rows from source to target</span>
-          </div>
-          <div class="checkbox-item">
-            <p-checkbox formControlName="startWorkflow" label="Start Workflow" binary="true" inputId="startWorkflow"></p-checkbox>
-            <span class="checkbox-description">Automatically start the workflow process</span>
-          </div>
-          <div class="checkbox-item">
-            <p-checkbox formControlName="linkDocuments" label="Link Documents" binary="true" inputId="linkDocuments"></p-checkbox>
-            <span class="checkbox-description">Create a link between source and target documents</span>
-          </div>
-          <div class="checkbox-item">
-            <p-checkbox formControlName="copyMetadata" label="Copy Metadata" binary="true" inputId="copyMetadata"></p-checkbox>
-            <span class="checkbox-description">Copy metadata fields from source document</span>
-          </div>
-          <div class="checkbox-item">
-            <p-checkbox formControlName="copyAttachments" label="Copy Attachments" binary="true" inputId="copyAttachments"></p-checkbox>
-            <span class="checkbox-description">Copy attachments from source to target document</span>
-          </div>
-          <div class="checkbox-item">
-            <p-checkbox formControlName="overrideTargetDefaults" label="Override Target Defaults" binary="true" inputId="overrideTargetDefaults"></p-checkbox>
-            <span class="checkbox-description">Override target document default values</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Field Mappings -->
-      <p-panel header="Field Mappings" [toggleable]="true" [collapsed]="false">
-        <div formArrayName="fieldMappings">
-          <div *ngFor="let mapping of fieldMappingsArray.controls; let i = index" [formGroupName]="i" class="mapping-item">
-            <div class="mapping-row">
-              <div class="mapping-field">
-                <label>Source Field Code</label>
-                <select 
-                  formControlName="sourceFieldCode"
-                  class="form-control">
-                  <option value="">Select source field</option>
-                  <option *ngFor="let field of sourceFields" [value]="field.fieldCode">
-                    {{ field.fieldName }} ({{ field.fieldCode }})
-                  </option>
-                </select>
-              </div>
-              <div class="mapping-arrow">→</div>
-              <div class="mapping-field">
-                <label>Target Field Code</label>
-                <select 
-                  formControlName="targetFieldCode"
-                  class="form-control">
-                  <option value="">Select target field</option>
-                  <option *ngFor="let field of targetFields" [value]="field.fieldCode">
-                    {{ field.fieldName }} ({{ field.fieldCode }})
-                  </option>
-                </select>
-              </div>
-              <div class="mapping-actions">
-                <p-button 
-                  icon="pi pi-trash" 
-                  (onClick)="removeFieldMapping(i)"
-                  [styleClass]="'p-button-danger p-button-text'"
-                  [style]="{ width: '40px', height: '40px' }"
-                  pTooltip="Remove mapping">
-                </p-button>
-              </div>
-            </div>
-          </div>
-          <p-button 
-            label="Add Field Mapping" 
-            icon="pi pi-plus" 
-            (onClick)="addFieldMapping()"
-            [styleClass]="'p-button-secondary p-button-outlined'"
-            [style]="{ marginTop: '10px' }">
-          </p-button>
-        </div>
-      </p-panel>
-
-      <!-- Grid Mappings -->
-      <p-panel header="Grid Mappings" [toggleable]="true" [collapsed]="true">
-        <div formArrayName="gridMappings">
-          <div *ngFor="let mapping of gridMappingsArray.controls; let i = index" [formGroupName]="i" class="mapping-item">
-            <div class="mapping-row">
-              <div class="mapping-field">
-                <label>Source Grid Code</label>
-                <select 
-                  formControlName="sourceGridCode"
-                  class="form-control">
-                  <option value="">Select source grid</option>
-                  <option *ngFor="let grid of sourceGrids" [value]="grid.gridCode">
-                    {{ grid.gridName }} ({{ grid.gridCode }})
-                  </option>
-                </select>
-              </div>
-              <div class="mapping-arrow">→</div>
-              <div class="mapping-field">
-                <label>Target Grid Code</label>
-                <select 
-                  formControlName="targetGridCode"
-                  class="form-control">
-                  <option value="">Select target grid</option>
-                  <option *ngFor="let grid of targetGrids" [value]="grid.gridCode">
-                    {{ grid.gridName }} ({{ grid.gridCode }})
-                  </option>
-                </select>
-              </div>
-              <div class="mapping-actions">
-                <p-button 
-                  icon="pi pi-trash" 
-                  (onClick)="removeGridMapping(i)"
-                  [styleClass]="'p-button-danger p-button-text'"
-                  [style]="{ width: '40px', height: '40px' }"
-                  pTooltip="Remove mapping">
-                </p-button>
-              </div>
-            </div>
-          </div>
-          <p-button 
-            label="Add Grid Mapping" 
-            icon="pi pi-plus" 
-            (onClick)="addGridMapping()"
-            [styleClass]="'p-button-secondary p-button-outlined'"
-            [style]="{ marginTop: '10px' }">
-          </p-button>
-        </div>
-      </p-panel>
-
-      <!-- Metadata Fields -->
-      <p-panel header="Metadata Fields" [toggleable]="true" [collapsed]="true" *ngIf="copyForm.get('copyMetadata')?.value">
-        <div formArrayName="metadataFields">
-          <div *ngFor="let field of metadataFieldsArray.controls; let i = index" class="metadata-item">
-            <div class="metadata-row">
-              <input type="text" [formControlName]="i" class="form-control" placeholder="Metadata field name">
-              <p-button 
-                icon="pi pi-trash" 
-                (onClick)="removeMetadataField(i)"
-                [styleClass]="'p-button-danger p-button-text'"
-                [style]="{ width: '40px', height: '40px', marginLeft: '10px' }"
-                pTooltip="Remove field">
-              </p-button>
-            </div>
-          </div>
-          <p-button 
-            label="Add Metadata Field" 
-            icon="pi pi-plus" 
-            (onClick)="addMetadataField()"
-            [styleClass]="'p-button-secondary p-button-outlined'"
-            [style]="{ marginTop: '10px' }">
-          </p-button>
-        </div>
-      </p-panel>
-
-      <!-- Result -->
-      <div *ngIf="result" class="result-section">
-        <p-panel [header]="result.success ? 'Success' : 'Error'" [toggleable]="true">
-          <div *ngIf="result.success" class="success-result">
-            <p><strong>Target Document ID:</strong> {{ result.targetDocumentId }}</p>
-            <p><strong>Target Document Number:</strong> {{ result.targetDocumentNumber }}</p>
-            <p *ngIf="result.fieldsCopied"><strong>Fields Copied:</strong> {{ result.fieldsCopied }}</p>
-            <p *ngIf="result.gridRowsCopied"><strong>Grid Rows Copied:</strong> {{ result.gridRowsCopied }}</p>
-          </div>
-          <div *ngIf="!result.success" class="error-result">
-            <p><strong>Error:</strong> {{ result.errorMessage }}</p>
-          </div>
-        </p-panel>
-      </div>
-
-      <!-- Action Buttons -->
-      <div class="form-actions">
-        <p-button 
-          label="Execute Copy" 
-          icon="pi pi-copy" 
-          type="submit"
-          [loading]="loading"
-          [disabled]="copyForm.invalid || loading"
-          [styleClass]="'p-button-primary'">
-        </p-button>
-        
-        <p-button 
-          label="View Audit Records" 
-          icon="pi pi-list" 
-          (onClick)="openAuditDialog()"
-          [styleClass]="'p-button-info'">
-        </p-button>
-        
-        <p-button 
-          label="Reset" 
-          icon="pi pi-refresh" 
-          (onClick)="resetForm()"
-          [styleClass]="'p-button-secondary'">
-        </p-button>
-      </div>
-    </form>
-  </p-card>
-
-  <!-- Audit Records Panel (Main Page) -->
-  <p-card *ngIf="showAuditPanel" [style]="{ margin: '20px' }">
-    <ng-template pTemplate="header">
-      <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: #10B981; color: white;">
-        <h3 style="margin: 0; color: white;">Audit Records</h3>
-        <button 
-          (click)="closeAuditPanel()" 
-          style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">
-          ×
+        <button type="button" class="ctd-btn ctd-btn-primary" (click)="openCreateSetupDialog()">
+          <i class="pi pi-plus"></i>
+          <span>New Setup</span>
         </button>
       </div>
-    </ng-template>
-    <div *ngIf="auditLoading" class="loading-container" style="text-align: center; padding: 20px;">
-      <p>Loading audit records...</p>
     </div>
-    <p-table 
-      [value]="auditRecords" 
-      [paginator]="true" 
-      [rows]="auditParams.pageSize"
-      [totalRecords]="auditTotalRecords"
-      [lazy]="true"
-      [loading]="auditLoading"
-      (onLazyLoad)="onAuditPageChange($event)"
-      [showCurrentPageReport]="true"
-      currentPageReportTemplate="Showing {first} to {last} of {totalRecords} entries"
-      [rowsPerPageOptions]="[10, 25, 50, 100]"
-      [first]="((auditParams?.page || 1) - 1) * (auditParams?.pageSize || 50)">
-      <ng-template pTemplate="header">
-        <tr>
-          <th>ID</th>
-          <th>SOURCE SUBMISSION</th>
-          <th>TARGET DOCUMENT</th>
-          <th>DOCUMENT NUMBER</th>
-          <th>SUCCESS</th>
-          <th>FIELDS COPIED</th>
-          <th>GRID ROWS COPIED</th>
-          <th>EXECUTION</th>
-          <th>ERROR MESSAGE</th>
-        </tr>
-      </ng-template>
-      <ng-template pTemplate="body" let-audit>
-        <tr>
-          <td>{{ audit.id }}</td>
-          <td>{{ audit.sourceSubmissionId }}</td>
-          <td>{{ audit.targetDocumentId || 'N/A' }}</td>
-          <td>{{ audit.targetDocumentNumber || 'N/A' }}</td>
-          <td>
-            <span [class]="audit.success ? 'badge-success' : 'badge-error'">
-              {{ audit.success ? 'Yes' : 'No' }}
-            </span>
-          </td>
-          <td>{{ audit.fieldsCopied || 0 }}</td>
-          <td>{{ audit.gridRowsCopied || 0 }}</td>
-          <td>{{ audit.executionDate | date:'short' }}</td>
-          <td>{{ audit.errorMessage || '-' }}</td>
-        </tr>
-      </ng-template>
-      <ng-template pTemplate="emptymessage">
-        <tr>
-          <td colspan="9">No audit records found</td>
-        </tr>
-      </ng-template>
-    </p-table>
-  </p-card>
+  </section>
 
-  <!-- Audit Records Dialog -->
-  <p-dialog 
-    [(visible)]="showAuditDialog" 
-    header="Audit Records" 
-    [modal]="true"
-    [style]="{ width: '90vw', maxWidth: '1200px' }"
-    [closable]="true">
-    <div *ngIf="auditLoading" class="loading-container">
-      <p>Loading audit records...</p>
+  <div class="ctd-summary-grid">
+    <div class="ctd-summary-card">
+      <div class="ctd-summary-icon ctd-summary-icon-teal">
+        <i class="pi pi-copy"></i>
+      </div>
+      <div class="ctd-summary-copy">
+        <span class="ctd-summary-value">{{ setups.length }}</span>
+        <span class="ctd-summary-label">Total Setups</span>
+      </div>
     </div>
-    <p-table 
-      *ngIf="!auditLoading"
-      [value]="auditRecords" 
-      [paginator]="true" 
-      [rows]="10"
-      [showCurrentPageReport]="true"
-      currentPageReportTemplate="Showing {first} to {last} of {totalRecords} entries">
-      <ng-template pTemplate="header">
-        <tr>
-          <th>ID</th>
-          <th>Source Submission</th>
-          <th>Target Document</th>
-          <th>Document Number</th>
-          <th>Success</th>
-          <th>Fields Copied</th>
-          <th>Grid Rows Copied</th>
-          <th>Execution Date</th>
-          <th>Error Message</th>
-        </tr>
-      </ng-template>
-      <ng-template pTemplate="body" let-audit>
-        <tr>
-          <td>{{ audit.id }}</td>
-          <td>{{ audit.sourceSubmissionId }}</td>
-          <td>{{ audit.targetDocumentId || 'N/A' }}</td>
-          <td>{{ audit.targetDocumentNumber || 'N/A' }}</td>
-          <td>
-            <span [class]="audit.success ? 'badge-success' : 'badge-error'">
-              {{ audit.success ? 'Yes' : 'No' }}
-            </span>
-          </td>
-          <td>{{ audit.fieldsCopied || 0 }}</td>
-          <td>{{ audit.gridRowsCopied || 0 }}</td>
-          <td>{{ audit.executionDate | date:'short' }}</td>
-          <td>{{ audit.errorMessage || '-' }}</td>
-        </tr>
-      </ng-template>
-      <ng-template pTemplate="emptymessage">
-        <tr>
-          <td colspan="9">No audit records found</td>
-        </tr>
-      </ng-template>
-    </p-table>
-  </p-dialog>
 
-  <p-toast></p-toast>
+    <div class="ctd-summary-card">
+      <div class="ctd-summary-icon ctd-summary-icon-blue">
+        <i class="pi pi-check-circle"></i>
+      </div>
+      <div class="ctd-summary-copy">
+        <span class="ctd-summary-value">{{ activeSetupsCount }}</span>
+        <span class="ctd-summary-label">Active</span>
+      </div>
+    </div>
+
+    <div class="ctd-summary-card">
+      <div class="ctd-summary-icon ctd-summary-icon-amber">
+        <i class="pi pi-pause-circle"></i>
+      </div>
+      <div class="ctd-summary-copy">
+        <span class="ctd-summary-value">{{ inactiveSetupsCount }}</span>
+        <span class="ctd-summary-label">Inactive</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctd-empty-note" *ngIf="documentTypes.length === 0 || (sourceForms.length === 0 && targetForms.length === 0)">
+    <div class="ctd-empty-note-icon">
+      <i class="pi pi-info-circle"></i>
+    </div>
+    <div class="ctd-empty-note-copy">
+      <strong>Setup lookups are limited.</strong>
+      <span *ngIf="documentTypes.length === 0">No active document types are currently available.</span>
+      <span *ngIf="documentTypes.length > 0 && sourceForms.length === 0 && targetForms.length === 0">
+        No active published forms are currently available.
+      </span>
+    </div>
+  </div>
+
+  <div class="ctd-error-banner" *ngIf="setupLoadError">
+    <i class="pi pi-exclamation-triangle"></i>
+    <span>{{ setupLoadError }}</span>
+  </div>
+
+  <app-table-shell [title]="''">
+    <div class="table-wrapper ctd-table-shell">
+      <div *ngIf="setupsLoading" class="ctd-loading">
+        <i class="pi pi-spin pi-spinner"></i>
+        <span>Loading setups...</span>
+      </div>
+
+      <p-table [value]="setups" [loading]="setupsLoading" styleClass="p-datatable-sm ctd-setups-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Setup</th>
+            <th>Source</th>
+            <th>Target</th>
+            <th>Trigger</th>
+            <th>Mappings</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-setup>
+          <tr>
+            <td class="ctd-name-cell">
+              <div class="ctd-setup-name">{{ setup.setupName }}</div>
+              <div class="ctd-setup-meta">Order {{ setup.executionOrder || 1 }}</div>
+            </td>
+
+            <td>
+              <div class="ctd-table-pair">
+                <strong>{{ setup.sourceDocumentTypeName || 'Unknown Type' }}</strong>
+                <span>{{ setup.sourceFormName || 'Unknown Form' }}</span>
+              </div>
+            </td>
+
+            <td>
+              <div class="ctd-table-pair">
+                <strong>{{ setup.targetDocumentTypeName || 'Unknown Type' }}</strong>
+                <span>{{ setup.targetFormName || 'Unknown Form' }}</span>
+              </div>
+            </td>
+
+            <td>{{ getTriggerLabel(setup.config?.triggerEvent) }}</td>
+            <td>{{ getMappingSummary(setup) }}</td>
+
+            <td>
+              <span class="ctd-status-badge" [class.ctd-status-active]="setup.isActive" [class.ctd-status-inactive]="!setup.isActive">
+                {{ setup.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+
+            <td class="text-end">
+              <div class="ctd-actions-row">
+                <button type="button" class="ctd-icon-btn ctd-icon-btn-edit" (click)="openEditSetupDialog(setup)" pTooltip="Edit setup">
+                  <i class="pi pi-pencil"></i>
+                </button>
+
+                <button
+                  type="button"
+                  class="ctd-icon-btn ctd-icon-btn-delete"
+                  (click)="deleteSetup(setup)"
+                  [disabled]="deletingSetupId === setup.id"
+                  pTooltip="Delete setup">
+                  <i class="pi pi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="7">
+              <div class="ctd-empty-table">
+                <div class="ctd-empty-table-icon">
+                  <i class="pi pi-inbox"></i>
+                </div>
+                <h3>No setups yet</h3>
+                <p>Create the first Copy To Document setup to reuse it from rules and actions.</p>
+                <button type="button" class="ctd-btn ctd-btn-primary" (click)="openCreateSetupDialog()">
+                  <i class="pi pi-plus"></i>
+                  <span>Create Setup</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+  </app-table-shell>
 </div>
+
+<app-dialog-shell
+  [(visible)]="showConfigDialog"
+  [header]="editingSetupId ? 'Edit Copy Setup' : 'New Copy Setup'"
+  [style]="{ width: '980px', maxWidth: '96vw' }"
+  [dismissableMask]="true"
+  [closeOnEscape]="true"
+  [resizable]="false"
+  [draggable]="false"
+  styleClass="ctd-dialog-shell"
+  (onHide)="closeConfigDialog()">
+  <form [formGroup]="copyForm" (ngSubmit)="saveSetup()" class="ctd-dialog-form">
+    <div class="ctd-form-grid">
+      <div class="ctd-form-group">
+        <label for="setupName">Setup Name <span class="ctd-required">*</span></label>
+        <input id="setupName" type="text" pInputText formControlName="setupName" class="ctd-control" placeholder="Example: Purchase Request to Approval" />
+        <small class="ctd-error-text" *ngIf="copyForm.get('setupName')?.invalid && copyForm.get('setupName')?.touched">Setup name is required.</small>
+      </div>
+
+      <div class="ctd-form-group">
+        <label for="executionOrder">Execution Order <span class="ctd-required">*</span></label>
+        <input id="executionOrder" type="number" formControlName="executionOrder" class="ctd-control" min="1" />
+        <small class="ctd-hint-text">Lower numbers run first.</small>
+      </div>
+
+      <div class="ctd-form-group">
+        <label for="sourceDocumentTypeId">Source Document Type <span class="ctd-required">*</span></label>
+        <select id="sourceDocumentTypeId" formControlName="sourceDocumentTypeId" class="ctd-control">
+          <option [ngValue]="null">Select source document type</option>
+          <option *ngFor="let docType of documentTypes" [ngValue]="docType.id">{{ docType.name }}</option>
+        </select>
+      </div>
+
+      <div class="ctd-form-group">
+        <label for="sourceFormId">Source Form <span class="ctd-required">*</span></label>
+        <select id="sourceFormId" formControlName="sourceFormId" class="ctd-control">
+          <option [ngValue]="null">Select source form</option>
+          <option *ngFor="let form of sourceForms" [ngValue]="form.id">{{ form.formName }}</option>
+        </select>
+      </div>
+
+      <div class="ctd-form-group">
+        <label for="targetDocumentTypeId">Target Document Type <span class="ctd-required">*</span></label>
+        <select id="targetDocumentTypeId" formControlName="targetDocumentTypeId" class="ctd-control">
+          <option [ngValue]="null">Select target document type</option>
+          <option *ngFor="let docType of documentTypes" [ngValue]="docType.id">{{ docType.name }}</option>
+        </select>
+      </div>
+
+      <div class="ctd-form-group">
+        <label for="targetFormId">Target Form <span class="ctd-required">*</span></label>
+        <select id="targetFormId" formControlName="targetFormId" class="ctd-control">
+          <option [ngValue]="null">Select target form</option>
+          <option *ngFor="let form of targetForms" [ngValue]="form.id">{{ form.formName }}</option>
+        </select>
+      </div>
+
+      <div class="ctd-form-group">
+        <label for="initialStatus">Initial Status</label>
+        <select id="initialStatus" formControlName="initialStatus" class="ctd-control">
+          <option [ngValue]="'Draft'">Draft</option>
+          <option [ngValue]="'Submitted'">Submitted</option>
+        </select>
+      </div>
+
+      <div class="ctd-form-group">
+        <label for="triggerEvent">Trigger</label>
+        <select id="triggerEvent" formControlName="triggerEvent" class="ctd-control">
+          <option *ngFor="let option of triggerOptions" [ngValue]="option.value">{{ option.label }}</option>
+        </select>
+      </div>
+
+      <div class="ctd-form-group" *ngIf="!copyForm.get('createNewDocument')?.value">
+        <label for="targetDocumentId">Target Document ID <span class="ctd-required">*</span></label>
+        <input id="targetDocumentId" type="number" formControlName="targetDocumentId" class="ctd-control" />
+      </div>
+    </div>
+
+    <div class="ctd-option-strip">
+      <div class="ctd-option-strip-card" [class.ctd-option-strip-card-active]="copyForm.get('isActive')?.value">
+        <div class="ctd-option-head">
+          <p-checkbox formControlName="isActive" binary="true" inputId="isActive"></p-checkbox>
+          <label for="isActive" class="ctd-option-label">Active Setup</label>
+        </div>
+        <span class="ctd-option-copy">Inactive setups remain in the list but do not run.</span>
+      </div>
+    </div>
+
+    <div class="ctd-form-group">
+      <label class="ctd-options-title">Copy Options</label>
+      <div class="ctd-options-grid">
+        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('createNewDocument')?.value">
+          <div class="ctd-option-head"><p-checkbox formControlName="createNewDocument" binary="true" inputId="createNewDocument"></p-checkbox><label for="createNewDocument" class="ctd-option-label">Create New Document</label></div>
+          <span class="ctd-option-copy">Create a new target document instead of updating an existing one.</span>
+        </div>
+        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyCalculatedFields')?.value">
+          <div class="ctd-option-head"><p-checkbox formControlName="copyCalculatedFields" binary="true" inputId="copyCalculatedFields"></p-checkbox><label for="copyCalculatedFields" class="ctd-option-label">Copy Calculated Fields</label></div>
+          <span class="ctd-option-copy">Include calculated source values in the copy.</span>
+        </div>
+        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyGridRows')?.value">
+          <div class="ctd-option-head"><p-checkbox formControlName="copyGridRows" binary="true" inputId="copyGridRows"></p-checkbox><label for="copyGridRows" class="ctd-option-label">Copy Grid Rows</label></div>
+          <span class="ctd-option-copy">Copy rows from mapped source grids into target grids.</span>
+        </div>
+        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('startWorkflow')?.value">
+          <div class="ctd-option-head"><p-checkbox formControlName="startWorkflow" binary="true" inputId="startWorkflow"></p-checkbox><label for="startWorkflow" class="ctd-option-label">Start Workflow</label></div>
+          <span class="ctd-option-copy">Start the workflow automatically after the copy completes.</span>
+        </div>
+        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('linkDocuments')?.value">
+          <div class="ctd-option-head"><p-checkbox formControlName="linkDocuments" binary="true" inputId="linkDocuments"></p-checkbox><label for="linkDocuments" class="ctd-option-label">Link Documents</label></div>
+          <span class="ctd-option-copy">Create a relationship between source and target documents.</span>
+        </div>
+        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyMetadata')?.value">
+          <div class="ctd-option-head"><p-checkbox formControlName="copyMetadata" binary="true" inputId="copyMetadata"></p-checkbox><label for="copyMetadata" class="ctd-option-label">Copy Metadata</label></div>
+          <span class="ctd-option-copy">Copy metadata values from the source document.</span>
+        </div>
+        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyAttachments')?.value">
+          <div class="ctd-option-head"><p-checkbox formControlName="copyAttachments" binary="true" inputId="copyAttachments"></p-checkbox><label for="copyAttachments" class="ctd-option-label">Copy Attachments</label></div>
+          <span class="ctd-option-copy">Copy attachments from the source document.</span>
+        </div>
+        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('overrideTargetDefaults')?.value">
+          <div class="ctd-option-head"><p-checkbox formControlName="overrideTargetDefaults" binary="true" inputId="overrideTargetDefaults"></p-checkbox><label for="overrideTargetDefaults" class="ctd-option-label">Override Target Defaults</label></div>
+          <span class="ctd-option-copy">Replace target defaults with incoming mapped values.</span>
+        </div>
+      </div>
+    </div>
+
+    <p-panel header="Field Mappings" [toggleable]="true" [collapsed]="false" styleClass="ctd-panel-shell">
+      <div formArrayName="fieldMappings" class="ctd-panel-body">
+        <div class="ctd-panel-copy">Map source fields into matching target fields.</div>
+        <div class="ctd-mapping-empty" *ngIf="fieldMappingsArray.length === 0">No field mappings added yet.</div>
+        <div *ngFor="let mapping of fieldMappingsArray.controls; let i = index" [formGroupName]="i" class="ctd-mapping-card">
+          <div class="ctd-mapping-row">
+            <div class="ctd-mapping-field"><label>Source Field</label><select formControlName="sourceFieldCode" class="ctd-control"><option [ngValue]="null">Select source field</option><option *ngFor="let field of sourceFields" [ngValue]="field.fieldCode">{{ field.fieldName }} ({{ field.fieldCode }})</option></select></div>
+            <div class="ctd-mapping-arrow"><i class="pi pi-arrow-right"></i></div>
+            <div class="ctd-mapping-field"><label>Target Field</label><select formControlName="targetFieldCode" class="ctd-control"><option [ngValue]="null">Select target field</option><option *ngFor="let field of targetFields" [ngValue]="field.fieldCode">{{ field.fieldName }} ({{ field.fieldCode }})</option></select></div>
+            <button type="button" class="ctd-icon-btn ctd-icon-btn-delete" (click)="removeFieldMapping(i)"><i class="pi pi-trash"></i></button>
+          </div>
+        </div>
+        <button type="button" class="ctd-inline-add" (click)="addFieldMapping()"><i class="pi pi-plus"></i><span>Add Field Mapping</span></button>
+      </div>
+    </p-panel>
+
+    <p-panel header="Grid Mappings" [toggleable]="true" [collapsed]="true" styleClass="ctd-panel-shell">
+      <div formArrayName="gridMappings" class="ctd-panel-body">
+        <div class="ctd-panel-copy">Match source grids with target grids before copying row data.</div>
+        <div class="ctd-mapping-empty" *ngIf="gridMappingsArray.length === 0">No grid mappings added yet.</div>
+        <div *ngFor="let mapping of gridMappingsArray.controls; let i = index" [formGroupName]="i" class="ctd-mapping-card">
+          <div class="ctd-mapping-row">
+            <div class="ctd-mapping-field"><label>Source Grid</label><select formControlName="sourceGridCode" class="ctd-control"><option [ngValue]="null">Select source grid</option><option *ngFor="let grid of sourceGrids" [ngValue]="grid.gridCode">{{ grid.gridName }} ({{ grid.gridCode }})</option></select></div>
+            <div class="ctd-mapping-arrow"><i class="pi pi-arrow-right"></i></div>
+            <div class="ctd-mapping-field"><label>Target Grid</label><select formControlName="targetGridCode" class="ctd-control"><option [ngValue]="null">Select target grid</option><option *ngFor="let grid of targetGrids" [ngValue]="grid.gridCode">{{ grid.gridName }} ({{ grid.gridCode }})</option></select></div>
+            <button type="button" class="ctd-icon-btn ctd-icon-btn-delete" (click)="removeGridMapping(i)"><i class="pi pi-trash"></i></button>
+          </div>
+        </div>
+        <button type="button" class="ctd-inline-add" (click)="addGridMapping()"><i class="pi pi-plus"></i><span>Add Grid Mapping</span></button>
+      </div>
+    </p-panel>
+
+    <p-panel header="Metadata Fields" [toggleable]="true" [collapsed]="true" styleClass="ctd-panel-shell" *ngIf="copyForm.get('copyMetadata')?.value">
+      <div formArrayName="metadataFields" class="ctd-panel-body">
+        <div class="ctd-panel-copy">List the metadata keys that should be copied to the target document.</div>
+        <div class="ctd-mapping-empty" *ngIf="metadataFieldsArray.length === 0">No metadata fields selected yet.</div>
+        <div *ngFor="let field of metadataFieldsArray.controls; let i = index" class="ctd-metadata-row">
+          <input type="text" pInputText [formControlName]="i" class="ctd-control" placeholder="Metadata field name" />
+          <button type="button" class="ctd-icon-btn ctd-icon-btn-delete" (click)="removeMetadataField(i)"><i class="pi pi-trash"></i></button>
+        </div>
+        <button type="button" class="ctd-inline-add" (click)="addMetadataField()"><i class="pi pi-plus"></i><span>Add Metadata Field</span></button>
+      </div>
+    </p-panel>
+
+    <div class="ctd-dialog-error" *ngIf="dialogErrorMessage">{{ dialogErrorMessage }}</div>
+
+    <div class="ctd-dialog-actions">
+      <button type="button" class="ctd-btn ctd-btn-secondary" (click)="closeConfigDialog()">Cancel</button>
+      <button type="submit" class="ctd-btn ctd-btn-primary" [disabled]="loading">
+        <i class="pi" [ngClass]="editingSetupId ? 'pi-save' : 'pi-plus'"></i>
+        <span>{{ editingSetupId ? 'Save Changes' : 'Create Setup' }}</span>
+      </button>
+    </div>
+  </form>
+</app-dialog-shell>

@@ -1,74 +1,157 @@
-<div class="page">
-  <div class="header">
-    <div>
-      <h2>Document Series</h2>
-      <p>Manage configured numbering series across projects.</p>
-    </div>
-    <div class="actions">
-      <button pButton type="button" icon="pi pi-plus" label="New Series" (click)="openCreateDialog()" [disabled]="loadingLookups"></button>
-      <button pButton type="button" icon="pi pi-refresh" label="Refresh" (click)="loadSeries()" [disabled]="loading"></button>
-      <a pButton routerLink="/document-types" class="p-button-outlined">Manage in Document Types</a>
-    </div>
-  </div>
+<div class="document-series-page">
+  <section class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <div>
+          <h1 class="page-title">Document Series</h1>
+          <p class="page-subtitle">Manage configured numbering series across projects.</p>
+        </div>
+      </div>
 
-  <p-table [value]="series" [loading]="loading" styleClass="p-datatable-sm">
-    <ng-template pTemplate="header">
-      <tr>
-        <th>Series</th>
-        <th>Template</th>
-        <th>Project</th>
-        <th>Next</th>
-        <th>Reset</th>
-        <th>Generate On</th>
-        <th>Default</th>
-        <th>Status</th>
-        <th>Actions</th>
-      </tr>
-    </ng-template>
-    <ng-template pTemplate="body" let-item>
-      <tr>
-        <td>{{ item.seriesName || item.seriesCode }}</td>
-        <td>
-          <code>{{ getSeriesTemplate(item) }}</code>
-          <div class="preview-text">Preview: {{ getSeriesPreview(item) }}</div>
-        </td>
-        <td>{{ item.projectName || getProjectName(item.projectId) }}</td>
-        <td>{{ item.nextNumber || item.sequenceStart || 1 }}</td>
-        <td>{{ item.resetPolicy || 'Yearly' }}</td>
-        <td>{{ item.generateOn || 'Submit' }}</td>
-        <td>
-          <span class="badge badge-default" *ngIf="item.isDefault">Default</span>
-          <span *ngIf="!item.isDefault">-</span>
-        </td>
-        <td>
-          <span class="status-chip" [class.active]="item.isActive" [class.inactive]="!item.isActive">
-            {{ item.isActive ? 'Active' : 'Inactive' }}
-          </span>
-        </td>
-        <td class="actions-cell">
-          <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-star" (click)="setDefault(item)" [disabled]="item.isDefault" pTooltip="Set Default"></button>
-          <button pButton type="button" class="p-button-text p-button-sm" [icon]="item.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'" (click)="toggleStatus(item)" [pTooltip]="item.isActive ? 'Deactivate' : 'Activate'"></button>
-          <button pButton type="button" class="p-button-text p-button-sm" icon="pi pi-pencil" (click)="openEditDialog(item)" pTooltip="Edit"></button>
-          <button pButton type="button" class="p-button-text p-button-sm p-button-danger" icon="pi pi-trash" (click)="deleteSeries(item)" pTooltip="Delete"></button>
-        </td>
-      </tr>
-    </ng-template>
-  </p-table>
+      <div class="nav-right">
+        <button type="button" class="btn-secondary" (click)="loadSeries()" [disabled]="loading">
+          <i class="pi pi-refresh"></i>
+          <span>Refresh</span>
+        </button>
+
+        <a routerLink="/document-types" class="btn-secondary">
+          <i class="pi pi-folder-open"></i>
+          <span>Manage in Document Types</span>
+        </a>
+
+        <button type="button" class="btn-primary" (click)="openCreateDialog()" [disabled]="loadingLookups">
+          <i class="pi pi-plus"></i>
+          <span>New Series</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <app-table-shell [title]="'Configured Series'" icon="pi pi-hashtag">
+    <div class="table-wrapper document-series-shell">
+      <p-table [value]="series" [loading]="loading" styleClass="p-datatable-sm document-series-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Series</th>
+            <th>Template</th>
+            <th>Project</th>
+            <th>Next</th>
+            <th>Reset</th>
+            <th>Generate On</th>
+            <th>Default</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-item>
+          <tr>
+            <td class="series-cell">
+              <div class="series-name">{{ item.seriesName || item.seriesCode }}</div>
+              <div class="series-code">{{ item.seriesCode || 'SERIES' }}</div>
+            </td>
+
+            <td class="template-cell">
+              <code class="series-template">{{ getSeriesTemplate(item) }}</code>
+              <div class="preview-text">{{ getSeriesPreview(item) }}</div>
+            </td>
+
+            <td>
+              <span class="project-pill">{{ item.projectName || getProjectName(item.projectId) }}</span>
+            </td>
+
+            <td>{{ item.nextNumber || item.sequenceStart || 1 }}</td>
+            <td>{{ item.resetPolicy || 'Yearly' }}</td>
+            <td>{{ item.generateOn || 'Submit' }}</td>
+
+            <td>
+              <span class="badge badge-success" *ngIf="item.isDefault">Default</span>
+              <span class="muted-value" *ngIf="!item.isDefault">No</span>
+            </td>
+
+            <td>
+              <span class="status-badge" [ngClass]="item.isActive ? 'status-active' : 'status-inactive'">
+                {{ item.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+
+            <td class="actions-cell text-end">
+              <div class="actions-menu">
+                <button
+                  type="button"
+                  class="action-btn action-default"
+                  (click)="setDefault(item)"
+                  [disabled]="item.isDefault"
+                  pTooltip="Set Default">
+                  <i class="pi pi-star"></i>
+                </button>
+
+                <button
+                  type="button"
+                  class="action-btn action-toggle"
+                  (click)="toggleStatus(item)"
+                  [pTooltip]="item.isActive ? 'Deactivate' : 'Activate'">
+                  <i [class]="item.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'"></i>
+                </button>
+
+                <button
+                  type="button"
+                  class="action-btn action-edit"
+                  (click)="openEditDialog(item)"
+                  pTooltip="Edit">
+                  <i class="pi pi-pencil"></i>
+                </button>
+
+                <button
+                  type="button"
+                  class="action-btn action-delete"
+                  (click)="deleteSeries(item)"
+                  pTooltip="Delete">
+                  <i class="pi pi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="9">
+              <div class="ds-empty-state">
+                <div class="empty-icon">
+                  <i class="pi pi-inbox"></i>
+                </div>
+                <h3>No document series yet</h3>
+                <p>Create the first numbering series to manage generated document numbers.</p>
+                <button type="button" class="btn-primary" (click)="openCreateDialog()" [disabled]="loadingLookups">
+                  <i class="pi pi-plus"></i>
+                  <span>Create Series</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+  </app-table-shell>
 </div>
 
-<p-dialog
+<app-dialog-shell
   [(visible)]="showFormDialog"
-  [modal]="true"
+  [header]="(editingSeries ? 'Edit' : 'Create') + ' Document Series'"
+  [style]="{ width: '760px', maxWidth: '96vw' }"
   [draggable]="false"
   [resizable]="false"
-  [header]="(editingSeries ? 'Edit' : 'Create') + ' Document Series'"
-  [style]="{ width: '680px' }"
-  (onHide)="closeDialog()">
-  <form [formGroup]="seriesForm" (ngSubmit)="saveSeries()">
-    <div class="form-grid">
+  [dismissableMask]="true"
+  [closeOnEscape]="true"
+  styleClass="document-series-dialog"
+  (onHide)="closeDialog()"
+>
+  <form [formGroup]="seriesForm" (ngSubmit)="saveSeries()" class="document-series-form">
+    <div class="form-grid ds-form-grid">
       <div class="form-group">
-        <label for="projectId">Project <span class="required">*</span></label>
-        <select id="projectId" formControlName="projectId" class="p-inputtext w-full">
+        <label class="ds-label" for="projectId">Project <span class="required">*</span></label>
+        <select id="projectId" formControlName="projectId" class="ds-control">
           <option [ngValue]="null">Select Project</option>
           <option *ngFor="let project of projects" [ngValue]="project.id">
             {{ project.name }} ({{ project.code }})
@@ -77,76 +160,82 @@
       </div>
 
       <div class="form-group">
-        <label for="seriesName">Series Name <span class="required">*</span></label>
-        <input id="seriesName" type="text" pInputText formControlName="seriesName" />
+        <label class="ds-label" for="seriesName">Series Name <span class="required">*</span></label>
+        <input id="seriesName" type="text" pInputText formControlName="seriesName" class="w-full" />
       </div>
 
       <div class="form-group">
-        <label for="templatePreset">Template Preset</label>
+        <label class="ds-label" for="templatePreset">Template Preset</label>
         <select
           id="templatePreset"
           formControlName="templatePreset"
-          class="p-inputtext w-full"
-          (change)="onTemplatePresetChange($any($event.target).value)">
+          class="ds-control">
           <option *ngFor="let preset of templatePresets" [ngValue]="preset">{{ preset }}</option>
           <option [ngValue]="customTemplateValue">Custom</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label for="template">Template <span class="required">*</span></label>
-        <input id="template" type="text" pInputText formControlName="template" placeholder="PR-{PROJECT}-{YYYY}-{SEQ}" />
+        <label class="ds-label" for="template">Template <span class="required">*</span></label>
+        <input id="template" type="text" pInputText formControlName="template" class="w-full" placeholder="PR-{PROJECT}-{YYYY}-{SEQ}" />
         <small class="hint">Supported: {{ supportedSeriesPlaceholders.join(', ') }}</small>
         <small class="hint" *ngIf="seriesForm.get('template')?.value">Preview: {{ getSeriesPreview() }}</small>
       </div>
 
       <div class="form-group">
-        <label for="sequenceStart">Sequence Start <span class="required">*</span></label>
+        <label class="ds-label" for="sequenceStart">Sequence Start <span class="required">*</span></label>
         <p-inputNumber id="sequenceStart" formControlName="sequenceStart" [min]="1" [showButtons]="true"></p-inputNumber>
       </div>
 
       <div class="form-group">
-        <label for="sequencePadding">Sequence Padding <span class="required">*</span></label>
+        <label class="ds-label" for="sequencePadding">Sequence Padding <span class="required">*</span></label>
         <p-inputNumber id="sequencePadding" formControlName="sequencePadding" [min]="1" [max]="10" [showButtons]="true"></p-inputNumber>
       </div>
 
       <div class="form-group">
-        <label for="resetPolicy">Reset Policy <span class="required">*</span></label>
-        <select id="resetPolicy" formControlName="resetPolicy" class="p-inputtext w-full">
+        <label class="ds-label" for="resetPolicy">Reset Policy <span class="required">*</span></label>
+        <select id="resetPolicy" formControlName="resetPolicy" class="ds-control">
           <option *ngFor="let option of resetPolicyOptions" [ngValue]="option">{{ option }}</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label for="generateOn">Generate On <span class="required">*</span></label>
-        <select id="generateOn" formControlName="generateOn" class="p-inputtext w-full">
+        <label class="ds-label" for="generateOn">Generate On <span class="required">*</span></label>
+        <select id="generateOn" formControlName="generateOn" class="ds-control">
           <option *ngFor="let option of generateOnOptions" [ngValue]="option">{{ option }}</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label for="nextNumber">Current Next Seq <span class="required">*</span></label>
+        <label class="ds-label" for="nextNumber">Current Next Seq <span class="required">*</span></label>
         <p-inputNumber id="nextNumber" formControlName="nextNumber" [min]="1" [showButtons]="true"></p-inputNumber>
       </div>
     </div>
 
-    <div class="checkbox-row">
-      <label class="checkbox-label">
-        <p-checkbox formControlName="isDefault" [binary]="true" inputId="isDefault"></p-checkbox>
-        <span>Set as default</span>
-      </label>
-      <label class="checkbox-label">
-        <p-checkbox formControlName="isActive" [binary]="true" inputId="isActive"></p-checkbox>
-        <span>Active</span>
-      </label>
+    <div class="ds-options-row">
+      <div class="ds-option-card">
+        <div class="ds-option-head">
+          <p-checkbox formControlName="isDefault" [binary]="true" inputId="isDefault"></p-checkbox>
+          <label class="ds-option-label" for="isDefault">Set as default</label>
+        </div>
+        <span class="ds-option-copy">Use this series as the default numbering option for the selected project.</span>
+      </div>
+
+      <div class="ds-option-card">
+        <div class="ds-option-head">
+          <p-checkbox formControlName="isActive" [binary]="true" inputId="isActive"></p-checkbox>
+          <label class="ds-option-label" for="isActive">Active</label>
+        </div>
+        <span class="ds-option-copy">Inactive series remain saved but cannot generate new numbers.</span>
+      </div>
     </div>
 
     <div class="dialog-actions">
-      <button pButton type="button" class="p-button-secondary" label="Cancel" icon="pi pi-times" (click)="closeDialog()" [disabled]="saving"></button>
+      <button pButton type="button" class="p-button-secondary p-button-outlined" label="Cancel" icon="pi pi-times" (click)="closeDialog()" [disabled]="saving"></button>
       <button pButton type="submit" [label]="editingSeries ? 'Update' : 'Create'" [icon]="editingSeries ? 'pi pi-save' : 'pi pi-plus'" [disabled]="saving || seriesForm.invalid" [loading]="saving"></button>
     </div>
   </form>
-</p-dialog>
+</app-dialog-shell>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>

@@ -32,8 +32,6 @@ import {
   UpdateEmailTemplateDto
 } from '../../FormBuilder/services/email-templates.service';
 
-type TemplateCodeOption = { label: string; value: EmailTemplateCode };
-
 @Component({
   selector: 'app-email-templates-manage',
   standalone: true,
@@ -74,14 +72,9 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
   canDeleteEmailTemplates = false;
   canManageEmailTemplates = false;
 
-  templateCodeOptions: TemplateCodeOption[] = [
-    { label: 'SubmissionConfirmation', value: 'SubmissionConfirmation' },
-    { label: 'ApprovalRequired', value: 'ApprovalRequired' },
-    { label: 'ApprovalResult', value: 'ApprovalResult' }
-  ];
+  private readonly defaultTemplateCode: EmailTemplateCode = 'SubmissionConfirmation';
 
   selectedDocumentTypeId: number | null = null;
-  selectedTemplateCode: EmailTemplateCode | null = null;
   includeInactive = false;
   searchTerm = '';
 
@@ -211,10 +204,6 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
   applyFilters(): void {
     let items = [...(this.templates || [])].filter(t => !(t as any)?.isDeleted);
 
-    if (this.selectedTemplateCode) {
-      items = items.filter(t => String(t.templateCode) === String(this.selectedTemplateCode));
-    }
-
     const term = (this.searchTerm || '').trim().toLowerCase();
     if (term) {
       items = items.filter(t =>
@@ -259,7 +248,7 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
     this.form.reset({
       documentTypeId: this.selectedDocumentTypeId,
       templateName: '',
-      templateCode: this.selectedTemplateCode,
+      templateCode: this.defaultTemplateCode,
       subjectTemplate: '',
       bodyTemplateHtml: '',
       smtpConfigId: null,
@@ -320,13 +309,14 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
     }
 
     const v = this.form.value;
+    const templateCode = this.resolveTemplateCode(v.templateCode, this.editing?.templateCode);
     this.loading.save = true;
 
     if (!this.editing) {
       const dto: CreateEmailTemplateDto = {
         documentTypeId: Number(v.documentTypeId),
         templateName: String(v.templateName).trim(),
-        templateCode: String(v.templateCode),
+        templateCode,
         subjectTemplate: String(v.subjectTemplate),
         bodyTemplateHtml: String(v.bodyTemplateHtml),
         smtpConfigId: Number(v.smtpConfigId),
@@ -353,7 +343,7 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
     const dto: UpdateEmailTemplateDto = {
       documentTypeId: Number(v.documentTypeId),
       templateName: String(v.templateName).trim(),
-      templateCode: String(v.templateCode),
+      templateCode,
       subjectTemplate: String(v.subjectTemplate),
       bodyTemplateHtml: String(v.bodyTemplateHtml),
       smtpConfigId: Number(v.smtpConfigId),
@@ -467,6 +457,11 @@ export class EmailTemplatesManageComponent implements OnInit, OnDestroy {
       }
     });
     this.subs.push(sub);
+  }
+
+  private resolveTemplateCode(formValue: unknown, fallbackCode?: string | null): string {
+    const raw = String(formValue ?? fallbackCode ?? this.defaultTemplateCode).trim();
+    return raw || this.defaultTemplateCode;
   }
 }
 

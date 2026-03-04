@@ -457,22 +457,23 @@ export interface CopyToDocumentResultDto {
  * ✅ New: Added for direct API usage
  */
 export interface CopyToDocumentActionDto {
-  // الحقول المطلوبة الجديدة
-  sourceDocumentTypeId: number;  // مطلوب - جديد
-  sourceFormId: number;          // مطلوب - كان اختياري
-  
-  // الحقول الموجودة
-  targetDocumentTypeId: number;
-  targetFormId: number;
-  createNewDocument: boolean;
-  targetDocumentId?: number;
-  
-  // الحقل الجديد
-  initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
-  
-  // Field Mapping
-  fieldMapping: { [sourceFieldCode: string]: string };  // SourceFieldCode -> TargetFieldCode
-  gridMapping?: { [sourceGridCode: string]: string };
+ // الحقول المطلوبة الجديدة
+ sourceDocumentTypeId: number;  // مطلوب - جديد
+ sourceFormId: number;          // مطلوب - كان اختياري
+ 
+ // الحقول الموجودة
+ targetDocumentTypeId: number;
+ targetFormId: number;
+ createNewDocument: boolean;
+ targetDocumentId?: number;
+ 
+ // الحقل الجديد
+ initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
+ triggerEvent?: 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentApproved' | 'OnRuleMatched';
+ 
+ // Field Mapping
+ fieldMapping: { [sourceFieldCode: string]: string };  // SourceFieldCode -> TargetFieldCode
+ gridMapping?: { [sourceGridCode: string]: string };
   
   // Options
   copyCalculatedFields: boolean;
@@ -576,6 +577,31 @@ export interface CopyToDocumentAuditResponse {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+export interface CopyToDocumentSetupDto {
+  id: number;
+  ruleId: number;
+  setupName: string;
+  sourceDocumentTypeName?: string;
+  sourceFormName?: string;
+  targetDocumentTypeName?: string;
+  targetFormName?: string;
+  config: CopyToDocumentActionDto;
+  isActive: boolean;
+  executionOrder: number;
+  createdDate: string;
+  updatedDate?: string | null;
+}
+
+export interface CreateCopyToDocumentSetupRequestDto {
+  setupName: string;
+  config: CopyToDocumentActionDto;
+  isActive?: boolean;
+  executionOrder?: number;
+}
+
+export interface UpdateCopyToDocumentSetupRequestDto extends CreateCopyToDocumentSetupRequestDto {
 }
 
 /**

@@ -1,28 +1,25 @@
-<c-container [fluid]="true" class="border-bottom px-4">
-  <!-- Main nav (Admin only) -->
-  <c-header-nav class="d-none d-md-flex" *ngIf="(authService.role() || '').toLowerCase() === 'administration' || (authService.role() || '').toLowerCase() === 'admin'">
-    <c-nav-item><a cNavLink routerLink="/dashboard" routerLinkActive="active">Dashboard</a></c-nav-item>
-    <c-nav-item><a cNavLink routerLink="/users" routerLinkActive="active">Users</a></c-nav-item>
-    <c-nav-item><a cNavLink routerLink="/settings" routerLinkActive="active">Settings</a></c-nav-item>
-  </c-header-nav>
+<c-container [fluid]="true" class="header-container px-4">
+  <div class="header-shell">
+    <div class="header-actions">
+      <c-header-nav class="header-bell-nav" *ngIf="isAdminUser()">
+        <app-notification-bell></app-notification-bell>
+      </c-header-nav>
 
-  <!-- Notification Bell (Admin only) -->
-  <c-header-nav class="me-2" *ngIf="(authService.role() || '').toLowerCase() === 'administration' || (authService.role() || '').toLowerCase() === 'admin'">
-    <app-notification-bell></app-notification-bell>
-  </c-header-nav>
-
-  <!-- User dropdown -->
-  <c-header-nav class="mx-0">
-    <c-dropdown [popperOptions]="{ placement: 'bottom-start' }" variant="nav-item">
-      <button [caret]="false" cDropdownToggle class="py-0 pe-0" aria-label="Open user menu">
-        <c-avatar shape="rounded-1" size="md" textColor="primary"></c-avatar>
-        <span class="ms-2">{{ authService.userName() || 'User' }}</span>
-      </button>
-      <ul cDropdownMenu class="pt-0 w-auto">
-        <li><h6 cDropdownHeader class="bg-body-secondary text-body-secondary fw-semibold py-2 rounded-top">Account</h6></li>
-        <li><a cDropdownItem (click)="logout()">Logout</a></li>
-      </ul>
-    </c-dropdown>
-  </c-header-nav>
+      <c-header-nav class="header-user-nav">
+        <c-dropdown [popperOptions]="{ placement: 'bottom-end' }" variant="nav-item">
+          <button [caret]="false" cDropdownToggle class="user-menu-trigger" aria-label="Open user menu">
+            <span class="user-avatar-fallback">
+              {{ (authService.userName() || 'U').charAt(0).toUpperCase() }}
+            </span>
+            <span class="user-name">{{ authService.userName() || 'User' }}</span>
+          </button>
+          <ul cDropdownMenu class="pt-0 user-menu-dropdown">
+            <li><h6 cDropdownHeader class="user-menu-header">Account</h6></li>
+            <li><a cDropdownItem (click)="logout()">Logout</a></li>
+          </ul>
+        </c-dropdown>
+      </c-header-nav>
+    </div>
+  </div>
 </c-container>
 

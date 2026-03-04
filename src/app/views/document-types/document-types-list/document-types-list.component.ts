@@ -1506,7 +1506,14 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   }
 
   private generateSeriesCodeForCompatibility(template: string, seriesName: string): string {
-    const staticPart = template.replace(/\{[A-Z]+\}/g, '').replace(/[^A-Za-z0-9\-_\/]/g, '');
+    const staticPart = template
+      .replace(/\{[A-Z]+\}/g, '')
+      .replace(/[^A-Za-z0-9\-_\/]/g, '')
+      .replace(/-{2,}/g, '-')
+      .replace(/_{2,}/g, '_')
+      .replace(/\/{2,}/g, '/')
+      .replace(/^[-_/]+|[-_/]+$/g, '');
+
     if (staticPart) {
       return staticPart.slice(0, 50);
     }

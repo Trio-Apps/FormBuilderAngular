@@ -10,7 +10,7 @@
         </button>
         <div class="nav-title-section">
           <h1 class="page-title">Email Templates</h1>
-          <p class="page-subtitle">Manage templates (DocumentType + TemplateCode) and link to SMTP</p>
+          <p class="page-subtitle">Manage email templates and link them to SMTP configs</p>
         </div>
       </div>
       <div class="nav-right">
@@ -74,17 +74,6 @@
           placeholder="Document Type"
           [(ngModel)]="selectedDocumentTypeId"
           (onChange)="loadTemplates()"
-          [style]="{ width: '260px' }"
-        ></p-select>
-
-        <p-select
-          [options]="templateCodeOptions"
-          optionLabel="label"
-          optionValue="value"
-          [showClear]="true"
-          placeholder="Template Code"
-          [(ngModel)]="selectedTemplateCode"
-          (onChange)="applyFilters()"
           [style]="{ width: '260px' }"
         ></p-select>
 
@@ -208,37 +197,27 @@
   <app-dialog-shell
     [(visible)]="showModal"
     [header]="editing ? 'Edit Email Template' : 'Create Email Template'"
-    [style]="{ width: '860px' }"
+    [style]="{ width: '760px', maxWidth: '96vw' }"
+    [draggable]="false"
+    [resizable]="false"
+    [dismissableMask]="true"
+    [closeOnEscape]="true"
+    styleClass="email-template-dialog"
   >
-    <form [formGroup]="form" class="form-grid">
+    <form [formGroup]="form" class="form-grid email-template-form">
       <div class="help-box">
         <div><strong>Placeholders</strong>: use <code>{{'{{DocumentNumber}}'}}</code>, <code>{{'{{SubmittedBy}}'}}</code>, …</div>
         <div><strong>Conditional</strong>: <code>{{'{{#if Comments}}'}}...{{'{{/if}}'}}</code> renders only when value exists.</div>
       </div>
 
-      <div class="form-row two-cols">
-        <div class="col">
-          <label class="form-label">Document Type *</label>
-          <p-select
-            [options]="documentTypes"
-            optionLabel="name"
-            optionValue="id"
-            placeholder="Select document type"
-            formControlName="documentTypeId"
-            [style]="{ width: '100%' }"
-          ></p-select>
-        </div>
-        <div class="col">
-          <label class="form-label">Template Code *</label>
-          <p-select
-            [options]="templateCodeOptions"
-            optionLabel="label"
-            optionValue="value"
-            placeholder="Select code"
-            formControlName="templateCode"
-            [style]="{ width: '100%' }"
-          ></p-select>
-        </div>
+      <div class="form-row">
+        <label class="form-label">Document Type *</label>
+        <select class="form-control" formControlName="documentTypeId">
+          <option [ngValue]="null">Select document type</option>
+          <option *ngFor="let documentType of documentTypes" [ngValue]="documentType.id">
+            {{ documentType.name }}
+          </option>
+        </select>
       </div>
 
       <div class="form-row">
@@ -248,14 +227,12 @@
 
       <div class="form-row">
         <label class="form-label">SMTP Config *</label>
-        <p-select
-          [options]="smtpConfigs"
-          optionLabel="name"
-          optionValue="id"
-          placeholder="Select SMTP config"
-          formControlName="smtpConfigId"
-          [style]="{ width: '100%' }"
-        ></p-select>
+        <select class="form-control" formControlName="smtpConfigId">
+          <option [ngValue]="null">Select SMTP config</option>
+          <option *ngFor="let smtpConfig of smtpConfigs" [ngValue]="smtpConfig.id">
+            {{ smtpConfig.name }}
+          </option>
+        </select>
       </div>
 
       <div class="form-row">

@@ -21,6 +21,7 @@ import {
 
 import { DefaultFooterComponent, DefaultHeaderComponent } from './';
 import { navItems } from './_nav';
+import { iconSubset } from '../../icons/icon-subset';
 import { AuthService } from '../../auth/auth.service';
 import { DocumentTypesService } from '../../views/FormBuilder/services/document-types.service';
 import { DocumentType } from '../../views/FormBuilder/form-builder/models/document-types.model';
@@ -63,6 +64,12 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
   private permissionsSnapshot: string[] = [];
   // Flag to prevent sidebar updates after initial load
   private sidebarInitialized = false;
+  private readonly sidebarIconNames = new Set(
+    Object.keys(iconSubset).flatMap(iconName => [
+      iconName,
+      iconName.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()
+    ])
+  );
 
   constructor(
     private authService: AuthService,
@@ -568,7 +575,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
                         subMenuChildren.push({
                           name: doc.documentTypeName || doc.documentTypeCode || `Document ${doc.documentTypeId}`,
                           url: `/document-types/${doc.documentTypeId}/submissions`,
-                          iconComponent: { name: 'cil-file' }
+                          iconComponent: { name: 'cil-description' }
                         });
                       }
                     });
@@ -614,7 +621,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
                 menuChildren.push({
                   name: doc.documentTypeName || `Document ${doc.documentTypeId}`,
                   url: `/document-types/${doc.documentTypeId}/submissions`,
-                  iconComponent: { name: 'cil-file' }
+                  iconComponent: { name: 'cil-description' }
                 });
               }
             });
@@ -623,7 +630,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         // Add menu to sidebar
         const menuItem: INavData = {
           name: menu.name || menu.foreignName || `Menu ${menu.id}`,
-          iconComponent: { name: menu.icon || 'cil-folder' },
+          iconComponent: { name: this.resolveSidebarIcon(menu.icon) },
           ...(menuChildren.length > 0 ? { children: menuChildren } : {
             url: `/dashboard-menus?menuId=${menu.id}`
           })
@@ -633,5 +640,14 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         filteredItems.push(menuItem);
       }
     });
+  }
+
+  private resolveSidebarIcon(iconName?: string | null): string {
+    if (!iconName) {
+      return 'cil-layers';
+    }
+
+    const normalizedIconName = iconName.trim();
+    return this.sidebarIconNames.has(normalizedIconName) ? normalizedIconName : 'cil-layers';
   }
 }

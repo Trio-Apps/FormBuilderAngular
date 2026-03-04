@@ -18,6 +18,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   // Only force anonymous submission flow on public form routes.
   // For authenticated app routes (e.g. /document-types/.../submissions/new), token must be sent.
   const forceAnonymousSubmissionEndpoint = isSubmissionEndpoint && isPublicFormViewRoute;
+  const allow401WithoutRedirect = req.url.includes('/CopyToDocument/setups');
   const isPublicFormEndpoint = req.url.includes('/FormBuilder/code/') || 
                                req.url.includes('/FormBuilder/by-code/') ||
                                req.url.includes('/FormBuilder/public/') ||
@@ -86,6 +87,10 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         
         // Handle 401 Unauthorized - token expired or invalid
         if (error.status === 401) {
+          if (allow401WithoutRedirect) {
+            return throwError(() => error);
+          }
+
           // For public form endpoints, never force redirect to login
           if (isPublicFormEndpoint || isPublicFormViewRoute) {
             if (isDebugMode) {
@@ -173,6 +178,10 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     catchError((error: HttpErrorResponse) => {
       // Handle 401 for requests without token
       if (error.status === 401) {
+        if (allow401WithoutRedirect) {
+          return throwError(() => error);
+        }
+
         // Don't redirect for public form endpoints or when on public form view route
         if (isPublicFormEndpoint || isPublicFormViewRoute) {
           if (isDebugMode) {

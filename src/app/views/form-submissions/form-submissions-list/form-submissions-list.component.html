@@ -104,7 +104,6 @@
             <th>Document Number</th>
             <th>Document Type</th>
             <th>Form Name</th>
-            <th>Series Code</th>
             <th>Submitted By</th>
             <th>Submitted Date</th>
             <th>Status</th>
@@ -131,7 +130,6 @@
               </div>
 </td>
             <td>{{ submission.formName || '-' }}</td>
-            <td><code>{{ submission.seriesCode || '-' }}</code></td>
             <td>{{ submission.submittedByUserName || submission.submittedByUserId || '-' }}</td>
             <td>{{ formatDate(submission.submittedDate) }}</td>
             <td>

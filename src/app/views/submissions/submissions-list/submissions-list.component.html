@@ -1,69 +1,158 @@
 <div class="submissions-page">
-  <div class="page-header">
-    <h2>All Submissions</h2>
-    <button class="btn-refresh" type="button" (click)="loadSubmissions()" [disabled]="loading">
-      {{ loading ? 'Loading...' : 'Refresh' }}
+  <section class="hero-card">
+    <div>
+      <p class="eyebrow">Submission Center</p>
+      <h2>All Submissions</h2>
+      <p class="hero-copy">
+        Review the latest submitted documents, download available reports, and run SAP only where integration is configured.
+      </p>
+    </div>
+
+    <button class="btn-primary" type="button" (click)="loadSubmissions()" [disabled]="loading">
+      {{ loading ? 'Refreshing...' : 'Refresh' }}
     </button>
+  </section>
+
+  <section class="summary-grid">
+    <article class="summary-card">
+      <span class="summary-label">Total Submissions</span>
+      <strong class="summary-value">{{ totalSubmissions }}</strong>
+      <span class="summary-note">Current records in the queue</span>
+    </article>
+
+    <article class="summary-card">
+      <span class="summary-label">SAP Ready</span>
+      <strong class="summary-value">{{ sapReadyCount }}</strong>
+      <span class="summary-note">Submissions with active SAP integration</span>
+    </article>
+
+    <article class="summary-card">
+      <span class="summary-label">SAP Disabled</span>
+      <strong class="summary-value">{{ sapDisabledCount }}</strong>
+      <span class="summary-note">No active SAP integration configured</span>
+    </article>
+  </section>
+
+  <div *ngIf="pageError" class="feedback-banner feedback-banner--error">
+    {{ pageError }}
   </div>
 
-  <div *ngIf="loading" class="loading">Loading submissions...</div>
+  <section *ngIf="loading" class="state-card">
+    <strong>Loading submissions...</strong>
+    <span>Fetching the latest submission list and available report layouts.</span>
+  </section>
 
-  <div *ngIf="!loading && submissions.length === 0" class="empty">
-    No submissions found.
-  </div>
+  <section *ngIf="!loading && submissions.length === 0" class="state-card state-card--empty">
+    <strong>No submissions found.</strong>
+    <span>Once documents are submitted, they will appear here.</span>
+  </section>
 
-  <div *ngIf="!loading && submissions.length > 0" class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Document #</th>
-          <th>Form</th>
-          <th>Document Type</th>
-          <th>Status</th>
-          <th>Last Update</th>
-          <th>Report</th>
-          <th>SAP Test</th>
-          <th>Result</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let s of submissions">
-          <td>{{ s.id }}</td>
-          <td>{{ s.documentNumber || '-' }}</td>
-          <td>{{ s.formName || '-' }}</td>
-          <td>{{ s.documentTypeName || s.documentTypeId }}</td>
-          <td>{{ s.status || '-' }}</td>
-          <td>{{ (s.lastUpdatedDate || s.createdDate || s.submittedDate) | date: 'yyyy-MM-dd HH:mm' }}</td>
-          <td>
-            <button
-              class="btn-pdf"
-              type="button"
-              (click)="downloadPdf(s)"
-              [disabled]="!canDownloadReport(s) || downloadingPdfBySubmission[s.id]"
-              [title]="getReportButtonTitle(s)">
-              {{ getReportButtonText(s) }}
-            </button>
-            <div class="pdf-error" *ngIf="pdfErrorBySubmission[s.id]">{{ pdfErrorBySubmission[s.id] }}</div>
-          </td>
-          <td>
-            <button
-              class="btn-exec"
-              type="button"
-              (click)="executeSap(s.id)"
-              [disabled]="executingBySubmission[s.id]">
-              {{ executingBySubmission[s.id] ? 'Executing...' : 'Execute SAP' }}
-            </button>
-          </td>
-          <td>
-            <div *ngIf="executionResultsBySubmission[s.id] as r" [class.ok]="r.success" [class.fail]="!r.success">
-              <strong>{{ r.status }}</strong>
-              <div *ngIf="r.errorMessage">{{ r.errorMessage }}</div>
-            </div>
-            <span *ngIf="!executionResultsBySubmission[s.id]">-</span>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <app-table-shell *ngIf="!loading && submissions.length > 0" title="Submission Queue">
+    <div table-actions class="table-shell-meta">
+      {{ submissions.length }} configured
+    </div>
+
+    <div class="table-wrap">
+      <table class="submissions-table">
+        <thead>
+          <tr>
+            <th>Submission</th>
+            <th>Form</th>
+            <th>Document Type</th>
+            <th>Status</th>
+            <th>Last Update</th>
+            <th>Report</th>
+            <th>SAP Integration</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let submission of submissions; trackBy: trackBySubmissionId">
+            <td class="submission-cell">
+              <div class="cell-primary">{{ submission.documentNumber || 'Pending Number' }}</div>
+              <div class="cell-muted">#{{ submission.id }}</div>
+            </td>
+
+            <td>
+              <div class="cell-primary">{{ submission.formName || '-' }}</div>
+              <div class="cell-muted">v{{ submission.version }}</div>
+            </td>
+
+            <td>
+              <div class="cell-primary">{{ submission.documentTypeName || ('Document #' + submission.documentTypeId) }}</div>
+            </td>
+
+            <td>
+              <span class="status-chip" [ngClass]="getStatusClass(submission.status)">
+                {{ submission.status || 'Unknown' }}
+              </span>
+            </td>
+
+            <td>
+              <div class="cell-primary">
+                {{ (submission.lastUpdatedDate || submission.createdDate || submission.submittedDate) | date: 'yyyy-MM-dd' }}
+              </div>
+              <div class="cell-muted">
+                {{ (submission.lastUpdatedDate || submission.createdDate || submission.submittedDate) | date: 'HH:mm' }}
+              </div>
+            </td>
+
+            <td>
+              <div class="action-stack">
+                <button
+                  class="btn-secondary btn-secondary--compact"
+                  type="button"
+                  (click)="downloadPdf(submission)"
+                  [disabled]="!canDownloadReport(submission) || downloadingPdfBySubmission[submission.id]"
+                  [title]="getReportButtonTitle(submission)">
+                  {{ getReportButtonText(submission) }}
+                </button>
+              </div>
+              <div class="inline-error" *ngIf="pdfErrorBySubmission[submission.id]">
+                {{ pdfErrorBySubmission[submission.id] }}
+              </div>
+            </td>
+
+            <td>
+              <div class="sap-inline">
+                <button
+                  *ngIf="submission.sapIntegrationEnabled; else sapDisabledState"
+                  class="btn-secondary btn-secondary--accent btn-secondary--compact"
+                  type="button"
+                  (click)="executeSap(submission)"
+                  [disabled]="!canExecuteSap(submission) || executingBySubmission[submission.id]"
+                  [title]="getSapButtonTitle(submission)">
+                  {{ getSapButtonText(submission) }}
+                </button>
+              </div>
+
+              <ng-template #sapDisabledState>
+                <span class="availability-chip availability-chip--disabled" [title]="getSapButtonTitle(submission)">
+                  SAP Disabled
+                </span>
+              </ng-template>
+            </td>
+
+            <td>
+              <div
+                *ngIf="executionResultsBySubmission[submission.id] as result"
+                class="result-inline"
+                [class.result-inline--ok]="result.success"
+                [class.result-inline--fail]="!result.success"
+                [title]="result.success ? 'SAP request completed successfully.' : (result.errorMessage || 'SAP request failed.')">
+                <strong>{{ result.status }}</strong>
+                <span>
+                  {{ result.success ? 'Completed' : (result.errorMessage || 'Failed') }}
+                </span>
+              </div>
+
+              <span *ngIf="!executionResultsBySubmission[submission.id]" class="cell-muted">
+                No execution
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </app-table-shell>
 </div>

@@ -24,6 +24,7 @@ export interface FormSubmissionDto {
   signatureStatus?: 'not_required' | 'pending' | 'signed' | string;
   docuSignEnvelopeId?: string | null;
   signedAt?: Date | null;
+  sapIntegrationEnabled: boolean;
   createdDate: Date;
   lastUpdatedDate: Date;
 }
@@ -179,6 +180,7 @@ export class FormSubmissionsService {
       signatureStatus: item?.signatureStatus ?? item?.SignatureStatus ?? 'not_required',
       docuSignEnvelopeId: item?.docuSignEnvelopeId ?? item?.DocuSignEnvelopeId ?? null,
       signedAt: item?.signedAt ?? item?.SignedAt ?? null,
+      sapIntegrationEnabled: Boolean(item?.sapIntegrationEnabled ?? item?.SapIntegrationEnabled),
       submittedByUserId: item?.submittedByUserId ?? item?.SubmittedByUserId ?? '',
       submittedByUserName: item?.submittedByUserName ?? item?.SubmittedByUserName ?? '',
       documentNumber: item?.documentNumber ?? item?.DocumentNumber ?? '',
@@ -370,6 +372,7 @@ export class FormSubmissionsService {
                 submittedByUserId: '',
                 submittedDate: new Date(),
                 status: 'Submitted',
+                sapIntegrationEnabled: false,
                 createdDate: new Date(),
                 lastUpdatedDate: new Date(),
                 fieldValues: [],
