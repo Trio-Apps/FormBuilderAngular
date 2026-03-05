@@ -19,6 +19,7 @@ import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { MultiSelectModule } from 'primeng/multiselect';
+import { SelectModule } from 'primeng/select';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { PermissionService } from '../../../services/permission.service';
@@ -44,6 +45,7 @@ import { HasPermissionDirective } from '../../../directives/has-permission.direc
     TableModule,
     PaginatorModule,
     MultiSelectModule,
+    SelectModule,
     TableShellComponent,
     HasPermissionDirective
   ],

@@ -359,6 +359,12 @@
   border-radius: 16px;
   border: 1px solid #e2e8f0;
   background: #f8fafc;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
 }
 
 .ctd-option-strip-card {
@@ -387,6 +393,26 @@
   gap: 0.65rem;
 }
 
+.ctd-check-indicator {
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex: 0 0 1.3rem;
+}
+
+.ctd-check-indicator-active {
+  border-color: #0f766e;
+  background: #0f766e;
+  color: #fff;
+}
+
 .ctd-option-label {
   margin: 0;
   font-size: 0.9rem;
@@ -405,6 +431,28 @@
 .ctd-panel-body {
   display: grid;
   gap: 0.9rem;
+  padding: 1rem;
+}
+
+.ctd-map-section {
+  border-radius: 16px;
+  border: 1px solid #dbe4ee;
+  background: #fff;
+  overflow: hidden;
+}
+
+.ctd-map-header {
+  width: 100%;
+  border: none;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 800;
+  padding: 0.9rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
 }
 
 .ctd-mapping-empty {
@@ -479,34 +527,17 @@
 
 .ctd-dialog-actions {
   justify-content: flex-end;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 0.9rem;
+  margin-top: 0.2rem;
 }
 
 :host ::ng-deep .ctd-dialog-shell.p-dialog {
-  width: min(980px, calc(100vw - 48px)) !important;
+  width: min(760px, calc(100vw - 48px)) !important;
 }
 
 :host ::ng-deep .ctd-dialog-shell.p-dialog .p-dialog-content {
   padding: 1.2rem 1.25rem 1.25rem !important;
-}
-
-:host ::ng-deep .p-panel.ctd-panel-shell {
-  border-radius: 18px;
-  border: 1px solid #dbe4ee;
-  overflow: hidden;
-  box-shadow: none;
-}
-
-:host ::ng-deep .p-panel.ctd-panel-shell .p-panel-header {
-  padding: 0.95rem 1rem;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
-  border-bottom: 1px solid #e2e8f0;
-  color: #0f172a;
-  font-weight: 800;
-}
-
-:host ::ng-deep .p-panel.ctd-panel-shell .p-panel-content {
-  padding: 1rem;
-  background: #fff;
 }
 
 :host ::ng-deep .ctd-setups-table .p-datatable-tbody > tr > td {

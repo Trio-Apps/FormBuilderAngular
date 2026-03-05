@@ -38,11 +38,12 @@ import { PermissionService } from '../../../services/permission.service';
 import { HasPermissionDirective } from '../../../directives/has-permission.directive';
 import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
 import { ApprovalStageAssigneesService, ApprovalStageAssigneeDto } from '../../FormBuilder/services/approval-stage-assignees.service';
-import { ApprovalStageService } from '../../FormBuilder/services/approval-stage.service';
+import { ApprovalStageService, ApprovalStageDto } from '../../FormBuilder/services/approval-stage.service';
 import { Subscription, forkJoin, of, Observable } from 'rxjs';
 import { catchError, finalize, map, switchMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { CopyToDocumentService } from '../../FormBuilder/services/copy-to-document.service';
 
 @Component({
   selector: 'app-form-submissions-list',
@@ -106,11 +107,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   stageAssignmentsCacheLoaded = false;
   // Cache for canApproveReject results to prevent infinite loops
   canApproveRejectCache: Map<number, boolean> = new Map(); // submissionId -> canApproveReject
-  // Cache stage signing requirements: stageId -> requiresAdobeSign
-  stageRequiresSignatureCache: Map<number, boolean> = new Map();
-  stageSignatureConfigLoaded = false;
   loadingSignatureSubmissionId: number | null = null;
+  availableSignatureStages: ApprovalStageDto[] = [];
+  loadingSignatureStages = false;
   loadingReportSubmissionId: number | null = null;
+  loadingCopyToDocumentSubmissionId: number | null = null;
 
   // Loading States
   loading = {
@@ -135,6 +136,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   showSubmissionModal = false;
   showFieldValueModal = false;
   showPreviewModal = false;
+  showSignatureStageModal = false;
   previewFile: FormSubmissionAttachmentDto | null = null;
   previewImageError: boolean = false;
   isViewMode = false; // true for view-only, false for edit mode
@@ -143,6 +145,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   editingFieldValue: FormSubmissionValueDto | null = null;
   editSubmissionValuesForm!: FormGroup; // Form for editing all submission values
   submissionFields: FormFieldDto[] = []; // Fields for the selected submission
+  selectedSubmissionForSignature: FormSubmissionDto | null = null;
+  signatureStageForm!: FormGroup;
 
   // Approve/Reject Modal
   showApproveRejectModal = false;
@@ -202,7 +206,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     private gridService: GridService,
     private stageAssigneesService: ApprovalStageAssigneesService,
     private stageService: ApprovalStageService,
-    private crystalReportsService: CrystalReportsService
+    private crystalReportsService: CrystalReportsService,
+    private copyToDocumentService: CopyToDocumentService
   ) {
     // Initialize forms
     this.submissionForm = this.fb.group({
@@ -233,6 +238,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     // Initialize approve/reject form
     this.approveRejectForm = this.fb.group({
       comments: ['']
+    });
+
+    this.signatureStageForm = this.fb.group({
+      stageId: [null, [Validators.required]]
     });
 
     // Subscribe to tabId changes to update selectedTabId
@@ -311,16 +320,14 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     this.documentTypesService.getAllDocumentTypes().subscribe({
       next: (types: DocumentType[]) => {
         this.documentType = types.find(t => t.id === this.documentTypeId) || null;
-        this.stageRequiresSignatureCache.clear();
-        this.stageSignatureConfigLoaded = false;
+        this.availableSignatureStages = [];
         // Always load forms and series
         this.loadForms();
         this.loadDocumentSeries();
+        this.loadSignatureStageOptions();
         // Load stage assignments cache if workflow exists (for approve/reject fallback)
         if (this.documentType?.approvalWorkflowId) {
           this.loadUserStageAssignmentsCache();
-        } else {
-          this.stageSignatureConfigLoaded = true;
         }
         this.loading.documentType = false;
         this.cdr.detectChanges();
@@ -433,16 +440,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
 
     // ✅ Non-admin users ALWAYS see only their own submissions
     // Admin can toggle "Show Only My Submissions"
-    if (!this.isAdmin || this.showOnlyMySubmissions) {
-      const currentUserId = this.currentUsername || this.authService.userName();
-      if (currentUserId) {
-        filtered = filtered.filter(sub => {
-          const submittedBy = sub.submittedByUserId?.trim().toLowerCase();
-          const submittedByName = sub.submittedByUserName?.trim().toLowerCase();
-          const currentUser = currentUserId.trim().toLowerCase();
-          return submittedBy === currentUser || submittedByName === currentUser;
-        });
-      }
+    if (!this.isAdmin) {
+      const assignedSubmissionIds = new Set((this.userInboxCache || []).map(item => Number(item.submissionId)));
+      filtered = filtered.filter(sub => this.isSubmissionOwner(sub) || assignedSubmissionIds.has(Number(sub.id)));
+    } else if (this.showOnlyMySubmissions) {
+      filtered = filtered.filter(sub => this.isSubmissionOwner(sub));
     }
 
     // Filter by search term
@@ -3645,34 +3647,15 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     return null;
   }
 
-  private loadStageSignatureConfig(): void {
-    if (this.stageSignatureConfigLoaded || !this.documentType?.approvalWorkflowId) {
-      return;
+  private isSubmissionOwner(submission: FormSubmissionDto): boolean {
+    const currentUser = (this.currentUsername || this.storageService.getUsername() || this.authService.userName() || '').trim().toLowerCase();
+    if (!currentUser) {
+      return false;
     }
 
-    // For users without ApprovalStage view permission, avoid 403 loops.
-    if (!this.permissionService.canViewApprovalStages() && !this.isAdmin) {
-      this.stageSignatureConfigLoaded = true;
-      return;
-    }
-
-    const workflowId = this.documentType.approvalWorkflowId;
-    this.stageService.getAllByWorkflowId(workflowId).subscribe({
-      next: (stages) => {
-        this.stageRequiresSignatureCache.clear();
-        (stages || []).forEach((stage) => {
-          if (stage.id && stage.id > 0) {
-            this.stageRequiresSignatureCache.set(stage.id, stage.requiresAdobeSign === true);
-          }
-        });
-        this.stageSignatureConfigLoaded = true;
-        this.cdr.detectChanges();
-      },
-      error: (error) => {
-        console.error('[FormSubmissionsList] Error loading stage signature config:', error);
-        this.stageSignatureConfigLoaded = true;
-      }
-    });
+    const submittedById = (submission.submittedByUserId || '').trim().toLowerCase();
+    const submittedByName = (submission.submittedByUserName || '').trim().toLowerCase();
+    return submittedById === currentUser || submittedByName === currentUser;
   }
 
   canRequestSignature(submission: FormSubmissionDto): boolean {
@@ -3680,32 +3663,18 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       return false;
     }
 
-    // Primary signal: backend already marked this submission as waiting for signature.
-    if ((submission.signatureStatus || '').toLowerCase() === 'pending') {
+    if ((submission.signatureStatus || '').trim().toLowerCase() === 'pending') {
       return true;
     }
 
-    const stageId = Number(submission.stageId || 0);
-    if (!stageId || stageId <= 0) {
+    if (!this.documentType?.approvalWorkflowId) {
       return false;
     }
 
-    if (!this.stageSignatureConfigLoaded) {
-      this.loadStageSignatureConfig();
-      return false;
-    }
-
-    const stageRequiresSignature = this.stageRequiresSignatureCache.get(stageId) === true;
-    if (!stageRequiresSignature) {
-      return false;
-    }
-
-    // Admin can request signature for any stage that requires signing
-    if (this.isAdmin) {
+    if (this.isAdmin || this.isSubmissionOwner(submission)) {
       return true;
     }
 
-    // Stage assignee can request signature for their assigned submission stage
     if (!this.inboxCacheLoaded && this.userInboxCache === null) {
       if (!this.loading.approveReject) {
         this.loadUserInboxCache();
@@ -3714,17 +3683,16 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     }
 
     const inboxItem = this.userInboxCache?.find(item => item.submissionId === submission.id);
-    if (inboxItem && inboxItem.stageId === stageId) {
+    if (inboxItem && inboxItem.stageId && inboxItem.stageId > 0) {
       return true;
     }
 
-    // Fallback: stage assignment cache check
     if (!this.stageAssignmentsCacheLoaded && this.documentType?.approvalWorkflowId) {
       this.loadUserStageAssignmentsCache();
       return false;
     }
 
-    return this.userStageAssignmentsCache.get(stageId) === true;
+    return Array.from(this.userStageAssignmentsCache.values()).some(isAssignee => isAssignee === true);
   }
 
   requestSignature(submission: FormSubmissionDto): void {
@@ -3732,64 +3700,82 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const signatureStatus = (submission.signatureStatus || '').toLowerCase();
+    const signatureStatus = (submission.signatureStatus || '').trim().toLowerCase();
     if (signatureStatus === 'pending') {
-      this.loadingSignatureSubmissionId = submission.id;
-      this.formSubmissionsService.getSubmissionSigningUrlById(submission.id).subscribe({
-        next: (response) => {
-          this.loadingSignatureSubmissionId = null;
-          if (response?.signingUrl) {
-            window.open(response.signingUrl, '_blank', 'noopener,noreferrer');
-            return;
-          }
+      this.openPendingSignature(submission);
+      return;
+    }
 
-          this.messageService.add({
-            severity: 'warn',
-            summary: 'Warning',
-            detail: 'Signing URL is not available for this submission.'
-          });
-          this.cdr.detectChanges();
-        },
-        error: (error) => {
-          this.loadingSignatureSubmissionId = null;
-          console.error('[FormSubmissionsList] Error opening signing URL:', error);
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: error?.error?.message || error?.message || 'Failed to open signing page.'
-          });
-          this.cdr.detectChanges();
-        }
+    if (!this.documentType?.approvalWorkflowId) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'No approval workflow is configured for this document type.'
       });
       return;
     }
 
-    const stageId = Number(submission.stageId || 0);
+    if (!this.availableSignatureStages.length && !this.loadingSignatureStages) {
+      this.loadSignatureStageOptions();
+    }
+
+    const fallbackStageId = Number(submission.signatureStageId || submission.stageId || 0);
+    const defaultStageId = this.availableSignatureStages.some(x => x.id === fallbackStageId)
+      ? fallbackStageId
+      : (this.availableSignatureStages[0]?.id || null);
+
+    this.selectedSubmissionForSignature = submission;
+    this.signatureStageForm.reset({
+      stageId: defaultStageId
+    });
+    this.showSignatureStageModal = true;
+    this.cdr.detectChanges();
+  }
+
+  closeSignatureStageModal(): void {
+    this.showSignatureStageModal = false;
+    this.selectedSubmissionForSignature = null;
+    this.signatureStageForm.reset({ stageId: null });
+  }
+
+  saveSignatureStageRequest(): void {
+    if (!this.selectedSubmissionForSignature?.id) {
+      return;
+    }
+
+    if (this.signatureStageForm.invalid) {
+      this.signatureStageForm.markAllAsTouched();
+      return;
+    }
+
+    const stageId = Number(this.signatureStageForm.get('stageId')?.value || 0);
     if (!stageId || stageId <= 0) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Warning',
-        detail: 'Stage ID is missing for this submission.'
+        detail: 'Please choose a valid stage.'
       });
       return;
     }
 
-    this.loadingSignatureSubmissionId = submission.id;
+    const submissionId = this.selectedSubmissionForSignature.id;
+    this.loadingSignatureSubmissionId = submissionId;
     const requestedByUserId = this.currentUsername || this.storageService.getUsername() || this.authService.userName() || undefined;
 
     this.approvalWorkflowRuntimeService.requestStageSignature({
-      submissionId: submission.id,
+      submissionId,
       stageId,
       requestedByUserId
     }).subscribe({
       next: () => {
         this.loadingSignatureSubmissionId = null;
+        this.closeSignatureStageModal();
         this.messageService.add({
           severity: 'success',
           summary: 'Success',
           detail: 'Signature request sent successfully.'
         });
-        this.cdr.detectChanges();
+        this.loadSubmissions();
       },
       error: (error) => {
         this.loadingSignatureSubmissionId = null;
@@ -3800,6 +3786,127 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
           detail: error?.message || 'Failed to request signature.'
         });
         this.cdr.detectChanges();
+      }
+    });
+  }
+
+  private openPendingSignature(submission: FormSubmissionDto): void {
+    this.loadingSignatureSubmissionId = submission.id;
+    this.formSubmissionsService.getSubmissionSigningUrlById(submission.id).subscribe({
+      next: (response) => {
+        this.loadingSignatureSubmissionId = null;
+        if (response?.signingUrl) {
+          window.open(response.signingUrl, '_blank', 'noopener,noreferrer');
+          return;
+        }
+
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Warning',
+          detail: 'Signing URL is not available for this submission.'
+        });
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        this.loadingSignatureSubmissionId = null;
+        console.error('[FormSubmissionsList] Error opening signing URL:', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: error?.error?.message || error?.message || 'Failed to open signing page.'
+        });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  private loadSignatureStageOptions(): void {
+    if (!this.documentType?.approvalWorkflowId) {
+      this.availableSignatureStages = [];
+      return;
+    }
+
+    this.loadingSignatureStages = true;
+    this.stageService.getAllByWorkflowId(this.documentType.approvalWorkflowId).subscribe({
+      next: (stages) => {
+        this.availableSignatureStages = (stages || [])
+          .filter(stage => stage.isActive !== false && stage.isDeleted !== true)
+          .sort((a, b) => Number(a.stageOrder || 0) - Number(b.stageOrder || 0));
+        this.loadingSignatureStages = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('[FormSubmissionsList] Error loading signature stages:', error);
+        this.availableSignatureStages = [];
+        this.loadingSignatureStages = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  canExecuteManualCopyToDocument(submission: FormSubmissionDto): boolean {
+    if (!submission?.id) return false;
+    if (this.loadingCopyToDocumentSubmissionId === submission.id) return false;
+    const normalizedStatus = (submission.status || '').trim().toLowerCase();
+    return normalizedStatus === 'submitted' || normalizedStatus === 'draft';
+  }
+
+  getManualCopyButtonTitle(submission: FormSubmissionDto): string {
+    if (!this.canExecuteManualCopyToDocument(submission)) {
+      return 'Copy is available only for draft or submitted records.';
+    }
+    return 'Run manual Copy To Document setups for this submission.';
+  }
+
+  executeManualCopyToDocument(submission: FormSubmissionDto): void {
+    if (!this.canExecuteManualCopyToDocument(submission)) {
+      return;
+    }
+
+    this.loadingCopyToDocumentSubmissionId = submission.id;
+
+    this.copyToDocumentService.executeManualSetupsForSubmission(submission.id).pipe(
+      finalize(() => {
+        this.loadingCopyToDocumentSubmissionId = null;
+        this.cdr.detectChanges();
+      })
+    ).subscribe({
+      next: (response) => {
+        const total = Number(response?.total || 0);
+        const successCount = Number(response?.successCount || 0);
+        const failedCount = Number(response?.failedCount || 0);
+
+        if (total === 0) {
+          this.messageService.add({
+            severity: 'info',
+            summary: 'Copy To Document',
+            detail: 'No active manual setups matched this submission.'
+          });
+          return;
+        }
+
+        if (failedCount === 0) {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Copy To Document',
+            detail: `${successCount} setup(s) executed successfully.`
+          });
+          return;
+        }
+
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Copy To Document',
+          detail: `${successCount} succeeded, ${failedCount} failed.`
+        });
+      },
+      error: (error) => {
+        const message = error?.error?.message || error?.message || 'Failed to execute manual copy setups.';
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Copy To Document',
+          detail: message
+        });
       }
     });
   }
@@ -4394,7 +4501,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     
     // Clear canApproveReject cache to force recalculation with new inbox data
     this.canApproveRejectCache.clear();
-    
+
+    // Re-apply submission filtering because non-admin users can also view assigned submissions.
+    this.filterSubmissions();
+
     // Trigger change detection to update approve/reject buttons
     this.cdr.detectChanges();
   }

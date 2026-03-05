@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input } from '@angular/core';
+import { Component, HostBinding, Input } from '@angular/core';
 
 @Component({
   selector: 'app-table-shell',
@@ -9,6 +9,9 @@ import { Component, Input } from '@angular/core';
   styleUrls: ['./table-shell.component.scss']
 })
 export class TableShellComponent {
+  // Prevent native browser tooltip from inherited `title="..."` attribute on host element.
+  @HostBinding('attr.title') hostTitle: string | null = null;
+
   @Input() title = '';
   @Input() icon = '';
 }

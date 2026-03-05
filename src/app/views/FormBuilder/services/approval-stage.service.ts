@@ -30,6 +30,7 @@ export interface ApprovalStageDto {
   isActive?: boolean;
   isDeleted: boolean;
   minimumRequiredAssignees?: number | null;
+  minimumRequiredRejections?: number | null;
   amountFieldCode?: string | null;
   requiresAdobeSign?: boolean;
   workflowName?: string;
@@ -45,6 +46,7 @@ export interface CreateApprovalStageDto {
   isActive?: boolean;
   isDeleted?: boolean;
   minimumRequiredAssignees?: number | null;
+  minimumRequiredRejections?: number | null;
   amountFieldCode?: string | null;
   requiresAdobeSign?: boolean;
 }
@@ -59,6 +61,7 @@ export interface UpdateApprovalStageDto {
   isActive?: boolean;
   isDeleted?: boolean;
   minimumRequiredAssignees?: number | null;
+  minimumRequiredRejections?: number | null;
   amountFieldCode?: string | null;
   requiresAdobeSign?: boolean;
 }
@@ -179,6 +182,7 @@ export class ApprovalStageService {
       isActive: dto.isActive !== undefined ? dto.isActive : true,
       isDeleted: dto.isDeleted !== undefined ? dto.isDeleted : false,
       minimumRequiredAssignees: dto.minimumRequiredAssignees !== undefined ? dto.minimumRequiredAssignees : null,
+      minimumRequiredRejections: dto.minimumRequiredRejections !== undefined ? dto.minimumRequiredRejections : null,
       amountFieldCode: dto.amountFieldCode || null,
       requiresAdobeSign: dto.requiresAdobeSign === true
     };

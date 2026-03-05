@@ -21,9 +21,7 @@ import { FormBuilderDto } from '../../form-builder/models/form-builder-dto.model
 import { FormGridDto } from '../../form-builder/models/grid-dto.model';
 import { PermissionService } from '../../../../services/permission.service';
 import { ButtonModule } from 'primeng/button';
-import { CheckboxModule } from 'primeng/checkbox';
 import { InputTextModule } from 'primeng/inputtext';
-import { PanelModule } from 'primeng/panel';
 import { TableModule } from 'primeng/table';
 import { TooltipModule } from 'primeng/tooltip';
 import { DialogShellComponent } from '../../../../shared/dialog-shell/dialog-shell.component';
@@ -39,9 +37,7 @@ type CopySetupTrigger = 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentA
     FormsModule,
     ReactiveFormsModule,
     ButtonModule,
-    CheckboxModule,
     InputTextModule,
-    PanelModule,
     TableModule,
     TooltipModule,
     DialogShellComponent,
@@ -59,6 +55,9 @@ export class CopyToDocumentComponent implements OnInit {
   deletingSetupId: number | null = null;
   setupLoadError: string | null = null;
   dialogErrorMessage: string | null = null;
+  fieldMappingsCollapsed = false;
+  gridMappingsCollapsed = false;
+  metadataCollapsed = true;
 
   documentTypes: DocumentType[] = [];
   sourceForms: FormBuilderDto[] = [];
@@ -134,6 +133,7 @@ export class CopyToDocumentComponent implements OnInit {
       targetDocumentId: [null],
       initialStatus: ['Draft'],
       triggerEvent: ['OnFormSubmitted'],
+      executeAutomatically: [true],
       copyCalculatedFields: [true],
       copyGridRows: [false],
       startWorkflow: [false],
@@ -292,6 +292,7 @@ export class CopyToDocumentComponent implements OnInit {
         targetDocumentId: config.targetDocumentId ?? null,
         initialStatus: config.initialStatus || 'Draft',
         triggerEvent: config.triggerEvent || 'OnFormSubmitted',
+        executeAutomatically: this.toBoolean((config as any).executeAutomatically ?? (config as any).ExecuteAutomatically, true),
         copyCalculatedFields: this.toBoolean(config.copyCalculatedFields, true),
         copyGridRows: this.toBoolean(config.copyGridRows, false),
         startWorkflow: this.toBoolean(config.startWorkflow, false),
@@ -409,6 +410,10 @@ export class CopyToDocumentComponent implements OnInit {
     return this.triggerOptions.find((item) => item.value === value)?.label || 'On Form Submitted';
   }
 
+  getExecutionLabel(value: any): string {
+    return this.toBoolean(value, true) ? 'Automatic' : 'Manual';
+  }
+
   getMappingSummary(setup: CopyToDocumentSetupDto): string {
     const fieldCount = Object.keys(setup.config?.fieldMapping || {}).length;
     const gridCount = Object.keys(setup.config?.gridMapping || {}).length;
@@ -482,6 +487,7 @@ export class CopyToDocumentComponent implements OnInit {
         targetDocumentId: null,
         initialStatus: 'Draft',
         triggerEvent: 'OnFormSubmitted',
+        executeAutomatically: true,
         copyCalculatedFields: true,
         copyGridRows: false,
         startWorkflow: false,
@@ -499,9 +505,34 @@ export class CopyToDocumentComponent implements OnInit {
     this.targetFields = [];
     this.sourceGrids = [];
     this.targetGrids = [];
+    this.fieldMappingsCollapsed = false;
+    this.gridMappingsCollapsed = false;
+    this.metadataCollapsed = true;
     this.loadSourceForms();
     this.loadTargetForms();
     this.syncTargetDocumentIdValidation(true);
+  }
+
+  toggleOption(controlName: string): void {
+    const control = this.copyForm.get(controlName);
+    if (!control) return;
+    control.setValue(!this.toBoolean(control.value, false));
+    control.markAsDirty();
+    control.markAsTouched();
+  }
+
+  toggleSection(section: 'field' | 'grid' | 'metadata'): void {
+    if (section === 'field') {
+      this.fieldMappingsCollapsed = !this.fieldMappingsCollapsed;
+      return;
+    }
+
+    if (section === 'grid') {
+      this.gridMappingsCollapsed = !this.gridMappingsCollapsed;
+      return;
+    }
+
+    this.metadataCollapsed = !this.metadataCollapsed;
   }
 
   private syncTargetDocumentIdValidation(createNew: boolean): void {
@@ -543,6 +574,7 @@ export class CopyToDocumentComponent implements OnInit {
       createNewDocument: this.toBoolean(value.createNewDocument, true),
       initialStatus: value.initialStatus || 'Draft',
       triggerEvent: (value.triggerEvent || 'OnFormSubmitted') as CopySetupTrigger,
+      executeAutomatically: this.toBoolean(value.executeAutomatically, true),
       fieldMapping: this.toMap(value.fieldMappings, 'sourceFieldCode', 'targetFieldCode'),
       gridMapping: this.toMap(value.gridMappings, 'sourceGridCode', 'targetGridCode'),
       copyCalculatedFields: this.toBoolean(value.copyCalculatedFields, true),
@@ -596,6 +628,7 @@ export class CopyToDocumentComponent implements OnInit {
         targetDocumentId: this.toNullableNumber(configRaw?.targetDocumentId ?? configRaw?.TargetDocumentId) ?? undefined,
         initialStatus: (configRaw?.initialStatus ?? configRaw?.InitialStatus ?? 'Draft') as 'Draft' | 'Submitted',
         triggerEvent: normalizedTrigger,
+        executeAutomatically: this.toBoolean(configRaw?.executeAutomatically ?? configRaw?.ExecuteAutomatically, true),
         fieldMapping: this.normalizeMap(configRaw?.fieldMapping ?? configRaw?.FieldMapping),
         gridMapping: this.normalizeMap(configRaw?.gridMapping ?? configRaw?.GridMapping),
         copyCalculatedFields: this.toBoolean(configRaw?.copyCalculatedFields ?? configRaw?.CopyCalculatedFields, true),

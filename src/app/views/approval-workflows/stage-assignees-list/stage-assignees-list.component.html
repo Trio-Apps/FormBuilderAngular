@@ -230,16 +230,35 @@
           User <span class="required-indicator">*</span>
         </label>
         <div class="field-input-wrapper">
-          <select
+          <p-select
             id="userId"
             formControlName="userId"
-            class="form-input"
-            [class.input-error]="assigneeForm.get('userId')?.invalid && assigneeForm.get('userId')?.touched">
-            <option [value]="null">Select a user...</option>
-            <option *ngFor="let user of users" [value]="user.id">
-              {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
-            </option>
-          </select>
+            [options]="users"
+            optionLabel="username"
+            optionValue="id"
+            placeholder="Select a user..."
+            styleClass="w-full form-select"
+            panelStyleClass="assignee-user-select-panel"
+            [filter]="true"
+            filterBy="name,username,email"
+            [showClear]="true"
+            [appendTo]="'body'"
+            [loading]="loading.users"
+            [disabled]="loading.users"
+            [ngClass]="{ 'p-invalid': assigneeForm.get('userId')?.invalid && assigneeForm.get('userId')?.touched }">
+            <ng-template pTemplate="item" let-user>
+              <div>
+                <div>{{ getUserDisplayName(user) }}</div>
+                <small class="text-muted">{{ user.username }} <span *ngIf="user.email"> - {{ user.email }}</span></small>
+              </div>
+            </ng-template>
+            <ng-template pTemplate="selectedItem" let-user>
+              <span *ngIf="user; else userPlaceholder">{{ getUserDisplayName(user) }} ({{ user.username }})</span>
+            </ng-template>
+          </p-select>
+          <ng-template #userPlaceholder>
+            <span>Select a user...</span>
+          </ng-template>
         </div>
         <div *ngIf="loading.users" class="field-hint">
           <i class="pi pi-spin pi-spinner"></i>
@@ -313,10 +332,12 @@
             optionLabel="name"
             optionValue="id"
             placeholder="Select users"
+            panelStyleClass="assignee-user-select-panel"
             [filter]="true"
             filterBy="name,username,email"
             [showClear]="true"
             styleClass="w-full"
+            [appendTo]="'body'"
             [loading]="loading.users">
             <ng-template pTemplate="item" let-user>
               <div>

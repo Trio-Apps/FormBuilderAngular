@@ -13,13 +13,16 @@
         </div>
       </div>
       <div class="nav-right">
-        <button class="btn-icon" (click)="loadConnections()" [disabled]="loading.list" title="Refresh">
+        <button class="btn-icon" (click)="loadConnections()" [disabled]="loading.list" title="Refresh SAP connections" pTooltip="Refresh SAP connections" tooltipPosition="top">
           <i class="pi pi-refresh"></i>
         </button>
         <button
           class="btn-primary"
           (click)="openCreate()"
           [disabled]="loading.list"
+          title="Create new SAP connection"
+          pTooltip="Create new SAP connection"
+          tooltipPosition="top"
         >
           <i class="pi pi-plus"></i>
           <span>New Config</span>

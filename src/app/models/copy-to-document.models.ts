@@ -18,6 +18,7 @@ export interface CopyToDocumentActionDto {
   
   // الحقل الجديد
   initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
+  executeAutomatically?: boolean;
   
   // Field Mapping
   fieldMapping: { [sourceFieldCode: string]: string };  // SourceFieldCode -> TargetFieldCode
@@ -69,6 +70,7 @@ export interface CopyToDocumentActionByCodesDto {
   createNewDocument: boolean;
   targetDocumentId?: number;
   initialStatus?: 'Draft' | 'Submitted';  // جديد
+  executeAutomatically?: boolean;
   fieldMapping?: { [key: string]: string };
   gridMapping?: { [key: string]: string };
   copyCalculatedFields: boolean;

@@ -20,6 +20,7 @@ export interface FormSubmissionDto {
   submittedDate: Date;
   status: string;
   stageId?: number | null;
+  signatureStageId?: number | null;
   signatureRequired?: boolean;
   signatureStatus?: 'not_required' | 'pending' | 'signed' | string;
   docuSignEnvelopeId?: string | null;
@@ -174,6 +175,7 @@ export class FormSubmissionsService {
       seriesId: Number(item?.seriesId ?? item?.SeriesId ?? 0),
       status: item?.status ?? item?.Status ?? '',
       stageId: item?.stageId ?? item?.StageId ?? null,
+      signatureStageId: item?.signatureStageId ?? item?.SignatureStageId ?? null,
       signatureRequired: (item?.signatureRequired ?? item?.SignatureRequired) !== undefined
         ? Boolean(item?.signatureRequired ?? item?.SignatureRequired)
         : undefined,

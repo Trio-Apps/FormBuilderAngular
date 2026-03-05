@@ -5,6 +5,7 @@ import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 
 export type SapExecutionMode = 'OnSubmit' | 'OnFinalApproval' | 'OnSpecificWorkflowStage';
+export type SapRequestLevel = 'Header' | 'Line';
 
 export interface SapIntegrationSettingsDto {
   id: number;
@@ -40,12 +41,14 @@ export interface SapFieldMappingDto {
   fieldName: string;
   sapConfigId?: number | null;
   sapFieldName: string;
+  requestLevel?: SapRequestLevel;
   isActive: boolean;
 }
 
 export interface SaveSapFieldMappingItemDto {
   formFieldId: number;
   sapFieldName: string;
+  requestLevel?: SapRequestLevel;
   isActive: boolean;
   sapConfigId?: number;
 }

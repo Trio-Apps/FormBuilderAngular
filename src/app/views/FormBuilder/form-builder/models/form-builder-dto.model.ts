@@ -385,7 +385,8 @@ export interface CopyToDocumentConfig {
   
   // Trigger Event - متى يتم تنفيذ الـ CopyToDocument
   triggerEvent?: 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentApproved' | 'OnRuleMatched'; // جديد - القيمة الافتراضية: 'OnRuleMatched'
-  
+  executeAutomatically?: boolean; // true = auto trigger execution, false = manual execution from submissions
+
   fieldMappings?: FieldMapping[]; // Array format: [{ sourceFieldCode, targetFieldCode }]
   fieldMapping?: { [key: string]: string }; // Object format: { "SOURCE_FIELD": "TARGET_FIELD" } - for API compatibility
   gridMapping?: { [key: string]: string }; // Object format: { "SOURCE_GRID": "TARGET_GRID" }
@@ -420,7 +421,8 @@ export interface CopyToDocumentRequestDto {
     
     // Trigger Event - متى يتم تنفيذ الـ CopyToDocument
     triggerEvent?: 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentApproved' | 'OnRuleMatched'; // جديد - القيمة الافتراضية: 'OnRuleMatched'
-    
+    executeAutomatically?: boolean;
+
     fieldMapping?: { [key: string]: string }; // Object format: { "SOURCE_FIELD": "TARGET_FIELD" }
     fieldMappings?: FieldMapping[]; // Array format: [{ sourceFieldCode, targetFieldCode }]
     gridMapping?: { [key: string]: string }; // Object format: { "SOURCE_GRID": "TARGET_GRID" }
@@ -470,7 +472,8 @@ export interface CopyToDocumentActionDto {
  // الحقل الجديد
  initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
  triggerEvent?: 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentApproved' | 'OnRuleMatched';
- 
+ executeAutomatically?: boolean;
+
  // Field Mapping
  fieldMapping: { [sourceFieldCode: string]: string };  // SourceFieldCode -> TargetFieldCode
  gridMapping?: { [sourceGridCode: string]: string };
@@ -509,6 +512,7 @@ export interface CopyToDocumentActionByCodesDto {
   createNewDocument: boolean;
   targetDocumentId?: number;
   initialStatus?: 'Draft' | 'Submitted';  // جديد
+  executeAutomatically?: boolean;
   fieldMapping?: { [key: string]: string };
   gridMapping?: { [key: string]: string };
   copyCalculatedFields: boolean;
@@ -602,6 +606,19 @@ export interface CreateCopyToDocumentSetupRequestDto {
 }
 
 export interface UpdateCopyToDocumentSetupRequestDto extends CreateCopyToDocumentSetupRequestDto {
+}
+
+export interface ExecuteManualCopyToDocumentRequestDto {
+  setupId?: number;
+}
+
+export interface ExecuteManualCopyToDocumentResponseDto {
+  submissionId: number;
+  setupId?: number;
+  total: number;
+  successCount: number;
+  failedCount: number;
+  items: CopyToDocumentResultDto[];
 }
 
 /**
@@ -842,6 +859,7 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
         
         // الحقل الجديد
         initialStatus: action.copyToDocumentConfig.initialStatus || 'Draft',
+        executeAutomatically: action.copyToDocumentConfig.executeAutomatically,
         
         fieldMappings: action.copyToDocumentConfig.fieldMappings || [],
         fieldMapping: action.copyToDocumentConfig.fieldMapping, // Object format for API compatibility
@@ -894,6 +912,7 @@ export function convertFormRuleToDto(formRule: FormRule, formBuilderId: number):
         
         // الحقل الجديد
         initialStatus: action.copyToDocumentConfig.initialStatus || 'Draft',
+        executeAutomatically: action.copyToDocumentConfig.executeAutomatically,
         
         fieldMappings: action.copyToDocumentConfig.fieldMappings || [],
         fieldMapping: action.copyToDocumentConfig.fieldMapping, // Object format for API compatibility

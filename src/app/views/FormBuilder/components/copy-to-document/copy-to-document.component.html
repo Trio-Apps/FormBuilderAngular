@@ -84,6 +84,7 @@
             <th>Source</th>
             <th>Target</th>
             <th>Trigger</th>
+            <th>Mode</th>
             <th>Mappings</th>
             <th>Status</th>
             <th class="text-end">Actions</th>
@@ -112,6 +113,7 @@
             </td>
 
             <td>{{ getTriggerLabel(setup.config?.triggerEvent) }}</td>
+            <td>{{ getExecutionLabel(setup.config?.executeAutomatically) }}</td>
             <td>{{ getMappingSummary(setup) }}</td>
 
             <td>
@@ -141,7 +143,7 @@
 
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="7">
+            <td colspan="8">
               <div class="ctd-empty-table">
                 <div class="ctd-empty-table-icon">
                   <i class="pi pi-inbox"></i>
@@ -164,7 +166,7 @@
 <app-dialog-shell
   [(visible)]="showConfigDialog"
   [header]="editingSetupId ? 'Edit Copy Setup' : 'New Copy Setup'"
-  [style]="{ width: '980px', maxWidth: '96vw' }"
+  [style]="{ width: '760px', maxWidth: '96vw' }"
   [dismissableMask]="true"
   [closeOnEscape]="true"
   [resizable]="false"
@@ -172,122 +174,144 @@
   styleClass="ctd-dialog-shell"
   (onHide)="closeConfigDialog()">
   <form [formGroup]="copyForm" (ngSubmit)="saveSetup()" class="ctd-dialog-form">
-    <div class="ctd-form-grid">
-      <div class="ctd-form-group">
-        <label for="setupName">Setup Name <span class="ctd-required">*</span></label>
-        <input id="setupName" type="text" pInputText formControlName="setupName" class="ctd-control" placeholder="Example: Purchase Request to Approval" />
+    <div class="ctd-form-grid form-grid">
+      <div class="ctd-form-group form-group">
+        <label for="setupName" class="form-label">Setup Name <span class="ctd-required">*</span></label>
+        <input id="setupName" type="text" pInputText formControlName="setupName" class="ctd-control form-control" placeholder="Example: Purchase Request to Approval" />
         <small class="ctd-error-text" *ngIf="copyForm.get('setupName')?.invalid && copyForm.get('setupName')?.touched">Setup name is required.</small>
       </div>
 
-      <div class="ctd-form-group">
-        <label for="executionOrder">Execution Order <span class="ctd-required">*</span></label>
-        <input id="executionOrder" type="number" formControlName="executionOrder" class="ctd-control" min="1" />
+      <div class="ctd-form-group form-group">
+        <label for="executionOrder" class="form-label">Execution Order <span class="ctd-required">*</span></label>
+        <input id="executionOrder" type="number" formControlName="executionOrder" class="ctd-control form-control" min="1" />
         <small class="ctd-hint-text">Lower numbers run first.</small>
       </div>
 
-      <div class="ctd-form-group">
-        <label for="sourceDocumentTypeId">Source Document Type <span class="ctd-required">*</span></label>
-        <select id="sourceDocumentTypeId" formControlName="sourceDocumentTypeId" class="ctd-control">
+      <div class="ctd-form-group form-group">
+        <label for="sourceDocumentTypeId" class="form-label">Source Document Type <span class="ctd-required">*</span></label>
+        <select id="sourceDocumentTypeId" formControlName="sourceDocumentTypeId" class="ctd-control form-control">
           <option [ngValue]="null">Select source document type</option>
           <option *ngFor="let docType of documentTypes" [ngValue]="docType.id">{{ docType.name }}</option>
         </select>
       </div>
 
-      <div class="ctd-form-group">
-        <label for="sourceFormId">Source Form <span class="ctd-required">*</span></label>
-        <select id="sourceFormId" formControlName="sourceFormId" class="ctd-control">
+      <div class="ctd-form-group form-group">
+        <label for="sourceFormId" class="form-label">Source Form <span class="ctd-required">*</span></label>
+        <select id="sourceFormId" formControlName="sourceFormId" class="ctd-control form-control">
           <option [ngValue]="null">Select source form</option>
           <option *ngFor="let form of sourceForms" [ngValue]="form.id">{{ form.formName }}</option>
         </select>
       </div>
 
-      <div class="ctd-form-group">
-        <label for="targetDocumentTypeId">Target Document Type <span class="ctd-required">*</span></label>
-        <select id="targetDocumentTypeId" formControlName="targetDocumentTypeId" class="ctd-control">
+      <div class="ctd-form-group form-group">
+        <label for="targetDocumentTypeId" class="form-label">Target Document Type <span class="ctd-required">*</span></label>
+        <select id="targetDocumentTypeId" formControlName="targetDocumentTypeId" class="ctd-control form-control">
           <option [ngValue]="null">Select target document type</option>
           <option *ngFor="let docType of documentTypes" [ngValue]="docType.id">{{ docType.name }}</option>
         </select>
       </div>
 
-      <div class="ctd-form-group">
-        <label for="targetFormId">Target Form <span class="ctd-required">*</span></label>
-        <select id="targetFormId" formControlName="targetFormId" class="ctd-control">
+      <div class="ctd-form-group form-group">
+        <label for="targetFormId" class="form-label">Target Form <span class="ctd-required">*</span></label>
+        <select id="targetFormId" formControlName="targetFormId" class="ctd-control form-control">
           <option [ngValue]="null">Select target form</option>
           <option *ngFor="let form of targetForms" [ngValue]="form.id">{{ form.formName }}</option>
         </select>
       </div>
 
-      <div class="ctd-form-group">
-        <label for="initialStatus">Initial Status</label>
-        <select id="initialStatus" formControlName="initialStatus" class="ctd-control">
+      <div class="ctd-form-group form-group">
+        <label for="initialStatus" class="form-label">Initial Status</label>
+        <select id="initialStatus" formControlName="initialStatus" class="ctd-control form-control">
           <option [ngValue]="'Draft'">Draft</option>
           <option [ngValue]="'Submitted'">Submitted</option>
         </select>
       </div>
 
-      <div class="ctd-form-group">
-        <label for="triggerEvent">Trigger</label>
-        <select id="triggerEvent" formControlName="triggerEvent" class="ctd-control">
+      <div class="ctd-form-group form-group">
+        <label for="triggerEvent" class="form-label">Trigger</label>
+        <select id="triggerEvent" formControlName="triggerEvent" class="ctd-control form-control" [disabled]="!copyForm.get('executeAutomatically')?.value">
           <option *ngFor="let option of triggerOptions" [ngValue]="option.value">{{ option.label }}</option>
         </select>
+        <small class="ctd-hint-text">Used only for automatic setups.</small>
       </div>
 
-      <div class="ctd-form-group" *ngIf="!copyForm.get('createNewDocument')?.value">
-        <label for="targetDocumentId">Target Document ID <span class="ctd-required">*</span></label>
-        <input id="targetDocumentId" type="number" formControlName="targetDocumentId" class="ctd-control" />
+      <div class="ctd-form-group form-group">
+        <label for="executeAutomatically" class="form-label">Execution Mode</label>
+        <select id="executeAutomatically" formControlName="executeAutomatically" class="ctd-control form-control">
+          <option [ngValue]="true">Automatic (Run by trigger)</option>
+          <option [ngValue]="false">Manual (Run from submissions)</option>
+        </select>
+        <small class="ctd-hint-text" *ngIf="!copyForm.get('executeAutomatically')?.value">
+          Manual setups run only when user clicks copy from the submission actions.
+        </small>
+      </div>
+
+      <div class="ctd-form-group form-group" *ngIf="!copyForm.get('createNewDocument')?.value">
+        <label for="targetDocumentId" class="form-label">Target Document ID <span class="ctd-required">*</span></label>
+        <input id="targetDocumentId" type="number" formControlName="targetDocumentId" class="ctd-control form-control" />
       </div>
     </div>
 
     <div class="ctd-option-strip">
-      <div class="ctd-option-strip-card" [class.ctd-option-strip-card-active]="copyForm.get('isActive')?.value">
+      <button
+        type="button"
+        class="ctd-option-strip-card"
+        [class.ctd-option-strip-card-active]="copyForm.get('isActive')?.value"
+        (click)="toggleOption('isActive')">
         <div class="ctd-option-head">
-          <p-checkbox formControlName="isActive" binary="true" inputId="isActive"></p-checkbox>
-          <label for="isActive" class="ctd-option-label">Active Setup</label>
+          <span class="ctd-check-indicator" [class.ctd-check-indicator-active]="copyForm.get('isActive')?.value">
+            <i class="pi pi-check"></i>
+          </span>
+          <span class="ctd-option-label">Active Setup</span>
         </div>
         <span class="ctd-option-copy">Inactive setups remain in the list but do not run.</span>
-      </div>
+      </button>
     </div>
 
     <div class="ctd-form-group">
       <label class="ctd-options-title">Copy Options</label>
       <div class="ctd-options-grid">
-        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('createNewDocument')?.value">
-          <div class="ctd-option-head"><p-checkbox formControlName="createNewDocument" binary="true" inputId="createNewDocument"></p-checkbox><label for="createNewDocument" class="ctd-option-label">Create New Document</label></div>
+        <button type="button" class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('createNewDocument')?.value" (click)="toggleOption('createNewDocument')">
+          <div class="ctd-option-head"><span class="ctd-check-indicator" [class.ctd-check-indicator-active]="copyForm.get('createNewDocument')?.value"><i class="pi pi-check"></i></span><span class="ctd-option-label">Create New Document</span></div>
           <span class="ctd-option-copy">Create a new target document instead of updating an existing one.</span>
-        </div>
-        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyCalculatedFields')?.value">
-          <div class="ctd-option-head"><p-checkbox formControlName="copyCalculatedFields" binary="true" inputId="copyCalculatedFields"></p-checkbox><label for="copyCalculatedFields" class="ctd-option-label">Copy Calculated Fields</label></div>
+        </button>
+        <button type="button" class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyCalculatedFields')?.value" (click)="toggleOption('copyCalculatedFields')">
+          <div class="ctd-option-head"><span class="ctd-check-indicator" [class.ctd-check-indicator-active]="copyForm.get('copyCalculatedFields')?.value"><i class="pi pi-check"></i></span><span class="ctd-option-label">Copy Calculated Fields</span></div>
           <span class="ctd-option-copy">Include calculated source values in the copy.</span>
-        </div>
-        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyGridRows')?.value">
-          <div class="ctd-option-head"><p-checkbox formControlName="copyGridRows" binary="true" inputId="copyGridRows"></p-checkbox><label for="copyGridRows" class="ctd-option-label">Copy Grid Rows</label></div>
+        </button>
+        <button type="button" class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyGridRows')?.value" (click)="toggleOption('copyGridRows')">
+          <div class="ctd-option-head"><span class="ctd-check-indicator" [class.ctd-check-indicator-active]="copyForm.get('copyGridRows')?.value"><i class="pi pi-check"></i></span><span class="ctd-option-label">Copy Grid Rows</span></div>
           <span class="ctd-option-copy">Copy rows from mapped source grids into target grids.</span>
-        </div>
-        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('startWorkflow')?.value">
-          <div class="ctd-option-head"><p-checkbox formControlName="startWorkflow" binary="true" inputId="startWorkflow"></p-checkbox><label for="startWorkflow" class="ctd-option-label">Start Workflow</label></div>
+        </button>
+        <button type="button" class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('startWorkflow')?.value" (click)="toggleOption('startWorkflow')">
+          <div class="ctd-option-head"><span class="ctd-check-indicator" [class.ctd-check-indicator-active]="copyForm.get('startWorkflow')?.value"><i class="pi pi-check"></i></span><span class="ctd-option-label">Start Workflow</span></div>
           <span class="ctd-option-copy">Start the workflow automatically after the copy completes.</span>
-        </div>
-        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('linkDocuments')?.value">
-          <div class="ctd-option-head"><p-checkbox formControlName="linkDocuments" binary="true" inputId="linkDocuments"></p-checkbox><label for="linkDocuments" class="ctd-option-label">Link Documents</label></div>
+        </button>
+        <button type="button" class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('linkDocuments')?.value" (click)="toggleOption('linkDocuments')">
+          <div class="ctd-option-head"><span class="ctd-check-indicator" [class.ctd-check-indicator-active]="copyForm.get('linkDocuments')?.value"><i class="pi pi-check"></i></span><span class="ctd-option-label">Link Documents</span></div>
           <span class="ctd-option-copy">Create a relationship between source and target documents.</span>
-        </div>
-        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyMetadata')?.value">
-          <div class="ctd-option-head"><p-checkbox formControlName="copyMetadata" binary="true" inputId="copyMetadata"></p-checkbox><label for="copyMetadata" class="ctd-option-label">Copy Metadata</label></div>
+        </button>
+        <button type="button" class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyMetadata')?.value" (click)="toggleOption('copyMetadata')">
+          <div class="ctd-option-head"><span class="ctd-check-indicator" [class.ctd-check-indicator-active]="copyForm.get('copyMetadata')?.value"><i class="pi pi-check"></i></span><span class="ctd-option-label">Copy Metadata</span></div>
           <span class="ctd-option-copy">Copy metadata values from the source document.</span>
-        </div>
-        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyAttachments')?.value">
-          <div class="ctd-option-head"><p-checkbox formControlName="copyAttachments" binary="true" inputId="copyAttachments"></p-checkbox><label for="copyAttachments" class="ctd-option-label">Copy Attachments</label></div>
+        </button>
+        <button type="button" class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('copyAttachments')?.value" (click)="toggleOption('copyAttachments')">
+          <div class="ctd-option-head"><span class="ctd-check-indicator" [class.ctd-check-indicator-active]="copyForm.get('copyAttachments')?.value"><i class="pi pi-check"></i></span><span class="ctd-option-label">Copy Attachments</span></div>
           <span class="ctd-option-copy">Copy attachments from the source document.</span>
-        </div>
-        <div class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('overrideTargetDefaults')?.value">
-          <div class="ctd-option-head"><p-checkbox formControlName="overrideTargetDefaults" binary="true" inputId="overrideTargetDefaults"></p-checkbox><label for="overrideTargetDefaults" class="ctd-option-label">Override Target Defaults</label></div>
+        </button>
+        <button type="button" class="ctd-option-card" [class.ctd-option-card-active]="copyForm.get('overrideTargetDefaults')?.value" (click)="toggleOption('overrideTargetDefaults')">
+          <div class="ctd-option-head"><span class="ctd-check-indicator" [class.ctd-check-indicator-active]="copyForm.get('overrideTargetDefaults')?.value"><i class="pi pi-check"></i></span><span class="ctd-option-label">Override Target Defaults</span></div>
           <span class="ctd-option-copy">Replace target defaults with incoming mapped values.</span>
-        </div>
+        </button>
       </div>
     </div>
 
-    <p-panel header="Field Mappings" [toggleable]="true" [collapsed]="false" styleClass="ctd-panel-shell">
-      <div formArrayName="fieldMappings" class="ctd-panel-body">
+    <section class="ctd-map-section">
+      <button type="button" class="ctd-map-header" (click)="toggleSection('field')">
+        <span>Field Mappings</span>
+        <i class="pi" [ngClass]="fieldMappingsCollapsed ? 'pi-plus' : 'pi-minus'"></i>
+      </button>
+      <div formArrayName="fieldMappings" class="ctd-panel-body" *ngIf="!fieldMappingsCollapsed">
         <div class="ctd-panel-copy">Map source fields into matching target fields.</div>
         <div class="ctd-mapping-empty" *ngIf="fieldMappingsArray.length === 0">No field mappings added yet.</div>
         <div *ngFor="let mapping of fieldMappingsArray.controls; let i = index" [formGroupName]="i" class="ctd-mapping-card">
@@ -300,10 +324,14 @@
         </div>
         <button type="button" class="ctd-inline-add" (click)="addFieldMapping()"><i class="pi pi-plus"></i><span>Add Field Mapping</span></button>
       </div>
-    </p-panel>
+    </section>
 
-    <p-panel header="Grid Mappings" [toggleable]="true" [collapsed]="true" styleClass="ctd-panel-shell">
-      <div formArrayName="gridMappings" class="ctd-panel-body">
+    <section class="ctd-map-section">
+      <button type="button" class="ctd-map-header" (click)="toggleSection('grid')">
+        <span>Grid Mappings</span>
+        <i class="pi" [ngClass]="gridMappingsCollapsed ? 'pi-plus' : 'pi-minus'"></i>
+      </button>
+      <div formArrayName="gridMappings" class="ctd-panel-body" *ngIf="!gridMappingsCollapsed">
         <div class="ctd-panel-copy">Match source grids with target grids before copying row data.</div>
         <div class="ctd-mapping-empty" *ngIf="gridMappingsArray.length === 0">No grid mappings added yet.</div>
         <div *ngFor="let mapping of gridMappingsArray.controls; let i = index" [formGroupName]="i" class="ctd-mapping-card">
@@ -316,10 +344,14 @@
         </div>
         <button type="button" class="ctd-inline-add" (click)="addGridMapping()"><i class="pi pi-plus"></i><span>Add Grid Mapping</span></button>
       </div>
-    </p-panel>
+    </section>
 
-    <p-panel header="Metadata Fields" [toggleable]="true" [collapsed]="true" styleClass="ctd-panel-shell" *ngIf="copyForm.get('copyMetadata')?.value">
-      <div formArrayName="metadataFields" class="ctd-panel-body">
+    <section class="ctd-map-section" *ngIf="copyForm.get('copyMetadata')?.value">
+      <button type="button" class="ctd-map-header" (click)="toggleSection('metadata')">
+        <span>Metadata Fields</span>
+        <i class="pi" [ngClass]="metadataCollapsed ? 'pi-plus' : 'pi-minus'"></i>
+      </button>
+      <div formArrayName="metadataFields" class="ctd-panel-body" *ngIf="!metadataCollapsed">
         <div class="ctd-panel-copy">List the metadata keys that should be copied to the target document.</div>
         <div class="ctd-mapping-empty" *ngIf="metadataFieldsArray.length === 0">No metadata fields selected yet.</div>
         <div *ngFor="let field of metadataFieldsArray.controls; let i = index" class="ctd-metadata-row">
@@ -328,7 +360,7 @@
         </div>
         <button type="button" class="ctd-inline-add" (click)="addMetadataField()"><i class="pi pi-plus"></i><span>Add Metadata Field</span></button>
       </div>
-    </p-panel>
+    </section>
 
     <div class="ctd-dialog-error" *ngIf="dialogErrorMessage">{{ dialogErrorMessage }}</div>
 

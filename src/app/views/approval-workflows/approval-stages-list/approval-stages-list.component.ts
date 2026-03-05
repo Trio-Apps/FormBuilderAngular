@@ -115,6 +115,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       requiresAdobeSign: [false],
       isActive: [true],
       minimumRequiredAssignees: [null, Validators.min(0)],
+      minimumRequiredRejections: [null, Validators.min(0)],
       amountFieldCode: [null]
       // Note: isDeleted is not managed via form - it's handled via delete/restore actions
     });
@@ -447,6 +448,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       requiresAdobeSign: false,
       isActive: true,
       minimumRequiredAssignees: null,
+      minimumRequiredRejections: null,
       amountFieldCode: null
       // Note: isDeleted defaults to false for new stages (handled by backend)
     });
@@ -481,6 +483,7 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
       requiresAdobeSign: stage.requiresAdobeSign === true,
       isActive: stage.isActive !== undefined ? stage.isActive : true,
       minimumRequiredAssignees: stage.minimumRequiredAssignees,
+      minimumRequiredRejections: stage.minimumRequiredRejections,
       amountFieldCode: stage.amountFieldCode
       // Note: isDeleted is not managed via form
     });
@@ -645,6 +648,9 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
         minimumRequiredAssignees: (formData.minimumRequiredAssignees !== null && formData.minimumRequiredAssignees !== undefined && formData.minimumRequiredAssignees !== '') 
           ? Number(formData.minimumRequiredAssignees) 
           : null,
+        minimumRequiredRejections: (formData.minimumRequiredRejections !== null && formData.minimumRequiredRejections !== undefined && formData.minimumRequiredRejections !== '')
+          ? Number(formData.minimumRequiredRejections)
+          : null,
         amountFieldCode: formData.amountFieldCode || null
         // Note: isDeleted is not updated via form - it's managed via delete/restore actions
       };
@@ -689,6 +695,9 @@ export class ApprovalStagesListComponent implements OnInit, OnDestroy {
         isActive: formData.isActive !== undefined ? formData.isActive : true,
         minimumRequiredAssignees: (formData.minimumRequiredAssignees !== null && formData.minimumRequiredAssignees !== undefined && formData.minimumRequiredAssignees !== '') 
           ? Number(formData.minimumRequiredAssignees) 
+          : null,
+        minimumRequiredRejections: (formData.minimumRequiredRejections !== null && formData.minimumRequiredRejections !== undefined && formData.minimumRequiredRejections !== '')
+          ? Number(formData.minimumRequiredRejections)
           : null,
         amountFieldCode: formData.amountFieldCode || null
         // Note: isDeleted defaults to false for new stages (handled by backend)

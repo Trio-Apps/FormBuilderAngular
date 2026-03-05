@@ -147,6 +147,15 @@
                   pTooltip="View Details"
                   tooltipPosition="top"></button>
                 <button pButton
+                  icon="pi pi-copy"
+                  class="p-button-text p-button-sm action-btn"
+                  [loading]="loadingCopyToDocumentSubmissionId === submission.id"
+                  [disabled]="!canExecuteManualCopyToDocument(submission)"
+                  (click)="executeManualCopyToDocument(submission)"
+                  pTooltip="Copy To Document"
+                  tooltipPosition="top"
+                  [title]="getManualCopyButtonTitle(submission)"></button>
+                <button pButton
                   *ngIf="canDownloadCrystalReport(submission)"
                   icon="pi pi-file-pdf"
                   class="p-button-text p-button-sm action-btn"
@@ -213,6 +222,55 @@
     </div>
   </div>
 </div>
+
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"
+  [(visible)]="showSignatureStageModal"
+  [header]="'Request Signature'"
+  [modal]="true"
+  [style]="{ width: '520px' }"
+  [draggable]="false"
+  [resizable]="false"
+  [autoZIndex]="true"
+  [baseZIndex]="10001"
+  (onHide)="closeSignatureStageModal()">
+  <form [formGroup]="signatureStageForm" (ngSubmit)="saveSignatureStageRequest()">
+    <div class="form-display-section">
+      <div class="form-field-wrapper">
+        <label class="field-label" for="signatureStageId">
+          Signature Stage <span class="required-indicator">*</span>
+        </label>
+        <div class="field-input-wrapper">
+          <select
+            id="signatureStageId"
+            name="signatureStageId"
+            formControlName="stageId"
+            class="form-input"
+            [disabled]="loadingSignatureStages || !availableSignatureStages.length">
+            <option [ngValue]="null">Select stage</option>
+            <option *ngFor="let stage of availableSignatureStages" [ngValue]="stage.id">
+              {{ stage.stageOrder }} - {{ stage.stageName }}
+            </option>
+          </select>
+        </div>
+        <div class="field-hint" *ngIf="loadingSignatureStages">
+          <i class="pi pi-spin pi-spinner"></i>
+          Loading stages...
+        </div>
+        <div class="field-hint" *ngIf="!loadingSignatureStages && !availableSignatureStages.length">
+          <i class="pi pi-info-circle"></i>
+          No active stages found for this workflow.
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <button type="button" pButton label="Cancel" icon="pi pi-times" class="p-button-secondary" (click)="closeSignatureStageModal()"></button>
+      <button type="submit" pButton label="Request Signature" icon="pi pi-send"
+        [loading]="loadingSignatureSubmissionId !== null"
+        [disabled]="signatureStageForm.invalid || loadingSignatureSubmissionId !== null || loadingSignatureStages"></button>
+    </div>
+  </form>
+</app-dialog-shell>
 
 <!-- Edit Submission Modal -->
 <app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true"

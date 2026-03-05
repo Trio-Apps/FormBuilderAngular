@@ -13,6 +13,8 @@ import {
   UpdateCopyToDocumentSetupRequestDto,
   ExecuteCopyToDocumentRequestDto,
   ExecuteCopyToDocumentByCodesRequestDto,
+  ExecuteManualCopyToDocumentRequestDto,
+  ExecuteManualCopyToDocumentResponseDto,
   ApiResponse
 } from '../form-builder/models/form-builder-dto.model';
 import { environment } from '../../../environments/environment';
@@ -295,6 +297,24 @@ export class CopyToDocumentService {
       map(() => void 0),
       catchError((error) => {
         console.error(`[CopyToDocumentService] Error deleting setup ${id}:`, error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  executeManualSetupsForSubmission(
+    submissionId: number,
+    request?: ExecuteManualCopyToDocumentRequestDto
+  ): Observable<ExecuteManualCopyToDocumentResponseDto> {
+    return this.http.post<ApiResponse<ExecuteManualCopyToDocumentResponseDto>>(
+      `${this.baseUrl}/submissions/${submissionId}/execute-manual`,
+      request ?? {}
+    ).pipe(
+      map((response: ApiResponse<ExecuteManualCopyToDocumentResponseDto>) =>
+        response.data ?? (response as any as ExecuteManualCopyToDocumentResponseDto)
+      ),
+      catchError((error) => {
+        console.error(`[CopyToDocumentService] Error executing manual setups for submission ${submissionId}:`, error);
         return throwError(() => error);
       })
     );

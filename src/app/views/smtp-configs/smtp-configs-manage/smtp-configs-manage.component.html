@@ -14,13 +14,15 @@
         </div>
       </div>
       <div class="nav-right">
-        <button class="btn-icon" (click)="load()" [disabled]="loading.list" title="Refresh">
+        <button class="btn-icon" (click)="load()" [disabled]="loading.list" title="Refresh SMTP configs" pTooltip="Refresh SMTP configs" tooltipPosition="top">
           <i class="pi pi-refresh"></i>
         </button>
         <button class="btn-primary" 
                 (click)="openCreate()" 
                 [disabled]="loading.list || (!permissionService.canCreateSmtpConfigs() && !permissionService.canManageSmtpConfigs())"
-                [title]="permissionService.canCreateSmtpConfigs() || permissionService.canManageSmtpConfigs() ? '' : 'You do not have permission to create SMTP configs'">
+                [title]="permissionService.canCreateSmtpConfigs() || permissionService.canManageSmtpConfigs() ? 'Create new SMTP config' : 'You do not have permission to create SMTP configs'"
+                [pTooltip]="permissionService.canCreateSmtpConfigs() || permissionService.canManageSmtpConfigs() ? 'Create new SMTP config' : 'You do not have permission to create SMTP configs'"
+                tooltipPosition="top">
           <i class="pi pi-plus"></i>
           <span>New Config</span>
         </button>

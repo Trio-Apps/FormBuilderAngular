@@ -383,6 +383,27 @@
         </div>
       </div>
 
+      <!-- Minimum Required Rejections -->
+      <div class="form-field-wrapper">
+        <label class="field-label" for="minimumRequiredRejections">Minimum Required Rejections</label>
+        <div class="field-input-wrapper">
+          <p-inputNumber
+            id="minimumRequiredRejections"
+            name="minimumRequiredRejections"
+            formControlName="minimumRequiredRejections"
+            [min]="0"
+            [showButtons]="true"
+            placeholder="1"
+            styleClass="w-full"
+            autocomplete="off">
+          </p-inputNumber>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          Minimum number of rejection votes required to cancel this stage.
+        </div>
+      </div>
+
       <!-- Signature Required -->
       <div class="form-field-wrapper">
         <div class="checkbox-group">

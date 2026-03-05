@@ -40,6 +40,7 @@ import {
   SapIntegrationService,
   SapHanaConfigDto,
   SapExecutionMode,
+  SapRequestLevel,
   SapServiceLayerEndpointDto,
   SapServiceLayerObjectFieldDto
 } from '../../FormBuilder/services/sap-integration.service';
@@ -237,6 +238,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   showSaveQueryDialog: boolean = false;
   sapIntegrationEnabled: boolean = false;
   sapFieldName: string = '';
+  sapRequestLevel: SapRequestLevel = 'Header';
+  sapRequestLevelOptions: Array<{ label: string; value: SapRequestLevel }> = [
+    { label: 'Header', value: 'Header' },
+    { label: 'Line', value: 'Line' }
+  ];
   sapConnections: SapHanaConfigDto[] = [];
   selectedSapConnectionId: number | null = null;
   loadingSapConnections: boolean = false;
@@ -2580,6 +2586,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   private resetSapIntegrationSelection(): void {
     this.sapIntegrationEnabled = false;
     this.sapFieldName = '';
+    this.sapRequestLevel = 'Header';
     this.selectedSapConnectionId = null;
     this.sapEndpointOptions = [];
     this.loadingSapEndpointOptions = false;
@@ -3082,6 +3089,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     );
   }
 
+  private normalizeSapRequestLevel(level: string | null | undefined): SapRequestLevel {
+    return (level || '').trim().toLowerCase() === 'line' ? 'Line' : 'Header';
+  }
+
   private extractErrorMessage(error: any): string {
     if (!error) return '';
     if (typeof error === 'string') return error;
@@ -3169,6 +3180,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         if (current && current.sapFieldName?.trim()) {
           this.sapIntegrationEnabled = current.isActive !== false;
           this.sapFieldName = current.sapFieldName.trim();
+          this.sapRequestLevel = this.normalizeSapRequestLevel(current.requestLevel);
           this.selectedSapConnectionId = current.sapConfigId ?? this.selectedSapConnectionId;
           if (!this.selectedSapConnectionId && this.sapConnections.length > 0) {
             const active = this.sapConnections.find(c => c.isActive === true);
@@ -3204,6 +3216,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             .map(m => ({
               formFieldId: m.formFieldId,
               sapFieldName: m.sapFieldName.trim(),
+              requestLevel: this.normalizeSapRequestLevel(m.requestLevel),
               isActive: m.isActive !== false,
               sapConfigId: m.sapConfigId ?? undefined
             }));
@@ -3212,6 +3225,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             preservedMappings.push({
               formFieldId: fieldId,
               sapFieldName,
+              requestLevel: this.normalizeSapRequestLevel(this.sapRequestLevel),
               isActive: true,
               sapConfigId: this.selectedSapConnectionId ?? undefined
             });
