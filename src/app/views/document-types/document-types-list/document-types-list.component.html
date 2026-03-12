@@ -360,7 +360,6 @@
             <th>Reset</th>
             <th>Generate On</th>
             <th>Default</th>
-            <th>Status</th>
             <th>Actions</th>
           </tr>
         </ng-template>
@@ -382,14 +381,6 @@
               <span *ngIf="!series.isDefault" class="badge badge-secondary">-</span>
             </td>
             <td>
-              <span *ngIf="series.isActive" class="badge badge-success">
-                <i class="pi pi-check"></i> Active
-              </span>
-              <span *ngIf="!series.isActive" class="badge badge-danger">
-                <i class="pi pi-times"></i> Inactive
-              </span>
-            </td>
-            <td>
               <app-table-actions>
                 <button pButton 
                   icon="pi pi-star" 
@@ -397,12 +388,6 @@
                   (click)="setSeriesAsDefault(series)"
                   [disabled]="series.isDefault"
                   pTooltip="Set as Default"
-                  tooltipPosition="top"></button>
-                <button pButton 
-                  [icon]="series.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'" 
-                  class="p-button-text p-button-sm action-btn" 
-                  (click)="toggleSeriesStatus(series)"
-                  [pTooltip]="series.isActive ? 'Deactivate' : 'Activate'"
                   tooltipPosition="top"></button>
                 <button pButton 
                   icon="pi pi-pencil" 

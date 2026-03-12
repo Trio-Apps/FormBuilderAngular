@@ -36,10 +36,8 @@
             <th>Template</th>
             <th>Project</th>
             <th>Next</th>
-            <th>Reset</th>
             <th>Generate On</th>
             <th>Default</th>
-            <th>Status</th>
             <th class="text-end">Actions</th>
           </tr>
         </ng-template>
@@ -48,7 +46,6 @@
           <tr>
             <td class="series-cell">
               <div class="series-name">{{ item.seriesName || item.seriesCode }}</div>
-              <div class="series-code">{{ item.seriesCode || 'SERIES' }}</div>
             </td>
 
             <td class="template-cell">
@@ -61,18 +58,11 @@
             </td>
 
             <td>{{ item.nextNumber || item.sequenceStart || 1 }}</td>
-            <td>{{ item.resetPolicy || 'Yearly' }}</td>
             <td>{{ item.generateOn || 'Submit' }}</td>
 
             <td>
               <span class="badge badge-success" *ngIf="item.isDefault">Default</span>
               <span class="muted-value" *ngIf="!item.isDefault">No</span>
-            </td>
-
-            <td>
-              <span class="status-badge" [ngClass]="item.isActive ? 'status-active' : 'status-inactive'">
-                {{ item.isActive ? 'Active' : 'Inactive' }}
-              </span>
             </td>
 
             <td class="actions-cell text-end">
@@ -82,23 +72,17 @@
                   class="action-btn action-default"
                   (click)="setDefault(item)"
                   [disabled]="item.isDefault"
-                  pTooltip="Set Default">
+                  [pTooltip]="item.isDefault ? 'Default Series' : 'Set as Default'"
+                  tooltipPosition="top">
                   <i class="pi pi-star"></i>
-                </button>
-
-                <button
-                  type="button"
-                  class="action-btn action-toggle"
-                  (click)="toggleStatus(item)"
-                  [pTooltip]="item.isActive ? 'Deactivate' : 'Activate'">
-                  <i [class]="item.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'"></i>
                 </button>
 
                 <button
                   type="button"
                   class="action-btn action-edit"
                   (click)="openEditDialog(item)"
-                  pTooltip="Edit">
+                  pTooltip="Edit Series"
+                  tooltipPosition="top">
                   <i class="pi pi-pencil"></i>
                 </button>
 
@@ -106,7 +90,8 @@
                   type="button"
                   class="action-btn action-delete"
                   (click)="deleteSeries(item)"
-                  pTooltip="Delete">
+                  pTooltip="Delete Series"
+                  tooltipPosition="top">
                   <i class="pi pi-trash"></i>
                 </button>
               </div>
@@ -116,7 +101,7 @@
 
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="9">
+            <td colspan="7">
               <div class="ds-empty-state">
                 <div class="empty-icon">
                   <i class="pi pi-inbox"></i>
@@ -148,6 +133,63 @@
   (onHide)="closeDialog()"
 >
   <form [formGroup]="seriesForm" (ngSubmit)="saveSeries()" class="document-series-form">
+    <div class="ds-help-bar">
+      <button
+        type="button"
+        class="ds-help-toggle"
+        (click)="showSeriesGuide = !showSeriesGuide"
+        [attr.aria-expanded]="showSeriesGuide">
+        <i class="pi pi-question-circle"></i>
+        <span>{{ showSeriesGuide ? 'Hide series guide' : 'Show series guide' }}</span>
+      </button>
+      <span class="ds-help-copy">Use this help to explain prefix, suffix, year logic, and numbering behavior.</span>
+    </div>
+
+    <div class="ds-rules-panel" *ngIf="showSeriesGuide">
+      <div class="ds-rules-header">
+        <div class="ds-rules-title">Series Definition Guide</div>
+        <div class="ds-rules-caption">Everything below is derived from the current setup so the user can understand the numbering logic before saving.</div>
+      </div>
+
+      <div class="ds-rules-grid">
+        <div class="ds-rule-card">
+          <div class="ds-rule-label">Prefix / Suffix</div>
+          <div class="ds-rule-value">{{ getTemplateStructureSummary() }}</div>
+          <div class="ds-rule-note">Example: <strong>AKH/</strong>{{ '{PROJECT}' }}/LA-{{ '{SEQ}' }}/<strong>2025</strong></div>
+        </div>
+
+        <div class="ds-rule-card">
+          <div class="ds-rule-label">Year Control</div>
+          <div class="ds-rule-value">{{ getYearControlSummary() }}</div>
+          <div class="ds-rule-note">Use {{ '{YYYY}' }} for 2026 or {{ '{YY}' }} for 26.</div>
+        </div>
+
+        <div class="ds-rule-card">
+          <div class="ds-rule-label">Document Digits</div>
+          <div class="ds-rule-value">{{ getSequenceDigitsPreview() }}</div>
+          <div class="ds-rule-note">Padding keeps the sequence width fixed to avoid inconsistent numbering.</div>
+        </div>
+
+        <div class="ds-rule-card">
+          <div class="ds-rule-label">Last Issued Number</div>
+          <div class="ds-rule-value">{{ getLastIssuedSequence() }}</div>
+          <div class="ds-rule-note">Current next sequence is {{ seriesForm.get('nextNumber')?.value || 1 }}.</div>
+        </div>
+
+        <div class="ds-rule-card">
+          <div class="ds-rule-label">Default Scope</div>
+          <div class="ds-rule-value">One default series per project</div>
+          <div class="ds-rule-note">Project: {{ seriesForm.get('projectId')?.value ? getProjectName(seriesForm.get('projectId')?.value) : 'Not selected yet' }}</div>
+        </div>
+
+        <div class="ds-rule-card">
+          <div class="ds-rule-label">Generate Event</div>
+          <div class="ds-rule-value">{{ seriesForm.get('generateOn')?.value || 'Submit' }}</div>
+          <div class="ds-rule-note">{{ getGenerateOnSummary() }}</div>
+        </div>
+      </div>
+    </div>
+
     <div class="form-grid ds-form-grid">
       <div class="form-group">
         <label class="ds-label" for="projectId">Project <span class="required">*</span></label>
@@ -170,26 +212,58 @@
           id="templatePreset"
           formControlName="templatePreset"
           class="ds-control">
-          <option *ngFor="let preset of templatePresets" [ngValue]="preset">{{ preset }}</option>
+          <option *ngFor="let preset of templatePresets" [ngValue]="preset.value">{{ preset.label }}</option>
           <option [ngValue]="customTemplateValue">Custom</option>
         </select>
+        <small class="hint">{{ getSelectedPresetDescription() }}</small>
       </div>
 
       <div class="form-group">
         <label class="ds-label" for="template">Template <span class="required">*</span></label>
-        <input id="template" type="text" pInputText formControlName="template" class="w-full" placeholder="PR-{PROJECT}-{YYYY}-{SEQ}" />
+        <input
+          id="template"
+          type="text"
+          pInputText
+          formControlName="template"
+          class="w-full"
+          [class.ds-control-invalid]="seriesForm.get('template')?.invalid && seriesForm.get('template')?.touched"
+          placeholder="PR-{PROJECT}-{YYYY}-{SEQ}" />
+        <div class="token-toolbar">
+          <button
+            *ngFor="let token of supportedSeriesPlaceholders"
+            type="button"
+            class="token-chip"
+            (click)="insertPlaceholder(token)">
+            {{ token }}
+          </button>
+        </div>
         <small class="hint">Supported: {{ supportedSeriesPlaceholders.join(', ') }}</small>
+        <small class="hint">Year formats: {{ '{YYYY}' }} = 2026, {{ '{YY}' }} = 26</small>
+        <small class="hint">{{ getTemplateStructureSummary() }}</small>
         <small class="hint" *ngIf="seriesForm.get('template')?.value">Preview: {{ getSeriesPreview() }}</small>
+        <small class="field-error" *ngIf="seriesForm.get('template')?.hasError('required') && seriesForm.get('template')?.touched">
+          Template is required.
+        </small>
+        <small class="field-error" *ngIf="seriesForm.get('template')?.hasError('missingSeq') && seriesForm.get('template')?.touched">
+          Template must include <strong>{{ '{SEQ}' }}</strong> so the document number can increment correctly.
+        </small>
+        <small class="field-error" *ngIf="seriesForm.get('template')?.hasError('unsupportedPlaceholders') && seriesForm.get('template')?.touched">
+          Unsupported placeholders:
+          {{ seriesForm.get('template')?.getError('unsupportedPlaceholders')?.join(', ') }}.
+          Use only {{ supportedSeriesPlaceholders.join(', ') }}.
+        </small>
       </div>
 
       <div class="form-group">
         <label class="ds-label" for="sequenceStart">Sequence Start <span class="required">*</span></label>
         <p-inputNumber id="sequenceStart" formControlName="sequenceStart" [min]="1" [showButtons]="true"></p-inputNumber>
+        <small class="hint">First number available when the series starts for the first time.</small>
       </div>
 
       <div class="form-group">
         <label class="ds-label" for="sequencePadding">Sequence Padding <span class="required">*</span></label>
         <p-inputNumber id="sequencePadding" formControlName="sequencePadding" [min]="1" [max]="10" [showButtons]="true"></p-inputNumber>
+        <small class="hint">{{ getSequenceDigitsPreview() }}</small>
       </div>
 
       <div class="form-group">
@@ -197,6 +271,7 @@
         <select id="resetPolicy" formControlName="resetPolicy" class="ds-control">
           <option *ngFor="let option of resetPolicyOptions" [ngValue]="option">{{ option }}</option>
         </select>
+        <small class="hint">Controls when the running sequence restarts: never, yearly, monthly, or daily.</small>
       </div>
 
       <div class="form-group">
@@ -204,38 +279,61 @@
         <select id="generateOn" formControlName="generateOn" class="ds-control">
           <option *ngFor="let option of generateOnOptions" [ngValue]="option">{{ option }}</option>
         </select>
+        <small class="hint">{{ getGenerateOnSummary() }}</small>
       </div>
 
       <div class="form-group">
         <label class="ds-label" for="nextNumber">Current Next Seq <span class="required">*</span></label>
         <p-inputNumber id="nextNumber" formControlName="nextNumber" [min]="1" [showButtons]="true"></p-inputNumber>
+        <small class="hint">Last issued sequence: {{ getLastIssuedSequence() }}</small>
+      </div>
+    </div>
+
+    <div class="ds-preview-panel" *ngIf="seriesForm.get('template')?.value">
+      <div class="ds-preview-title">Live Preview</div>
+      <div class="ds-preview-value">{{ getSeriesPreview() }}</div>
+      <div class="ds-preview-caption">
+        This preview uses the selected project, current date, and the next sequence value.
       </div>
     </div>
 
     <div class="ds-options-row">
-      <div class="ds-option-card">
+      <label class="ds-option-card" for="isDefault">
         <div class="ds-option-head">
           <p-checkbox formControlName="isDefault" [binary]="true" inputId="isDefault"></p-checkbox>
-          <label class="ds-option-label" for="isDefault">Set as default</label>
+          <span class="ds-option-label">Set as default</span>
         </div>
         <span class="ds-option-copy">Use this series as the default numbering option for the selected project.</span>
-      </div>
+      </label>
 
-      <div class="ds-option-card">
+      <label class="ds-option-card" for="isActive">
         <div class="ds-option-head">
           <p-checkbox formControlName="isActive" [binary]="true" inputId="isActive"></p-checkbox>
-          <label class="ds-option-label" for="isActive">Active</label>
+          <span class="ds-option-label">Active</span>
         </div>
         <span class="ds-option-copy">Inactive series remain saved but cannot generate new numbers.</span>
-      </div>
+      </label>
     </div>
 
     <div class="dialog-actions">
-      <button pButton type="button" class="p-button-secondary p-button-outlined" label="Cancel" icon="pi pi-times" (click)="closeDialog()" [disabled]="saving"></button>
-      <button pButton type="submit" [label]="editingSeries ? 'Update' : 'Create'" [icon]="editingSeries ? 'pi pi-save' : 'pi pi-plus'" [disabled]="saving || seriesForm.invalid" [loading]="saving"></button>
+      <button
+        pButton
+        type="button"
+        class="dialog-btn dialog-btn-secondary"
+        label="Cancel"
+        icon="pi pi-times"
+        (click)="closeDialog()"
+        [disabled]="saving"></button>
+      <button
+        pButton
+        type="submit"
+        class="dialog-btn dialog-btn-primary"
+        [label]="editingSeries ? 'Update Series' : 'Create Series'"
+        [icon]="editingSeries ? 'pi pi-save' : 'pi pi-plus'"
+        [disabled]="saving || seriesForm.invalid"
+        [loading]="saving"></button>
     </div>
   </form>
 </app-dialog-shell>
 
-<p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>

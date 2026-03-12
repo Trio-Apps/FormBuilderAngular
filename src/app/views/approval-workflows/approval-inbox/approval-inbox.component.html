@@ -29,6 +29,14 @@
           </div>
         </div>
 
+      <div *ngIf="pageAccessNotice" class="page-access-notice">
+        <i class="pi pi-shield"></i>
+        <div class="notice-copy">
+          <strong>Access Restricted</strong>
+          <span>{{ pageAccessNotice }}</span>
+        </div>
+      </div>
+
       <div *ngIf="loading.inbox" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
         <p>Loading inbox...</p>
@@ -74,6 +82,9 @@
           [first]="first" 
           [rows]="rows" 
           [totalRecords]="getSubmittedSubmissionsTotalRecords()"
+          styleClass="approval-paginator"
+          [showCurrentPageReport]="true"
+          currentPageReportTemplate="Showing {first} to {last} of {totalRecords}"
           [rowsPerPageOptions]="[10, 20, 50]" 
           (onPageChange)="onPageChange($event)">
         </p-paginator>
@@ -115,11 +126,11 @@
             <td>{{ formatDate(item.submittedDate) }}</td>
             <td>
               <!-- ✅ Show Approve/Reject/Return buttons if user can approve (Admin or assigned as Stage Assignee) -->
-              <app-table-actions *ngIf="canApproveReject(item)">
-                <button pButton label="Approve" icon="pi pi-check" class="p-button-success p-button-sm" (click)="openActionModal(item, 'Approved')" pTooltip="Approve"></button>
-                <button pButton label="Reject" icon="pi pi-times" class="p-button-danger p-button-sm" (click)="openActionModal(item, 'Rejected')" pTooltip="Reject"></button>
-                <button pButton label="Return" icon="pi pi-reply" class="p-button-warning p-button-sm" (click)="openActionModal(item, 'Returned')" pTooltip="Return"></button>
-              </app-table-actions>
+              <div *ngIf="canApproveReject(item)" class="action-buttons">
+                <button pButton type="button" icon="pi pi-check" class="p-button-success p-button-sm action-icon-button" (click)="openActionModal(item, 'Approved')" pTooltip="Approve" tooltipPosition="top"></button>
+                <button pButton type="button" icon="pi pi-times" class="p-button-danger p-button-sm action-icon-button" (click)="openActionModal(item, 'Rejected')" pTooltip="Reject" tooltipPosition="top"></button>
+                <button pButton type="button" icon="pi pi-reply" class="p-button-warning p-button-sm action-icon-button" (click)="openActionModal(item, 'Returned')" pTooltip="Return" tooltipPosition="top"></button>
+              </div>
               <!-- ✅ Show View Only if user cannot approve -->
               <span *ngIf="!canApproveReject(item)" class="view-only-text">View Only</span>
             </td>
@@ -129,6 +140,9 @@
 
       <p-paginator *ngIf="!loading.inbox && inboxItems.length > 0"
         [first]="first" [rows]="rows" [totalRecords]="totalRecords"
+        styleClass="approval-paginator"
+        [showCurrentPageReport]="true"
+        currentPageReportTemplate="Showing {first} to {last} of {totalRecords}"
         [rowsPerPageOptions]="[10, 20, 50]" (onPageChange)="onPageChange($event)">
       </p-paginator>
       </app-table-shell>
@@ -169,8 +183,7 @@
         [attr.disabled]="isApproveDisabled() ? '' : (loading.action ? '' : null)" 
         [loading]="loading.action"
         [class]="actionType === 'Approved' ? 'p-button-success' : actionType === 'Rejected' ? 'p-button-danger' : 'p-button-warning'"
-        [pTooltip]="actionType === 'Approved' && !isAmountValid ? amountValidationError : ''"
-        (click)="processAction()">
+        [pTooltip]="actionType === 'Approved' && !isAmountValid ? amountValidationError : ''">
       </button>
     </div>
   </form>

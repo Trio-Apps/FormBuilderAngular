@@ -39,6 +39,16 @@ export interface ApprovalInboxItemDto {
   delegatedFromUserId?: string | null;
 }
 
+export interface PagedApprovalInboxResult {
+  items: ApprovalInboxItemDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+}
+
 export interface ResolvedApproverDto {
   userId: string;
   userName?: string;
@@ -382,6 +392,45 @@ export class ApprovalWorkflowRuntimeService {
           url: url
         });
         return of([]);
+      })
+    );
+  }
+
+  getApprovalInboxForUserPaged(
+    userId: string,
+    page: number,
+    pageSize: number,
+    searchTerm?: string
+  ): Observable<PagedApprovalInboxResult> {
+    if (!userId || userId.trim() === '') {
+      return throwError(() => new Error('User ID is required'));
+    }
+
+    const encodedUserId = encodeURIComponent(userId);
+    const normalizedPage = Number.isFinite(page) && page > 0 ? page : 1;
+    const normalizedPageSize = Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
+    const searchParam = searchTerm?.trim() ? `&searchTerm=${encodeURIComponent(searchTerm.trim())}` : '';
+    const url = `${this.baseUrl}/inbox/${encodedUserId}/paged?page=${normalizedPage}&pageSize=${normalizedPageSize}${searchParam}`;
+
+    return this.http.get<any>(url).pipe(
+      map((response: any) => {
+        const data = response?.data ?? response ?? {};
+        const items = Array.isArray(data.items) ? data.items : [];
+
+        return {
+          items,
+          totalCount: Number(data.totalCount ?? items.length ?? 0),
+          page: Number(data.page ?? normalizedPage),
+          pageSize: Number(data.pageSize ?? normalizedPageSize),
+          totalPages: Number(data.totalPages ?? 1),
+          hasPrevious: !!data.hasPrevious,
+          hasNext: !!data.hasNext
+        } as PagedApprovalInboxResult;
+      }),
+      catchError((error) => {
+        console.error(`[ApprovalWorkflowRuntimeService] Error fetching paged approval inbox for user ${userId}:`, error);
+        const errorMessage = this.extractErrorMessage(error);
+        throw new Error(errorMessage);
       })
     );
   }

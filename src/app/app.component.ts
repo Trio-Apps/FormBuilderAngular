@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { ToastModule } from 'primeng/toast';
 
 import { ColorModeService } from '@coreui/angular';
 import { IconSetService } from '@coreui/icons-angular';
@@ -11,8 +12,11 @@ import { TranslationService } from './core/services/translation.service';
 
 @Component({
     selector: 'app-root',
-    template: '<router-outlet />',
-    imports: [RouterOutlet]
+    template: `
+      <p-toast [autoZIndex]="true" [baseZIndex]="200000"></p-toast>
+      <router-outlet />
+    `,
+    imports: [RouterOutlet, ToastModule]
 })
 export class AppComponent implements OnInit {
   title = 'Beon-IT Formbuilder';

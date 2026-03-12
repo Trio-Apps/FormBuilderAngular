@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { TranslationService } from '../../../core/services/translation.service';
 import { ButtonModule } from 'primeng/button';
 import { FormSubmissionsService } from '../../form-submissions/services/form-submissions.service';
+import { StorageService } from '../../../auth/storage.service';
 
 @Component({
   selector: 'app-form-submission-success',
@@ -21,7 +22,8 @@ export class FormSubmissionSuccessComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     public translationService: TranslationService,
-    private formSubmissionsService: FormSubmissionsService
+    private formSubmissionsService: FormSubmissionsService,
+    private storageService: StorageService
   ) {}
 
   ngOnInit(): void {
@@ -32,9 +34,8 @@ export class FormSubmissionSuccessComponent implements OnInit {
     this.formCode = this.route.snapshot.queryParams['formCode'] || null;
     this.documentNumber = this.route.snapshot.queryParams['documentNumber'] || null;
 
-    // Always refresh document number from backend if submissionId is available.
-    // This avoids showing stale value from query params in race conditions.
-    if (this.submissionId && this.submissionId > 0) {
+    // Refresh from backend only when query params do not already provide a document number.
+    if (this.submissionId && this.submissionId > 0 && !this.documentNumber && this.storageService.hasToken()) {
       this.formSubmissionsService.getSubmissionById(this.submissionId).subscribe({
         next: (submission) => {
           if (submission?.documentNumber) {
@@ -52,13 +53,6 @@ export class FormSubmissionSuccessComponent implements OnInit {
     // Go back to form view if formCode is available
     if (this.formCode) {
       const queryParams: any = {};
-
-      if (this.submissionId) {
-        queryParams.submissionId = this.submissionId;
-      }
-      if (this.documentNumber) {
-        queryParams.documentNumber = this.documentNumber;
-      }
 
       // Preserve original context if present.
       const passthroughParams = ['documentTypeId', 'projectId', 'seriesId', 'userId', 'lang'];

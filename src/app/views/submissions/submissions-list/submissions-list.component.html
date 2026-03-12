@@ -48,8 +48,27 @@
   </section>
 
   <app-table-shell *ngIf="!loading && submissions.length > 0" title="Submission Queue">
-    <div table-actions class="table-shell-meta">
-      {{ submissions.length }} configured
+    <div table-actions class="table-toolbar">
+      <label class="search-field">
+        <i class="pi pi-search"></i>
+        <input
+          type="text"
+          [value]="searchTerm"
+          (input)="onSearchChange(($any($event.target).value || '').toString())"
+          placeholder="Search document number, form, user..."
+        />
+      </label>
+
+      <label class="filter-select">
+        <span>Status</span>
+        <select [value]="statusFilter" (change)="onStatusFilterChange(($any($event.target).value || 'all').toString())">
+          <option value="all">All statuses</option>
+          <option value="draft">Draft</option>
+          <option value="submitted">Submitted</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </label>
     </div>
 
     <div class="table-wrap">
@@ -67,7 +86,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let submission of submissions; trackBy: trackBySubmissionId">
+          <tr *ngFor="let submission of pagedSubmissions; trackBy: trackBySubmissionId">
             <td class="submission-cell">
               <div class="cell-primary">{{ submission.documentNumber || 'Pending Number' }}</div>
               <div class="cell-muted">#{{ submission.id }}</div>
@@ -153,6 +172,40 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="table-footer">
+      <div class="table-results">
+        Showing {{ pageStart }} to {{ pageEnd }} of {{ filteredSubmissions.length }} submissions
+      </div>
+
+      <div class="pagination-controls" *ngIf="filteredSubmissions.length > 0">
+        <label class="page-size-select">
+          <span>Rows</span>
+          <select [value]="pageSize" (change)="onPageSizeChange(($any($event.target).value || '10').toString())">
+            <option *ngFor="let option of pageSizeOptions" [value]="option">{{ option }}</option>
+          </select>
+        </label>
+
+        <div class="page-buttons">
+          <button type="button" class="page-btn" (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1">
+            Prev
+          </button>
+
+          <button
+            *ngFor="let page of getVisiblePages()"
+            type="button"
+            class="page-btn"
+            [class.page-btn--active]="page === currentPage"
+            (click)="goToPage(page)">
+            {{ page }}
+          </button>
+
+          <button type="button" class="page-btn" (click)="goToPage(currentPage + 1)" [disabled]="currentPage === totalPages">
+            Next
+          </button>
+        </div>
+      </div>
     </div>
   </app-table-shell>
 </div>

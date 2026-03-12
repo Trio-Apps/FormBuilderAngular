@@ -90,6 +90,41 @@
   font-weight: 500;
 }
 
+.page-access-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 18px 16px;
+  padding: 14px 16px;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+
+  .pi {
+    margin-top: 2px;
+    font-size: 1rem;
+    color: #ea580c;
+  }
+
+  .notice-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  strong {
+    font-size: 13px;
+    font-weight: 700;
+    color: #7c2d12;
+  }
+
+  span {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+}
+
 // Main card
 .main-content {
   margin-top: 18px;
@@ -200,24 +235,30 @@
 
     .action-buttons {
       display: inline-flex;
-      gap: 6px;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: nowrap;
 
-      .p-button {
+      .action-icon-button {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
         border-radius: 10px;
-        height: 32px;
-        padding: 0 10px;
-        font-size: 12px;
-        font-weight: 700;
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.07);
-      }
-    }
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
 
-    .p-paginator {
-      border-top: 1px solid #f1f5f9;
-      .p-paginator-pages .p-paginator-page.p-highlight {
-        background: #0ea5e9;
-        border-color: #0ea5e9;
-        color: #fff;
+        &:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+        }
+
+        .pi {
+          font-size: 0.9rem;
+        }
       }
     }
 
@@ -248,6 +289,79 @@
         font-size: 13px;
       }
     }
+  }
+}
+
+::ng-deep .approval-paginator.p-paginator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border: none;
+  border-top: 1px solid #f1f5f9;
+  background: #fff;
+
+  .p-paginator-current {
+    order: 1;
+    margin: 0;
+    color: #64748b;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .p-paginator-first,
+  .p-paginator-prev,
+  .p-paginator-next,
+  .p-paginator-last,
+  .p-paginator-page {
+    min-width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid #dbe3ef;
+    color: #334155;
+    background: #fff;
+    margin: 0 2px;
+    transition: all 0.15s ease;
+
+    &:hover {
+      border-color: #14b8a6;
+      background: #f0fdfa;
+      color: #0f766e;
+    }
+  }
+
+  .p-paginator-pages {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .p-paginator-page.p-highlight {
+    background: linear-gradient(135deg, #14b8a6, #10b981);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(20, 184, 166, 0.18);
+  }
+
+  .p-dropdown {
+    min-width: 78px;
+    height: 34px;
+    border-radius: 10px;
+    border-color: #dbe3ef;
+    align-items: center;
+  }
+
+  .p-dropdown-label {
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+    font-size: 12.5px;
+    color: #334155;
+  }
+
+  .p-dropdown-trigger {
+    color: #64748b;
   }
 }
 

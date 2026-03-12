@@ -94,13 +94,27 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
  * Suppress global toast for expected 404 checks in Crystal layout probing.
  */
 function shouldIgnoreErrorToast(url: string, status: number): boolean {
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+
+  if (status === 401 && currentPath.includes('/forms/view/')) {
+    return true;
+  }
+
   if (status !== 404) {
     return false;
   }
 
+  if (currentPath.includes('/forms/submission/success')) {
+    return true;
+  }
+
   const normalizedUrl = (url || '').toLowerCase();
   return normalizedUrl.includes('/api/crystalreports/default-layouts')
-    || normalizedUrl.includes('/api/crystalreports/default-layout/');
+    || normalizedUrl.includes('/api/crystalreports/default-layout/')
+    || normalizedUrl.includes('/api/approvalworkflowruntime/activate-stage')
+    || normalizedUrl.includes('/api/approvalworkflowruntime/request-signature')
+    || normalizedUrl.includes('/api/approvalworkflow/name/')
+    || normalizedUrl.endsWith('/api/approvalworkflow');
 }
 
 /**

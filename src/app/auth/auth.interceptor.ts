@@ -15,6 +15,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     req.url.includes('/FormSubmissions/data/save') ||
     req.url.includes('/FormSubmissions/submit');
   const isPublicFormViewRoute = router.url.includes('/forms/view/');
+  const isPublicSubmissionSuccessRoute = router.url.includes('/forms/submission/success');
   // Only force anonymous submission flow on public form routes.
   // For authenticated app routes (e.g. /document-types/.../submissions/new), token must be sent.
   const forceAnonymousSubmissionEndpoint = isSubmissionEndpoint && isPublicFormViewRoute;
@@ -28,6 +29,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
                                req.url.includes('/FormTabs/') ||
                                // Public submission flow (draft/submit) for public forms
                                (isSubmissionEndpoint && isPublicFormViewRoute) ||
+                               isPublicSubmissionSuccessRoute ||
                                isPublicFormViewRoute;
   
   // Debug logging (only in development)
@@ -92,7 +94,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
           }
 
           // For public form endpoints, never force redirect to login
-          if (isPublicFormEndpoint || isPublicFormViewRoute) {
+          if (isPublicFormEndpoint || isPublicFormViewRoute || isPublicSubmissionSuccessRoute) {
             if (isDebugMode) {
               console.log('[AuthInterceptor] Public form endpoint - allowing 401 without redirect:', req.url);
             }
@@ -183,7 +185,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         }
 
         // Don't redirect for public form endpoints or when on public form view route
-        if (isPublicFormEndpoint || isPublicFormViewRoute) {
+        if (isPublicFormEndpoint || isPublicFormViewRoute || isPublicSubmissionSuccessRoute) {
           if (isDebugMode) {
             console.log('[AuthInterceptor] Public form endpoint - allowing 401 without redirect:', req.url);
           }

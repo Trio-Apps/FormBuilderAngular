@@ -13,7 +13,6 @@ import { FormulasService } from '../../FormBuilder/services/formulas.service';
 import { FormFieldDto, FieldTypeDto, UpdateFormFieldDto, CreateFormFieldDto, FieldOptionDto, CreateFieldOptionDto, FieldDataSource, CreateFieldDataSourceDto, FieldOptionResponse, PreviewDataSourceRequestDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { FormGridDto } from '../../FormBuilder/form-builder/models/grid-dto.model';
 import { MessageService, ConfirmationService } from 'primeng/api';
-import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { DialogModule } from 'primeng/dialog';
@@ -58,7 +57,6 @@ import { ApprovalStageService, ApprovalStageDto } from '../../FormBuilder/servic
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
-    ToastModule,
     ConfirmDialogModule,
     TooltipModule,
     DialogModule,
@@ -70,7 +68,7 @@ import { ApprovalStageService, ApprovalStageDto } from '../../FormBuilder/servic
   ],
   templateUrl: './fields-list.component.html',
   styleUrls: ['./fields-list.component.scss'],
-  providers: [MessageService, ConfirmationService]
+  providers: [ConfirmationService]
 })
 export class FieldsListComponent implements OnInit, OnDestroy {
   // Route Parameters
@@ -740,7 +738,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.resetSapIntegrationSelection();
     this.loadSapConnections();
     this.loadSapDefaults();
-    this.loadSapIntegrationMapping(field.id);
 
     // Debug: Log field data to check if expressionText is present
     console.log('[openEditFieldModal] Field data:', {
@@ -3202,7 +3199,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   private async saveSapIntegrationMapping(fieldId: number): Promise<void> {
-    if (!this.formBuilderId || !fieldId) {
+    if (!this.formBuilderId || !fieldId || !this.sapIntegrationEnabled) {
       return;
     }
 
@@ -3259,10 +3256,14 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   private completeFieldModalSave(fieldId: number, successMessage: string): void {
-    Promise.all([
-      this.saveSapIntegrationMapping(fieldId),
-      this.saveSapIntegrationSettings()
-    ]).finally(() => {
+    const sapTasks: Array<Promise<void>> = [];
+
+    if (this.sapIntegrationEnabled) {
+      sapTasks.push(this.saveSapIntegrationMapping(fieldId));
+      sapTasks.push(this.saveSapIntegrationSettings());
+    }
+
+    Promise.all(sapTasks).finally(() => {
         this.loading.save = false;
         this.loadFields();
         this.messageService.add({ severity: 'success', summary: 'Success', detail: successMessage });

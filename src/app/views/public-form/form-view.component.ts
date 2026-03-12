@@ -78,11 +78,6 @@ export class FormViewComponent implements OnInit {
       return submissionNumber;
     }
 
-    const queryParamDocumentNumber = (this.route.snapshot.queryParams['documentNumber'] || '').trim();
-    if (queryParamDocumentNumber && !queryParamDocumentNumber.startsWith('DRAFT-')) {
-      return queryParamDocumentNumber;
-    }
-
     if (this.previewDocumentNumber) {
       return this.previewDocumentNumber;
     }
@@ -173,7 +168,9 @@ export class FormViewComponent implements OnInit {
 
   ngOnInit(): void {
     // Load field types first (they will be used as fallback in getFieldType)
-    this.loadFieldTypes();
+    if (this.canRunAuthenticatedApprovalActions()) {
+      this.loadFieldTypes();
+    }
     
     this.route.paramMap.subscribe(params => {
       const code = params.get('formCode');
@@ -185,11 +182,9 @@ export class FormViewComponent implements OnInit {
           const decoded = decodeURIComponent(code);
           // Trim whitespace and normalize
           this.formCode = decoded.trim();
-          this.loadCachedDocumentNumber();
         } catch (e) {
           // If decoding fails, use the original code trimmed
           this.formCode = code.trim();
-          this.loadCachedDocumentNumber();
         }
         
         if (!this.formCode) {
@@ -205,13 +200,7 @@ export class FormViewComponent implements OnInit {
 
     // Check for submissionId in query params (for draft/edit mode)
     this.route.queryParams.subscribe(params => {
-      this.queryDocumentNumber = params['documentNumber'] || null;
-      if (!this.queryDocumentNumber) {
-        this.loadCachedDocumentNumber();
-      } else {
-        this.cacheDocumentNumber(this.queryDocumentNumber);
-      }
-      if (params['submissionId']) {
+      if (params['submissionId'] && this.canRunAuthenticatedApprovalActions()) {
         this.submissionId = +params['submissionId'];
         // Load submission data to check status and enable approve/reject
         this.loadSubmissionData();
@@ -529,11 +518,10 @@ export class FormViewComponent implements OnInit {
 
           this.activeTabIndex = 0;
           this.loading = false;
-          // Create a draft submission on initial load so file fields can be linked
-          // and uploadedFiles can be loaded without causing 404 errors.
-          // This is intentionally best-effort and will fail silently if the
-          // backend requires authentication or the endpoint is not available.
-          this.createSubmissionOnLoad();
+          // Do not create backend drafts on initial load.
+          // Opening the form should stay read-only until the user actually
+          // uploads a file, saves, or submits. Otherwise we end up with
+          // orphan draft rows ("Pending Number") just by visiting the form.
 
           // Field options will be loaded lazily when needed (when getFieldOptions is called)
           // This improves initial load performance by not loading all options at once
@@ -1497,10 +1485,14 @@ export class FormViewComponent implements OnInit {
     // This ensures that even if field.fieldOptions is not loaded yet, we still detect it correctly
     // Note: hasOptionsFromFieldType already checked above, reuse it
     const hasOptionsFromField = field.fieldOptions && field.fieldOptions.length > 0;
+    const dataSourceType = (field.fieldDataSource?.sourceType || '').toLowerCase().trim();
+    const hasOptionsFromDataSource =
+      !!field.fieldDataSource?.isActive &&
+      ['static', 'api', 'lookuptable', 'datasourcesqlquery', 'sqlquery', 'saphana'].includes(dataSourceType);
     
     // IMPORTANT: If fieldType.hasOptions = true OR isExplicitOptionsType, we MUST treat it as a field with options
     // even if field.fieldOptions is empty (options might be loaded from DataSource later)
-    const hasOptions = hasOptionsFromFieldType || isExplicitOptionsType || hasOptionsFromField;
+    const hasOptions = hasOptionsFromFieldType || isExplicitOptionsType || hasOptionsFromField || hasOptionsFromDataSource;
     
     // If field has options (from fieldType.hasOptions OR field.fieldOptions), treat it as select/radio/checkbox
     if (hasOptions) {
@@ -1566,6 +1558,11 @@ export class FormViewComponent implements OnInit {
 
       // إذا كان allowMultiple = false و hasOptions = true وليس select/combobox صراحة
       // (Radio buttons تسمح باختيار واحد فقط، بينما Select قد يكون single أو multiple)
+      // Data-source backed option fields are rendered as dropdowns in Form Builder unless explicitly marked otherwise.
+      if (hasOptionsFromDataSource) {
+        return 'select';
+      }
+
       // Check allowMultiple - use ft?.allowMultiple if available, otherwise default to false (single selection = radio)
       const allowMultiple = ft?.allowMultiple ?? false;
       
@@ -1636,6 +1633,12 @@ export class FormViewComponent implements OnInit {
       console.log('[FormView] Using rules from form object:', this.form.formRules.length);
       this.resetDynamicFieldStates();
       this.evaluateFormRules();
+      return;
+    }
+
+    if (!this.canRunAuthenticatedApprovalActions()) {
+      console.log('[FormView] Skipping rules API load for anonymous public form.');
+      this.resetDynamicFieldStates();
       return;
     }
 
@@ -2003,6 +2006,10 @@ export class FormViewComponent implements OnInit {
    */
   validateFormRulesBeforeSubmit(): Observable<{ valid: boolean; errors: string[] }> {
     if (!this.form || !this.form.id) {
+      return of({ valid: true, errors: [] });
+    }
+
+    if (!this.canRunAuthenticatedApprovalActions()) {
       return of({ valid: true, errors: [] });
     }
 
@@ -4045,15 +4052,11 @@ export class FormViewComponent implements OnInit {
       return docTypeId;
     };
 
-    // Validate and load active projectId if the provided one is inactive/soft-deleted
+    // Validate and load active projectId if the provided one is inactive/soft-deleted.
+    // If no projectId is provided, defer resolving it until we inspect the available series.
     const loadActiveProjectId = async (projId: number | null): Promise<number | null> => {
       if (!projId) {
-        // No projectId in query params, load from API
-        const projects = await this.projectsService.getActiveProjects().toPromise();
-        if (projects && projects.length > 0 && projects[0]?.id) {
-          console.log('[FormView] No projectId in query params, using first active project:', projects[0].id);
-          return projects[0].id;
-        }
+        console.log('[FormView] No projectId in query params during initial load. Will resolve from series when possible.');
         return null;
       }
 
@@ -4097,28 +4100,15 @@ export class FormViewComponent implements OnInit {
     ]).then(async ([activeDocTypeId, resolvedProjectId]) => {
       // Update documentTypeId if it changed
       documentTypeId = activeDocTypeId;
-      if (!resolvedProjectId) {
-        console.warn('[FormView] No projectId available (not in query params and API failed), cannot create draft on load');
-        return;
-      }
-
       projectId = resolvedProjectId;
 
-      // Ensure projectId is not null (TypeScript check)
-      if (!projectId) {
-        console.warn('[FormView] projectId is null, cannot create draft on load');
-        return;
-      }
-
-      // Create a const with correct type for TypeScript
-      const finalProjectId: number = projectId;
       const queryParams = this.route.snapshot.queryParams;
       const selectedSeriesId = queryParams['seriesId'] ? +queryParams['seriesId'] : 0;
 
       console.log('[FormView] Creating draft submission on load:', {
         formBuilderId: this.form!.id!,
         documentTypeId,
-        projectId: finalProjectId,
+        projectId,
         submittedByUserId
       });
 
@@ -4149,8 +4139,8 @@ export class FormViewComponent implements OnInit {
       next: (documentSeries) => {
         console.log('[FormView] Loaded document series for draft creation:', {
           documentTypeId,
-          projectId: finalProjectId,
           totalSeries: documentSeries?.length || 0,
+          projectId,
           series: documentSeries?.map(s => ({ id: s.id, code: s.seriesCode, isActive: s.isActive, projectId: s.projectId }))
         });
         
@@ -4158,6 +4148,21 @@ export class FormViewComponent implements OnInit {
           console.warn('[FormView] No document series found, cannot create draft on load');
           return;
         }
+
+        if (!projectId) {
+          const firstSeriesWithProject = documentSeries.find((s: DocumentSeries) => !!s.projectId);
+          if (firstSeriesWithProject?.projectId) {
+            projectId = firstSeriesWithProject.projectId;
+            console.log('[FormView] Resolved initial-load projectId from series:', projectId);
+          }
+        }
+
+        if (!projectId) {
+          console.warn('[FormView] No projectId available after inspecting series, cannot create preview/draft on load');
+          return;
+        }
+
+        const finalProjectId: number = projectId;
 
         // Filter by project and find active series - MUST use only project-specific series
         const projectSeries = documentSeries.filter((s: DocumentSeries) => s.projectId === finalProjectId);
@@ -4204,7 +4209,12 @@ export class FormViewComponent implements OnInit {
         }
 
         console.log('[FormView] Creating draft with seriesId:', seriesId);
-        
+
+        if (!this.canRunAuthenticatedApprovalActions()) {
+          console.log('[FormView] Public form detected; keeping preview only and skipping draft creation on load.');
+          return;
+        }
+
         // Now create draft with seriesId
         if (!this.form || !this.form.id) return;
         this.formSubmissionsService.createDraft(this.form.id, finalProjectId, submittedByUserId, seriesId).subscribe({
@@ -4664,27 +4674,13 @@ export class FormViewComponent implements OnInit {
         console.warn('[FormView] Could not verify Document Type for Form:', docTypeError?.message || docTypeError);
       }
       
-      const seriesId = routeQueryParams['seriesId'] ? +routeQueryParams['seriesId'] : 1; // Default to 1 if not provided
+      const seriesId = routeQueryParams['seriesId'] ? +routeQueryParams['seriesId'] : 0;
       let projectId: number | null = routeQueryParams['projectId'] ? +routeQueryParams['projectId'] : null;
       const submittedByUserId = routeQueryParams['userId'] || 'public-user'; // Default user ID
 
-      // Validate and load active projectId if the provided one is inactive/soft-deleted
-      if (!projectId) {
-        console.log('[FormView] No projectId in query params, attempting to load from API');
-        try {
-          const projects = await this.projectsService.getActiveProjects().toPromise();
-          if (projects && projects.length > 0 && projects[0]?.id) {
-            projectId = projects[0].id;
-            console.log('[FormView] No projectId in query params, using first active project from API:', projectId);
-          } else {
-            projectId = 1;
-            console.warn('[FormView] No active projects found in API, defaulting to projectId: 1');
-          }
-        } catch (error) {
-          console.error('[FormView] Error loading projects, defaulting to projectId: 1', error);
-          projectId = 1; // Fallback
-        }
-      } else {
+      // If projectId is provided explicitly, validate it.
+      // Otherwise leave it null for now and resolve it from the available series first.
+      if (projectId) {
         // Validate projectId - check if it's active
         try {
           const project = await this.projectsService.getProjectById(projectId).toPromise();
@@ -4699,6 +4695,8 @@ export class FormViewComponent implements OnInit {
         } catch (error) {
           console.warn('[FormView] Error validating projectId, continuing with provided value:', error);
         }
+      } else {
+        console.log('[FormView] No projectId in query params. Will resolve it from document series first.');
       }
 
       let currentSubmissionId = this.submissionId;
@@ -4839,6 +4837,10 @@ export class FormViewComponent implements OnInit {
               }
               
               if (selectedSeries && selectedSeries.id) {
+                if (!projectId && selectedSeries.projectId) {
+                  projectId = selectedSeries.projectId;
+                  console.log('[FormView] Resolved projectId from selected series:', projectId);
+                }
                 actualSeriesId = selectedSeries.id;
                 this.updatePreviewDocumentNumber(selectedSeries);
                 console.log('[FormView] Selected active series:', { id: actualSeriesId, code: selectedSeries.seriesCode, projectId: selectedSeries.projectId });
@@ -4876,8 +4878,9 @@ export class FormViewComponent implements OnInit {
           // This is a workaround if the list endpoint requires auth but the get by ID doesn't
           // If seriesId is not found (404), ignore error and continue without seriesId for auto-selection
           if (!actualSeriesId || actualSeriesId === 0) {
-            const fallbackSeriesId = seriesId && seriesId > 0 ? seriesId : 1;
+            const fallbackSeriesId = seriesId && seriesId > 0 ? seriesId : 0;
             
+            if (fallbackSeriesId > 0) {
             try {
               // Try to get the series by ID to verify it exists
               // If 404, ignore error and continue without seriesId - series will be auto-selected
@@ -4918,6 +4921,9 @@ export class FormViewComponent implements OnInit {
               // Handle any other errors (non-404)
               console.error('[FormView] Error verifying series:', verifyError);
               hasActiveSeries = false;
+            }
+            } else {
+              shouldAllowAutoSelectSeries = true;
             }
           }
         }
@@ -5600,35 +5606,37 @@ export class FormViewComponent implements OnInit {
         this.isSaving = false;
       }
 
-      // Step 5: Check and update status to Draft if needed (to allow resubmission)
-      // If status is "Approved" or "Submitted", update it to "Draft" first
-      console.log('[FormView] Checking submission status before submit...');
-      try {
-        const currentSubmission = await new Promise<FormSubmissionDto>((resolve, reject) => {
-          this.formSubmissionsService.getSubmissionById(currentSubmissionId).subscribe({
-            next: (result) => resolve(result),
-            error: (err) => reject(err)
-          });
-        });
-
-        if (currentSubmission && (currentSubmission.status === 'Approved' || currentSubmission.status === 'Submitted')) {
-          console.log(`[FormView] Submission status is "${currentSubmission.status}", updating to Draft to allow resubmission...`);
-          await new Promise<void>((resolve, reject) => {
-            this.formSubmissionsService.updateSubmission(currentSubmissionId, { status: 'Draft' }).subscribe({
-              next: () => {
-                console.log('[FormView] ✅ Status updated to Draft, ready for resubmission');
-                resolve();
-              },
-              error: (updateErr) => {
-                console.warn('[FormView] Failed to update status to Draft, will try submit anyway:', updateErr);
-                resolve(); // Don't fail - try submit anyway
-              }
+      // Step 5: Only authenticated users should run pre-submit submission status checks.
+      if (this.canRunAuthenticatedApprovalActions()) {
+        console.log('[FormView] Checking submission status before submit...');
+        try {
+          const currentSubmission = await new Promise<FormSubmissionDto>((resolve, reject) => {
+            this.formSubmissionsService.getSubmissionById(currentSubmissionId).subscribe({
+              next: (result) => resolve(result),
+              error: (err) => reject(err)
             });
           });
+
+          if (currentSubmission && (currentSubmission.status === 'Approved' || currentSubmission.status === 'Submitted')) {
+            console.log(`[FormView] Submission status is "${currentSubmission.status}", updating to Draft to allow resubmission...`);
+            await new Promise<void>((resolve) => {
+              this.formSubmissionsService.updateSubmission(currentSubmissionId, { status: 'Draft' }).subscribe({
+                next: () => {
+                  console.log('[FormView] ✅ Status updated to Draft, ready for resubmission');
+                  resolve();
+                },
+                error: (updateErr) => {
+                  console.warn('[FormView] Failed to update status to Draft, will try submit anyway:', updateErr);
+                  resolve();
+                }
+              });
+            });
+          }
+        } catch (statusCheckError) {
+          console.warn('[FormView] Could not check/update status, will try submit anyway:', statusCheckError);
         }
-      } catch (statusCheckError) {
-        console.warn('[FormView] Could not check/update status, will try submit anyway:', statusCheckError);
-        // Continue with submit even if status check failed
+      } else {
+        console.log('[FormView] Public form detected; skipping authenticated pre-submit status checks.');
       }
 
       // Step 6: Final submit using submit endpoint
@@ -5656,9 +5664,8 @@ export class FormViewComponent implements OnInit {
         console.log('[FormView] Initial status from backend:', submittedSubmission.status);
         console.log('[FormView] Document Number from submit response:', submittedSubmission.documentNumber);
 
-        // If documentNumber is not in the submit response, fetch the submission to get it
-        // Document Number is generated at submission time and stored in the database
-        if (!submittedSubmission.documentNumber) {
+        // If documentNumber is not in the submit response, fetch it only for authenticated users.
+        if (!submittedSubmission.documentNumber && this.canRunAuthenticatedApprovalActions()) {
           console.log('[FormView] Document Number not in submit response, fetching submission to get it...');
           try {
             const fetchedSubmission = await new Promise<any>((resolve, reject) => {
@@ -5683,9 +5690,9 @@ export class FormViewComponent implements OnInit {
           }
         }
 
-        // Always update status to "Submitted" regardless of backend response or current status
-        // This allows resubmission and ensures status is always "Submitted" after submission
-        console.log('[FormView] Updating status to Submitted (allowing resubmission)...');
+        // Public submissions should not perform an extra authenticated update call here.
+        if (this.canRunAuthenticatedApprovalActions()) {
+          console.log('[FormView] Updating status to Submitted (allowing resubmission)...');
           this.formSubmissionsService.updateSubmission(currentSubmissionId, { status: 'Submitted' }).subscribe({
             next: () => {
               console.log('[FormView] ✅ Status updated to Submitted');
@@ -5694,13 +5701,18 @@ export class FormViewComponent implements OnInit {
             },
             error: (updateError) => {
               console.warn('[FormView] Failed to update status to Submitted:', updateError);
-            // Even if update fails, set status locally to Submitted
-            submittedSubmission.status = 'Submitted';
-            if (this.currentSubmission) {
-              this.currentSubmission.status = 'Submitted';
+              submittedSubmission.status = 'Submitted';
+              if (this.currentSubmission) {
+                this.currentSubmission.status = 'Submitted';
+              }
             }
+          });
+        } else {
+          submittedSubmission.status = 'Submitted';
+          if (this.currentSubmission) {
+            this.currentSubmission.status = 'Submitted';
+          }
         }
-        });
 
         const currentLang = this.translationService.getCurrentLanguage();
         const statusMessage = currentLang === 'ar' ? 'تم إرسال الطلب للمراجعة' : 'Request submitted for review';
@@ -5710,9 +5722,9 @@ export class FormViewComponent implements OnInit {
         console.log('[FormView] Document Type ID from submission:', submittedSubmission.documentTypeId);
         console.log('[FormView] Final Document Number:', submittedSubmission.documentNumber);
 
-        // Always activate stage after submit, then re-fetch submission to reflect stageId.
-        // This matches backend behavior (activate-stage sets stageId on the submission).
-        if (submittedSubmission.status === 'Submitted') {
+        // Approval/stage runtime actions require an authenticated admin/user context.
+        // For guest/public submissions we skip them to avoid noisy post-submit errors.
+        if (submittedSubmission.status === 'Submitted' && false) {
           console.log('[FormView] ✅ Status is Submitted, calling activate-stage then re-fetching submission...');
           this.approvalWorkflowRuntimeService.activateStage(currentSubmissionId).subscribe({
             next: () => {
@@ -5720,10 +5732,8 @@ export class FormViewComponent implements OnInit {
               this.formSubmissionsService.getSubmissionById(currentSubmissionId).subscribe({
                 next: (refetched: any) => {
                   this.currentSubmission = refetched;
-                  // If backend didn't set stageId (unexpected), keep existing fallback behavior.
                   if (!refetched?.stageId) {
                     console.warn('[FormView] stageId still null after activate-stage; falling back to stage lookup by workflow.');
-                    // Existing logic below will try to resolve documentTypeId -> workflowId -> stage list.
                   }
                 },
                 error: (refetchErr) => {
@@ -5748,49 +5758,9 @@ export class FormViewComponent implements OnInit {
             }
           });
 
-          // Continue with existing stageId resolution flow (fallback)
-          console.log('[FormView] Proceeding with stageId resolution fallback (if needed)...');
-          
-          // Get documentTypeId from multiple sources (priority order):
-          // 1. From submission object (most reliable)
-          // 2. From query params
-          // 3. From form (load it)
-          let docTypeId: number | null = null;
-          
-          if (submittedSubmission.documentTypeId) {
-            docTypeId = submittedSubmission.documentTypeId;
-            console.log('[FormView] Using documentTypeId from submission:', docTypeId);
-          } else {
-            // Try query params
-            const queryDocTypeId = this.route.snapshot.queryParams['documentTypeId'] ? +this.route.snapshot.queryParams['documentTypeId'] : null;
-            if (queryDocTypeId && queryDocTypeId > 0) {
-              docTypeId = queryDocTypeId;
-              console.log('[FormView] Using documentTypeId from query params:', docTypeId);
-            } else if (this.form && this.form.id) {
-              // Try to load from form
-              console.log('[FormView] Loading documentTypeId from form...');
-              this.documentTypesService.getDocumentTypeByFormId(this.form.id).subscribe({
-                next: (documentType) => {
-                  if (documentType && documentType.id) {
-                    console.log('[FormView] Loaded documentTypeId from form:', documentType.id);
-                    this.loadAndSetStageId(documentType.id, currentSubmissionId);
-                  } else {
-                    console.warn('[FormView] No documentTypeId found in form');
-                  }
-                },
-                error: (docTypeError) => {
-                  console.error('[FormView] Failed to load documentTypeId from form:', docTypeError);
-                }
-              });
-              return; // Exit early, will continue in callback
-            }
-          }
-          
-          if (docTypeId) {
-            this.loadAndSetStageId(docTypeId, currentSubmissionId);
-          } else {
-            console.warn('[FormView] No documentTypeId found in submission, query params, or form');
-          }
+          console.log('[FormView] Stage resolution fallback skipped in public form flow.');
+        } else if (submittedSubmission.status === 'Submitted') {
+          console.log('[FormView] Guest/public submission detected. Skipping approval runtime side effects.');
         }
 
         // Step 6: Redirect to success page
@@ -5810,9 +5780,17 @@ export class FormViewComponent implements OnInit {
           queryParams.documentTypeId = finalDocTypeId;
         }
         
-        // Add documentNumber if available
-        if (submittedSubmission.documentNumber) {
-          queryParams.documentNumber = submittedSubmission.documentNumber;
+        // Add documentNumber if available. Fall back to the current displayed/previewed number
+        // so the public success page does not need an authenticated refresh call.
+        const successDocumentNumber =
+          (submittedSubmission.documentNumber || '').trim() ||
+          (this.displayedDocumentNumber || '').trim() ||
+          (this.previewDocumentNumber || '').trim() ||
+          (this.queryDocumentNumber || '').trim();
+        if (successDocumentNumber) {
+          this.queryDocumentNumber = successDocumentNumber;
+          this.cacheDocumentNumber(successDocumentNumber);
+          queryParams.documentNumber = successDocumentNumber;
         }
         
         // Navigate to success page
@@ -5922,6 +5900,11 @@ export class FormViewComponent implements OnInit {
    * Load document type and set stageId
    */
   private loadAndSetStageId(docTypeId: number, submissionId: number): void {
+    if (!this.canRunAuthenticatedApprovalActions()) {
+      console.log('[FormView] Skipping workflow stage resolution for public/guest submission.');
+      return;
+    }
+
     console.log('[FormView] Loading document type to get approvalWorkflowId...', 'docTypeId:', docTypeId);
     
     // Try to get active document type by ID first, or by formBuilderId if available
@@ -6138,6 +6121,11 @@ export class FormViewComponent implements OnInit {
    * Set stageId for submission
    */
   private setStageIdForSubmission(approvalWorkflowId: number, submissionId: number): void {
+    if (!this.canRunAuthenticatedApprovalActions()) {
+      console.log('[FormView] Skipping stage assignment for public/guest submission.');
+      return;
+    }
+
     // Backend may create default stage asynchronously; retry briefly if no stages are returned yet.
     this.tryUpdateSubmissionStageIdWithRetry(submissionId, approvalWorkflowId);
     
@@ -6155,6 +6143,11 @@ export class FormViewComponent implements OnInit {
     maxAttempts: number = 5,
     delayMs: number = 500
   ): void {
+    if (!this.canRunAuthenticatedApprovalActions()) {
+      console.log('[FormView] Skipping stage retry flow for public/guest submission.');
+      return;
+    }
+
     this.approvalStageService.getAllByWorkflowId(approvalWorkflowId).subscribe({
       next: (stages) => {
         const validStages = (stages || []).filter(s => !s.isDeleted);
@@ -6270,21 +6263,63 @@ export class FormViewComponent implements OnInit {
     const template = (series.template || '').trim() || `${series.seriesCode || 'SERIES'}-{SEQ}`;
     const now = new Date();
     const year = `${now.getFullYear()}`;
+    const shortYear = year.slice(-2);
     const month = `${now.getMonth() + 1}`.padStart(2, '0');
     const day = `${now.getDate()}`.padStart(2, '0');
     const sequencePadding = Math.max(1, Number(series.sequencePadding || 3));
-    const sequenceNumber = Math.max(1, Number(series.nextNumber || series.sequenceStart || 1));
+    const sequenceNumber = this.getPreviewSequenceNumber(template, series);
     const sequenceValue = `${sequenceNumber}`.padStart(sequencePadding, '0');
     const projectToken = String(series.projectName || `PROJECT${series.projectId || ''}`).trim().toUpperCase();
 
     const preview = template
       .split('{PROJECT}').join(projectToken)
       .split('{YYYY}').join(year)
+      .split('{YY}').join(shortYear)
       .split('{MM}').join(month)
       .split('{DD}').join(day)
       .split('{SEQ}').join(sequenceValue);
 
     this.previewDocumentNumber = preview || null;
+  }
+
+  private getPreviewSequenceNumber(template: string, series: DocumentSeries): number {
+    const baseSequence = Math.max(1, Number(series.nextNumber || series.sequenceStart || 1));
+    const cachedDocumentNumber = (this.queryDocumentNumber || '').trim();
+    if (!cachedDocumentNumber) {
+      return baseSequence;
+    }
+
+    const cachedSequence = this.extractSequenceFromDocumentNumber(template, cachedDocumentNumber);
+    if (cachedSequence === null) {
+      return baseSequence;
+    }
+
+    return Math.max(baseSequence, cachedSequence + 1);
+  }
+
+  private extractSequenceFromDocumentNumber(template: string, documentNumber: string): number | null {
+    const normalizedTemplate = (template || '').trim();
+    const normalizedDocumentNumber = (documentNumber || '').trim();
+    if (!normalizedTemplate || !normalizedDocumentNumber || !normalizedTemplate.includes('{SEQ}')) {
+      return null;
+    }
+
+    const escapedTemplate = normalizedTemplate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = escapedTemplate
+      .replace('\\{PROJECT\\}', '.+?')
+      .replace('\\{YYYY\\}', '\\d{4}')
+      .replace('\\{YY\\}', '\\d{2}')
+      .replace('\\{MM\\}', '\\d{2}')
+      .replace('\\{DD\\}', '\\d{2}')
+      .replace('\\{SEQ\\}', '(\\d+)');
+
+    const match = new RegExp(`^${pattern}$`).exec(normalizedDocumentNumber);
+    if (!match || !match[1]) {
+      return null;
+    }
+
+    const parsed = Number(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
   private getDocumentNumberCacheKey(): string | null {
@@ -6306,25 +6341,16 @@ export class FormViewComponent implements OnInit {
   }
 
   private loadCachedDocumentNumber(): void {
-    const cacheKey = this.getDocumentNumberCacheKey();
-    if (!cacheKey) return;
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached && !this.queryDocumentNumber) {
-        this.queryDocumentNumber = cached;
-      }
-    } catch {
-      // Ignore storage errors
-    }
+    // Public form display should always be driven by the backend latest number,
+    // not by URL or local browser cache.
   }
 
   private loadLatestDocumentNumberForForm(): void {
-    if (this.queryDocumentNumber) return;
     if (!this.form?.id) return;
 
     this.formSubmissionsService.getLatestDocumentNumberByFormBuilderId(this.form.id).subscribe({
       next: (documentNumber) => {
-        if (!documentNumber || this.queryDocumentNumber) return;
+        if (!documentNumber) return;
         this.queryDocumentNumber = documentNumber;
         this.cacheDocumentNumber(documentNumber);
         this.cdr.detectChanges();
@@ -6333,6 +6359,10 @@ export class FormViewComponent implements OnInit {
         // Keep page working silently if endpoint fails.
       }
     });
+  }
+
+  private canRunAuthenticatedApprovalActions(): boolean {
+    return this.storageService.hasToken();
   }
 
   /**

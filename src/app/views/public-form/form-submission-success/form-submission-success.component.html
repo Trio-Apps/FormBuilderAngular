@@ -3,17 +3,17 @@
     <div class="success-icon">
       <i class="pi pi-check-circle" style="font-size: 5rem; color: #10b981;"></i>
     </div>
-    
+
     <h1 class="success-title">
       {{ translationService.getCurrentLanguage() === 'ar' ? 'تم تسجيل النموذج بنجاح!' : 'Form Submitted Successfully!' }}
     </h1>
-    
+
     <p class="success-message">
-      {{ translationService.getCurrentLanguage() === 'ar' 
-        ? 'شكراً لك! تم إرسال النموذج بنجاح وسيتم مراجعته قريباً.' 
+      {{ translationService.getCurrentLanguage() === 'ar'
+        ? 'شكراً لك! تم إرسال النموذج بنجاح وسيتم مراجعته قريباً.'
         : 'Thank you! Your form has been submitted successfully and will be reviewed soon.' }}
     </p>
-    
+
     <div class="success-details" *ngIf="submissionId || documentNumber">
       <p class="detail-item" *ngIf="documentNumber">
         <strong>{{ translationService.getCurrentLanguage() === 'ar' ? 'رقم المستند:' : 'Document Number:' }}</strong>
@@ -24,24 +24,15 @@
         {{ submissionId }}
       </p>
     </div>
-    
+
     <div class="success-actions">
-      <p-button 
+      <p-button
         label="{{ translationService.getCurrentLanguage() === 'ar' ? 'العودة إلى النموذج' : 'Back to Form' }}"
         icon="pi pi-arrow-left"
         [iconPos]="translationService.getCurrentLanguage() === 'ar' ? 'right' : 'left'"
         (onClick)="goBack()"
         styleClass="p-button-primary">
       </p-button>
-      
-      <p-button 
-        *ngIf="submissionId"
-        label="{{ translationService.getCurrentLanguage() === 'ar' ? 'عرض جميع الطلبات' : 'View All Submissions' }}"
-        icon="pi pi-list"
-        (onClick)="goToSubmissions()"
-        styleClass="p-button-secondary">
-      </p-button>
     </div>
   </div>
 </div>
-

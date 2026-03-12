@@ -300,7 +300,6 @@
               <input type="text" class="form-control" formControlName="fieldCode"
                 [placeholder]="translateLabel('fields.enterFieldCode')"
                 [class.is-invalid]="isFieldInvalid('fieldCode')">
-              <small class="form-hint">{{ translateLabel('fields.enterFieldCode') }}</small>
               <div class="invalid-feedback" *ngIf="isFieldInvalid('fieldCode')">
                 {{ getFieldErrorMessage('fieldCode') }}
               </div>
@@ -672,6 +671,41 @@
           </h4>
 
           <div class="form-grid">
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <div class="data-source-guide">
+                <div class="guide-header">
+                  <div class="guide-title">
+                    <i class="pi pi-question-circle"></i>
+                    <span>How this source works</span>
+                  </div>
+                  <div class="guide-subtitle">Choose the source based on where the dropdown values actually live.</div>
+                </div>
+
+                <div class="guide-grid">
+                  <div class="guide-card">
+                    <div class="guide-card-title">Static</div>
+                    <div class="guide-card-text">Use for a short manual list like <strong>Low, Medium, High</strong>.</div>
+                  </div>
+
+                  <div class="guide-card">
+                    <div class="guide-card-title">Database Table</div>
+                    <div class="guide-card-text">Use only for real system tables already mapped in the backend, such as master data tables.</div>
+                  </div>
+
+                  <div class="guide-card">
+                    <div class="guide-card-title">SQL Query</div>
+                    <div class="guide-card-text">Use when you need stronger control or when the values come from submissions and generic storage tables.</div>
+                  </div>
+
+                  <div class="guide-card">
+                    <div class="guide-card-title">Important</div>
+                    <div class="guide-card-text">Forms created in Form Builder do <strong>not</strong> appear here as separate SQL tables. Their data is stored in generic submission tables.</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
             <!-- Data Source Type Selection (3 Options) -->
             <div class="form-group" style="grid-column: 1 / -1;">
               <label class="form-label">{{ translateLabel('fields.dataSourceType') }} <span
@@ -707,10 +741,8 @@
                     style="width: 20px; height: 20px; cursor: pointer;" />
                   <i class="pi pi-table" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
-                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
-                      translateLabel('fields.dataSourceTable') }}</div>
-                    <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceTableDesc') }}
-                    </div>
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">System Database Table</div>
+                    <div style="font-size: 12px; color: #6b7280;">Use a real mapped table from FormBuilder or AKHManageIT, such as master/reference data already available in the backend.</div>
                   </div>
                 </label>
 
@@ -741,10 +773,10 @@
                   <i class="pi pi-code" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
                     <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">
-                      DataSourceSqlQuery
+                      SQL Query
                     </div>
                     <div style="font-size: 12px; color: #6b7280;">
-                      Load options from SQL query. Column names are case-insensitive (Email, email, EMAIL all work). Please select the database to execute the query against.
+                      Best option when values need filtering, joining, or reading from Form Builder submission tables. Column names are case-insensitive.
                     </div>
                   </div>
                 </label>
@@ -772,6 +804,24 @@
 
             <!-- Database Table Selection -->
             <div class="form-group" *ngIf="dataSourceType === 'LookupTable'" style="grid-column: 1 / -1;">
+              <div class="source-detail-panel">
+                <div class="source-detail-title">
+                  <i class="pi pi-table"></i>
+                  <span>Database Table Guide</span>
+                </div>
+                <div class="source-detail-copy">
+                  This list shows backend-mapped tables only. If you are trying to link to values produced by a Form Builder form, that form will usually <strong>not</strong> appear here as its own table.
+                </div>
+                <ul class="source-detail-list">
+                  <li>Use this for master data tables like users, business partners, or pre-existing system entities.</li>
+                  <li>If the needed values come from form submissions, use <strong>SQL Query</strong> instead.</li>
+                  <li>After selecting a table, choose the key column in <strong>Value Path</strong> and the display column in <strong>Text Path</strong>.</li>
+                </ul>
+                <div class="source-detail-example">
+                  Example: If you want an operator dropdown from a master table, choose the appropriate system table, then set <code>Id</code> as Value Path and <code>Name</code> as Text Path.
+                </div>
+              </div>
+
               <!-- Database Selection for LookupTable -->
               <label class="form-label" style="margin-bottom: 8px;">
                 <i class="pi pi-database" style="margin-right: 6px; color: #667eea;"></i>
@@ -803,6 +853,10 @@
                 style="color: #059669; margin-top: 6px; display: block;">
                 <i class="pi pi-info-circle"></i>
                 Tables from {{ lookupTableConfig.database === 'AkhmanageIt' ? 'AKHManageIT' : 'FormBuilder' }} database
+              </small>
+              <small class="form-text text-muted"
+                style="margin-top: 6px; display: block; color: #6b7280; font-size: 12px;">
+                Tip: if you created a new form and cannot find it here, that is expected with the current architecture. Use SQL Query if you need to read from stored submissions.
               </small>
 
               <!-- Available Columns Display (similar to Available Properties for API) -->
@@ -887,6 +941,25 @@
 
             <!-- SQL Query Configuration (SQL Server) -->
             <div class="form-group" *ngIf="dataSourceType === 'SqlQuery'" style="grid-column: 1 / -1;">
+              <div class="source-detail-panel source-detail-panel-query">
+                <div class="source-detail-title">
+                  <i class="pi pi-code"></i>
+                  <span>SQL Query Guide</span>
+                </div>
+                <div class="source-detail-copy">
+                  Use SQL Query when dropdown values need stronger logic, joins, filters, or when the source data comes from Form Builder submissions rather than a direct mapped table.
+                </div>
+                <ul class="source-detail-list">
+                  <li>Return two main columns: one for the stored value and one for the displayed text.</li>
+                  <li>Then map them below using <strong>Value Path</strong> and <strong>Text Path</strong>.</li>
+                  <li>This is the recommended path when testers expect data from created forms or submission records.</li>
+                </ul>
+                <div class="source-detail-example">
+                  Example shape: <code>SELECT Id, Name FROM Tbl_User WHERE IsActive = 1</code><br />
+                  Example for advanced scenarios: join submission tables or filter by active business rules, then expose the result as <code>Id</code> and <code>Name</code>.
+                </div>
+              </div>
+
               <!-- Database Selection -->
               <label class="form-label" style="margin-bottom: 8px;">
                 <i class="pi pi-database" style="margin-right: 6px; color: #667eea;"></i>
@@ -1707,5 +1780,4 @@
   </app-dialog-shell>
 </div>
 
-<p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>

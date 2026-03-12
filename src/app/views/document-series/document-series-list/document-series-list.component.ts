@@ -7,7 +7,6 @@ import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { CheckboxModule } from 'primeng/checkbox';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { MessageService, ConfirmationService } from 'primeng/api';
@@ -38,7 +37,6 @@ import { catchError, of } from 'rxjs';
     CheckboxModule,
     FormsModule,
     ReactiveFormsModule,
-    ToastModule,
     ConfirmDialogModule,
     TooltipModule,
     DialogShellComponent,
@@ -46,7 +44,7 @@ import { catchError, of } from 'rxjs';
   ],
   templateUrl: './document-series-list.component.html',
   styleUrls: ['./document-series-list.component.scss'],
-  providers: [MessageService, ConfirmationService]
+  providers: [ConfirmationService]
 })
 export class DocumentSeriesListComponent implements OnInit {
   loading = false;
@@ -56,17 +54,42 @@ export class DocumentSeriesListComponent implements OnInit {
   projects: ProjectDto[] = [];
   seriesForm!: FormGroup;
   showFormDialog = false;
+  showSeriesGuide = false;
   editingSeries: DocumentSeries | null = null;
-  readonly supportedSeriesPlaceholders = ['{PROJECT}', '{YYYY}', '{MM}', '{DD}', '{SEQ}'];
+  readonly supportedSeriesPlaceholders = ['{PROJECT}', '{YYYY}', '{YY}', '{MM}', '{DD}', '{SEQ}'];
   readonly resetPolicyOptions: DocumentSeriesResetPolicy[] = ['None', 'Yearly', 'Monthly', 'Daily'];
   readonly generateOnOptions: DocumentSeriesGenerateOn[] = ['Submit', 'Approval'];
   readonly templatePresets = [
-    'PR-{PROJECT}-{YYYY}-{SEQ}',
-    'INV-{PROJECT}-{YYYY}-{SEQ}',
-    'INV/{PROJECT}/{YYYY}/{SEQ}',
-    'CNT-{YYYY}{MM}-{SEQ}',
-    'REQ-{YYYY}{MM}{DD}-{SEQ}',
-    'DOC-{PROJECT}-{YYYY}{MM}-{SEQ}'
+    {
+      label: 'Project yearly',
+      value: 'PR-{PROJECT}-{YYYY}-{SEQ}',
+      description: 'Good for project-based yearly numbering.'
+    },
+    {
+      label: 'Project short year',
+      value: 'PR-{PROJECT}-{YY}-{SEQ}',
+      description: 'Uses 2-digit year like 26.'
+    },
+    {
+      label: 'Slash format',
+      value: 'INV/{PROJECT}/{YYYY}/{SEQ}',
+      description: 'Readable invoice-style format with slash separator.'
+    },
+    {
+      label: 'Monthly compact',
+      value: 'CNT-{YYYY}{MM}-{SEQ}',
+      description: 'Groups numbers by year and month.'
+    },
+    {
+      label: 'Daily request',
+      value: 'REQ-{YYYY}{MM}{DD}-{SEQ}',
+      description: 'Best when documents are created many times per day.'
+    },
+    {
+      label: 'Project monthly',
+      value: 'DOC-{PROJECT}-{YYYY}{MM}-{SEQ}',
+      description: 'Project-based with monthly grouping.'
+    }
   ];
   readonly customTemplateValue = '__CUSTOM__';
 
@@ -80,7 +103,7 @@ export class DocumentSeriesListComponent implements OnInit {
     this.seriesForm = this.fb.group({
       projectId: [null, [Validators.required]],
       seriesName: ['', [Validators.required, Validators.maxLength(100)]],
-      templatePreset: [this.templatePresets[0], [Validators.required]],
+      templatePreset: [this.templatePresets[0].value, [Validators.required]],
       template: ['', [Validators.required, Validators.maxLength(150)]],
       sequenceStart: [1, [Validators.required, Validators.min(1)]],
       sequencePadding: [3, [Validators.required, Validators.min(1), Validators.max(10)]],
@@ -133,11 +156,12 @@ export class DocumentSeriesListComponent implements OnInit {
   openCreateDialog(): void {
     this.editingSeries = null;
     this.showFormDialog = true;
+    this.showSeriesGuide = false;
     this.seriesForm.reset({
       projectId: null,
       seriesName: '',
-      templatePreset: this.templatePresets[0],
-      template: this.templatePresets[0],
+      templatePreset: this.templatePresets[0].value,
+      template: this.templatePresets[0].value,
       sequenceStart: 1,
       sequencePadding: 3,
       resetPolicy: 'Yearly',
@@ -150,12 +174,13 @@ export class DocumentSeriesListComponent implements OnInit {
 
   openEditDialog(item: DocumentSeries): void {
     const currentTemplate = this.getSeriesTemplate(item);
-    const matchedPreset = this.templatePresets.includes(currentTemplate)
+    const matchedPreset = this.templatePresets.some(preset => preset.value === currentTemplate)
       ? currentTemplate
       : this.customTemplateValue;
 
     this.editingSeries = item;
     this.showFormDialog = true;
+    this.showSeriesGuide = false;
     this.seriesForm.patchValue({
       projectId: item.projectId,
       seriesName: item.seriesName || item.seriesCode,
@@ -174,12 +199,93 @@ export class DocumentSeriesListComponent implements OnInit {
   closeDialog(): void {
     this.showFormDialog = false;
     this.editingSeries = null;
+    this.showSeriesGuide = false;
     this.seriesForm.reset();
   }
 
   onTemplatePresetChange(value: string | null): void {
     if (!value || value === this.customTemplateValue) return;
     this.seriesForm.patchValue({ template: value });
+  }
+
+  insertPlaceholder(token: string): void {
+    const templateControl = this.seriesForm.get('template');
+    const currentValue = String(templateControl?.value || '');
+    const nextValue = currentValue.includes(token)
+      ? currentValue
+      : `${currentValue}${currentValue ? '-' : ''}${token}`;
+
+    templateControl?.setValue(nextValue);
+    templateControl?.markAsTouched();
+    templateControl?.updateValueAndValidity();
+  }
+
+  getSelectedPresetDescription(): string {
+    const selectedPreset = String(this.seriesForm.get('templatePreset')?.value || '');
+    if (selectedPreset === this.customTemplateValue) {
+      return 'Build your own template using the supported placeholders below.';
+    }
+
+    return this.templatePresets.find(preset => preset.value === selectedPreset)?.description
+      || 'Choose a preset or switch to custom for a fully manual template.';
+  }
+
+  getSequenceDigitsPreview(): string {
+    const padding = Number(this.seriesForm.get('sequencePadding')?.value || 3);
+    const safePadding = Math.max(1, padding);
+    return `${safePadding} digit${safePadding === 1 ? '' : 's'} -> ${`${1}`.padStart(safePadding, '0')}`;
+  }
+
+  getLastIssuedSequence(): number {
+    const nextNumber = Number(this.seriesForm.get('nextNumber')?.value || 1);
+    const sequenceStart = Number(this.seriesForm.get('sequenceStart')?.value || 1);
+    return Math.max(sequenceStart - 1, nextNumber - 1, 0);
+  }
+
+  getYearControlSummary(): string {
+    const template = String(this.seriesForm.get('template')?.value || '');
+    const resetPolicy = String(this.seriesForm.get('resetPolicy')?.value || 'None');
+
+    if (template.includes('{YYYY}')) {
+      return `Uses 4-digit year and resets ${resetPolicy.toLowerCase()}.`;
+    }
+
+    if (template.includes('{YY}')) {
+      return `Uses 2-digit year and resets ${resetPolicy.toLowerCase()}.`;
+    }
+
+    return `No year token in template. Reset is still ${resetPolicy.toLowerCase()}.`;
+  }
+
+  getGenerateOnSummary(): string {
+    const generateOn = String(this.seriesForm.get('generateOn')?.value || 'Submit');
+    return generateOn === 'Approval'
+      ? 'Number is reserved only after the document reaches approval generation.'
+      : 'Number is generated as soon as the submit action is completed.';
+  }
+
+  getTemplateStructureSummary(): string {
+    const template = String(this.seriesForm.get('template')?.value || '');
+    if (!template) {
+      return 'Template supports free prefix and suffix text around the placeholders.';
+    }
+
+    const startsWithToken = template.startsWith('{');
+    const endsWithToken = template.endsWith('}');
+
+    if (!startsWithToken && !endsWithToken) {
+      return 'This template currently uses both custom prefix and custom suffix text.';
+    }
+
+    if (!startsWithToken) {
+      return 'This template currently uses a custom prefix before the numbering tokens.';
+    }
+
+    if (!endsWithToken) {
+      return 'This template currently uses a custom suffix after the numbering tokens.';
+    }
+
+    return 'This template is token-based only. Add text before or after tokens for prefix/suffix.';
   }
 
   saveSeries(): void {
@@ -194,23 +300,35 @@ export class DocumentSeriesListComponent implements OnInit {
     }
 
     const formData = this.seriesForm.value;
+    const templateControl = this.seriesForm.get('template');
     const template = String(formData.template || '').trim();
     const unsupportedPlaceholders = this.getUnsupportedTemplatePlaceholders(template);
 
+    templateControl?.setErrors(null);
+    templateControl?.markAsTouched();
+
     if (unsupportedPlaceholders.length > 0) {
+      templateControl?.setErrors({
+        ...(templateControl.errors || {}),
+        unsupportedPlaceholders: unsupportedPlaceholders
+      });
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation',
-        detail: `Unsupported placeholders: ${unsupportedPlaceholders.join(', ')}`
+        detail: `Template contains unsupported placeholders: ${unsupportedPlaceholders.join(', ')}. Supported placeholders are ${this.supportedSeriesPlaceholders.join(', ')}.`
       });
       return;
     }
 
     if (!template.includes('{SEQ}')) {
+      templateControl?.setErrors({
+        ...(templateControl.errors || {}),
+        missingSeq: true
+      });
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation',
-        detail: 'Template must include {SEQ}.'
+        detail: 'Template must include {SEQ} so the running sequence number can be generated.'
       });
       return;
     }
@@ -317,12 +435,13 @@ export class DocumentSeriesListComponent implements OnInit {
     if (!item.id) return;
     const next = !(item.isActive === true);
     this.documentTypesService.toggleDocumentSeriesStatus(item.id, next).subscribe({
-      next: () => {
+      next: (updatedSeries) => {
+        item.isActive = updatedSeries?.isActive ?? next;
         this.messageService.add({ severity: 'success', summary: 'Success', detail: `Series ${next ? 'activated' : 'deactivated'}.` });
         this.loadSeries();
       },
-      error: (error: any) => {
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: error?.message || 'Failed to change status.' });
+      error: () => {
+        // Global error interceptor already shows the failure toast.
       }
     });
   }
@@ -352,6 +471,7 @@ export class DocumentSeriesListComponent implements OnInit {
   getSeriesPreview(item?: DocumentSeries): string {
     const now = new Date();
     const year = `${now.getFullYear()}`;
+    const shortYear = year.slice(-2);
     const month = `${now.getMonth() + 1}`.padStart(2, '0');
     const day = `${now.getDate()}`.padStart(2, '0');
 
@@ -370,6 +490,7 @@ export class DocumentSeriesListComponent implements OnInit {
     return targetTemplate
       .split('{PROJECT}').join(projectCode)
       .split('{YYYY}').join(year)
+      .split('{YY}').join(shortYear)
       .split('{MM}').join(month)
       .split('{DD}').join(day)
       .split('{SEQ}').join(sequenceValue);

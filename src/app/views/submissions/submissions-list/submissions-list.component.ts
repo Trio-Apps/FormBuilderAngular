@@ -18,6 +18,11 @@ export class SubmissionsListComponent implements OnInit {
   submissions: FormSubmissionDto[] = [];
   loading = false;
   pageError = '';
+  searchTerm = '';
+  statusFilter = 'all';
+  currentPage = 1;
+  pageSize = 10;
+  readonly pageSizeOptions = [10, 20, 50];
   executingBySubmission: Record<number, boolean> = {};
   executionResultsBySubmission: Record<number, SapIntegrationExecuteResultDto> = {};
   downloadingPdfBySubmission: Record<number, boolean> = {};
@@ -41,6 +46,60 @@ export class SubmissionsListComponent implements OnInit {
     return this.submissions.length;
   }
 
+  get filteredSubmissions(): FormSubmissionDto[] {
+    const search = this.searchTerm.trim().toLowerCase();
+    const status = this.statusFilter.trim().toLowerCase();
+
+    return this.submissions.filter((submission) => {
+      const submissionStatus = (submission.status || '').trim().toLowerCase();
+      const matchesStatus = status === 'all' || submissionStatus === status;
+
+      if (!matchesStatus) {
+        return false;
+      }
+
+      if (!search) {
+        return true;
+      }
+
+      const haystack = [
+        submission.documentNumber,
+        submission.formName,
+        submission.documentTypeName,
+        submission.submittedByUserName,
+        submission.submittedByUserId,
+        submission.status,
+        submission.id?.toString()
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(search);
+    });
+  }
+
+  get pagedSubmissions(): FormSubmissionDto[] {
+    const start = (this.currentPage - 1) * this.pageSize;
+    return this.filteredSubmissions.slice(start, start + this.pageSize);
+  }
+
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredSubmissions.length / this.pageSize));
+  }
+
+  get pageStart(): number {
+    if (!this.filteredSubmissions.length) {
+      return 0;
+    }
+
+    return (this.currentPage - 1) * this.pageSize + 1;
+  }
+
+  get pageEnd(): number {
+    return Math.min(this.currentPage * this.pageSize, this.filteredSubmissions.length);
+  }
+
   get sapReadyCount(): number {
     return this.submissions.filter((submission) => submission.sapIntegrationEnabled).length;
   }
@@ -61,6 +120,7 @@ export class SubmissionsListComponent implements OnInit {
           return bTime - aTime;
         });
 
+        this.currentPage = 1;
         this.prefetchAvailableLayouts();
         this.loading = false;
       },
@@ -250,6 +310,41 @@ export class SubmissionsListComponent implements OnInit {
 
   trackBySubmissionId(_: number, submission: FormSubmissionDto): number {
     return submission.id;
+  }
+
+  onSearchChange(term: string): void {
+    this.searchTerm = term;
+    this.currentPage = 1;
+  }
+
+  onStatusFilterChange(value: string): void {
+    this.statusFilter = value;
+    this.currentPage = 1;
+  }
+
+  onPageSizeChange(value: string): void {
+    const nextSize = Number(value);
+    if (!Number.isFinite(nextSize) || nextSize <= 0) {
+      return;
+    }
+
+    this.pageSize = nextSize;
+    this.currentPage = 1;
+  }
+
+  goToPage(page: number): void {
+    const nextPage = Math.min(Math.max(page, 1), this.totalPages);
+    this.currentPage = nextPage;
+  }
+
+  getVisiblePages(): number[] {
+    const total = this.totalPages;
+    const current = this.currentPage;
+    const pages = new Set<number>([1, total, current - 1, current, current + 1]);
+
+    return Array.from(pages)
+      .filter((page) => page >= 1 && page <= total)
+      .sort((a, b) => a - b);
   }
 
   private prefetchAvailableLayouts(): void {

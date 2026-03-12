@@ -1,9 +1,8 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
-import { TableActionsComponent } from '../../../shared/table-actions/table-actions.component';
 import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto, ProcessApprovalActionDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
+import { ApprovalWorkflowRuntimeService, ApprovalInboxItemDto, PagedApprovalInboxResult, ProcessApprovalActionDto } from '../../FormBuilder/services/approval-workflow-runtime.service';
 import { ApprovalStageAssigneesService } from '../../FormBuilder/services/approval-stage-assignees.service';
 import { ApprovalStageService, ApprovalStageDto } from '../../FormBuilder/services/approval-stage.service';
 import { FormSubmissionsService, FormSubmissionDto, FormSubmissionDetailDto } from '../../form-submissions/services/form-submissions.service';
@@ -31,7 +30,6 @@ import { HasPermissionDirective } from '../../../directives/has-permission.direc
   selector: 'app-approval-inbox',
   standalone: true,
   imports: [
-    TableActionsComponent,
     DialogShellComponent,
     CommonModule,
     FormsModule,
@@ -58,6 +56,7 @@ export class ApprovalInboxComponent implements OnInit {
   currentUserId: string | null = null;
   currentUsername: string | null = null; // Store username separately in case backend needs it
   showAllSubmissions = false; // Toggle between inbox and all submissions
+  pageAccessNotice: string | null = null;
   
   // ✅ Role-based access control
   isAdmin = false; // Only admins can Approve/Reject
@@ -87,6 +86,7 @@ export class ApprovalInboxComponent implements OnInit {
   first = 0;
   rows = 10;
   totalRecords = 0;
+  private lastInboxIdentifier: string | null = null;
 
   constructor(
     private runtimeService: ApprovalWorkflowRuntimeService,
@@ -256,6 +256,7 @@ export class ApprovalInboxComponent implements OnInit {
    * Load inbox with delegations - includes inbox items for delegated users
    */
   private loadInboxWithDelegations(delegations: ApprovalDelegationDto[]): void {
+    this.lastInboxIdentifier = null;
     const now = new Date();
     const activeDelegations = delegations.filter(d => {
       if (d.isActive === false) return false;
@@ -314,7 +315,7 @@ export class ApprovalInboxComponent implements OnInit {
         
         console.log(`[ApprovalInbox] Total unique inbox items (including delegations):`, uniqueItems.length);
         
-        this.inboxItems = uniqueItems;
+        this.inboxItems = this.sortInboxItemsByNewest(uniqueItems);
         this.filteredItems = [...this.inboxItems];
         this.totalRecords = this.filteredItems.length;
         this.loading.inbox = false;
@@ -337,15 +338,85 @@ export class ApprovalInboxComponent implements OnInit {
       return;
     }
 
+    this.lastInboxIdentifier = userIdentifier;
+
+    const page = Math.floor(this.first / this.rows) + 1;
+    this.runtimeService.getApprovalInboxForUserPaged(userIdentifier, page, this.rows, this.searchTerm).subscribe({
+      next: (result: PagedApprovalInboxResult) => {
+        const assignedItems = this.sortInboxItemsByNewest(result.items || []);
+
+        this.inboxItems = assignedItems;
+        this.filteredItems = [...assignedItems];
+
+        if (!isRetry) {
+          this.activeDelegations = [];
+        }
+
+        this.totalRecords = result.totalCount || 0;
+        this.loading.inbox = false;
+
+        if (this.totalRecords > 0 && this.first >= this.totalRecords) {
+          this.first = 0;
+          this.loadInboxWithUserId(userIdentifier, isRetry);
+          return;
+        }
+
+        if (assignedItems.length === 0 && this.totalRecords === 0 && !isRetry) {
+          if (userIdentifier === this.currentUserId && this.currentUsername && this.currentUsername !== this.currentUserId) {
+            this.loadInboxWithUserId(this.currentUsername, true);
+            return;
+          }
+
+          if (userIdentifier === this.currentUsername) {
+            const userId = this.storageService.getUserId();
+            if (userId && userId.toString() !== this.currentUsername) {
+              this.loadInboxWithUserId(userId.toString(), true);
+              return;
+            }
+          }
+        }
+
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Error loading inbox:', error);
+        this.inboxItems = [];
+        this.filteredItems = [];
+        this.loading.inbox = false;
+
+        let errorMessage = 'Failed to load approval inbox.';
+        if (error?.error) {
+          if (typeof error.error === 'string') {
+            errorMessage = error.error;
+          } else if (error.error.message) {
+            errorMessage = error.error.message;
+          } else if (error.error.errorMessage) {
+            errorMessage = error.error.errorMessage;
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: errorMessage + ' Please verify that you are assigned as Stage Assignee for at least one stage.',
+          life: 8000
+        });
+        this.cdr.detectChanges();
+      }
+    });
+    return;
+
     console.log('========================================');
     console.log('[ApprovalInbox] 📥 Loading Inbox');
     console.log('========================================');
     console.log('User Identifier:', userIdentifier);
     console.log('Is Retry:', isRetry);
-    console.log('API URL:', `${this.runtimeService['baseUrl']}/inbox/${encodeURIComponent(userIdentifier)}`);
+    console.log('API URL:', `${this.runtimeService['baseUrl']}/inbox/${encodeURIComponent(userIdentifier || '')}`);
     console.log('========================================');
     
-    this.runtimeService.getApprovalInboxForUser(userIdentifier).subscribe({
+    this.runtimeService.getApprovalInboxForUser(userIdentifier || '').subscribe({
       next: (items: ApprovalInboxItemDto[]) => {
         // IMPORTANT: Filter out items with stageId = 0 (NOT ASSIGNED TO YOU)
         // Only show items where user is actually assigned as Stage Assignee
@@ -367,7 +438,7 @@ export class ApprovalInboxComponent implements OnInit {
         // If user is not in Stage Assignees, inboxItems will be empty (no items shown)
         // IMPORTANT: Backend should only return items with stageId > 0 if user is in Stage Assignees
         // If Backend returns items with stageId > 0 but user is NOT in Stage Assignees, this is a Backend issue
-        this.inboxItems = assignedItems;
+        this.inboxItems = this.sortInboxItemsByNewest(assignedItems);
         this.filteredItems = [...this.inboxItems];
         
         // Clear active delegations if loading inbox without delegations
@@ -541,7 +612,7 @@ export class ApprovalInboxComponent implements OnInit {
           console.log('[ApprovalInbox] 👤 User view - showing only own submissions:', filtered.length);
         }
         
-        this.allSubmissions = filtered;
+        this.allSubmissions = this.sortSubmissionsByNewest(filtered);
         this.cdr.detectChanges();
       },
       error: (error) => {
@@ -582,7 +653,7 @@ export class ApprovalInboxComponent implements OnInit {
           });
         }
         
-        this.allSubmissions = filtered;
+        this.allSubmissions = this.sortSubmissionsByNewest(filtered);
         this.loading.inbox = false;
         this.cdr.detectChanges();
       },
@@ -631,14 +702,14 @@ export class ApprovalInboxComponent implements OnInit {
       this.loadInbox();
     }
     // CRITICAL: Always filter to show only assigned items (stageId > 0)
-    this.filteredItems = this.inboxItems.filter(item => item.stageId > 0);
+    this.filteredItems = this.sortInboxItemsByNewest(this.inboxItems.filter(item => item.stageId > 0));
     this.totalRecords = this.filteredItems.length;
     this.first = 0;
   }
 
   filterItems(): void {
     // CRITICAL: Always filter to show only assigned items (stageId > 0)
-    const assignedItems = this.inboxItems.filter(item => item.stageId > 0);
+    const assignedItems = this.sortInboxItemsByNewest(this.inboxItems.filter(item => item.stageId > 0));
     
     if (!this.searchTerm.trim()) {
       this.filteredItems = assignedItems;
@@ -661,16 +732,16 @@ export class ApprovalInboxComponent implements OnInit {
    */
   getFilteredSubmittedSubmissions(): FormSubmissionDto[] {
     if (!this.searchTerm.trim()) {
-      return this.allSubmissions;
+      return this.sortSubmissionsByNewest(this.allSubmissions);
     }
 
     const term = this.searchTerm.toLowerCase();
-    return this.allSubmissions.filter(sub =>
+    return this.sortSubmissionsByNewest(this.allSubmissions.filter(sub =>
       sub.documentNumber?.toLowerCase().includes(term) ||
       sub.documentTypeName?.toLowerCase().includes(term) ||
       sub.submittedByUserName?.toLowerCase().includes(term) ||
       sub.formName?.toLowerCase().includes(term)
-    );
+    ));
   }
 
   /**
@@ -691,19 +762,69 @@ export class ApprovalInboxComponent implements OnInit {
   }
 
   onSearchChange(): void {
-    this.filterItems();
     this.first = 0;
+
+    if (this.lastInboxIdentifier && this.activeDelegations.length === 0) {
+      this.loadInboxWithUserId(this.lastInboxIdentifier);
+      return;
+    }
+
+    this.filterItems();
   }
 
   getPaginatedItems(): ApprovalInboxItemDto[] {
+    if (this.lastInboxIdentifier && this.activeDelegations.length === 0) {
+      return this.filteredItems;
+    }
+
     const start = this.first;
     const end = start + this.rows;
     return this.filteredItems.slice(start, end);
   }
 
+  private sortInboxItemsByNewest(items: ApprovalInboxItemDto[]): ApprovalInboxItemDto[] {
+    return [...items].sort((a, b) => {
+      const dateDiff = this.getComparableDateValue(b.submittedDate) - this.getComparableDateValue(a.submittedDate);
+      if (dateDiff !== 0) {
+        return dateDiff;
+      }
+
+      return (b.submissionId || 0) - (a.submissionId || 0);
+    });
+  }
+
+  private sortSubmissionsByNewest(items: FormSubmissionDto[]): FormSubmissionDto[] {
+    return [...items].sort((a, b) => {
+      const dateDiff = this.getComparableDateValue(
+        b.lastUpdatedDate || b.submittedDate || b.createdDate
+      ) - this.getComparableDateValue(
+        a.lastUpdatedDate || a.submittedDate || a.createdDate
+      );
+
+      if (dateDiff !== 0) {
+        return dateDiff;
+      }
+
+      return (b.id || 0) - (a.id || 0);
+    });
+  }
+
+  private getComparableDateValue(value: Date | string | null | undefined): number {
+    if (!value) {
+      return 0;
+    }
+
+    const timestamp = new Date(value).getTime();
+    return Number.isNaN(timestamp) ? 0 : timestamp;
+  }
+
   onPageChange(event: any): void {
     this.first = event.first;
     this.rows = event.rows;
+
+    if (this.lastInboxIdentifier && this.activeDelegations.length === 0) {
+      this.loadInboxWithUserId(this.lastInboxIdentifier);
+    }
   }
 
   /**
@@ -812,7 +933,33 @@ export class ApprovalInboxComponent implements OnInit {
     return hasInboxItem;
   }
 
+  private setPageAccessNotice(message: string): void {
+    this.pageAccessNotice = message;
+    this.cdr.detectChanges();
+  }
+
+  private clearPageAccessNotice(): void {
+    if (!this.pageAccessNotice) {
+      return;
+    }
+
+    this.pageAccessNotice = null;
+    this.cdr.detectChanges();
+  }
+
+  private handlePermissionDenied(message: string): void {
+    this.loading.action = false;
+    this.closeActionModal();
+    this.setPageAccessNotice(message);
+  }
+
   openActionModal(item: ApprovalInboxItemDto, actionType: 'Approved' | 'Rejected' | 'Returned'): void {
+    if (!this.canApproveReject(item)) {
+      this.handlePermissionDenied('ليس لديك صلاحية تنفيذ هذا الإجراء على هذا المستند.');
+      return;
+    }
+
+    this.clearPageAccessNotice();
     this.selectedItem = item;
     this.selectedSubmission = null;
     this.isSubmissionAction = false;
@@ -836,6 +983,12 @@ export class ApprovalInboxComponent implements OnInit {
    * Open action modal for submission (from all submissions table)
    */
   openActionModalForSubmission(submission: FormSubmissionDto, actionType: 'Approved' | 'Rejected' | 'Returned'): void {
+    if (!this.canApproveRejectSubmission(submission)) {
+      this.handlePermissionDenied('ليس لديك صلاحية تنفيذ هذا الإجراء على هذا المستند.');
+      return;
+    }
+
+    this.clearPageAccessNotice();
     this.selectedSubmission = submission;
     this.selectedItem = null;
     this.isSubmissionAction = true;
@@ -845,6 +998,10 @@ export class ApprovalInboxComponent implements OnInit {
   }
 
   processAction(): void {
+    if (this.loading.action) {
+      return;
+    }
+
     console.log('[ApprovalInbox] processAction called');
     console.log('[ApprovalInbox] selectedItem:', this.selectedItem);
     console.log('[ApprovalInbox] selectedSubmission:', this.selectedSubmission);
@@ -876,13 +1033,7 @@ export class ApprovalInboxComponent implements OnInit {
     if (this.selectedItem.stageId === 0 || !this.selectedItem.stageId || this.selectedItem.stageId < 0) {
       console.error('[ApprovalInbox] ⚠️ SECURITY: User tried to approve item with stageId = 0');
       console.error('[ApprovalInbox] This should not happen - item should be filtered out');
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Access Denied',
-        detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
-        life: 5000
-      });
-      this.loading.action = false;
+      this.handlePermissionDenied('ليس لديك صلاحية تنفيذ هذا الإجراء على هذا المستند.');
       return;
     }
     
@@ -897,13 +1048,7 @@ export class ApprovalInboxComponent implements OnInit {
       console.error('[ApprovalInbox] ⚠️ SECURITY: Item not found in inbox items');
       console.error('[ApprovalInbox] Item:', this.selectedItem);
       console.error('[ApprovalInbox] Inbox items:', this.inboxItems.map(i => ({ submissionId: i.submissionId, stageId: i.stageId })));
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Access Denied',
-        detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
-        life: 5000
-      });
-      this.loading.action = false;
+      this.handlePermissionDenied('ليس لديك صلاحية تنفيذ هذا الإجراء على هذا المستند.');
       return;
     }
 
@@ -941,7 +1086,7 @@ export class ApprovalInboxComponent implements OnInit {
     if (stageId === 0 || !stageId) {
       console.log('[ApprovalInbox] StageId is 0, trying to get from inbox or use direct endpoints');
       // Try to get stageId from the actual inbox
-      this.runtimeService.getApprovalInboxForUser(this.currentUserId).subscribe({
+        this.runtimeService.getApprovalInboxForUser(this.currentUserId || '').subscribe({
         next: (inboxItems: ApprovalInboxItemDto[]) => {
           console.log('[ApprovalInbox] Inbox items received:', inboxItems);
           const inboxItem = inboxItems.find(item => item.submissionId === this.selectedItem!.submissionId);
@@ -1003,7 +1148,7 @@ export class ApprovalInboxComponent implements OnInit {
                 this.processActionDirectly(formData);
                 return;
               }
-              this.runtimeService.getApprovalInboxForUser(this.currentUserId).subscribe({
+    this.runtimeService.getApprovalInboxForUser(this.currentUserId || '').subscribe({
                 next: (inboxItems: ApprovalInboxItemDto[]) => {
                   const inboxItem = inboxItems.find(item => item.submissionId === this.selectedItem!.submissionId);
                   if (inboxItem && inboxItem.stageId > 0) {
@@ -1067,7 +1212,7 @@ export class ApprovalInboxComponent implements OnInit {
             this.processActionDirectly(formData);
             return;
           }
-          this.runtimeService.getApprovalInboxForUser(this.currentUserId).subscribe({
+    this.runtimeService.getApprovalInboxForUser(this.currentUserId || '').subscribe({
             next: (inboxItems: ApprovalInboxItemDto[]) => {
               const inboxItem = inboxItems.find(item => item.submissionId === this.selectedItem!.submissionId);
               if (inboxItem && inboxItem.stageId > 0) {
@@ -1137,32 +1282,10 @@ export class ApprovalInboxComponent implements OnInit {
     console.log('[ApprovalInbox] Processing action with stageId:', actionDto);
     console.log('[ApprovalInbox] ⚠️ Backend should check delegations for actionByUserId:', this.currentUserId);
 
-    // Determine the new status based on action type
-    let newStatus = '';
-    if (this.actionType === 'Approved') {
-      newStatus = 'Approved';
-    } else if (this.actionType === 'Rejected') {
-      newStatus = 'Rejected';
-    } else if (this.actionType === 'Returned') {
-      newStatus = 'Submitted';
-    }
-
-    // Update status first, then process approval action
-    if (newStatus) {
-      this.formSubmissionsService.updateSubmission(this.selectedItem.submissionId, { status: newStatus }).subscribe({
-        next: () => {
-          console.log(`[ApprovalInbox] Status updated to ${newStatus}`);
-          this.processApprovalAction(actionDto, newStatus);
-        },
-        error: (error) => {
-          console.error('[ApprovalInbox] Error updating status:', error);
-          // Continue with approval action
-          this.processApprovalAction(actionDto, newStatus);
-        }
-      });
-    } else {
-      this.processApprovalAction(actionDto, '');
-    }
+    // Let the backend own the workflow status transition.
+    // It knows whether the current vote only increments counters
+    // or actually reaches the required approval/rejection threshold.
+    this.processApprovalAction(actionDto, '');
   }
 
   /**
@@ -1237,8 +1360,12 @@ export class ApprovalInboxComponent implements OnInit {
         },
         error: (error) => {
           console.error('[ApprovalInbox] Error approving:', error);
-          this.loading.action = false;
           let errorMessage = error?.message || error?.error?.message || 'Failed to approve document';
+          if (error?.status === 400 || error?.status === 403) {
+            this.handlePermissionDenied(errorMessage);
+            return;
+          }
+          this.loading.action = false;
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
@@ -1281,8 +1408,12 @@ export class ApprovalInboxComponent implements OnInit {
         },
         error: (error) => {
           console.error('[ApprovalInbox] Error rejecting:', error);
-          this.loading.action = false;
           let errorMessage = error?.message || error?.error?.message || 'Failed to reject document';
+          if (error?.status === 400 || error?.status === 403) {
+            this.handlePermissionDenied(errorMessage);
+            return;
+          }
+          this.loading.action = false;
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
@@ -1385,6 +1516,11 @@ export class ApprovalInboxComponent implements OnInit {
         const lowered = (errorMessage || '').toString().toLowerCase();
         if (error?.status === 400 && lowered.includes('stage requires minimum')) {
           errorMessage = `${errorMessage}. Please assign enough active stage assignees then try again.`;
+        }
+
+        if (error?.status === 400 || error?.status === 403) {
+          this.handlePermissionDenied(errorMessage);
+          return;
         }
         
         this.messageService.add({
@@ -1556,12 +1692,7 @@ export class ApprovalInboxComponent implements OnInit {
     // User can only approve if there's a corresponding inbox item (user is assigned as Stage Assignee)
     if (!this.canApproveRejectSubmission(this.selectedSubmission)) {
       console.error('[ApprovalInbox] ⚠️ SECURITY: User tried to approve submission without being assigned');
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Access Denied',
-        detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
-        life: 5000
-      });
+      this.handlePermissionDenied('ليس لديك صلاحية تنفيذ هذا الإجراء على هذا المستند.');
       return;
     }
 
@@ -1574,12 +1705,7 @@ export class ApprovalInboxComponent implements OnInit {
     if (!this.isAdmin) {
       if (!inboxItem || stageId === 0 || stageId < 0) {
         console.error('[ApprovalInbox] ⚠️ SECURITY: No valid inbox item found for submission');
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Access Denied',
-          detail: 'You are not assigned to approve this document. Only Stage Assignees can approve documents.',
-          life: 5000
-        });
+        this.handlePermissionDenied('ليس لديك صلاحية تنفيذ هذا الإجراء على هذا المستند.');
         return;
       }
     } else {
@@ -1630,7 +1756,6 @@ export class ApprovalInboxComponent implements OnInit {
         },
         error: (error) => {
           console.error('[ApprovalInbox] Error approving submission:', error);
-          this.loading.action = false;
           
           // Extract error message from backend response
           let errorMessage = 'Failed to approve document';
@@ -1658,6 +1783,13 @@ export class ApprovalInboxComponent implements OnInit {
           } else if (error?.message) {
             errorMessage = error.message;
           }
+
+          if (error?.status === 400 || error?.status === 403) {
+            this.handlePermissionDenied(errorMessage);
+            return;
+          }
+
+          this.loading.action = false;
           
           this.messageService.add({
             severity: 'error',
@@ -1694,7 +1826,6 @@ export class ApprovalInboxComponent implements OnInit {
         },
         error: (error) => {
           console.error('[ApprovalInbox] Error rejecting submission:', error);
-          this.loading.action = false;
           
           // Extract error message from backend response
           let errorMessage = 'Failed to reject document';
@@ -1722,6 +1853,13 @@ export class ApprovalInboxComponent implements OnInit {
           } else if (error?.message) {
             errorMessage = error.message;
           }
+
+          if (error?.status === 400 || error?.status === 403) {
+            this.handlePermissionDenied(errorMessage);
+            return;
+          }
+
+          this.loading.action = false;
           
           this.messageService.add({
             severity: 'error',

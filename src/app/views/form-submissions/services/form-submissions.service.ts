@@ -221,25 +221,17 @@ export class FormSubmissionsService {
    * Get latest non-draft document number for a specific form
    */
   getLatestDocumentNumberByFormBuilderId(formBuilderId: number): Observable<string | null> {
-    return this.getAllSubmissions().pipe(
-      map((submissions: FormSubmissionDto[]) => {
-        const matching = (submissions || []).filter((s) => {
-          if (!s || s.formBuilderId !== formBuilderId) return false;
-          const docNo = (s.documentNumber || '').trim();
-          if (!docNo) return false;
-          if (docNo.startsWith('DRAFT-')) return false;
-          return true;
-        });
+    return this.http.get<any>(`${this.baseUrl}/latest-document-number/form/${formBuilderId}`).pipe(
+      map((response: any) => {
+        const payload = response && typeof response === 'object'
+          ? (response.data ?? response.result ?? response)
+          : response;
 
-        if (matching.length === 0) return null;
+        const documentNumber = typeof payload === 'string'
+          ? payload.trim()
+          : '';
 
-        matching.sort((a, b) => {
-          const aDate = new Date((a.lastUpdatedDate || a.submittedDate || a.createdDate) as any).getTime() || 0;
-          const bDate = new Date((b.lastUpdatedDate || b.submittedDate || b.createdDate) as any).getTime() || 0;
-          return bDate - aDate;
-        });
-
-        return matching[0].documentNumber?.trim() || null;
+        return documentNumber || null;
       }),
       catchError((error) => {
         console.error(`Error fetching latest document number for form ${formBuilderId}:`, error);
@@ -560,23 +552,18 @@ export class FormSubmissionsService {
 
   /**
    * Save form submission data (field values, attachments, grid data)
-   * POST /api/FormSubmissions/data/save
+   * POST /api/FormSubmissions/save-data
    *
    * Saves the form data without changing the submission status.
    * The submission remains in its current status (usually "Draft").
-   * 
-   * Note: Changed from /save-data to /data/save to avoid routing conflict
-   * with /{id} route in backend (save-data was being matched as id parameter)
    */
   saveSubmissionData(dto: SaveFormSubmissionDataDto): Observable<void> {
-    // Try /data/save first (preferred route to avoid routing conflicts)
-    // If backend doesn't support it, fallback to /save-data
-    return this.http.post<any>(`${this.baseUrl}/data/save`, dto).pipe(
+    return this.http.post<any>(`${this.baseUrl}/save-data`, dto).pipe(
       catchError((error) => {
-        // If 404, try the old route /save-data (in case backend doesn't have /data/save)
+        // Backward-compatible fallback for environments that still expose /data/save.
         if (error.status === 404) {
-          console.warn('[FormSubmissionsService] /data/save not found, trying /save-data');
-          return this.http.post<any>(`${this.baseUrl}/save-data`, dto);
+          console.warn('[FormSubmissionsService] /save-data not found, trying /data/save');
+          return this.http.post<any>(`${this.baseUrl}/data/save`, dto);
         }
         console.error('Error saving form submission data:', error);
         throw error;

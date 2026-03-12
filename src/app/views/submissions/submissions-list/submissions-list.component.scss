@@ -170,6 +170,57 @@
   color: #64748b;
 }
 
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.search-field,
+.filter-select,
+.page-size-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #d8e4ea;
+  border-radius: 0.95rem;
+  background: #ffffff;
+}
+
+.search-field {
+  min-width: min(100%, 22rem);
+  flex: 1 1 18rem;
+}
+
+.search-field i {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.search-field input,
+.filter-select select,
+.page-size-select select {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #1f2937;
+  font-size: 0.9rem;
+}
+
+.filter-select span,
+.page-size-select span {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 :host ::ng-deep app-table-shell .table-card {
   border: 1px solid rgba(150, 214, 196, 0.9);
   border-radius: 1.25rem;
@@ -197,6 +248,69 @@
 
 .table-wrap {
   overflow-x: auto;
+}
+
+.table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.35rem 1.2rem;
+  border-top: 1px solid #e2e8f0;
+  background: rgba(248, 250, 252, 0.7);
+}
+
+.table-results {
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.page-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.page-btn {
+  min-width: 2.35rem;
+  height: 2.35rem;
+  padding: 0 0.85rem;
+  border: 1px solid #d1dbe3;
+  border-radius: 0.8rem;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #14b8a6;
+}
+
+.page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.page-btn--active {
+  border-color: transparent;
+  background: linear-gradient(135deg, #14b8a6, #0ea5a4);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(20, 184, 166, 0.22);
 }
 
 .submissions-table {
@@ -369,5 +483,20 @@
 
   .hero-card h2 {
     font-size: 1.8rem;
+  }
+
+  .table-toolbar,
+  .pagination-controls {
+    width: 100%;
+  }
+
+  .search-field,
+  .filter-select,
+  .page-size-select {
+    width: 100%;
+  }
+
+  .page-buttons {
+    width: 100%;
   }
 }
