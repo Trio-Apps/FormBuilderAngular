@@ -94,7 +94,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   seriesForm!: FormGroup;
   editingSeries: DocumentSeries | null = null;
   currentDocumentTypeForSeries: DocumentType | null = null;
-  readonly supportedSeriesPlaceholders = ['{PROJECT}', '{YYYY}', '{MM}', '{DD}', '{SEQ}'];
+  readonly supportedSeriesPlaceholders = ['{PROJECT}', '{YYYY}', '{YY}', '{MM}', '{DD}', '{SEQ}'];
   readonly resetPolicyOptions: DocumentSeriesResetPolicy[] = ['None', 'Yearly', 'Monthly', 'Daily'];
   readonly generateOnOptions: DocumentSeriesGenerateOn[] = ['Submit', 'Approval'];
 
@@ -168,7 +168,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     // Initialize series form
     this.seriesForm = this.fb.group({
       documentTypeId: [null, [Validators.required]],
-      projectId: [null, [Validators.required]],
+      projectId: [null],
       seriesName: ['', [Validators.required, Validators.maxLength(100)]],
       template: ['', [Validators.required, Validators.maxLength(150)]],
       seriesCode: ['', [Validators.maxLength(50)]],
@@ -1225,7 +1225,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     if (this.editingSeries && this.editingSeries.id) {
       // Update existing series
       const updateDto: UpdateDocumentSeriesDto = {
-        projectId: formData.projectId,
+        projectId: formData.projectId || null,
         seriesName: String(formData.seriesName || '').trim(),
         template,
         seriesCode,
@@ -1267,7 +1267,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       // Create new series
       const createDto: CreateDocumentSeriesDto = {
         documentTypeId: formData.documentTypeId,
-        projectId: formData.projectId,
+        projectId: formData.projectId || null,
         seriesName: String(formData.seriesName || '').trim(),
         template,
         seriesCode,
@@ -1431,7 +1431,8 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     });
   }
 
-  getProjectName(projectId: number): string {
+  getProjectName(projectId: number | null | undefined): string {
+    if (!projectId) return 'Global / Master Data';
     const project = this.projects.find(p => p.id === projectId);
     return project ? project.name : `Project #${projectId}`;
   }
@@ -1536,7 +1537,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       return series.projectName;
     }
     // Fallback to project lookup
-    return this.getProjectName(series.projectId);
+    return this.getProjectName(series.projectId || null);
   }
 
   /**

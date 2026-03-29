@@ -3,13 +3,14 @@ import { Component, OnInit } from '@angular/core';
 import { finalize } from 'rxjs/operators';
 import { CrystalLayoutByDocumentTypeDto, CrystalReportsService } from '../../FormBuilder/services/crystal-reports.service';
 import { SapIntegrationExecuteResultDto, SapIntegrationService } from '../../FormBuilder/services/sap-integration.service';
-import { FormSubmissionDto, FormSubmissionsService } from '../../form-submissions/services/form-submissions.service';
+import { FormSubmissionDetailDto, FormSubmissionDto, FormSubmissionsService, FormSubmissionValueDto } from '../../form-submissions/services/form-submissions.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
 
 @Component({
   selector: 'app-submissions-list',
   standalone: true,
-  imports: [CommonModule, DatePipe, TableShellComponent],
+  imports: [CommonModule, DatePipe, TableShellComponent, DialogShellComponent],
   templateUrl: './submissions-list.component.html',
   styleUrl: './submissions-list.component.scss'
 })
@@ -24,12 +25,18 @@ export class SubmissionsListComponent implements OnInit {
   pageSize = 10;
   readonly pageSizeOptions = [10, 20, 50];
   executingBySubmission: Record<number, boolean> = {};
+  postingBySubmission: Record<number, boolean> = {};
   executionResultsBySubmission: Record<number, SapIntegrationExecuteResultDto> = {};
   downloadingPdfBySubmission: Record<number, boolean> = {};
   pdfErrorBySubmission: Record<number, string> = {};
   defaultLayoutByDocumentType: Record<number, CrystalLayoutByDocumentTypeDto | null> = {};
   unavailableLayoutDocumentTypeIds = new Set<number>();
   isCrystalBridgeAvailable = true;
+  showSubmissionDetails = false;
+  loadingSubmissionDetails = false;
+  submissionDetailsError = '';
+  selectedSubmissionDetail: FormSubmissionDetailDto | null = null;
+  selectedSubmissionSummary: FormSubmissionDto | null = null;
 
   constructor(
     private formSubmissionsService: FormSubmissionsService,
@@ -186,6 +193,10 @@ export class SubmissionsListComponent implements OnInit {
   getStatusClass(status: string | null | undefined): string {
     const normalized = (status || '').trim().toLowerCase();
 
+    if (normalized === 'posted') {
+      return 'status-chip--posted';
+    }
+
     if (normalized === 'approved') {
       return 'status-chip--approved';
     }
@@ -310,6 +321,162 @@ export class SubmissionsListComponent implements OnInit {
 
   trackBySubmissionId(_: number, submission: FormSubmissionDto): number {
     return submission.id;
+  }
+
+  openSubmissionDetails(submission: FormSubmissionDto): void {
+    const submissionId = Number(submission?.id || 0);
+    if (!submissionId) {
+      return;
+    }
+
+    this.loadingSubmissionDetails = true;
+    this.submissionDetailsError = '';
+    this.selectedSubmissionDetail = null;
+    this.selectedSubmissionSummary = submission;
+    this.showSubmissionDetails = true;
+
+    this.formSubmissionsService.getSubmissionById(submissionId).subscribe({
+      next: (detail) => {
+        this.selectedSubmissionDetail = detail;
+        this.loadingSubmissionDetails = false;
+      },
+      error: (error: Error) => {
+        this.submissionDetailsError = error?.message || 'Unable to load submission details.';
+        this.loadingSubmissionDetails = false;
+      }
+    });
+  }
+
+  closeSubmissionDetails(): void {
+    this.showSubmissionDetails = false;
+    this.loadingSubmissionDetails = false;
+    this.submissionDetailsError = '';
+    this.selectedSubmissionDetail = null;
+    this.selectedSubmissionSummary = null;
+  }
+
+  getVisibleFieldValues(): FormSubmissionValueDto[] {
+    const values = this.selectedSubmissionDetail?.fieldValues || [];
+    return values.filter((fieldValue) => {
+      const displayValue = this.getFieldDisplayValue(fieldValue);
+      return !!displayValue;
+    });
+  }
+
+  getFieldDisplayValue(fieldValue: FormSubmissionValueDto): string {
+    if (fieldValue.valueString && fieldValue.valueString.trim()) {
+      return fieldValue.valueString.trim();
+    }
+
+    if (fieldValue.valueNumber !== null && fieldValue.valueNumber !== undefined) {
+      return String(fieldValue.valueNumber);
+    }
+
+    if (fieldValue.valueDate) {
+      const date = new Date(fieldValue.valueDate);
+      if (!Number.isNaN(date.getTime())) {
+        return date.toLocaleDateString();
+      }
+    }
+
+    if (fieldValue.valueBool !== null && fieldValue.valueBool !== undefined) {
+      return fieldValue.valueBool ? 'Yes' : 'No';
+    }
+
+    if (fieldValue.valueJson && fieldValue.valueJson.trim()) {
+      return fieldValue.valueJson.trim();
+    }
+
+    return '';
+  }
+
+  get postedSubmissions(): FormSubmissionDto[] {
+    return this.submissions
+      .filter((submission) => (submission.status || '').trim().toLowerCase() === 'posted')
+      .slice()
+      .sort((a, b) => {
+        const aTime = new Date((a.lastUpdatedDate || a.createdDate || a.submittedDate) as any).getTime() || 0;
+        const bTime = new Date((b.lastUpdatedDate || b.createdDate || b.submittedDate) as any).getTime() || 0;
+        if (aTime !== bTime) {
+          return aTime - bTime;
+        }
+
+        return (a.id || 0) - (b.id || 0);
+      });
+  }
+
+  canNavigatePostedPrevious(): boolean {
+    const currentIndex = this.getCurrentPostedIndex();
+    return currentIndex > 0;
+  }
+
+  canNavigatePostedNext(): boolean {
+    const currentIndex = this.getCurrentPostedIndex();
+    return currentIndex >= 0 && currentIndex < this.postedSubmissions.length - 1;
+  }
+
+  navigatePostedPrevious(): void {
+    this.navigatePostedByOffset(-1);
+  }
+
+  navigatePostedNext(): void {
+    this.navigatePostedByOffset(1);
+  }
+
+  private navigatePostedByOffset(offset: number): void {
+    const currentIndex = this.getCurrentPostedIndex();
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const nextSubmission = this.postedSubmissions[currentIndex + offset];
+    if (!nextSubmission) {
+      return;
+    }
+
+    this.openSubmissionDetails(nextSubmission);
+  }
+
+  private getCurrentPostedIndex(): number {
+    const currentId = Number(this.selectedSubmissionDetail?.id || this.selectedSubmissionSummary?.id || 0);
+    if (!currentId) {
+      return -1;
+    }
+
+    return this.postedSubmissions.findIndex((submission) => submission.id === currentId);
+  }
+
+  canPost(submission: FormSubmissionDto): boolean {
+    const normalized = (submission?.status || '').trim().toLowerCase();
+    return normalized === 'approved';
+  }
+
+  getPostButtonText(submission: FormSubmissionDto): string {
+    const submissionId = Number(submission?.id || 0);
+    return this.postingBySubmission[submissionId] ? 'Posting...' : 'Post';
+  }
+
+  postSubmission(submission: FormSubmissionDto): void {
+    const submissionId = Number(submission?.id || 0);
+    if (!submissionId || this.postingBySubmission[submissionId] || !this.canPost(submission)) {
+      return;
+    }
+
+    this.postingBySubmission[submissionId] = true;
+    this.pageError = '';
+
+    this.formSubmissionsService.postSubmission(submissionId).subscribe({
+      next: (updatedSubmission) => {
+        this.submissions = this.submissions.map((item) =>
+          item.id === submissionId ? { ...item, ...updatedSubmission } : item
+        );
+        this.postingBySubmission[submissionId] = false;
+      },
+      error: (error: Error) => {
+        this.pageError = error?.message || 'Failed to post the approved submission.';
+        this.postingBySubmission[submissionId] = false;
+      }
+    });
   }
 
   onSearchChange(term: string): void {

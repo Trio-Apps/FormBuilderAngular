@@ -674,7 +674,10 @@ export class DocumentTypesService {
         return (series || []).map((s: any) => ({
           ...s,
           id: s?.id ?? s?.Id,
-          projectId: s?.projectId ?? s?.ProjectId,
+          projectId: s?.projectId ?? s?.ProjectId ?? null,
+          projectName: s?.projectName ?? s?.ProjectName ?? null,
+          isLocked: s?.isLocked ?? s?.IsLocked ?? false,
+          usageCount: s?.usageCount ?? s?.UsageCount ?? 0,
           isActive: s?.isActive ?? s?.IsActive,
           isDefault: s?.isDefault ?? s?.IsDefault,
           seriesCode: s?.seriesCode ?? s?.SeriesCode,
@@ -718,7 +721,10 @@ export class DocumentTypesService {
         return {
           ...payload,
           id: payload?.id ?? payload?.Id,
-          projectId: payload?.projectId ?? payload?.ProjectId,
+          projectId: payload?.projectId ?? payload?.ProjectId ?? null,
+          projectName: payload?.projectName ?? payload?.ProjectName ?? null,
+          isLocked: payload?.isLocked ?? payload?.IsLocked ?? false,
+          usageCount: payload?.usageCount ?? payload?.UsageCount ?? 0,
           isActive: payload?.isActive ?? payload?.IsActive,
           isDefault: payload?.isDefault ?? payload?.IsDefault,
           seriesCode: payload?.seriesCode ?? payload?.SeriesCode,
@@ -741,13 +747,6 @@ export class DocumentTypesService {
    * Response: ApiResponse
    */
   createDocumentSeries(dto: CreateDocumentSeriesDto): Observable<DocumentSeries> {
-    // Validate required fields
-    if (!dto.projectId || dto.projectId <= 0) {
-      return new Observable(observer => {
-        observer.error(new Error('Project ID is required'));
-      });
-    }
-
     if ((!dto.seriesCode || dto.seriesCode.trim() === '') && (!dto.template || dto.template.trim() === '')) {
       return new Observable(observer => {
         observer.error(new Error('Series code or template is required'));
@@ -762,7 +761,7 @@ export class DocumentTypesService {
 
     // Set defaults according to API documentation
     const createDto: CreateDocumentSeriesDto = {
-      projectId: dto.projectId,
+      projectId: dto.projectId && dto.projectId > 0 ? dto.projectId : null,
       seriesName: dto.seriesName?.trim(),
       template: normalizedTemplate,
       seriesCode: normalizedSeriesCode,
@@ -886,6 +885,7 @@ export class DocumentTypesService {
 
     const updateDto: UpdateDocumentSeriesDto = {
       ...dto,
+      projectId: dto.projectId && dto.projectId > 0 ? dto.projectId : null,
       seriesName: dto.seriesName?.trim(),
       template: dto.template?.trim(),
       seriesCode: dto.seriesCode?.trim()
@@ -1231,7 +1231,7 @@ export class DocumentTypesService {
         return series.filter((s: DocumentSeries) => {
           // Filter by project and active status
           // isActive is boolean from backend (verified)
-          return s.projectId === projectId && s.isActive === true;
+          return (s.projectId ?? null) === (projectId > 0 ? projectId : null) && s.isActive === true;
         });
       }),
       catchError((error) => {
@@ -1260,7 +1260,7 @@ export class DocumentTypesService {
    */
   getProjectName(series: DocumentSeries | null | undefined, fallback: string = 'N/A'): string {
     if (!series) return fallback;
-    return series.projectName ?? fallback;
+    return series.projectName ?? (series.projectId ? `Project #${series.projectId}` : 'Global / Master Data');
   }
 
   /**

@@ -34,6 +34,7 @@ export type NotificationSeverity = 'Info' | 'Success' | 'Warning' | 'Error';
 
 // ReferenceType = trigger type from ALERT_RULES
 export type NotificationReferenceType = 
+  | 'FormSubmitted'
   | 'FormSubmission' 
   | 'ApprovalRequired' 
   | 'ApprovalApproved' 

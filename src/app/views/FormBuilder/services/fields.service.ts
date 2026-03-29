@@ -136,6 +136,40 @@ export class FieldsService {
     );
   }
 
+  getFieldsByFormId(formBuilderId: number): Observable<FormFieldDto[]> {
+    return this.http.get<any>(`${this.fieldsUrl}/form/${formBuilderId}`).pipe(
+      map((response: any) => {
+        let fields: any[] = [];
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const data = response.data || response.items || response.result || [];
+          fields = Array.isArray(data) ? data : [];
+        } else if (Array.isArray(response)) {
+          fields = response;
+        }
+
+        return fields.map((field: any) => {
+          if (!field.expressionText && field.ExpressionText) {
+            field.expressionText = field.ExpressionText;
+          }
+          if (!field.calculationMode && field.CalculationMode) {
+            field.calculationMode = field.CalculationMode;
+          }
+          if (!field.recalculateOn && field.RecalculateOn) {
+            field.recalculateOn = field.RecalculateOn;
+          }
+          if (!field.resultType && field.ResultType) {
+            field.resultType = field.ResultType;
+          }
+          return field as FormFieldDto;
+        });
+      }),
+      catchError((error) => {
+        console.warn(`Failed to get fields for form ${formBuilderId}:`, error);
+        return of([]);
+      })
+    );
+  }
+
   // إنشاء حقل جديد - معالجة response المغلف
   createField(dto: CreateFormFieldDto): Observable<FormFieldDto> {
     return this.http.post<any>(this.fieldsUrl, dto).pipe(

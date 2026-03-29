@@ -43,10 +43,11 @@ import {
   SapServiceLayerEndpointDto,
   SapServiceLayerObjectFieldDto
 } from '../../FormBuilder/services/sap-integration.service';
-import { FormsService } from '../../FormBuilder/services/forms.service';
+import { FormsService, PagedResult } from '../../FormBuilder/services/forms.service';
 import { DocumentTypesService } from '../../FormBuilder/services/document-types.service';
 import { ApprovalWorkflowService } from '../../FormBuilder/services/approval-workflow.service';
 import { ApprovalStageService, ApprovalStageDto } from '../../FormBuilder/services/approval-stage.service';
+import { FormBuilderDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 
 @Component({
   selector: 'app-fields-list',
@@ -182,7 +183,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
 
   // Field DataSource Options
-  dataSourceType: 'Static' | 'Api' | 'LookupTable' | 'SqlQuery' | 'SapHana' = 'Static';
+  dataSourceType: 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana' = 'Static';
   dataSourceConfig: Partial<CreateFieldDataSourceDto> = {
     sourceType: 'Static',
     apiUrl: null,
@@ -216,6 +217,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       textPath: 'Name',
       database: 'FormBuilder'
     };
+  formSubmissionConfig: {
+    formId: number | null;
+    formCode: string;
+    valueFieldId: number | null;
+    textFieldId: number | null;
+    valueFieldCode: string;
+    textFieldCode: string;
+  } = {
+      formId: null,
+      formCode: '',
+      valueFieldId: null,
+      textFieldId: null,
+      valueFieldCode: '',
+      textFieldCode: ''
+    };
+  availableSourceForms: FormBuilderDto[] = [];
+  loadingSourceForms = false;
+  availableSourceFormFields: FormFieldDto[] = [];
+  loadingSourceFormFields = false;
   availableLookupTables: string[] = [];
   availableColumns: string[] = []; // Available columns from selected table
   previewOptions: FieldOptionResponse[] = [];
@@ -901,6 +921,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         // - Api/LookupTable/SqlQuery: load preview options dynamically
         if (this.dataSourceType === 'Static') {
           this.loadFieldOptions(field.id);
+        } else if (this.dataSourceType === 'FormSubmissions') {
+          // Form submissions preview is triggered only after source fields are loaded
+          // and saved value/text field codes are resolved back into the form state.
+          this.previewOptions = [];
         } else {
           // Ensure any Static options UI won't show stale values
           // and immediately fetch preview so user sees options again when reopening edit
@@ -3823,7 +3847,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           // Use the first active DataSource
           const dataSource = dataSources[0];
           this.existingDataSource = dataSource;
-          this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'SqlQuery' | 'SapHana';
+          this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana';
 
           // Parse LookupTable configuration
           if (dataSource.sourceType === 'LookupTable' && dataSource.apiUrl) {
@@ -3901,6 +3925,54 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             if (this.lookupTableConfig.table) {
               this.loadTableColumns(this.lookupTableConfig.table);
             }
+          } else if (dataSource.sourceType === 'FormSubmissions') {
+            let formId: number | null = null;
+            let formCode = '';
+            let valueFieldCode = dataSource.valuePath || '';
+            let textFieldCode = dataSource.textPath || '';
+
+            if ((dataSource as any).configurationJson) {
+              try {
+                const parsed = JSON.parse((dataSource as any).configurationJson);
+                formId = parsed.formId ? Number(parsed.formId) : null;
+                formCode = parsed.formCode || '';
+                valueFieldCode = parsed.valueFieldCode || valueFieldCode;
+                textFieldCode = parsed.textFieldCode || textFieldCode;
+              } catch {
+                // ignore invalid historical config
+              }
+            }
+
+            this.formSubmissionConfig = {
+              formId,
+              formCode,
+              valueFieldId: null,
+              textFieldId: null,
+              valueFieldCode,
+              textFieldCode
+            };
+
+            this.dataSourceConfig = {
+              sourceType: dataSource.sourceType,
+              apiUrl: formId ? String(formId) : null,
+              httpMethod: null,
+              requestBodyJson: formCode || null,
+              valuePath: valueFieldCode || null,
+              textPath: textFieldCode || null,
+              isActive: dataSource.isActive
+            };
+
+            this.loadSubmissionSourceForms(() => {
+              if (this.formSubmissionConfig.formId) {
+                this.loadSubmissionSourceFields(this.formSubmissionConfig.formId!, true, callback);
+              } else {
+                if (callback) {
+                  callback();
+                }
+                this.cdr.detectChanges();
+              }
+            });
+            return;
           } else if (dataSource.sourceType === 'SqlQuery') {
             // For SqlQuery type, load SQL query and database from requestBodyJson
             let sqlQuery = '';
@@ -4210,6 +4282,27 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.previewOptions = [];
       // Clear static options when using DataSource
       this.clearFieldOptions();
+    } else if (this.dataSourceType === 'FormSubmissions') {
+      this.dataSourceConfig.httpMethod = null;
+      this.dataSourceConfig.apiUrl = null;
+      this.dataSourceConfig.requestBodyJson = null;
+      this.dataSourceConfig.valuePath = this.formSubmissionConfig.valueFieldCode || null;
+      this.dataSourceConfig.textPath = this.formSubmissionConfig.textFieldCode || null;
+      this.previewOptions = [];
+      this.clearFieldOptions();
+
+      if (!this.formSubmissionConfig.formId) {
+        this.formSubmissionConfig = {
+          formId: null,
+          formCode: '',
+          valueFieldId: null,
+          textFieldId: null,
+          valueFieldCode: '',
+          textFieldCode: ''
+        };
+      }
+
+      this.loadSubmissionSourceForms();
     } else if (this.dataSourceType === 'Api') {
       // Set default HTTP method
       this.dataSourceConfig.httpMethod = 'GET';
@@ -4277,6 +4370,103 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
 
     this.cdr.detectChanges();
+  }
+
+  loadSubmissionSourceForms(callback?: () => void): void {
+    this.loadingSourceForms = true;
+    this.formsService.getForms(1, 1000).subscribe({
+      next: (result) => {
+        this.availableSourceForms = (result.items || [])
+          .filter(form => form.isActive !== false && !form.isDeleted)
+          .sort((a, b) => (a.formName || '').localeCompare(b.formName || ''));
+        this.loadingSourceForms = false;
+
+        if (this.formSubmissionConfig.formId) {
+          const selectedForm = this.availableSourceForms.find(form => form.id === this.formSubmissionConfig.formId);
+          if (selectedForm) {
+            this.formSubmissionConfig.formCode = selectedForm.formCode || this.formSubmissionConfig.formCode;
+          }
+        }
+
+        callback?.();
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('[FieldsList] Error loading source forms:', error);
+        this.availableSourceForms = [];
+        this.loadingSourceForms = false;
+        callback?.();
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  onSubmissionSourceFormChange(): void {
+    this.previewOptions = [];
+    this.availableSourceFormFields = [];
+    this.formSubmissionConfig.valueFieldId = null;
+    this.formSubmissionConfig.textFieldId = null;
+    this.formSubmissionConfig.valueFieldCode = '';
+    this.formSubmissionConfig.textFieldCode = '';
+
+    const selectedForm = this.availableSourceForms.find(form => form.id === this.formSubmissionConfig.formId);
+    this.formSubmissionConfig.formCode = selectedForm?.formCode || '';
+
+    if (this.formSubmissionConfig.formId) {
+      this.loadSubmissionSourceFields(this.formSubmissionConfig.formId);
+    }
+  }
+
+  loadSubmissionSourceFields(formId: number, autoPreview: boolean = true, callback?: () => void): void {
+    this.loadingSourceFormFields = true;
+    this.fieldsService.getFieldsByFormId(formId).subscribe({
+      next: (fields) => {
+        this.availableSourceFormFields = (fields || [])
+          .filter(field => !field.isDeleted && (field.isActive ?? true))
+          .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
+
+        const valueField = this.availableSourceFormFields.find(field =>
+          field.id === this.formSubmissionConfig.valueFieldId ||
+          field.fieldCode === this.formSubmissionConfig.valueFieldCode);
+        const textField = this.availableSourceFormFields.find(field =>
+          field.id === this.formSubmissionConfig.textFieldId ||
+          field.fieldCode === this.formSubmissionConfig.textFieldCode);
+
+        this.formSubmissionConfig.valueFieldId = valueField?.id || null;
+        this.formSubmissionConfig.textFieldId = textField?.id || null;
+        this.formSubmissionConfig.valueFieldCode = valueField?.fieldCode || this.formSubmissionConfig.valueFieldCode;
+        this.formSubmissionConfig.textFieldCode = textField?.fieldCode || this.formSubmissionConfig.textFieldCode;
+        this.loadingSourceFormFields = false;
+
+        if (autoPreview && this.formSubmissionConfig.valueFieldCode && this.formSubmissionConfig.textFieldCode) {
+          setTimeout(() => this.previewDataSource(), 150);
+        }
+
+        callback?.();
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('[FieldsList] Error loading source form fields:', error);
+        this.availableSourceFormFields = [];
+        this.loadingSourceFormFields = false;
+        callback?.();
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  onSubmissionValueFieldChange(): void {
+    const selectedField = this.availableSourceFormFields.find(field => field.id === this.formSubmissionConfig.valueFieldId);
+    this.formSubmissionConfig.valueFieldCode = selectedField?.fieldCode || '';
+    this.dataSourceConfig.valuePath = this.formSubmissionConfig.valueFieldCode || null;
+    this.previewOptions = [];
+  }
+
+  onSubmissionTextFieldChange(): void {
+    const selectedField = this.availableSourceFormFields.find(field => field.id === this.formSubmissionConfig.textFieldId);
+    this.formSubmissionConfig.textFieldCode = selectedField?.fieldCode || '';
+    this.dataSourceConfig.textPath = this.formSubmissionConfig.textFieldCode || null;
+    this.previewOptions = [];
   }
 
   /**
@@ -5556,6 +5746,37 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Update valuePath and textPath from lookupTableConfig
       this.dataSourceConfig.valuePath = this.lookupTableConfig.valueColumn;
       this.dataSourceConfig.textPath = this.lookupTableConfig.textColumn;
+    } else if (this.dataSourceType === 'FormSubmissions') {
+      if (!this.formSubmissionConfig.formId) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please select a source form'
+        });
+        return;
+      }
+      const hasValueField = !!(this.formSubmissionConfig.valueFieldId || this.formSubmissionConfig.valueFieldCode);
+      const hasTextField = !!(this.formSubmissionConfig.textFieldId || this.formSubmissionConfig.textFieldCode);
+      if (!hasValueField || !hasTextField) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'Please select both value and text fields'
+        });
+        return;
+      }
+
+      if (this.formSubmissionConfig.valueFieldId) {
+        this.onSubmissionValueFieldChange();
+      } else {
+        this.dataSourceConfig.valuePath = this.formSubmissionConfig.valueFieldCode || null;
+      }
+
+      if (this.formSubmissionConfig.textFieldId) {
+        this.onSubmissionTextFieldChange();
+      } else {
+        this.dataSourceConfig.textPath = this.formSubmissionConfig.textFieldCode || null;
+      }
     } else if (this.dataSourceType === 'SqlQuery') {
       if (!this.sqlQueryConfig.sqlQuery || !this.sqlQueryConfig.sqlQuery.trim()) {
         this.messageService.add({
@@ -5565,21 +5786,14 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         });
         return;
       }
-      // Set default valuePath and textPath if not set
-      if (!this.sqlQueryConfig.valuePath || !this.sqlQueryConfig.valuePath.trim()) {
-        this.sqlQueryConfig.valuePath = 'Id';
-      }
-      if (!this.sqlQueryConfig.textPath || !this.sqlQueryConfig.textPath.trim()) {
-        this.sqlQueryConfig.textPath = 'Name';
-      }
-      // Update valuePath and textPath from sqlQueryConfig
-      this.dataSourceConfig.valuePath = this.sqlQueryConfig.valuePath;
-      this.dataSourceConfig.textPath = this.sqlQueryConfig.textPath;
+      // For SQL queries, let the backend infer a single selected column when value/text are empty.
+      this.dataSourceConfig.valuePath = (this.sqlQueryConfig.valuePath || '').trim();
+      this.dataSourceConfig.textPath = (this.sqlQueryConfig.textPath || '').trim();
     }
 
     // Ensure valuePath and textPath are set with defaults if empty
     // Only set defaults if availableProperties is empty (no API tested yet)
-    if (this.availableProperties.length === 0) {
+    if (this.dataSourceType !== 'SqlQuery' && this.availableProperties.length === 0) {
       const defaultValuePath = this.dataSourceType === 'LookupTable' ? 'Id' : 'id';
       const defaultTextPath = this.dataSourceType === 'LookupTable' ? 'Name' : 'name';
 
@@ -5629,11 +5843,14 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.dataSourceConfig.valuePath = valuePath;
       this.dataSourceConfig.textPath = textPath;
     } else if (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') {
-      // For SqlQuery and SapHana, use sqlQueryConfig paths, fallback to dataSourceConfig, then defaults
-      const defaultId = this.dataSourceType === 'SapHana' ? 'ID' : 'Id';
-      const defaultName = this.dataSourceType === 'SapHana' ? 'NAME' : 'Name';
-      valuePath = (this.sqlQueryConfig.valuePath || this.dataSourceConfig.valuePath || defaultId).trim();
-      textPath = (this.sqlQueryConfig.textPath || this.dataSourceConfig.textPath || defaultName).trim();
+      if (this.dataSourceType === 'SqlQuery') {
+        valuePath = (this.sqlQueryConfig.valuePath || this.dataSourceConfig.valuePath || '').trim();
+        textPath = (this.sqlQueryConfig.textPath || this.dataSourceConfig.textPath || '').trim();
+      } else {
+        // For SapHana, use sqlQueryConfig paths, fallback to dataSourceConfig, then defaults
+        valuePath = (this.sqlQueryConfig.valuePath || this.dataSourceConfig.valuePath || 'ID').trim();
+        textPath = (this.sqlQueryConfig.textPath || this.dataSourceConfig.textPath || 'NAME').trim();
+      }
       // Sync with both configs for consistency
       this.sqlQueryConfig.valuePath = valuePath;
       this.sqlQueryConfig.textPath = textPath;
@@ -5649,7 +5866,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     // For SqlQuery/SapHana, use undefined for apiUrl and SQL query in requestBodyJson
     const apiUrlForPreview = this.dataSourceType === 'LookupTable'
       ? this.lookupTableConfig.table
-      : ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') ? undefined : (this.dataSourceConfig.apiUrl || undefined));
+      : (this.dataSourceType === 'FormSubmissions'
+        ? (this.formSubmissionConfig.formId ? String(this.formSubmissionConfig.formId) : undefined)
+        : ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') ? undefined : (this.dataSourceConfig.apiUrl || undefined)));
 
     // For SqlQuery, use SQL query and database in requestBodyJson as JSON object
     // For LookupTable, include database in requestBodyJson as JSON object
@@ -5698,6 +5917,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         : undefined;
       console.log('[FieldsList] LookupTable payload:', lookupTablePayload);
       console.log('[FieldsList] RequestBodyJson for LookupTable:', requestBodyJsonForPreview);
+    } else if (this.dataSourceType === 'FormSubmissions') {
+      configurationJsonForPreview = JSON.stringify({
+        formId: this.formSubmissionConfig.formId,
+        formCode: this.formSubmissionConfig.formCode,
+        valueFieldCode: this.formSubmissionConfig.valueFieldCode,
+        textFieldCode: this.formSubmissionConfig.textFieldCode
+      });
     } else {
       requestBodyJsonForPreview = this.dataSourceConfig.requestBodyJson || undefined;
     }
@@ -5724,6 +5950,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       if (configurationJsonForPreview) {
         requestPayload.ConfigurationJson = configurationJsonForPreview; // PascalCase
       }
+    } else if (this.dataSourceType === 'FormSubmissions') {
+      requestPayload.ApiUrl = apiUrlForPreview;
+      requestPayload.ConfigurationJson = configurationJsonForPreview;
     } else if (this.dataSourceType === 'SapHana') {
       // For SapHana, RequestBodyJson is the SAP HANA SQL query string, SourceType is already "SapHana"
       requestPayload.RequestBodyJson = requestBodyJsonForPreview;
@@ -5796,7 +6025,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         console.log('[FieldsList] ========== PREVIEW RESPONSE END ==========');
         
         // Show success message with options count for SqlQuery, SapHana and LookupTable
-        if ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana' || this.dataSourceType === 'LookupTable') && options && options.length > 0) {
+        if ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana' || this.dataSourceType === 'LookupTable' || this.dataSourceType === 'FormSubmissions') && options && options.length > 0) {
           // Count options with valid text (for SAP HANA, some might have empty text)
           const validOptionsCount = options.filter((opt: any) => {
             const text = String(opt.text || '').trim();
@@ -5813,7 +6042,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           
           this.messageService.add({
             severity: 'success',
-            summary: (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') ? 'Query Executed Successfully' : 'Table Data Loaded Successfully',
+            summary: (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana')
+              ? 'Query Executed Successfully'
+              : (this.dataSourceType === 'FormSubmissions' ? 'Form Data Loaded Successfully' : 'Table Data Loaded Successfully'),
             detail: detailMessage,
             life: 5000
           });
@@ -6100,6 +6331,14 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 }
               }
             }
+
+            if (this.dataSourceType === 'SqlQuery' && error.error.message.includes('Returned columns:')) {
+              const returnedColumns = error.error.message.split('Returned columns:')[1]?.trim() || '';
+              errorMessage = 'The query ran, but the selected columns do not match the result.';
+              errorDetail = returnedColumns
+                ? `Returned columns: ${returnedColumns}`
+                : 'Check the columns returned by your query.';
+            }
             
             // Check for SAP HANA specific errors
             if (error.error.message.includes('SAP HANA') || error.error.message.includes('invalid column name') || error.error.message.includes('HDBODBC')) {
@@ -6374,6 +6613,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         apiUrlValue = this.lookupTableConfig.table || null;
         valuePathValue = this.lookupTableConfig.valueColumn || null;
         textPathValue = this.lookupTableConfig.textColumn || null;
+      } else if (this.dataSourceType === 'FormSubmissions') {
+        apiUrlValue = this.formSubmissionConfig.formId ? String(this.formSubmissionConfig.formId) : null;
+        valuePathValue = this.formSubmissionConfig.valueFieldCode || null;
+        textPathValue = this.formSubmissionConfig.textFieldCode || null;
       } else if (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') {
         // For SqlQuery and SapHana, store SQL query in requestBodyJson
         apiUrlValue = null;
@@ -6412,6 +6655,16 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         requestBodyJsonValue = JSON.stringify({
           database: normalizedDatabase
         });
+      } else if (this.dataSourceType === 'FormSubmissions') {
+        requestBodyJsonValue = this.formSubmissionConfig.formCode || null;
+        configurationJsonValue = JSON.stringify({
+          formId: this.formSubmissionConfig.formId,
+          formCode: this.formSubmissionConfig.formCode,
+          valueFieldId: this.formSubmissionConfig.valueFieldId,
+          textFieldId: this.formSubmissionConfig.textFieldId,
+          valueFieldCode: this.formSubmissionConfig.valueFieldCode,
+          textFieldCode: this.formSubmissionConfig.textFieldCode
+        });
       } else {
         requestBodyJsonValue = this.dataSourceConfig.requestBodyJson || null;
       }
@@ -6428,126 +6681,66 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         isActive: this.dataSourceConfig.isActive !== false
       };
 
-      const existingId = this.existingDataSource?.id;
-      if (existingId && this.existingDataSource) {
-        const existingDataSource = this.existingDataSource; // Store reference for type narrowing
-        // Check if sourceType is changing - if so, delete old and create new
-        if (existingDataSource.sourceType !== this.dataSourceType) {
-          console.log('[FieldsList] SourceType changing from', existingDataSource.sourceType, 'to', this.dataSourceType, '- deleting old and creating new');
-          // Try soft delete first (more reliable), fallback to hard delete
-          this.fieldDataSourceService.softDeleteDataSource(existingId).subscribe({
-            next: () => {
-              console.log('[FieldsList] Old DataSource soft deleted, creating new one');
-              // Then create new DataSource
-              this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
-                next: (createdDataSource) => {
-                  this.existingDataSource = createdDataSource;
-                  resolve();
-                },
-                error: (error) => {
-                  console.error('[FieldsList] Error creating new DataSource:', error);
-                  this.messageService.add({
-                    severity: 'error',
-                    summary: 'Error',
-                    detail: 'Failed to create new DataSource'
-                  });
-                  reject();
-                }
-              });
-            },
-            error: (softDeleteError) => {
-              // If soft delete fails, try hard delete
-              console.warn('[FieldsList] Soft delete failed, trying hard delete:', softDeleteError);
-              this.fieldDataSourceService.deleteDataSource(existingId).subscribe({
-                next: () => {
-                  console.log('[FieldsList] Old DataSource hard deleted, creating new one');
-                  // Then create new DataSource
-                  this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
-                    next: (createdDataSource) => {
-                      this.existingDataSource = createdDataSource;
-                      resolve();
-                    },
-                    error: (error) => {
-                      console.error('[FieldsList] Error creating new DataSource:', error);
-                      this.messageService.add({
-                        severity: 'error',
-                        summary: 'Error',
-                        detail: 'Failed to create new DataSource'
-                      });
-                      reject();
-                    }
-                  });
-                },
-                error: (hardDeleteError) => {
-                  // Even if delete fails, try to create new one anyway (old might already be deleted)
-                  console.warn('[FieldsList] Both soft and hard delete failed, trying to create new DataSource anyway:', hardDeleteError);
-                  this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
-                    next: (createdDataSource) => {
-                      this.existingDataSource = createdDataSource;
-                      console.log('[FieldsList] New DataSource created despite delete failure');
-                      resolve();
-                    },
-                    error: (createError) => {
-                      console.error('[FieldsList] Error creating new DataSource after delete failure:', createError);
-                      this.messageService.add({
-                        severity: 'error',
-                        summary: 'Error',
-                        detail: 'Failed to create new DataSource. The old DataSource may still exist.'
-                      });
-                      reject();
-                    }
-                  });
-                }
-              });
-            }
-          });
-        } else {
-          // Update existing DataSource (same sourceType)
-          if (!existingId || !this.existingDataSource) {
-            console.error('[FieldsList] Cannot update DataSource: ID or DataSource is missing');
-            reject();
-            return;
-          }
-          const existingDataSource = this.existingDataSource; // Store reference for type narrowing
-          this.fieldDataSourceService.updateDataSource(existingId, {
-            sourceType: dataSourceDto.sourceType,
-            apiUrl: dataSourceDto.apiUrl,
-            httpMethod: dataSourceDto.httpMethod,
-            requestBodyJson: dataSourceDto.requestBodyJson,
-            valuePath: dataSourceDto.valuePath,
-            textPath: dataSourceDto.textPath,
-            isActive: dataSourceDto.isActive!,
-            isDeleted: existingDataSource.isDeleted !== undefined ? existingDataSource.isDeleted : false
-          }).subscribe({
-            next: () => {
-              resolve();
-            },
-            error: () => {
-              this.messageService.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to update DataSource'
-              });
-              reject();
-            }
-          });
-        }
-      } else {
-        // Create new DataSource
-        this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
-          next: () => {
-            resolve();
-          },
-          error: () => {
-            this.messageService.add({
-              severity: 'error',
-              summary: 'Error',
-              detail: 'Failed to create DataSource'
+      this.fieldDataSourceService.getActiveDataSourcesByFieldId(fieldId).subscribe({
+        next: (activeDataSources) => {
+          const activeDataSource = activeDataSources && activeDataSources.length > 0
+            ? activeDataSources[0]
+            : null;
+
+          if (activeDataSource?.id) {
+            this.fieldDataSourceService.updateDataSource(activeDataSource.id, {
+              sourceType: dataSourceDto.sourceType,
+              apiUrl: dataSourceDto.apiUrl,
+              httpMethod: dataSourceDto.httpMethod,
+              requestBodyJson: dataSourceDto.requestBodyJson,
+              valuePath: dataSourceDto.valuePath,
+              textPath: dataSourceDto.textPath,
+              configurationJson: dataSourceDto.configurationJson,
+              isActive: dataSourceDto.isActive!,
+              isDeleted: activeDataSource.isDeleted !== undefined ? activeDataSource.isDeleted : false
+            }).subscribe({
+              next: (updatedDataSource) => {
+                this.existingDataSource = updatedDataSource;
+                resolve();
+              },
+              error: (error) => {
+                console.error('[FieldsList] Error updating active DataSource:', error);
+                this.messageService.add({
+                  severity: 'error',
+                  summary: 'Error',
+                  detail: 'Failed to update DataSource'
+                });
+                reject();
+              }
             });
-            reject();
+          } else {
+            this.fieldDataSourceService.createDataSource(dataSourceDto).subscribe({
+              next: (createdDataSource) => {
+                this.existingDataSource = createdDataSource;
+                resolve();
+              },
+              error: (error) => {
+                console.error('[FieldsList] Error creating DataSource:', error);
+                this.messageService.add({
+                  severity: 'error',
+                  summary: 'Error',
+                  detail: 'Failed to create DataSource'
+                });
+                reject();
+              }
+            });
           }
-        });
-      }
+        },
+        error: (error) => {
+          console.error('[FieldsList] Error loading active DataSource before save:', error);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load current DataSource state'
+          });
+          reject();
+        }
+      });
       }).catch(() => {
         // Even if delete fails, continue with DataSource save
         reject();

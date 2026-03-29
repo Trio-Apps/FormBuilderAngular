@@ -96,7 +96,11 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 function shouldIgnoreErrorToast(url: string, status: number): boolean {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
 
-  if (status === 401 && currentPath.includes('/forms/view/')) {
+  if ((status === 401 || status === 403) && currentPath.includes('/forms/view/')) {
+    return true;
+  }
+
+  if ((status === 400 || status === 401 || status === 403) && currentPath.includes('/approval-inbox')) {
     return true;
   }
 

@@ -101,7 +101,7 @@ export class DocumentSeriesListComponent implements OnInit {
     private confirmationService: ConfirmationService
   ) {
     this.seriesForm = this.fb.group({
-      projectId: [null, [Validators.required]],
+      projectId: [null],
       seriesName: ['', [Validators.required, Validators.maxLength(100)]],
       templatePreset: [this.templatePresets[0].value, [Validators.required]],
       template: ['', [Validators.required, Validators.maxLength(150)]],
@@ -170,6 +170,7 @@ export class DocumentSeriesListComponent implements OnInit {
       isDefault: false,
       isActive: true
     });
+    this.enableAllSeriesControls();
   }
 
   openEditDialog(item: DocumentSeries): void {
@@ -194,6 +195,7 @@ export class DocumentSeriesListComponent implements OnInit {
       isDefault: item.isDefault || false,
       isActive: item.isActive !== false
     });
+    this.applyEditabilityState();
   }
 
   closeDialog(): void {
@@ -201,6 +203,19 @@ export class DocumentSeriesListComponent implements OnInit {
     this.editingSeries = null;
     this.showSeriesGuide = false;
     this.seriesForm.reset();
+    this.enableAllSeriesControls();
+  }
+
+  isEditingLocked(): boolean {
+    return !!this.editingSeries?.isLocked;
+  }
+
+  getImmutableFieldsSummary(): string {
+    if (!this.editingSeries?.usageCount) {
+      return '';
+    }
+
+    return `This series already has ${this.editingSeries.usageCount} transaction(s), so project, template, numbering policy, and current next sequence are locked to protect numbering integrity.`;
   }
 
   onTemplatePresetChange(value: string | null): void {
@@ -337,22 +352,26 @@ export class DocumentSeriesListComponent implements OnInit {
     const sequenceStart = Number(formData.sequenceStart || 1);
     const sequencePadding = Number(formData.sequencePadding || 3);
     const nextNumber = Number(formData.nextNumber || sequenceStart || 1);
-    const seriesCode = this.generateSeriesCodeForCompatibility(template, formData.seriesName);
+    const generatedSeriesCode = this.generateSeriesCodeForCompatibility(template, formData.seriesName);
 
     if (this.editingSeries?.id) {
+      const isLocked = this.isEditingLocked();
       const updateDto: UpdateDocumentSeriesDto = {
-        projectId: Number(formData.projectId),
         seriesName: String(formData.seriesName || '').trim(),
-        template,
-        seriesCode,
-        sequenceStart,
-        sequencePadding,
-        resetPolicy: formData.resetPolicy,
-        generateOn: formData.generateOn,
-        nextNumber,
         isDefault: !!formData.isDefault,
         isActive: formData.isActive !== false
       };
+
+      if (!isLocked) {
+        updateDto.projectId = formData.projectId ? Number(formData.projectId) : null;
+        updateDto.template = template;
+        updateDto.seriesCode = generatedSeriesCode;
+        updateDto.sequenceStart = sequenceStart;
+        updateDto.sequencePadding = sequencePadding;
+        updateDto.resetPolicy = formData.resetPolicy;
+        updateDto.generateOn = formData.generateOn;
+        updateDto.nextNumber = nextNumber;
+      }
 
       this.documentTypesService.updateDocumentSeries(this.editingSeries.id, updateDto).subscribe({
         next: () => {
@@ -374,10 +393,10 @@ export class DocumentSeriesListComponent implements OnInit {
     }
 
     const createDto: CreateDocumentSeriesDto = {
-      projectId: Number(formData.projectId),
+      projectId: formData.projectId ? Number(formData.projectId) : null,
       seriesName: String(formData.seriesName || '').trim(),
       template,
-      seriesCode,
+      seriesCode: generatedSeriesCode,
       sequenceStart,
       sequencePadding,
       resetPolicy: formData.resetPolicy,
@@ -463,7 +482,10 @@ export class DocumentSeriesListComponent implements OnInit {
     return item.template || `${item.seriesCode}-{SEQ}`;
   }
 
-  getProjectName(projectId: number): string {
+  getProjectName(projectId?: number | null): string {
+    if (!projectId) {
+      return 'Global / Master Data';
+    }
     const project = this.projects.find(p => p.id === projectId);
     return project ? project.name : `#${projectId}`;
   }
@@ -479,9 +501,9 @@ export class DocumentSeriesListComponent implements OnInit {
       ? this.getSeriesTemplate(item)
       : String(this.seriesForm.get('template')?.value || '');
 
-    const projectId = Number(item?.projectId || this.seriesForm.get('projectId')?.value);
+    const projectId = Number(item?.projectId || this.seriesForm.get('projectId')?.value || 0);
     const project = this.projects.find(p => p.id === projectId);
-    const projectCode = (project?.code || project?.name || 'PROJECT').toUpperCase();
+    const projectCode = (project?.code || project?.name || 'GLOBAL').toUpperCase();
 
     const padding = Number(item?.sequencePadding || this.seriesForm.get('sequencePadding')?.value || 3);
     const seq = Number(item?.nextNumber || this.seriesForm.get('nextNumber')?.value || 1);
@@ -515,5 +537,30 @@ export class DocumentSeriesListComponent implements OnInit {
     }
 
     return String(seriesName || 'SERIES').toUpperCase().replace(/[^A-Z0-9\-_]/g, '').slice(0, 50);
+  }
+
+  private applyEditabilityState(): void {
+    if (!this.editingSeries?.isLocked) {
+      this.enableAllSeriesControls();
+      return;
+    }
+
+    this.enableAllSeriesControls();
+    [
+      'projectId',
+      'templatePreset',
+      'template',
+      'sequenceStart',
+      'sequencePadding',
+      'resetPolicy',
+      'generateOn',
+      'nextNumber'
+    ].forEach(controlName => this.seriesForm.get(controlName)?.disable({ emitEvent: false }));
+  }
+
+  private enableAllSeriesControls(): void {
+    Object.keys(this.seriesForm.controls).forEach(controlName => {
+      this.seriesForm.get(controlName)?.enable({ emitEvent: false });
+    });
   }
 }

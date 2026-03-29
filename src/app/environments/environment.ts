@@ -1,11 +1,15 @@
 // src/environments/environment.ts
 
+const browserProtocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
+const browserHostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const resolvedApiUrl = `${browserProtocol}//${browserHostname}:5000/api`;
+
 // إعدادات التطبيق الأساسية
 export const environment = {
   production: false,
   
   // عنوان API
-  apiUrl: 'http://localhost:5000/api',
+  apiUrl: resolvedApiUrl,
   
   // إعدادات التطبيق
   appName: 'Form Builder',

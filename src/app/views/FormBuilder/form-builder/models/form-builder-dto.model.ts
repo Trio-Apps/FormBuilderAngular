@@ -273,19 +273,20 @@ export interface CreateFormFieldDto {
 export interface FieldDataSource {
   id?: number;
   fieldId: number;
-  sourceType: string; // 'Static' | 'Api' | 'LookupTable' | 'Custom'
+  sourceType: string; // 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana'
   apiUrl?: string | null;
   httpMethod?: string | null; // 'GET' | 'POST'
   requestBodyJson?: string | null;
   valuePath?: string | null;
   textPath?: string | null;
+  configurationJson?: string | null;
   isActive?: boolean;
   isDeleted: boolean;
 }
 
 export interface CreateFieldDataSourceDto {
   fieldId: number; // Required
-  sourceType: string; // Required: 'Static' | 'Api' | 'LookupTable' | 'Custom'
+  sourceType: string; // Required: 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana'
   apiUrl?: string | null; // Optional, max 500 chars
   apiPath?: string | null;
   httpMethod?: string | null; // Optional, max 10 chars ('GET' | 'POST')

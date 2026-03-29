@@ -4,8 +4,8 @@
       <div class="nav-left">
         <div class="nav-title-section">
           <!-- ✅ Different title for Admin vs User -->
-          <h1 class="page-title">{{ isAdmin ? 'Approval Inbox' : 'My Submissions' }}</h1>
-          <p class="page-subtitle">{{ isAdmin ? 'Pending approvals awaiting your action' : 'View your submitted requests' }}</p>
+          <h1 class="page-title">Approval Inbox</h1>
+          <p class="page-subtitle">Review pending approvals awaiting your action.</p>
         </div>
       </div>
       <div class="nav-right">
@@ -19,7 +19,7 @@
   <div class="main-content">
     <div class="document-types-section">
       <app-table-shell
-        [title]="isAdmin ? 'Pending Approvals' : 'My Submissions'"
+        [title]="'Pending Approvals'"
         icon="pi pi-inbox">
         <div table-actions class="header-actions">
           <!-- ✅ Only Admin can toggle between views -->
@@ -28,14 +28,6 @@
             <input type="text" placeholder="Search..." class="search-input" [(ngModel)]="searchTerm" (input)="onSearchChange()" />
           </div>
         </div>
-
-      <div *ngIf="pageAccessNotice" class="page-access-notice">
-        <i class="pi pi-shield"></i>
-        <div class="notice-copy">
-          <strong>Access Restricted</strong>
-          <span>{{ pageAccessNotice }}</span>
-        </div>
-      </div>
 
       <div *ngIf="loading.inbox" class="loading-container">
         <i class="pi pi-spin pi-spinner"></i>
@@ -72,7 +64,16 @@
                 <span class="badge badge-info">{{ submission.status }}</span>
               </td>
               <td>
-                <span class="view-only-text">View Only</span>
+                <div class="action-buttons">
+                  <button
+                    pButton
+                    type="button"
+                    icon="pi pi-eye"
+                    class="p-button-secondary p-button-sm action-icon-button"
+                    (click)="openSubmissionDetails(submission.id)"
+                    pTooltip="Open document details"
+                    tooltipPosition="top"></button>
+                </div>
               </td>
             </tr>
           </ng-template>
@@ -126,13 +127,25 @@
             <td>{{ formatDate(item.submittedDate) }}</td>
             <td>
               <!-- ✅ Show Approve/Reject/Return buttons if user can approve (Admin or assigned as Stage Assignee) -->
-              <div *ngIf="canApproveReject(item)" class="action-buttons">
-                <button pButton type="button" icon="pi pi-check" class="p-button-success p-button-sm action-icon-button" (click)="openActionModal(item, 'Approved')" pTooltip="Approve" tooltipPosition="top"></button>
-                <button pButton type="button" icon="pi pi-times" class="p-button-danger p-button-sm action-icon-button" (click)="openActionModal(item, 'Rejected')" pTooltip="Reject" tooltipPosition="top"></button>
-                <button pButton type="button" icon="pi pi-reply" class="p-button-warning p-button-sm action-icon-button" (click)="openActionModal(item, 'Returned')" pTooltip="Return" tooltipPosition="top"></button>
+              <div class="action-buttons">
+                <button
+                  pButton
+                  type="button"
+                  icon="pi pi-eye"
+                  class="p-button-secondary p-button-sm action-icon-button"
+                  (click)="openSubmissionDetails(item.submissionId)"
+                  pTooltip="Open document details"
+                  tooltipPosition="top"></button>
+                <ng-container *ngIf="canShowDecisionActions(item); else signActionTemplate">
+                  <button pButton type="button" icon="pi pi-check" class="p-button-success p-button-sm action-icon-button" (click)="openActionModal(item, 'Approved')" pTooltip="Approve" tooltipPosition="top"></button>
+                  <button pButton type="button" icon="pi pi-times" class="p-button-danger p-button-sm action-icon-button" (click)="openActionModal(item, 'Rejected')" pTooltip="Reject" tooltipPosition="top"></button>
+                  <button pButton type="button" icon="pi pi-reply" class="p-button-warning p-button-sm action-icon-button" (click)="openActionModal(item, 'Returned')" pTooltip="Return" tooltipPosition="top"></button>
+                </ng-container>
+                <ng-template #signActionTemplate>
+                  <button *ngIf="canShowSignAction(item)" pButton type="button" icon="pi pi-file-edit" class="p-button-info p-button-sm action-icon-button sign-icon-button" (click)="openSigningForItem(item)" pTooltip="Sign with DocuSign" tooltipPosition="top"></button>
+                </ng-template>
               </div>
               <!-- ✅ Show View Only if user cannot approve -->
-              <span *ngIf="!canApproveReject(item)" class="view-only-text">View Only</span>
             </td>
           </tr>
         </ng-template>
@@ -150,7 +163,7 @@
   </div>
 </div>
 
-<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true" [resizable]="false" [draggable]="false" [(visible)]="showActionModal" [header]="actionType + ' Document'" [modal]="true" [style]="{ width: '600px' }" (onHide)="closeActionModal()">
+<app-dialog-shell [dismissableMask]="true" [closeOnEscape]="true" [closable]="true" [resizable]="false" [draggable]="false" [(visible)]="showActionModal" [header]="getActionDialogTitle()" [modal]="true" [style]="{ width: '600px' }" (onHide)="closeActionModal()">
   <form [formGroup]="actionForm" (ngSubmit)="processAction()">
       <div class="form-display-section">
         <div class="form-field-wrapper" *ngIf="selectedItem || selectedSubmission">
@@ -179,7 +192,7 @@
       <button 
         type="submit" 
         pButton 
-        [label]="actionType" 
+        [label]="getActionVerb(actionType)" 
         [attr.disabled]="isApproveDisabled() ? '' : (loading.action ? '' : null)" 
         [loading]="loading.action"
         [class]="actionType === 'Approved' ? 'p-button-success' : actionType === 'Rejected' ? 'p-button-danger' : 'p-button-warning'"
@@ -189,7 +202,61 @@
   </form>
 </app-dialog-shell>
 
-<p-toast></p-toast>
+<app-dialog-shell
+  [(visible)]="showSubmissionDetails"
+  [header]="'Document Details'"
+  [modal]="true"
+  [style]="{ width: '760px', maxWidth: '95vw' }"
+  [dismissableMask]="true"
+  [closeOnEscape]="true"
+  [closable]="true"
+  (onHide)="closeSubmissionDetails()">
+  <div class="submission-details-modal">
+    <div class="details-meta" *ngIf="selectedSubmissionDetail as detail">
+      <div class="details-meta__item">
+        <span class="details-meta__label">Document Number</span>
+        <strong class="details-meta__value">{{ detail.documentNumber || '-' }}</strong>
+      </div>
+      <div class="details-meta__item">
+        <span class="details-meta__label">Submission ID</span>
+        <strong class="details-meta__value">#{{ detail.id }}</strong>
+      </div>
+      <div class="details-meta__item">
+        <span class="details-meta__label">Status</span>
+        <span class="badge badge-info">{{ detail.status || 'Unknown' }}</span>
+      </div>
+      <div class="details-meta__item">
+        <span class="details-meta__label">Created</span>
+        <strong class="details-meta__value">{{ formatDate(detail.createdDate || detail.submittedDate || detail.lastUpdatedDate) }}</strong>
+      </div>
+    </div>
+
+    <section *ngIf="loadingSubmissionDetails" class="loading-container">
+      <i class="pi pi-spin pi-spinner"></i>
+      <p>Loading document details...</p>
+    </section>
+
+    <section *ngIf="!loadingSubmissionDetails && submissionDetailsError" class="details-error">
+      {{ submissionDetailsError }}
+    </section>
+
+    <section *ngIf="!loadingSubmissionDetails && selectedSubmissionDetail && !submissionDetailsError" class="details-list">
+      <div class="details-row" *ngFor="let fieldValue of getVisibleFieldValues()">
+        <div class="details-row__label">{{ fieldValue.fieldName || fieldValue.fieldCode || ('Field #' + fieldValue.fieldId) }}</div>
+        <div class="details-row__value">{{ getFieldDisplayValue(fieldValue) }}</div>
+      </div>
+
+      <div class="details-empty" *ngIf="getVisibleFieldValues().length === 0">
+        No saved field values were found for this document.
+      </div>
+    </section>
+
+    <div class="details-footer">
+      <button class="p-button-secondary p-button" type="button" (click)="closeSubmissionDetails()">Close</button>
+    </div>
+  </div>
+</app-dialog-shell>
+
 <p-confirmDialog></p-confirmDialog>
 
 

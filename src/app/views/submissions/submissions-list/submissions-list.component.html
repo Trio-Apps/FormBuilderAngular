@@ -66,6 +66,7 @@
           <option value="draft">Draft</option>
           <option value="submitted">Submitted</option>
           <option value="approved">Approved</option>
+          <option value="posted">Posted</option>
           <option value="rejected">Rejected</option>
         </select>
       </label>
@@ -77,28 +78,33 @@
           <tr>
             <th>Submission</th>
             <th>Form</th>
-            <th>Document Type</th>
             <th>Status</th>
             <th>Last Update</th>
-            <th>Report</th>
             <th>SAP Integration</th>
             <th>Result</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let submission of pagedSubmissions; trackBy: trackBySubmissionId">
             <td class="submission-cell">
-              <div class="cell-primary">{{ submission.documentNumber || 'Pending Number' }}</div>
+              <button
+                *ngIf="submission.id; else submissionNumberText"
+                class="cell-primary document-link"
+                type="button"
+                (click)="openSubmissionDetails(submission)"
+                [title]="'Open submission ' + (submission.documentNumber || ('#' + submission.id))">
+                {{ submission.documentNumber || 'Pending Number' }}
+              </button>
+              <ng-template #submissionNumberText>
+                <div class="cell-primary">{{ submission.documentNumber || 'Pending Number' }}</div>
+              </ng-template>
               <div class="cell-muted">#{{ submission.id }}</div>
             </td>
 
             <td>
               <div class="cell-primary">{{ submission.formName || '-' }}</div>
               <div class="cell-muted">v{{ submission.version }}</div>
-            </td>
-
-            <td>
-              <div class="cell-primary">{{ submission.documentTypeName || ('Document #' + submission.documentTypeId) }}</div>
             </td>
 
             <td>
@@ -113,22 +119,6 @@
               </div>
               <div class="cell-muted">
                 {{ (submission.lastUpdatedDate || submission.createdDate || submission.submittedDate) | date: 'HH:mm' }}
-              </div>
-            </td>
-
-            <td>
-              <div class="action-stack">
-                <button
-                  class="btn-secondary btn-secondary--compact"
-                  type="button"
-                  (click)="downloadPdf(submission)"
-                  [disabled]="!canDownloadReport(submission) || downloadingPdfBySubmission[submission.id]"
-                  [title]="getReportButtonTitle(submission)">
-                  {{ getReportButtonText(submission) }}
-                </button>
-              </div>
-              <div class="inline-error" *ngIf="pdfErrorBySubmission[submission.id]">
-                {{ pdfErrorBySubmission[submission.id] }}
               </div>
             </td>
 
@@ -168,6 +158,23 @@
               <span *ngIf="!executionResultsBySubmission[submission.id]" class="cell-muted">
                 No execution
               </span>
+            </td>
+
+            <td>
+              <div class="action-stack" *ngIf="canPost(submission); else noPostAction">
+                <button
+                  class="btn-secondary btn-secondary--accent btn-secondary--compact"
+                  type="button"
+                  (click)="postSubmission(submission)"
+                  [disabled]="postingBySubmission[submission.id]"
+                  title="Convert this approved submission into a posted document.">
+                  {{ getPostButtonText(submission) }}
+                </button>
+              </div>
+
+              <ng-template #noPostAction>
+                <span class="cell-muted">-</span>
+              </ng-template>
             </td>
           </tr>
         </tbody>
@@ -209,3 +216,84 @@
     </div>
   </app-table-shell>
 </div>
+
+<app-dialog-shell
+  [(visible)]="showSubmissionDetails"
+  [header]="'Submission Details'"
+  [modal]="true"
+  [style]="{ width: '760px', maxWidth: '95vw' }"
+  [dismissableMask]="true"
+  [closeOnEscape]="true"
+  [closable]="true"
+  (onHide)="closeSubmissionDetails()">
+  <div class="submission-details-modal">
+    <div
+      class="details-navigation"
+      *ngIf="selectedSubmissionDetail && (selectedSubmissionDetail.status || '').toLowerCase() === 'posted'">
+      <button
+        type="button"
+        class="btn-secondary btn-secondary--compact details-nav-btn"
+        (click)="navigatePostedPrevious()"
+        [disabled]="!canNavigatePostedPrevious()"
+        title="Previous posted transaction">
+        <span aria-hidden="true">‹</span>
+        <span>Previous</span>
+      </button>
+
+      <button
+        type="button"
+        class="btn-secondary btn-secondary--compact details-nav-btn"
+        (click)="navigatePostedNext()"
+        [disabled]="!canNavigatePostedNext()"
+        title="Next posted transaction">
+        <span>Next</span>
+        <span aria-hidden="true">›</span>
+      </button>
+    </div>
+
+    <div class="details-meta" *ngIf="selectedSubmissionDetail as detail">
+      <div class="details-meta__item">
+        <span class="details-meta__label">Document Number</span>
+        <strong class="details-meta__value">{{ detail.documentNumber || '-' }}</strong>
+      </div>
+      <div class="details-meta__item">
+        <span class="details-meta__label">Submission ID</span>
+        <strong class="details-meta__value">#{{ detail.id }}</strong>
+      </div>
+      <div class="details-meta__item">
+        <span class="details-meta__label">Status</span>
+        <span class="status-chip" [ngClass]="getStatusClass(detail.status)">{{ detail.status || 'Unknown' }}</span>
+      </div>
+      <div class="details-meta__item">
+        <span class="details-meta__label">Created</span>
+        <strong class="details-meta__value">
+          {{ (detail.createdDate || detail.submittedDate || detail.lastUpdatedDate) | date: 'yyyy-MM-dd HH:mm' }}
+        </strong>
+      </div>
+    </div>
+
+    <section *ngIf="loadingSubmissionDetails" class="state-card">
+      <strong>Loading submission details...</strong>
+      <span>Please wait while we fetch the transaction data.</span>
+    </section>
+
+    <section *ngIf="!loadingSubmissionDetails && submissionDetailsError" class="feedback-banner feedback-banner--error">
+      {{ submissionDetailsError }}
+    </section>
+
+    <section *ngIf="!loadingSubmissionDetails && selectedSubmissionDetail && !submissionDetailsError" class="details-list">
+      <div class="details-row" *ngFor="let fieldValue of getVisibleFieldValues()">
+        <div class="details-row__label">{{ fieldValue.fieldName || fieldValue.fieldCode || ('Field #' + fieldValue.fieldId) }}</div>
+        <div class="details-row__value">{{ getFieldDisplayValue(fieldValue) }}</div>
+      </div>
+
+      <div class="details-empty" *ngIf="getVisibleFieldValues().length === 0">
+        No saved field values were found for this submission.
+      </div>
+    </section>
+
+    <div class="details-footer">
+      <button class="btn-secondary" type="button" (click)="closeSubmissionDetails()">Close</button>
+    </div>
+  </div>
+</app-dialog-shell>

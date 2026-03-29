@@ -37,6 +37,20 @@ export interface ApprovalInboxItemDto {
   workflowName?: string;
   isDelegated?: boolean;
   delegatedFromUserId?: string | null;
+  status?: string;
+  canApprove?: boolean;
+  signatureRequired?: boolean;
+  signatureStatus?: 'not_required' | 'pending' | 'signed' | string;
+}
+
+export interface ProcessApprovalActionResultDto {
+  submissionId: number;
+  stageId?: number | null;
+  status?: string | null;
+  requiredApprovals?: number;
+  currentRejections?: number;
+  requiredRejections?: number;
+  signatureRequested?: boolean;
 }
 
 export interface PagedApprovalInboxResult {
@@ -176,7 +190,7 @@ export class ApprovalWorkflowRuntimeService {
    * POST /api/ApprovalWorkflowRuntime/process-action
    * This is the main method for processing approval actions
    */
-  processApprovalAction(dto: ProcessApprovalActionDto): Observable<void> {
+  processApprovalAction(dto: ProcessApprovalActionDto): Observable<ProcessApprovalActionResultDto> {
     // Validate required fields
     if (!dto.submissionId || dto.submissionId <= 0) {
       return throwError(() => new Error('Submission ID is required'));
@@ -211,9 +225,18 @@ export class ApprovalWorkflowRuntimeService {
     console.log('[ApprovalWorkflowRuntimeService] Processing approval action:', processDto);
 
     return this.http.post<any>(`${this.baseUrl}/process-action`, processDto).pipe(
-      map(() => {
+      map((response: any) => {
         console.log('[ApprovalWorkflowRuntimeService] Approval action processed successfully');
-        return;
+        const payload = response?.data ?? response ?? {};
+        return {
+          submissionId: Number(payload.submissionId ?? payload.SubmissionId ?? processDto.submissionId),
+          stageId: payload.stageId ?? payload.StageId ?? null,
+          status: payload.status ?? payload.Status ?? null,
+          requiredApprovals: payload.requiredApprovals ?? payload.RequiredApprovals,
+          currentRejections: payload.currentRejections ?? payload.CurrentRejections,
+          requiredRejections: payload.requiredRejections ?? payload.RequiredRejections,
+          signatureRequested: Boolean(payload.signatureRequested ?? payload.SignatureRequested)
+        } as ProcessApprovalActionResultDto;
       }),
       catchError((error) => {
         console.error('[ApprovalWorkflowRuntimeService] Error processing approval action:', error);
@@ -232,7 +255,7 @@ export class ApprovalWorkflowRuntimeService {
     stageId: number,
     actionByUserId: string,
     comments?: string | null
-  ): Observable<void> {
+  ): Observable<ProcessApprovalActionResultDto> {
     return this.processApprovalAction({
       submissionId,
       stageId,
@@ -251,7 +274,7 @@ export class ApprovalWorkflowRuntimeService {
     stageId: number,
     actionByUserId: string,
     comments?: string | null
-  ): Observable<void> {
+  ): Observable<ProcessApprovalActionResultDto> {
     return this.processApprovalAction({
       submissionId,
       stageId,
@@ -270,7 +293,7 @@ export class ApprovalWorkflowRuntimeService {
     stageId: number,
     actionByUserId: string,
     comments?: string | null
-  ): Observable<void> {
+  ): Observable<ProcessApprovalActionResultDto> {
     return this.processApprovalAction({
       submissionId,
       stageId,

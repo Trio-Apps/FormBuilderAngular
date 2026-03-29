@@ -8,6 +8,7 @@ import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { SelectModule } from 'primeng/select';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
@@ -32,7 +33,7 @@ import {
   AlertNotificationType
 } from '../../FormBuilder/services/alert-rules.service';
 import { EmailTemplatesService, EmailTemplateDto } from '../../FormBuilder/services/email-templates.service';
-import { UsersService, UserDto } from '../../FormBuilder/services/users.service';
+import { UsersService, UserDto, UserGroupDto } from '../../FormBuilder/services/users.service';
 
 type TriggerOption = { label: string; value: AlertTriggerType };
 type NotificationOption = { label: string; value: AlertNotificationType };
@@ -50,6 +51,7 @@ type NotificationOption = { label: string; value: AlertNotificationType };
     TooltipModule,
     DialogModule,
     SelectModule,
+    MultiSelectModule,
     InputTextModule,
     CheckboxModule,
     ButtonModule,
@@ -85,6 +87,7 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
   filteredRules: AlertRuleDto[] = [];
   emailTemplates: EmailTemplateDto[] = [];
   users: UserDto[] = [];
+  userGroups: UserGroupDto[] = [];
 
   // Permission flags
   canViewAlertRules = false;
@@ -145,12 +148,11 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
       documentTypeId: [null, Validators.required],
       triggerType: [null, Validators.required],
       ruleName: ['', [Validators.required, Validators.maxLength(200)]],
-      targetUserId: [''],
-      targetRoleId: [''],
+      targetUserId: [[]],
+      targetRoleId: [[]],
       isActive: [true],
       notificationType: ['Email', Validators.required],
-      emailTemplateId: [null],
-      conditionJson: ['{}', Validators.required]
+      emailTemplateId: [null]
     });
 
     this.loadInitialData();
@@ -184,13 +186,15 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
       docTypes: this.docTypesService.getActiveDocumentTypes(),
       rules: this.alertRulesService.getAll(),
       emailTemplates: this.emailTemplatesService.getAll({ includeInactive: true }),
-      users: this.usersService.getActiveUsers()
+      users: this.usersService.getActiveUsers(),
+      userGroups: this.usersService.getActiveUserGroups()
     }).subscribe({
-      next: ({ docTypes, rules, emailTemplates, users }) => {
+      next: ({ docTypes, rules, emailTemplates, users, userGroups }) => {
         this.documentTypes = docTypes || [];
         this.rules = rules || [];
         this.emailTemplates = emailTemplates || [];
         this.users = users || [];
+        this.userGroups = userGroups || [];
         this.applyFilters();
         this.loading.init = false;
       },
@@ -240,12 +244,11 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
         documentTypeId: rule.documentTypeId,
         triggerType: rule.triggerType as AlertTriggerType,
         ruleName: rule.ruleName,
-        targetUserId: rule.targetUserId || '',
-        targetRoleId: rule.targetRoleId || '',
+        targetUserId: this.splitCsv(rule.targetUserId),
+        targetRoleId: this.splitCsv(rule.targetRoleId),
         isActive: rule.isActive,
         notificationType: (rule.notificationType as AlertNotificationType) || 'Email',
-        emailTemplateId: rule.emailTemplateId ?? null,
-        conditionJson: rule.conditionJson || '{}'
+        emailTemplateId: rule.emailTemplateId ?? null
       });
     } else {
       // Creating new rule
@@ -259,12 +262,11 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
         documentTypeId: this.selectedDocumentTypeId,
         triggerType: this.selectedTriggerType,
         ruleName: '',
-        targetUserId: '',
-        targetRoleId: '',
+        targetUserId: [],
+        targetRoleId: [],
         isActive: true,
         notificationType: 'Email',
-        emailTemplateId: null,
-        conditionJson: '{}'
+        emailTemplateId: null
       });
     }
     this.showCreateModal = true;
@@ -300,6 +302,8 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
       v.emailTemplateId !== null && v.emailTemplateId !== undefined && v.emailTemplateId !== ''
         ? Number(v.emailTemplateId)
         : null;
+    const targetUserId = this.joinCsv(v.targetUserId);
+    const targetRoleId = this.joinCsv(v.targetRoleId);
     this.loading.save = true;
 
     if (this.editingRule) {
@@ -309,11 +313,11 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
         documentTypeId: Number(v.documentTypeId),
         triggerType: String(v.triggerType),
         ruleName: String(v.ruleName).trim(),
-        conditionJson: v.conditionJson ?? '{}',
+        conditionJson: '{}',
         emailTemplateId,
         notificationType: v.notificationType as string,
-        targetRoleId: v.targetRoleId ? String(v.targetRoleId).trim() : '',
-        targetUserId: v.targetUserId ? String(v.targetUserId).trim() : '',
+        targetRoleId,
+        targetUserId,
         isActive: !!v.isActive
       };
 
@@ -342,11 +346,11 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
         documentTypeId: Number(v.documentTypeId),
         triggerType: v.triggerType,
         ruleName: String(v.ruleName).trim(),
-        conditionJson: v.conditionJson ?? '{}',
+        conditionJson: '{}',
         emailTemplateId,
         notificationType: v.notificationType as AlertNotificationType,
-        targetRoleId: v.targetRoleId ? String(v.targetRoleId).trim() : '',
-        targetUserId: v.targetUserId ? String(v.targetUserId).trim() : '',
+        targetRoleId,
+        targetUserId,
         isActive: !!v.isActive
       };
 
@@ -450,6 +454,55 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
       return this.emailTemplates || [];
     }
     return (this.emailTemplates || []).filter(t => Number(t.documentTypeId) === Number(docTypeId));
+  }
+
+  get targetUserOptions(): Array<{ label: string; value: string }> {
+    return (this.users || []).map(user => ({
+      value: user.username,
+      label: `${user.name || user.username} (${user.username})${user.email ? ' - ' + user.email : ''}`
+    }));
+  }
+
+  get targetRoleOptions(): Array<{ label: string; value: string }> {
+    return (this.userGroups || []).map(group => ({
+      value: group.name,
+      label: group.name
+    }));
+  }
+
+  getSelectedUsersSummary(): string {
+    const selected = this.createForm?.get('targetUserId')?.value as string[] | null;
+    if (!selected || selected.length === 0) return 'Select users';
+    if (selected.length === 1) {
+      const match = this.targetUserOptions.find(option => option.value === selected[0]);
+      return match?.label || selected[0];
+    }
+    return `${selected.length} users selected`;
+  }
+
+  getSelectedRolesSummary(): string {
+    const selected = this.createForm?.get('targetRoleId')?.value as string[] | null;
+    if (!selected || selected.length === 0) return 'Select roles';
+    if (selected.length === 1) {
+      const match = this.targetRoleOptions.find(option => option.value === selected[0]);
+      return match?.label || selected[0];
+    }
+    return `${selected.length} roles selected`;
+  }
+
+  private splitCsv(value?: string | null): string[] {
+    return (value || '')
+      .split(',')
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
+  }
+
+  private joinCsv(value: unknown): string {
+    if (!Array.isArray(value)) return '';
+    return value
+      .map(item => String(item).trim())
+      .filter(item => item.length > 0)
+      .join(',');
   }
 }
 

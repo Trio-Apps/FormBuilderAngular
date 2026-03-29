@@ -746,7 +746,22 @@
                   </div>
                 </label>
 
-                <!-- Option 3: API Link -->
+                <!-- Option 3: Form Submissions -->
+                <label class="data-source-option" [class.selected]="dataSourceType === 'FormSubmissions'"
+                  style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                  [style.border-color]="dataSourceType === 'FormSubmissions' ? '#667eea' : '#e5e7eb'"
+                  [style.background]="dataSourceType === 'FormSubmissions' ? '#f0ebf8' : '#f9fafb'">
+                  <input type="radio" name="dataSourceType" value="FormSubmissions" [(ngModel)]="dataSourceType"
+                    [ngModelOptions]="{standalone: true}" (change)="onDataSourceTypeChange()"
+                    style="width: 20px; height: 20px; cursor: pointer;" />
+                  <i class="pi pi-file-edit" style="font-size: 20px; color: #667eea;"></i>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Form Submissions</div>
+                    <div style="font-size: 12px; color: #6b7280;">Read dropdown options directly from another Form Builder form without writing SQL.</div>
+                  </div>
+                </label>
+
+                <!-- Option 4: API Link -->
                 <label class="data-source-option" [class.selected]="dataSourceType === 'Api'"
                   style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
                   [style.border-color]="dataSourceType === 'Api' ? '#667eea' : '#e5e7eb'"
@@ -762,7 +777,7 @@
                   </div>
                 </label>
 
-                <!-- Option 4: SQL Query (SQL Server) -->
+                <!-- Option 5: SQL Query (SQL Server) -->
                 <label class="data-source-option" [class.selected]="dataSourceType === 'SqlQuery'"
                   style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
                   [style.border-color]="dataSourceType === 'SqlQuery' ? '#667eea' : '#e5e7eb'"
@@ -781,7 +796,7 @@
                   </div>
                 </label>
 
-                <!-- Option 5: SAP HANA Query -->
+                <!-- Option 6: SAP HANA Query -->
                 <label class="data-source-option" [class.selected]="dataSourceType === 'SapHana'"
                   style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
                   [style.border-color]="dataSourceType === 'SapHana' ? '#059669' : '#e5e7eb'"
@@ -935,6 +950,98 @@
                     *ngIf="availableColumns.length === 0">
                     <i class="pi pi-info-circle"></i> Select a table above to load available columns automatically
                   </small>
+                </div>
+              </div>
+            </div>
+
+            <!-- Form Submissions Selection -->
+            <div class="form-group" *ngIf="dataSourceType === 'FormSubmissions'" style="grid-column: 1 / -1;">
+              <div class="source-detail-panel">
+                <div class="source-detail-title">
+                  <i class="pi pi-file-edit"></i>
+                  <span>Form Submissions Guide</span>
+                </div>
+                <div class="source-detail-copy">
+                  Use this when the dropdown should read values from another form built inside this solution, such as Business Partner Master Data or any reusable setup form.
+                </div>
+                <ul class="source-detail-list">
+                  <li>Select the source form that stores the records.</li>
+                  <li>Select the field that should be saved as the dropdown value.</li>
+                  <li>Select the field that should be shown to the user as the dropdown label.</li>
+                </ul>
+                <div class="source-detail-example">
+                  Example: source form = <code>Business Partner Master Data</code>, value field = <code>BP Code</code>, text field = <code>BP Name</code>.
+                </div>
+              </div>
+
+              <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-file" style="margin-right: 6px; color: #667eea;"></i>
+                    Source Form <span class="required">*</span>
+                  </label>
+                  <select class="form-control"
+                    [(ngModel)]="formSubmissionConfig.formId"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onSubmissionSourceFormChange()">
+                    <option [ngValue]="null">-- Select Form --</option>
+                    <option *ngFor="let form of availableSourceForms" [ngValue]="form.id">
+                      {{ form.formName }} ({{ form.formCode }})
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                    <i class="pi pi-info-circle"></i>
+                    Choose the form that already stores the records you want to reuse.
+                  </small>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
+                    Value Field <span class="required">*</span>
+                  </label>
+                  <select class="form-control"
+                    [(ngModel)]="formSubmissionConfig.valueFieldId"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onSubmissionValueFieldChange()"
+                    [disabled]="!formSubmissionConfig.formId">
+                    <option [ngValue]="null">-- Select Value Field --</option>
+                    <option *ngFor="let field of availableSourceFormFields" [ngValue]="field.id">
+                      {{ field.fieldName }} ({{ field.fieldCode }})
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                    The stored value sent with the form submission.
+                  </small>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
+                    Text Field <span class="required">*</span>
+                  </label>
+                  <select class="form-control"
+                    [(ngModel)]="formSubmissionConfig.textFieldId"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onSubmissionTextFieldChange()"
+                    [disabled]="!formSubmissionConfig.formId">
+                    <option [ngValue]="null">-- Select Text Field --</option>
+                    <option *ngFor="let field of availableSourceFormFields" [ngValue]="field.id">
+                      {{ field.fieldName }} ({{ field.fieldCode }})
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                    The human-readable label shown inside the dropdown.
+                  </small>
+                </div>
+
+                <div class="form-group" style="display: flex; align-items: flex-end;">
+                  <button type="button" class="btn btn-primary" (click)="previewDataSource()"
+                    [disabled]="!formSubmissionConfig.formId || !formSubmissionConfig.valueFieldId || !formSubmissionConfig.textFieldId || loadingPreview"
+                    style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                    <i class="pi pi-play" style="font-size: 14px;"></i>
+                    Preview Options
+                  </button>
                 </div>
               </div>
             </div>
@@ -1305,7 +1412,7 @@
 
             <!-- Preview Options Display (id, name) -->
             <div class="form-group"
-              *ngIf="(dataSourceType === 'LookupTable' && lookupTableConfig.table) || (dataSourceType === 'Api' && dataSourceConfig.apiUrl)"
+              *ngIf="(dataSourceType === 'LookupTable' && lookupTableConfig.table) || (dataSourceType === 'Api' && dataSourceConfig.apiUrl) || (dataSourceType === 'FormSubmissions' && formSubmissionConfig.formId)"
               style="grid-column: 1 / -1;">
               <label class="form-label">
                 <button type="button" class="btn-preview-small" (click)="previewDataSource()"

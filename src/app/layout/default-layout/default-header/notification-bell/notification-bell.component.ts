@@ -503,33 +503,12 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
 
     // Navigate based on referenceType and referenceId
     // As per documentation: referenceType='ApprovalRequired' → open /submissions/{referenceId}
-    if (notification.referenceId) {
-      switch (notification.referenceType) {
-        case 'ApprovalRequired':
-          // Navigate to submission approval page
-          this.router.navigate(['/submissions', notification.referenceId]);
-          break;
-        case 'FormSubmission':
-          // Navigate to submission details
-          this.router.navigate(['/form-submissions', notification.referenceId]);
-          break;
-        case 'ApprovalApproved':
-        case 'ApprovalRejected':
-        case 'ApprovalReturned':
-          // Navigate to submission details
-          this.router.navigate(['/submissions', notification.referenceId]);
-          break;
-        default:
-          // No navigation for system notifications
-          console.log('[NotificationBell] No navigation for referenceType:', notification.referenceType);
-          break;
-      }
-    }
+    this.navigateFromNotification(notification);
   }
 
   markAllAsRead(event: Event): void {
     event.stopPropagation();
-    const userId = this.authService.userName();
+    const userId = this.getCurrentUserId();
     if (userId) {
       this.notificationService.markAllAsRead(userId).subscribe();
     }
@@ -537,5 +516,32 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
 
   viewAllNotifications(): void {
     this.router.navigate(['/notifications']);
+  }
+
+  private navigateFromNotification(notification: NotificationDto): void {
+    switch (notification.referenceType) {
+      case 'ApprovalRequired':
+        this.router.navigate(['/approval-inbox']);
+        return;
+      case 'FormSubmitted':
+      case 'FormSubmission':
+        this.router.navigate(['/submissions']);
+        return;
+      case 'ApprovalApproved':
+      case 'ApprovalRejected':
+      case 'ApprovalReturned':
+        if (notification.referenceId) {
+          this.router.navigate(['/form-submissions', notification.referenceId, 'approval-history']);
+          return;
+        }
+        this.router.navigate(['/approvals-history']);
+        return;
+      default:
+        if (notification.referenceId) {
+          this.router.navigate(['/submissions']);
+          return;
+        }
+        console.log('[NotificationBell] No navigation for referenceType:', notification.referenceType);
+    }
   }
 }

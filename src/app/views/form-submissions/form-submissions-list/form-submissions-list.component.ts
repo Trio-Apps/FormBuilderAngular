@@ -435,7 +435,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     filtered = filtered.filter(sub => {
       const status = (sub.status || '').toLowerCase();
       // Only show Draft and Submitted submissions
-      return status === 'draft' || status === 'submitted';
+      return status === 'draft' || status === 'submitted' || status === 'approved';
     });
 
     // ✅ Non-admin users ALWAYS see only their own submissions
@@ -3848,12 +3848,12 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     if (!submission?.id) return false;
     if (this.loadingCopyToDocumentSubmissionId === submission.id) return false;
     const normalizedStatus = (submission.status || '').trim().toLowerCase();
-    return normalizedStatus === 'submitted' || normalizedStatus === 'draft';
+    return normalizedStatus === 'submitted' || normalizedStatus === 'draft' || normalizedStatus === 'approved';
   }
 
   getManualCopyButtonTitle(submission: FormSubmissionDto): string {
     if (!this.canExecuteManualCopyToDocument(submission)) {
-      return 'Copy is available only for draft or submitted records.';
+      return 'Copy is available only for draft, submitted, or approved records.';
     }
     return 'Run manual Copy To Document setups for this submission.';
   }
@@ -3875,6 +3875,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         const total = Number(response?.total || 0);
         const successCount = Number(response?.successCount || 0);
         const failedCount = Number(response?.failedCount || 0);
+        const createdTargetNumbers = (response?.items || [])
+          .filter(item => item?.success && (item?.targetDocumentId || item?.targetDocumentNumber))
+          .map(item => item.targetDocumentNumber || `#${item.targetDocumentId}`)
+          .filter((value): value is string => !!value);
 
         if (total === 0) {
           this.messageService.add({
@@ -3889,7 +3893,9 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'success',
             summary: 'Copy To Document',
-            detail: `${successCount} setup(s) executed successfully.`
+            detail: createdTargetNumbers.length > 0
+              ? `${successCount} setup(s) executed successfully. Draft created: ${createdTargetNumbers.join(', ')}`
+              : `${successCount} setup(s) executed successfully.`
           });
           return;
         }

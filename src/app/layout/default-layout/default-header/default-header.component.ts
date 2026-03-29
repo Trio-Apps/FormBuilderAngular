@@ -35,11 +35,6 @@ import { NotificationBellComponent } from './notification-bell/notification-bell
 export class DefaultHeaderComponent extends HeaderComponent {
   readonly authService = inject(AuthService);
 
-  isAdminUser(): boolean {
-    const role = (this.authService.role() || '').toLowerCase();
-    return role === 'administration' || role === 'admin';
-  }
-
   logout(): void {
     this.authService.logout();
   }

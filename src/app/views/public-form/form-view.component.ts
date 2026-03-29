@@ -13,7 +13,7 @@ import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto, For
 import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../form-submissions/models/approve-reject-submission.model';
 import { FormSubmissionValuesService, CreateFormSubmissionValueDto, BulkFormSubmissionValuesDto } from '../form-submissions/services/form-submission-values.service';
 import { DocumentTypesService } from '../FormBuilder/services/document-types.service';
-import { DocumentSeries, CreateDocumentSeriesDto } from '../FormBuilder/form-builder/models/document-types.model';
+import { DocumentType, DocumentSeries, CreateDocumentSeriesDto } from '../FormBuilder/form-builder/models/document-types.model';
 import { ProjectsService } from '../projects/services/projects.service';
 import { StorageService } from '../../auth/storage.service';
 import { buildContext, getContextFieldCodes, requiresContext } from '../FormBuilder/utils/field-data-source-helpers';
@@ -67,6 +67,7 @@ export class FormViewComponent implements OnInit {
   currentSubmission: FormSubmissionDto | null = null;
   queryDocumentNumber: string | null = null;
   previewDocumentNumber: string | null = null;
+  private resolvedDocumentType: DocumentType | null = null;
   isApproving = false;
   isRejecting = false;
   approveRejectComments: string = '';
@@ -354,7 +355,9 @@ export class FormViewComponent implements OnInit {
         }
 
         this.form = form;
+        this.resolvedDocumentType = null;
         this.loadLatestDocumentNumberForForm();
+        this.loadPreferredSeriesPreviewForForm();
         
         // Check if rules are included with form (from backend)
         if (form.formRules && form.formRules.length > 0) {
@@ -428,10 +431,11 @@ export class FormViewComponent implements OnInit {
                     const hasDataSource = dataSource && dataSource.isActive;
                     const isSqlQuery = dataSource?.sourceType === 'SqlQuery' || dataSource?.sourceType === 'DataSourceSqlQuery';
                     const isSapHana = dataSource?.sourceType === 'SapHana';
+                    const isFormSubmissions = dataSource?.sourceType === 'FormSubmissions';
                     const hasExternalDataSource = dataSource && 
                                                  dataSource.isActive && 
                                                  (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || 
-                                                  isSqlQuery || isSapHana);
+                                                  isSqlQuery || isSapHana || isFormSubmissions);
                     // Only warn if field has NO DataSource at all (neither static nor external)
                     if (!hasDataSource) {
                       console.warn(`[FormView] WARNING: Field ${field.id} (${field.fieldCode || 'no-code'}) has NO static options and NO DataSource!`);
@@ -829,16 +833,18 @@ export class FormViewComponent implements OnInit {
     // Note: Backend stores SqlQuery as "DataSourceSqlQuery", so check for both
     const isSqlQuery = dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery';
     const isSapHana = dataSource.sourceType === 'SapHana';
+    const isFormSubmissions = dataSource.sourceType === 'FormSubmissions';
     console.log(`[FormView] Checking DataSource type for field ${field.id}:`, {
       sourceType: dataSource.sourceType,
       isSqlQuery: isSqlQuery,
       isSapHana: isSapHana,
+      isFormSubmissions: isFormSubmissions,
       isApi: dataSource.sourceType === 'Api',
       isLookupTable: dataSource.sourceType === 'LookupTable',
-      willLoad: dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana
+      willLoad: dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana || isFormSubmissions
     });
     
-    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana) {
+    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana || isFormSubmissions) {
       console.log(`[FormView] ✅ Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`, {
         sourceType: dataSource.sourceType,
         requestBodyJson: dataSource.requestBodyJson,
@@ -899,6 +905,7 @@ export class FormViewComponent implements OnInit {
             this.fieldDataSourceOptions[field.id] = [];
           }
           this.loadingFieldOptions[field.id] = false;
+          this.cdr.detectChanges();
         },
         error: (error) => {
           clearTimeout(dataSourceTimeoutId);
@@ -913,6 +920,7 @@ export class FormViewComponent implements OnInit {
           // Fallback to static options on error
           this.fieldDataSourceOptions[field.id] = [];
           this.loadingFieldOptions[field.id] = false;
+          this.cdr.detectChanges();
         },
         complete: () => {
           // Ensure loading state is cleared when observable completes
@@ -1097,34 +1105,37 @@ export class FormViewComponent implements OnInit {
     // if DataSource failed or returned no options
     const staticOptions = field.fieldOptions || [];
     
+    const dataSource = field.fieldDataSource;
+    const isSqlQuery = dataSource?.sourceType === 'SqlQuery' || dataSource?.sourceType === 'DataSourceSqlQuery';
+    const isSapHana = dataSource?.sourceType === 'SapHana';
+    const isFormSubmissions = dataSource?.sourceType === 'FormSubmissions';
+    const hasExternalDataSource = dataSource && 
+                                 dataSource.isActive && 
+                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana || isFormSubmissions);
+
+    // External data sources should always be retried when no options are loaded yet.
+    // This avoids getting stuck in a state where a previous lazy-load attempt happened
+    // before the datasource or field type metadata was fully available.
+    if (staticOptions.length === 0 && hasExternalDataSource && !this.loadingFieldOptions[field.id]) {
+      this.loadFieldOptionsFromDataSource(field);
+      return [];
+    }
+
     // Check if field should have options but doesn't - load them lazily
-    // Only trigger loading once per field to avoid multiple requests
-    if (staticOptions.length === 0 && !this.loadingFieldOptions[field.id] && !this._attemptedLoadOptions[field.id]) {
-    const fieldTypeCache = this.getFieldTypeFromCache(field);
+    // Only trigger loading once per field for non-datasource-backed fields
+    if (staticOptions.length === 0 && !hasExternalDataSource && !this.loadingFieldOptions[field.id] && !this._attemptedLoadOptions[field.id]) {
+      const fieldTypeCache = this.getFieldTypeFromCache(field);
       if (fieldTypeCache?.hasOptions === true) {
         this._attemptedLoadOptions[field.id] = true; // Mark as attempted to prevent repeated calls
-      // Try to load options from DataSource if available
-      if (field.fieldDataSource && field.fieldDataSource.isActive && 
-          field.fieldDataSource.sourceType !== 'Static') {
-        this.loadFieldOptionsFromDataSource(field);
-          return []; // Return empty while loading
-      } else {
         // If no DataSource, try to load static options from API endpoint
-          if (field.id) {
+        if (field.id) {
           this.loadStaticFieldOptions(field);
-            return []; // Return empty while loading
-          }
+          return []; // Return empty while loading
         }
       }
     }
     
     // Check if DataSource failed or returned no options
-    const dataSource = field.fieldDataSource;
-    const isSqlQuery = dataSource?.sourceType === 'SqlQuery' || dataSource?.sourceType === 'DataSourceSqlQuery';
-    const isSapHana = dataSource?.sourceType === 'SapHana';
-    const hasExternalDataSource = dataSource && 
-                                 dataSource.isActive && 
-                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana);
     const dataSourceFailed = hasExternalDataSource && 
                             (!this.fieldDataSourceOptions[field.id] || this.fieldDataSourceOptions[field.id].length === 0);
 
@@ -1488,7 +1499,7 @@ export class FormViewComponent implements OnInit {
     const dataSourceType = (field.fieldDataSource?.sourceType || '').toLowerCase().trim();
     const hasOptionsFromDataSource =
       !!field.fieldDataSource?.isActive &&
-      ['static', 'api', 'lookuptable', 'datasourcesqlquery', 'sqlquery', 'saphana'].includes(dataSourceType);
+      ['static', 'api', 'lookuptable', 'datasourcesqlquery', 'sqlquery', 'saphana', 'formsubmissions'].includes(dataSourceType);
     
     // IMPORTANT: If fieldType.hasOptions = true OR isExplicitOptionsType, we MUST treat it as a field with options
     // even if field.fieldOptions is empty (options might be loaded from DataSource later)
@@ -3240,7 +3251,7 @@ export class FormViewComponent implements OnInit {
       try {
         const queryParams = this.route.snapshot.queryParams;
         const documentTypeId = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1;
-        const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 6; // Default to 6 if not provided (most common project)
+        let projectId = queryParams['projectId'] ? +queryParams['projectId'] : 6; // Default to 6 if not provided (most common project)
         const selectedSeriesId = queryParams['seriesId'] ? +queryParams['seriesId'] : 0;
         const submittedByUserId = queryParams['userId'] || 'public-user';
 
@@ -3255,24 +3266,10 @@ export class FormViewComponent implements OnInit {
             throw new Error('Form or form.id is missing');
           }
           
-          // Get seriesId first
-          const documentSeries = await this.documentTypesService.getDocumentSeriesByDocumentTypeId(documentTypeId).toPromise();
-          if (!documentSeries || documentSeries.length === 0) {
-            throw new Error('No document series found');
-          }
-          
-          const projectSeries = documentSeries.filter((s: DocumentSeries) => s.projectId === projectId);
-          const availableSeries = projectSeries.length > 0 ? projectSeries : documentSeries;
-          // Backend returns isActive as boolean
-          const activeSeries = availableSeries.filter((s: DocumentSeries) => s.isActive === true);
-          
-          if (activeSeries.length === 0) {
-            throw new Error('No active document series found');
-          }
-          
-          const selectedSeries = selectedSeriesId > 0
-            ? activeSeries.find((s: DocumentSeries) => s.id === selectedSeriesId)
-            : activeSeries[0];
+          const preferredSeries = await this.resolvePreferredSeriesForForm(documentTypeId, projectId, selectedSeriesId);
+          const selectedSeries = preferredSeries.series;
+          projectId = preferredSeries.projectId || projectId;
+          this.updatePreviewDocumentNumber(selectedSeries);
           const seriesId = selectedSeries?.id;
           
           if (!seriesId || seriesId <= 0) {
@@ -3437,7 +3434,7 @@ export class FormViewComponent implements OnInit {
       try {
         const queryParams = this.route.snapshot.queryParams;
         const documentTypeId = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 1;
-        const projectId = queryParams['projectId'] ? +queryParams['projectId'] : 6; // Default to 6 if not provided (most common project)
+        let projectId = queryParams['projectId'] ? +queryParams['projectId'] : 6; // Default to 6 if not provided (most common project)
         const selectedSeriesId = queryParams['seriesId'] ? +queryParams['seriesId'] : 0;
         const submittedByUserId = queryParams['userId'] || 'public-user';
 
@@ -3452,24 +3449,10 @@ export class FormViewComponent implements OnInit {
             throw new Error('Form or form.id is missing');
           }
           
-          // Get seriesId first
-          const documentSeries = await this.documentTypesService.getDocumentSeriesByDocumentTypeId(documentTypeId).toPromise();
-          if (!documentSeries || documentSeries.length === 0) {
-            throw new Error('No document series found');
-          }
-          
-          const projectSeries = documentSeries.filter((s: DocumentSeries) => s.projectId === projectId);
-          const availableSeries = projectSeries.length > 0 ? projectSeries : documentSeries;
-          // Backend returns isActive as boolean
-          const activeSeries = availableSeries.filter((s: DocumentSeries) => s.isActive === true);
-          
-          if (activeSeries.length === 0) {
-            throw new Error('No active document series found');
-          }
-          
-          const selectedSeries = selectedSeriesId > 0
-            ? activeSeries.find((s: DocumentSeries) => s.id === selectedSeriesId)
-            : activeSeries[0];
+          const preferredSeries = await this.resolvePreferredSeriesForForm(documentTypeId, projectId, selectedSeriesId);
+          const selectedSeries = preferredSeries.series;
+          projectId = preferredSeries.projectId || projectId;
+          this.updatePreviewDocumentNumber(selectedSeries);
           const seriesId = selectedSeries?.id;
           
           if (!seriesId || seriesId <= 0) {
@@ -4756,7 +4739,21 @@ export class FormViewComponent implements OnInit {
             series: documentSeries?.map(s => ({ id: s.id, code: s.seriesCode, isActive: s.isActive, projectId: s.projectId }))
           });
           
-          if (documentSeries && documentSeries.length > 0) {
+          const preferredSeries = await this.resolvePreferredSeriesForForm(documentTypeId, projectId, seriesId);
+          if (preferredSeries.series?.id) {
+            projectId = preferredSeries.projectId || projectId;
+            actualSeriesId = preferredSeries.series.id;
+            hasActiveSeries = true;
+            availableSeries = documentSeries || [];
+            this.updatePreviewDocumentNumber(preferredSeries.series);
+            console.log('[FormView] Using preferred series for submission:', {
+              id: preferredSeries.series.id,
+              code: preferredSeries.series.seriesCode,
+              projectId
+            });
+          }
+
+          if (!actualSeriesId && documentSeries && documentSeries.length > 0) {
             // Filter series by Project ID first to ensure backend validation passes
             const projectSeries = documentSeries.filter((s: DocumentSeries) => s.projectId === projectId);
 
@@ -6345,6 +6342,118 @@ export class FormViewComponent implements OnInit {
     // not by URL or local browser cache.
   }
 
+  private async ensureResolvedDocumentType(): Promise<DocumentType | null> {
+    if (!this.form?.id) {
+      return null;
+    }
+
+    if (this.resolvedDocumentType?.formBuilderId === this.form.id || this.resolvedDocumentType?.id) {
+      return this.resolvedDocumentType;
+    }
+
+    try {
+      const documentType = await this.documentTypesService.getDocumentTypeByFormBuilderId(this.form.id).toPromise();
+      this.resolvedDocumentType = documentType ?? null;
+      return this.resolvedDocumentType;
+    } catch (error) {
+      console.warn('[FormView] Unable to resolve document type for form preview:', error);
+      this.resolvedDocumentType = null;
+      return null;
+    }
+  }
+
+  private selectPreferredSeriesFromList(
+    documentSeries: DocumentSeries[],
+    requestedSeriesId: number,
+    requestedProjectId: number | null,
+    defaultSeriesId: number | null | undefined
+  ): DocumentSeries | undefined {
+    const activeSeries = (documentSeries || []).filter((series: DocumentSeries) => series.isActive === true);
+    if (activeSeries.length === 0) {
+      return undefined;
+    }
+
+    if (requestedSeriesId > 0) {
+      const requestedSeries = activeSeries.find((series: DocumentSeries) => series.id === requestedSeriesId);
+      if (requestedSeries) {
+        return requestedSeries;
+      }
+    }
+
+    if (defaultSeriesId && defaultSeriesId > 0) {
+      const defaultSeries = activeSeries.find((series: DocumentSeries) => series.id === defaultSeriesId);
+      if (defaultSeries) {
+        return defaultSeries;
+      }
+    }
+
+    if (requestedProjectId && requestedProjectId > 0) {
+      const projectSeries = activeSeries.find((series: DocumentSeries) => series.projectId === requestedProjectId);
+      if (projectSeries) {
+        return projectSeries;
+      }
+    }
+
+    const globalSeries = activeSeries.find((series: DocumentSeries) => !series.projectId || series.projectId <= 0);
+    return globalSeries ?? activeSeries[0];
+  }
+
+  private async resolvePreferredSeriesForForm(
+    requestedDocumentTypeId: number,
+    requestedProjectId: number | null,
+    requestedSeriesId: number
+  ): Promise<{ documentTypeId: number; projectId: number; series: DocumentSeries | null }> {
+    const resolvedDocumentType = await this.ensureResolvedDocumentType();
+    const documentTypeId = resolvedDocumentType?.id || requestedDocumentTypeId;
+
+    if (!documentTypeId || documentTypeId <= 0) {
+      return { documentTypeId: 0, projectId: requestedProjectId || 0, series: null };
+    }
+
+    try {
+      const documentSeries = await this.documentTypesService.getDocumentSeriesByDocumentTypeId(documentTypeId).toPromise();
+      const selectedSeries = this.selectPreferredSeriesFromList(
+        documentSeries || [],
+        requestedSeriesId,
+        requestedProjectId,
+        resolvedDocumentType?.defaultSeriesId
+      );
+
+      return {
+        documentTypeId,
+        projectId: Number(selectedSeries?.projectId || requestedProjectId || 0),
+        series: selectedSeries || null
+      };
+    } catch (error) {
+      console.warn('[FormView] Unable to resolve preferred series for form:', error);
+      return { documentTypeId, projectId: requestedProjectId || 0, series: null };
+    }
+  }
+
+  private loadPreferredSeriesPreviewForForm(): void {
+    if (!this.form?.id) {
+      return;
+    }
+
+    const queryParams = this.route.snapshot.queryParams;
+    const requestedDocumentTypeId = queryParams['documentTypeId'] ? +queryParams['documentTypeId'] : 0;
+    const requestedProjectId = queryParams['projectId'] ? +queryParams['projectId'] : null;
+    const requestedSeriesId = queryParams['seriesId'] ? +queryParams['seriesId'] : 0;
+
+    this.resolvePreferredSeriesForForm(requestedDocumentTypeId, requestedProjectId, requestedSeriesId)
+      .then(({ series }) => {
+        if (!series) {
+          return;
+        }
+
+        this.updatePreviewDocumentNumber(series);
+        this.cdr.detectChanges();
+      })
+      .catch(() => {
+        // Keep the page usable even if preview series resolution fails.
+      });
+  }
+
   private loadLatestDocumentNumberForForm(): void {
     if (!this.form?.id) return;
 
@@ -6362,7 +6471,7 @@ export class FormViewComponent implements OnInit {
   }
 
   private canRunAuthenticatedApprovalActions(): boolean {
-    return this.storageService.hasToken();
+    return false;
   }
 
   /**
@@ -6387,3 +6496,4 @@ export class FormViewComponent implements OnInit {
     }
   }
 }
+

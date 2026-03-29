@@ -213,6 +213,12 @@
   color: #9ca3af;
 }
 
+.target-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
 .empty-message {
   padding: 2rem 0.5rem;
 }
@@ -300,8 +306,173 @@
 }
 
 :host ::ng-deep .alert-rule-dialog .form-control,
-:host ::ng-deep .alert-rule-dialog .p-inputtext {
+:host ::ng-deep .alert-rule-dialog .p-inputtext,
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect {
   width: 100%;
+}
+
+:host ::ng-deep .alert-rule-dialog p-multiselect.alert-rule-multiselect,
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect {
+  display: block;
+  width: 100%;
+}
+
+:host ::ng-deep .alert-rule-dialog .form-row {
+  min-width: 0;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect .p-multiselect {
+  width: 100%;
+  display: flex;
+  min-height: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: none !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect .p-multiselect-label {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  height: 44px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #ffffff !important;
+  padding: 0 0.95rem !important;
+  font-size: 1rem;
+  color: #111827 !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect .p-multiselect-trigger {
+  background: #ffffff !important;
+  width: 44px;
+  color: #4b5563 !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect .p-multiselect:hover {
+  border-color: #9ca3af !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect.p-focus .p-multiselect,
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect .p-multiselect.p-focus,
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect .p-focus {
+  border-color: #22b892 !important;
+  box-shadow: 0 0 0 3px rgba(34, 184, 146, 0.16) !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect-panel {
+  border-radius: 12px !important;
+  border: 1px solid #d8e1ea !important;
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18) !important;
+  overflow: hidden;
+  background: #ffffff !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect-panel .p-multiselect-header {
+  padding: 0.6rem 0.75rem !important;
+  background: #f8fbfd !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect-panel .p-multiselect-filter {
+  width: 100% !important;
+  height: 2.35rem;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 10px !important;
+  padding: 0.45rem 0.75rem !important;
+  background: #ffffff !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect-panel .p-multiselect-items-wrapper {
+  max-height: 260px !important;
+  background: #ffffff !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-multiselect-panel .p-multiselect-option {
+  padding: 0.65rem 0.85rem !important;
+  background: #ffffff !important;
+  color: #1f2937 !important;
+  line-height: 1.35 !important;
+}
+
+::ng-deep .p-multiselect-overlay.alert-rule-multiselect-panel,
+::ng-deep .p-overlay.alert-rule-multiselect-panel,
+::ng-deep .alert-rule-multiselect-panel {
+  z-index: 21050 !important;
+  background: #ffffff !important;
+  border-radius: 12px !important;
+  border: 1px solid #d8e1ea !important;
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18) !important;
+  overflow: hidden !important;
+}
+
+::ng-deep .p-multiselect-overlay.alert-rule-multiselect-panel .p-multiselect-header,
+::ng-deep .p-overlay.alert-rule-multiselect-panel .p-multiselect-header,
+::ng-deep .alert-rule-multiselect-panel .p-multiselect-header {
+  background: #f8fbfd !important;
+}
+
+::ng-deep .p-multiselect-overlay.alert-rule-multiselect-panel .p-multiselect-items-wrapper,
+::ng-deep .p-overlay.alert-rule-multiselect-panel .p-multiselect-items-wrapper,
+::ng-deep .alert-rule-multiselect-panel .p-multiselect-items-wrapper {
+  max-height: 260px !important;
+  background: #ffffff !important;
+}
+
+::ng-deep .p-multiselect-overlay.alert-rule-multiselect-panel .p-multiselect-option,
+::ng-deep .p-overlay.alert-rule-multiselect-panel .p-multiselect-option,
+::ng-deep .alert-rule-multiselect-panel .p-multiselect-option {
+  background: #ffffff !important;
+  color: #1f2937 !important;
+  padding: 0.7rem 0.9rem !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 0.65rem !important;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+::ng-deep .p-multiselect-overlay.alert-rule-multiselect-panel .p-multiselect-option:last-child,
+::ng-deep .p-overlay.alert-rule-multiselect-panel .p-multiselect-option:last-child,
+::ng-deep .alert-rule-multiselect-panel .p-multiselect-option:last-child {
+  border-bottom: none;
+}
+
+::ng-deep .p-multiselect-overlay.alert-rule-multiselect-panel .p-multiselect-option .p-checkbox,
+::ng-deep .p-overlay.alert-rule-multiselect-panel .p-multiselect-option .p-checkbox,
+::ng-deep .alert-rule-multiselect-panel .p-multiselect-option .p-checkbox {
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+::ng-deep .p-multiselect-overlay.alert-rule-multiselect-panel .p-multiselect-option.p-focus,
+::ng-deep .p-overlay.alert-rule-multiselect-panel .p-multiselect-option.p-focus,
+::ng-deep .alert-rule-multiselect-panel .p-multiselect-option.p-focus {
+  background: #f0fdfa !important;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-option {
+  display: flex;
+  align-items: center;
+  min-height: 1.4rem;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-option-title {
+  font-size: 0.96rem;
+  line-height: 1.4;
+  color: #1f2937;
+  word-break: break-word;
+}
+
+:host ::ng-deep .alert-rule-dialog .alert-rule-selected-summary {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {

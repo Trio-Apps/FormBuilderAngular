@@ -48,7 +48,7 @@ export type DocumentSeriesGenerateOn = 'Submit' | 'Approval';
 
 /**
  * Document Series - Series configuration for document numbering
- * Linked to ProjectId
+ * Linked to ProjectId when project-based, or global when projectId is null
  * 
  * Updated based on backend API response:
  * - documentTypeName and projectName can be null
@@ -58,7 +58,7 @@ export interface DocumentSeries {
   id?: number;
   documentTypeId?: number; // Included in many API payloads and used by consumers
   documentTypeName?: string | null; // For display - can be null from backend
-  projectId: number; // Required - links to Project
+  projectId?: number | null; // Optional - null means global/master-data series
   projectName?: string | null; // For display - can be null from backend
   seriesName?: string;
   template?: string;
@@ -70,6 +70,8 @@ export interface DocumentSeries {
   nextNumber: number; // Next running value
   isDefault: boolean; // Default series selection
   isActive?: boolean; // Active status - boolean from backend
+  isLocked?: boolean;
+  usageCount?: number;
   lastGeneratedAt?: string;
   lastGeneratedNumber?: string;
   // Note: isDeleted is not returned by the backend API
@@ -77,11 +79,11 @@ export interface DocumentSeries {
 
 /**
  * Create Document Series DTO
- * According to API documentation: projectId is required
+ * Project is optional. Null means a global/master-data series.
  */
 export interface CreateDocumentSeriesDto {
   documentTypeId?: number; // Optional: some flows send it explicitly
-  projectId: number; // Required
+  projectId?: number | null;
   seriesName?: string;
   template?: string;
   seriesCode: string; // Required - Prefix, max 50 chars
@@ -100,7 +102,7 @@ export interface CreateDocumentSeriesDto {
  */
 export interface UpdateDocumentSeriesDto {
   documentTypeId?: number;
-  projectId?: number;
+  projectId?: number | null;
   seriesName?: string;
   template?: string;
   seriesCode?: string;

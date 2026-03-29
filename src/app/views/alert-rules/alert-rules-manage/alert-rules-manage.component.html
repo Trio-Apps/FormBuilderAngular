@@ -125,9 +125,13 @@
             <td><code>{{ rule.triggerType }}</code></td>
             <td>{{ rule.notificationType }}</td>
             <td>
-              <span *ngIf="rule.targetUserId">User: <code>{{ rule.targetUserId }}</code></span>
-              <span *ngIf="!rule.targetUserId && rule.targetRoleId">Role: <code>{{ rule.targetRoleId }}</code></span>
-              <span *ngIf="!rule.targetUserId && !rule.targetRoleId" class="text-muted">Not set</span>
+              <div class="target-cell" *ngIf="rule.targetUserId || rule.targetRoleId; else noTarget">
+                <span *ngIf="rule.targetUserId">Users: <code>{{ rule.targetUserId }}</code></span>
+                <span *ngIf="rule.targetRoleId">Roles: <code>{{ rule.targetRoleId }}</code></span>
+              </div>
+              <ng-template #noTarget>
+                <span class="text-muted">Not set</span>
+              </ng-template>
             </td>
             <td>
               <span [class]="rule.isActive ? 'status-badge active' : 'status-badge inactive'">
@@ -250,22 +254,56 @@
 
       <div class="form-row">
         <label>Target User (optional)</label>
-        <select class="form-control" formControlName="targetUserId">
-          <option [ngValue]="null">Select user (from Tbl_User)</option>
-          <option *ngFor="let user of users" [ngValue]="user.username">
-            {{ user.name || user.username }} ({{ user.username }}){{ user.email ? ' - ' + user.email : '' }}
-          </option>
-        </select>
+        <p-multiSelect
+          formControlName="targetUserId"
+          [options]="targetUserOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select users"
+          [filter]="true"
+          filterBy="label"
+          [showToggleAll]="false"
+          defaultLabel="Select users"
+          [appendTo]="'body'"
+          styleClass="w-full alert-rule-multiselect"
+          panelStyleClass="alert-rule-multiselect-panel"
+        >
+          <ng-template pTemplate="selectedItems">
+            <span class="alert-rule-selected-summary">{{ getSelectedUsersSummary() }}</span>
+          </ng-template>
+          <ng-template let-option pTemplate="item">
+            <div class="alert-rule-option">
+              <div class="alert-rule-option-title">{{ option.label }}</div>
+            </div>
+          </ng-template>
+        </p-multiSelect>
       </div>
 
       <div class="form-row">
         <label>Target Role Id (optional)</label>
-        <input pInputText formControlName="targetRoleId" placeholder="e.g. Administration" />
-      </div>
-
-      <div class="form-row">
-        <label>Condition JSON</label>
-        <input pInputText formControlName="conditionJson" placeholder="{}" />
+        <p-multiSelect
+          formControlName="targetRoleId"
+          [options]="targetRoleOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select roles"
+          [filter]="true"
+          filterBy="label"
+          [showToggleAll]="false"
+          defaultLabel="Select roles"
+          [appendTo]="'body'"
+          styleClass="w-full alert-rule-multiselect"
+          panelStyleClass="alert-rule-multiselect-panel"
+        >
+          <ng-template pTemplate="selectedItems">
+            <span class="alert-rule-selected-summary">{{ getSelectedRolesSummary() }}</span>
+          </ng-template>
+          <ng-template let-option pTemplate="item">
+            <div class="alert-rule-option">
+              <div class="alert-rule-option-title">{{ option.label }}</div>
+            </div>
+          </ng-template>
+        </p-multiSelect>
       </div>
 
       <div class="form-row inline">

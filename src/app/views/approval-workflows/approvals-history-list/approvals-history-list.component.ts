@@ -69,11 +69,12 @@ export class ApprovalsHistoryListComponent implements OnInit {
   previewImageError = false;
 
   // Filter options
-  selectedActionType: string = 'Submitted';
+  selectedActionType: string = 'all';
   actionTypes = [
     { label: 'All Actions', value: 'all' },
     { label: 'Approved', value: 'Approved' },
     { label: 'Rejected', value: 'Rejected' },
+    { label: 'Returned', value: 'Returned' },
   ];
 
   constructor(
@@ -148,47 +149,9 @@ export class ApprovalsHistoryListComponent implements OnInit {
   applyFilters(): void {
     let filtered = [...this.historyItems];
 
-    // Filter by action type or submission status
+    // Filter by action type
     if (this.selectedActionType !== 'all') {
-      if (this.selectedActionType === 'Submitted') {
-        // Filter by submission status (case-insensitive)
-        filtered = filtered.filter(item => {
-          const status = item.submissionStatus?.toString().trim();
-          const isSubmitted = status && status.toLowerCase() === 'submitted';
-          
-          // Debug log for items that don't match
-          if (!isSubmitted && item.submissionStatus) {
-            console.log('[ApprovalsHistory] Item not matching Submitted filter:', {
-              id: item.id,
-              documentNumber: item.documentNumber,
-              submissionStatus: item.submissionStatus,
-              statusLower: status?.toLowerCase()
-            });
-          }
-          
-          return isSubmitted;
-        });
-        console.log('[ApprovalsHistory] Filtering by Submitted status. Total items:', this.historyItems.length, 'Filtered:', filtered.length);
-        if (filtered.length > 0) {
-          console.log('[ApprovalsHistory] Filtered items:', filtered.map(item => ({
-            id: item.id,
-            documentNumber: item.documentNumber,
-            submissionStatus: item.submissionStatus
-          })));
-        } else {
-          console.log('[ApprovalsHistory] No items found with Submitted status. All items:', 
-            this.historyItems.map(item => ({
-              id: item.id,
-              documentNumber: item.documentNumber,
-              submissionStatus: item.submissionStatus,
-              actionType: item.actionType
-            }))
-          );
-        }
-      } else {
-        // Filter by action type
-        filtered = filtered.filter(item => item.actionType === this.selectedActionType);
-      }
+      filtered = filtered.filter(item => this.matchesActionType(item.actionType, this.selectedActionType));
     }
 
     // Filter by search term
@@ -215,6 +178,16 @@ export class ApprovalsHistoryListComponent implements OnInit {
 
   onActionTypeChange(): void {
     this.applyFilters();
+  }
+
+  private matchesActionType(actionType: string | null | undefined, selectedType: string): boolean {
+    if (!actionType || !selectedType || selectedType === 'all') {
+      return true;
+    }
+
+    const normalizedAction = actionType.trim().toLowerCase();
+    const normalizedSelected = selectedType.trim().toLowerCase();
+    return normalizedAction === normalizedSelected || normalizedAction.startsWith(normalizedSelected + ' ');
   }
 
   refreshData(): void {
