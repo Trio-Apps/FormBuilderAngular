@@ -59,6 +59,7 @@
     "formNameRequired": "Form name is required",
     "formCodeRequired": "Form code is required",
     "copyPublicLink": "Copy Public Link",
+    "openPublicForm": "Open Public Form",
     "manageTabs": "Manage Tabs",
     "manageRules": "Manage Rules",
     "documentSettings": "Document Settings",

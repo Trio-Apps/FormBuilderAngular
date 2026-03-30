@@ -1267,35 +1267,21 @@ export class FormsListComponent implements OnInit, OnDestroy {
     return isActive !== false ? 'status-active' : 'status-inactive';
   }
 
-  copyPublicLink(form: FormBuilderDto): void {
+  openPublicForm(form: FormBuilderDto): void {
     if (!form?.formCode) {
       this.messageService.add({
         severity: 'warn',
-        summary: 'Copy link',
+        summary: 'Open form',
         detail: 'Form code is missing.'
       });
       return;
     }
 
-    const baseUrl = window.location.origin;
-    const publicUrl = `${baseUrl}/forms/view/${encodeURIComponent(form.formCode)}`;
-
-    navigator.clipboard.writeText(publicUrl).then(
-      () => {
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Link copied',
-          detail: 'Public form link copied to clipboard.'
-        });
-      },
-      () => {
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Copy failed',
-          detail: 'Unable to copy link. Please try again.'
-        });
-      }
+    const publicFormUrl = this.router.serializeUrl(
+      this.router.createUrlTree(['/forms/view', form.formCode])
     );
+
+    window.open(publicFormUrl, '_blank', 'noopener,noreferrer');
   }
 
   duplicateForm(form: FormBuilderDto): void {

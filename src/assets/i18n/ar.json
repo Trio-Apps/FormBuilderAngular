@@ -59,6 +59,7 @@
     "formNameRequired": "اسم النموذج مطلوب",
     "formCodeRequired": "كود النموذج مطلوب",
     "copyPublicLink": "نسخ الرابط العام",
+    "openPublicForm": "فتح النموذج العام",
     "manageTabs": "إدارة التبويبات",
     "manageRules": "إدارة القواعد",
     "documentSettings": "إعدادات المستند",

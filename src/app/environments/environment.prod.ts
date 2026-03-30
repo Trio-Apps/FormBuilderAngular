@@ -1,30 +1,25 @@
-// src/environments/environment.ts
+// src/environments/environment.prod.ts
 
 const browserProtocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
 const browserHostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-const resolvedApiUrl = `${browserProtocol}//${browserHostname}:5203/api`;
+const resolvedApiUrl = `${browserProtocol}//${browserHostname}:5000/api`;
 
-// إعدادات التطبيق الأساسية
 export const environment = {
-  production: false,
-  
-  // عنوان API
+  production: true,
+
   apiUrl: resolvedApiUrl,
-  
-  // إعدادات التطبيق
+
   appName: 'Form Builder',
   appVersion: '1.0.0',
   appDescription: 'Form Building and Management System',
-  
-  // إعدادات API
+
   apiSettings: {
-    timeout: 30000, // 30 ثانية
+    timeout: 30000,
     retryAttempts: 3,
-    cacheDuration: 300000, // 5 دقائق
-    maxFileSize: 10485760, // 10MB
+    cacheDuration: 300000,
+    maxFileSize: 10485760,
   },
-  
-  // إعدادات التصميم
+
   design: {
     primaryColor: '#3B82F6',
     secondaryColor: '#6B7280',
@@ -38,20 +33,18 @@ export const environment = {
     shadow: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
     transition: 'all 0.3s ease',
   },
-  
-  // إعدادات التكوين
+
   config: {
     defaultPageSize: 10,
     maxPageSize: 100,
     itemsPerPageOptions: [5, 10, 20, 50, 100],
-    enableDebug: true,
+    enableDebug: false,
     enableAnalytics: false,
     enableLogging: true,
-    logLevel: 'debug', // 'error', 'warn', 'info', 'debug'
-    sessionTimeout: 86400000, // 24 hours
+    logLevel: 'info',
+    sessionTimeout: 86400000,
   },
-  
-  // إعدادات التحقق والصلاحيات
+
   validation: {
     formNameMinLength: 3,
     formNameMaxLength: 200,
@@ -69,8 +62,7 @@ export const environment = {
     hintTextMaxLength: 500,
     defaultValueMaxLength: 1000,
   },
-  
-  // إعدادات الجداول
+
   table: {
     defaultSortField: 'id',
     defaultSortOrder: 'desc',
@@ -78,16 +70,14 @@ export const environment = {
     headerHeight: 56,
     virtualScrollThreshold: 100,
   },
-  
-  // إعدادات التحميل
+
   loading: {
     spinnerSize: 40,
     spinnerColor: '#3B82F6',
     backdropOpacity: 0.5,
-    minLoadingTime: 500, // الحد الأدنى للتحميل (ميلي ثانية)
+    minLoadingTime: 500,
   },
-  
-  // إعدادات الإشعارات
+
   notifications: {
     successDuration: 3000,
     errorDuration: 5000,
@@ -96,8 +86,7 @@ export const environment = {
     position: 'top-right',
     maxStack: 5,
   },
-  
-  // إعدادات الحقول
+
   fields: {
     types: [
       { id: 1, name: 'Text', code: 'text', icon: 'pi pi-font' },
@@ -114,7 +103,7 @@ export const environment = {
       { id: 12, name: 'Image', code: 'image', icon: 'pi pi-image' },
       { id: 13, name: 'Grid', code: 'grid', icon: 'pi pi-table' },
     ],
-    
+
     validationRules: [
       { id: 1, name: 'Required', code: 'required' },
       { id: 2, name: 'Email Format', code: 'email' },
@@ -126,25 +115,22 @@ export const environment = {
       { id: 8, name: 'Custom', code: 'custom' },
     ],
   },
-  
-  // إعدادات الأمان
+
   security: {
     enableCors: true,
     enableCsrf: true,
     enableHttps: true,
     tokenKey: 'form_builder_token',
-    tokenExpiry: 86400, // 24 ساعة
+    tokenExpiry: 86400,
   },
-  
-  // إعدادات التخزين
+
   storage: {
     localStoragePrefix: 'form_builder_',
     sessionStoragePrefix: 'form_builder_session_',
     cookiePrefix: 'form_builder_',
     cachePrefix: 'form_builder_cache_',
   },
-  
-  // إعدادات الوسائط
+
   media: {
     supportedImageTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
     supportedFileTypes: [
@@ -156,13 +142,12 @@ export const environment = {
       'text/plain',
       'text/csv',
     ],
-    maxImageSize: 5242880, // 5MB
-    maxFileSize: 10485760, // 10MB
+    maxImageSize: 5242880,
+    maxFileSize: 10485760,
     thumbnailWidth: 150,
     thumbnailHeight: 150,
   },
-  
-  // إعدادات التقارير
+
   reports: {
     defaultFormat: 'pdf',
     supportedFormats: ['pdf', 'excel', 'csv', 'json'],
@@ -172,8 +157,7 @@ export const environment = {
       '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'
     ],
   },
-  
-  // إعدادات التخصيص
+
   features: {
     enableFormTemplates: true,
     enableFormImportExport: true,
@@ -186,35 +170,31 @@ export const environment = {
     enableMultiLanguage: false,
     enableDarkMode: true,
   },
-  
-  // إعدادات البريد
+
   email: {
     fromEmail: 'noreply@formbuilder.com',
     fromName: 'Form Builder System',
     supportEmail: 'support@formbuilder.com',
     bccEmails: ['admin@formbuilder.com'],
   },
-  
-  // روابط التطبيق
+
   links: {
     documentation: 'https://docs.formbuilder.com',
     support: 'https://support.formbuilder.com',
-    apiDocs: 'https://localhost:7276/swagger',
+    apiDocs: 'http://localhost:5000/swagger',
     privacyPolicy: 'https://formbuilder.com/privacy',
     termsOfService: 'https://formbuilder.com/terms',
   },
-  
-  // إعدادات التطوير
+
   development: {
-    enableMockData: true,
-    mockDelay: 500,
-    enableApiLogging: true,
-    enablePerformanceLogging: true,
+    enableMockData: false,
+    mockDelay: 0,
+    enableApiLogging: false,
+    enablePerformanceLogging: false,
     enableErrorTracking: true,
     sentryDsn: '',
   },
-  
-  // إعدادات المزايدات (Feature Flags)
+
   featureFlags: {
     newFormBuilder: true,
     advancedValidation: false,

@@ -63,10 +63,11 @@
     <div class="tab-panel" *ngFor="let tab of tabs; let i = index" [class.active]="i === activeTabIndex"
       [class.hidden]="i !== activeTabIndex">
 
-      <div class="tab-section" *ngIf="tab.fields && tab.fields.length > 0">
+      <div class="tab-section fields-grid" *ngIf="tab.fields && tab.fields.length > 0">
 
         <!-- Field Display -->
         <div class="form-field" *ngFor="let field of tab.fields"
+          [ngClass]="getFieldLayoutClass(field)"
           [style.display]="isFieldVisible(field) ? 'block' : 'none'"
           [attr.data-field-type]="getFieldType(field)"
           [attr.data-grid-id]="field.gridId">
@@ -437,8 +438,8 @@
       </div>
 
       <!-- Standalone Grids (grids not associated with fields) -->
-      <div class="tab-section" *ngIf="tab.id && getTabGrids(tab.id) && getTabGrids(tab.id).length > 0">
-        <div class="form-field" *ngFor="let grid of getTabGrids(tab.id)">
+      <div class="tab-section fields-grid" *ngIf="tab.id && getTabGrids(tab.id) && getTabGrids(tab.id).length > 0">
+        <div class="form-field field-span-full" *ngFor="let grid of getTabGrids(tab.id)">
           <!-- Grid Label -->
           <label class="field-label">
             {{ translationService.getCurrentLanguage() === 'ar' && grid.foreignGridName ? grid.foreignGridName : grid.gridName }}

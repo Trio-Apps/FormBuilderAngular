@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 
 export type SapExecutionMode = 'OnSubmit' | 'OnFinalApproval' | 'OnSpecificWorkflowStage';
@@ -152,7 +152,14 @@ export class SapIntegrationService {
 
   getSettings(documentTypeId: number): Observable<SapIntegrationSettingsDto | null> {
     return this.http.get<any>(`${this.sapIntegrationUrl}/settings/${documentTypeId}`).pipe(
-      map((response) => this.extractItem<SapIntegrationSettingsDto>(response))
+      map((response) => this.extractItem<SapIntegrationSettingsDto>(response)),
+      catchError((error) => {
+        if (error?.status === 404) {
+          return of(null);
+        }
+
+        throw error;
+      })
     );
   }
 

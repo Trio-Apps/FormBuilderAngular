@@ -115,6 +115,7 @@ function shouldIgnoreErrorToast(url: string, status: number): boolean {
   const normalizedUrl = (url || '').toLowerCase();
   return normalizedUrl.includes('/api/crystalreports/default-layouts')
     || normalizedUrl.includes('/api/crystalreports/default-layout/')
+    || normalizedUrl.includes('/api/sapintegration/settings/')
     || normalizedUrl.includes('/api/approvalworkflowruntime/activate-stage')
     || normalizedUrl.includes('/api/approvalworkflowruntime/request-signature')
     || normalizedUrl.includes('/api/approvalworkflow/name/')

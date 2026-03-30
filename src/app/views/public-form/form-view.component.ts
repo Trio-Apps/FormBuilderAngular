@@ -6470,6 +6470,26 @@ export class FormViewComponent implements OnInit {
     });
   }
 
+  getFieldLayoutClass(field: FormFieldDto): string {
+    const fieldType = this.getFieldType(field);
+    const isGridField = !!field.gridId && field.gridId > 0;
+    const isMultiSelect = fieldType === 'select' && (field.fieldType?.allowMultiple ?? false);
+
+    if (
+      isGridField ||
+      fieldType === 'grid' ||
+      fieldType === 'textarea' ||
+      fieldType === 'file' ||
+      fieldType === 'checkbox' ||
+      fieldType === 'radio' ||
+      isMultiSelect
+    ) {
+      return 'field-span-full';
+    }
+
+    return 'field-span-1';
+  }
+
   private canRunAuthenticatedApprovalActions(): boolean {
     return false;
   }
