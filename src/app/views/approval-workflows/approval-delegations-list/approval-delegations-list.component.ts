@@ -23,6 +23,7 @@ import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { PermissionService } from '../../../services/permission.service';
 
 @Component({
   selector: 'app-approval-delegations-list',
@@ -53,6 +54,8 @@ export class ApprovalDelegationsListComponent implements OnInit {
   delegations: ApprovalDelegationDto[] = [];
   filteredDelegations: ApprovalDelegationDto[] = [];
   currentUserId: string | null = null;
+  currentUser: UserDto | null = null;
+  isAdminUser = false;
   private deletedDelegationIds: Set<number> = new Set(); // Track deleted delegation IDs to filter them out
   
   // Users data for dropdowns
@@ -65,8 +68,8 @@ export class ApprovalDelegationsListComponent implements OnInit {
   // Document types data for dropdown
   documentTypes: DocumentType[] = [];
   
-  // Scope types
-  scopeTypes: ScopeType[] = ['Global', 'Workflow', 'Document'];
+  // Scope types available for the current user
+  scopeTypes: ScopeType[] = ['Global'];
 
   loading = {
     delegations: false,
@@ -96,7 +99,8 @@ export class ApprovalDelegationsListComponent implements OnInit {
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    private permissionService: PermissionService
   ) {
     this.delegationForm = this.fb.group({
       fromUserId: [null, [Validators.required]],
@@ -125,13 +129,17 @@ export class ApprovalDelegationsListComponent implements OnInit {
     // Get current user ID (assuming it's stored as string in storage)
     // TODO: Adjust based on your auth implementation
     this.currentUserId = this.storageService.getUserId()?.toString() || null;
+    const currentRole = this.storageService.getRole()?.toLowerCase() || '';
+    this.isAdminUser = currentRole === 'admin' || currentRole === 'administration';
+    this.scopeTypes = this.getAvailableScopeTypes();
     
     // Load deleted delegation IDs from localStorage
     this.loadDeletedDelegationIds();
     
-    // Load users and workflows first, then delegations (so we can display names)
+    // Load only what the list view needs on page entry.
+    // Workflows/document types are form dependencies and may require separate permissions,
+    // so they should be fetched lazily when the user actually selects that scope in the dialog.
     this.loadUsers();
-    this.loadWorkflows();
     this.loadDelegations();
   }
   
@@ -153,6 +161,11 @@ export class ApprovalDelegationsListComponent implements OnInit {
   }
   
   onScopeTypeChange(scopeType: ScopeType): void {
+    if (!this.scopeTypes.includes(scopeType)) {
+      this.delegationForm.patchValue({ scopeType: 'Global', scopeId: null }, { emitEvent: false });
+      scopeType = 'Global';
+    }
+
     const scopeIdControl = this.delegationForm.get('scopeId');
     
     if (scopeType === 'Global') {
@@ -224,9 +237,15 @@ export class ApprovalDelegationsListComponent implements OnInit {
       next: (users: UserDto[]) => {
         this.users = users || [];
         this.filteredUsers = [...this.users];
+        this.currentUser = this.findCurrentUser();
         this.loading.users = false;
-        // Enable user dropdowns after loading
-        this.delegationForm.get('fromUserId')?.enable();
+        // Non-admin users always delegate from themselves.
+        if (this.isAdminUser) {
+          this.delegationForm.get('fromUserId')?.enable();
+        } else {
+          this.delegationForm.patchValue({ fromUserId: this.currentUser });
+          this.delegationForm.get('fromUserId')?.disable();
+        }
         this.delegationForm.get('toUserId')?.enable();
         this.cdr.detectChanges();
       },
@@ -234,9 +253,13 @@ export class ApprovalDelegationsListComponent implements OnInit {
         console.error('Error loading users:', error);
         this.users = [];
         this.filteredUsers = [];
+        this.currentUser = null;
         this.loading.users = false;
-        // Enable user dropdowns even on error
-        this.delegationForm.get('fromUserId')?.enable();
+        if (this.isAdminUser) {
+          this.delegationForm.get('fromUserId')?.enable();
+        } else {
+          this.delegationForm.get('fromUserId')?.disable();
+        }
         this.delegationForm.get('toUserId')?.enable();
         this.messageService.add({
           severity: 'warn',
@@ -255,6 +278,33 @@ export class ApprovalDelegationsListComponent implements OnInit {
 
   getUserDisplayName(user: UserDto): string {
     return user.name || user.username || `User #${user.id}`;
+  }
+
+  private findCurrentUser(): UserDto | null {
+    if (!this.currentUserId) {
+      return null;
+    }
+
+    const currentUserIdNum = parseInt(this.currentUserId, 10);
+    if (isNaN(currentUserIdNum)) {
+      return null;
+    }
+
+    return this.users.find(user => user.id === currentUserIdNum) || null;
+  }
+
+  private getAvailableScopeTypes(): ScopeType[] {
+    const scopeTypes: ScopeType[] = ['Global'];
+
+    if (this.permissionService.hasPermission('ApprovalWorkflow_Allow_View')) {
+      scopeTypes.push('Workflow');
+    }
+
+    if (this.permissionService.hasPermission('Document_Allow_View')) {
+      scopeTypes.push('Document');
+    }
+
+    return scopeTypes;
   }
 
   /**
@@ -403,21 +453,18 @@ export class ApprovalDelegationsListComponent implements OnInit {
 
     this.editingDelegation = null;
     this.showModal = true;
-    
-    // Find current user object from users list
-    let currentUser: UserDto | null = null;
-    if (this.currentUserId) {
-      const currentUserIdNum = parseInt(this.currentUserId, 10);
-      currentUser = this.users.find(u => u.id === currentUserIdNum) || null;
+
+    // Admin can choose the source user. Non-admin always delegates from self.
+    if (this.isAdminUser) {
+      this.delegationForm.get('fromUserId')?.enable();
+    } else {
+      this.delegationForm.get('fromUserId')?.disable();
     }
-    
-    // Enable fromUserId control for new delegation
-    this.delegationForm.get('fromUserId')?.enable();
     this.delegationForm.get('toUserId')?.enable();
     this.delegationForm.get('isActive')?.enable(); // Enable for new delegation
     
     this.delegationForm.reset({
-      fromUserId: currentUser, // Set user object, not just ID
+      fromUserId: this.currentUser, // Set user object, not just ID
       toUserId: null,
       scopeType: 'Global',
       scopeId: null,
@@ -481,7 +528,7 @@ export class ApprovalDelegationsListComponent implements OnInit {
     }
 
     this.loading.save = true;
-    const formData = this.delegationForm.value;
+    const formData = this.delegationForm.getRawValue();
 
     // Helper function to extract ID from user object or value
     const extractUserId = (value: any): string | null => {
@@ -725,11 +772,15 @@ export class ApprovalDelegationsListComponent implements OnInit {
   closeModal(): void {
     this.showModal = false;
     this.editingDelegation = null;
-    // Enable all controls before resetting
-    this.delegationForm.get('fromUserId')?.enable();
+    if (this.isAdminUser) {
+      this.delegationForm.get('fromUserId')?.enable();
+    } else {
+      this.delegationForm.get('fromUserId')?.disable();
+    }
     this.delegationForm.get('toUserId')?.enable();
     this.delegationForm.get('isActive')?.enable();
     this.delegationForm.reset({
+      fromUserId: this.currentUser,
       scopeType: 'Global',
       scopeId: null
     });

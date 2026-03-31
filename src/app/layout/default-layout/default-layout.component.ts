@@ -371,13 +371,14 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         // Use snapshot instead of live permission service to avoid sidebar updates on refresh
         const hasPermission = permissionCode ? this.permissionsSnapshot.includes(permissionCode) : true;
         if (permissionCode && !hasPermission) {
-          // ✅ Allow Administration to always see the permissions management screen
-          // This avoids the chicken-and-egg problem where admins can't reach the screen to grant its own permission.
-          if (isAdmin && permissionCode === 'UserGroupPermission_Allow_View' && itemUrl === '/user-group-permissions') {
+          // Allow Administration to always reach the security setup screens,
+          // even before their explicit permission matrix is fully configured.
+          const adminAllowedUrls = ['/permissions', '/user-group-permissions', '/users', '/groups'];
+          if (isAdmin && adminAllowedUrls.includes(itemUrl || '')) {
             // allow
           } else {
-          // حتى لو الأطفال مسموحين، بنخفي الـ parent علشان ال sidebar يكون واضح
-          continue;
+            // حتى لو الأطفال مسموحين، بنخفي الـ parent علشان ال sidebar يكون واضح
+            continue;
           }
         }
 
@@ -479,11 +480,22 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
       if (item.name === 'Approval Workflows') {
         // For User role, only show Approval Inbox (not Manage Workflows or Approvals History)
         if (!isAdmin) {
+          const allowedChildren = (item.children || []).filter((child: any) => {
+            if (!(child.name === 'Approval Inbox' || child.name === 'Delegations')) {
+              return false;
+            }
+
+            const childPermissionCode = child.attributes?.['permissionCode'] as string | undefined;
+            return !childPermissionCode || this.permissionsSnapshot.includes(childPermissionCode);
+          });
+
+          if (allowedChildren.length === 0) {
+            continue;
+          }
+
           filteredItems.push({
             ...item,
-            children: item.children?.filter((child: any) => 
-              child.name === 'Approval Inbox' || child.name === 'Delegations'
-            ) || []
+            children: allowedChildren
           });
         } else {
           // For Admin, show all children including Approvals History

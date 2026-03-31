@@ -18,6 +18,12 @@ import { PermissionService } from '../../../services/permission.service';
 import { FieldDataSourceService } from '../../FormBuilder/services/field-data-source.service';
 import { UsersService, UserGroupDto } from '../../FormBuilder/services/users.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import {
+  FORM_BUILDER_PERMISSION_ACTIONS,
+  FORM_BUILDER_PERMISSION_ENTITIES,
+  isFormBuilderPermission,
+  parsePermissionCode
+} from '../form-builder-permissions.registry';
 
 type PermissionRow = { permission: string };
 
@@ -50,13 +56,12 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
   allPermissions: string[] = [];
   entityOptions: string[] = [];
   actionOptions: string[] = [];
+  private availablePermissionsByEntity: Record<string, string[]> = {};
 
   // Permission builder
   selectedEntity: string | null = null;
   selectedActions: string[] = ['View'];
   generatedPreview: string[] = [];
-  customEntity = '';
-
   // Selected new permissions to add
   selectedToAdd: string[] = [];
 
@@ -65,13 +70,14 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
   addDialogGroupId: number | null = null;
   addDialogSelectedActions: string[] = ['View'];
   addDialogSelectedEntity: string | null = null;
-  addDialogCustomEntity = '';
   addDialogGeneratedPreview: string[] = [];
   addDialogSelectedPermissions: string[] = [];
 
   // Current group permissions
+  rawGroupPermissions: string[] = [];
   groupPermissions: string[] = [];
   filteredGroupPermissions: PermissionRow[] = [];
+  paginatedGroupPermissions: PermissionRow[] = [];
 
   loading = {
     groups: false,
@@ -80,6 +86,9 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
   };
 
   searchTerm = '';
+  currentPage = 1;
+  itemsPerPage = 10;
+  totalPages = 0;
 
   // Edit dialog
   showEditDialog = false;
@@ -118,7 +127,6 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
     // default entity to builder selection or first option
     this.addDialogSelectedEntity = this.selectedEntity || (this.entityOptions.length > 0 ? this.entityOptions[0] : null);
     this.addDialogSelectedActions = [...(this.selectedActions?.length ? this.selectedActions : ['View'])];
-    this.addDialogCustomEntity = '';
     this.addDialogSelectedPermissions = [];
 
     this.updateAddDialogPreview();
@@ -130,18 +138,57 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
   }
 
   onAddDialogBuilderChange(): void {
+    this.normalizeAddDialogSelectedActions();
     this.updateAddDialogPreview();
   }
 
-  useAddDialogCustomEntity(): void {
-    const cleaned = (this.addDialogCustomEntity || '').trim();
-    if (!cleaned) return;
-    this.addDialogSelectedEntity = cleaned;
-    if (!this.entityOptions.includes(cleaned)) {
-      this.entityOptions = [...this.entityOptions, cleaned].sort((a, b) => a.localeCompare(b));
+  toggleAddDialogAction(action: string, checked: boolean): void {
+    const current = new Set(this.addDialogSelectedActions || []);
+    if (checked) {
+      current.add(action);
+    } else {
+      current.delete(action);
     }
-    this.addDialogCustomEntity = '';
+    this.addDialogSelectedActions = [...current];
     this.updateAddDialogPreview();
+  }
+
+  getAvailableActionsForEntity(entity: string | null | undefined): string[] {
+    const normalizedEntity = (entity || '').trim();
+    if (!normalizedEntity) {
+      return [];
+    }
+
+    const permissions = this.availablePermissionsByEntity[normalizedEntity] || [];
+    return permissions
+      .map(permission => parsePermissionCode(permission))
+      .filter((value): value is { entity: string; action: string } => value !== null)
+      .map(value => value.action)
+      .filter((action, index, array) => array.indexOf(action) === index)
+      .sort((a, b) => a.localeCompare(b));
+  }
+
+  private normalizeAddDialogSelectedActions(): void {
+    const availableActions = new Set(this.getAvailableActionsForEntity(this.addDialogSelectedEntity));
+    this.addDialogSelectedActions = (this.addDialogSelectedActions || []).filter(action => availableActions.has(action));
+  }
+
+  toggleAddDialogPermission(permission: string, checked: boolean): void {
+    const current = new Set(this.addDialogSelectedPermissions || []);
+    if (checked) {
+      current.add(permission);
+    } else {
+      current.delete(permission);
+    }
+    this.addDialogSelectedPermissions = [...current].sort((a, b) => a.localeCompare(b));
+  }
+
+  selectAllAddDialogPermissions(): void {
+    this.addDialogSelectedPermissions = [...this.allPermissions].sort((a, b) => a.localeCompare(b));
+  }
+
+  clearAllAddDialogPermissions(): void {
+    this.addDialogSelectedPermissions = [];
   }
 
   private updateAddDialogPreview(): void {
@@ -151,7 +198,11 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
       this.addDialogGeneratedPreview = [];
       return;
     }
-    this.addDialogGeneratedPreview = acts.map(a => `${entity}_Allow_${a}`).sort((a, b) => a.localeCompare(b));
+    const allowedPermissions = new Set(this.availablePermissionsByEntity[entity] || []);
+    this.addDialogGeneratedPreview = acts
+      .map(a => `${entity}_Allow_${a}`)
+      .filter(permission => allowedPermissions.has(permission))
+      .sort((a, b) => a.localeCompare(b));
   }
 
   addDialogAddGeneratedToSelection(): void {
@@ -256,6 +307,10 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
     const sub = this.usersService.getActiveUserGroups().subscribe({
       next: (groups) => {
         this.userGroups = (groups || []).filter(g => g.isActive !== false);
+        if (!this.selectedGroupId && this.userGroups.length > 0) {
+          this.selectedGroupId = this.userGroups[0].id;
+          this.loadGroupPermissions(this.userGroups[0].id);
+        }
         this.loading.groups = false;
         this.cdr.detectChanges();
       },
@@ -270,72 +325,82 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
   }
 
   loadAllPermissions(): void {
-    // For now, we don't have a backend endpoint that returns all distinct permissions,
-    // so we synthesize them from known FormBuilder entities + actions.
     this.loading.permissions = true;
+    const sub = this.permissionService.getAllPermissions().subscribe({
+      next: (permissions) => {
+        this.buildCatalogFromExistingPermissions();
+        const allowedPermissions = [...new Set((permissions || []).filter(isFormBuilderPermission))]
+          .sort((a, b) => a.localeCompare(b));
 
-    // Build catalogs (entities + actions) from defaults and any existing permissions (if added later)
-    this.allPermissions = [];
-    this.buildCatalogFromExistingPermissions();
+        this.allPermissions = allowedPermissions;
+        this.availablePermissionsByEntity = allowedPermissions.reduce<Record<string, string[]>>((acc, permission) => {
+          const parsed = parsePermissionCode(permission);
+          if (!parsed) {
+            return acc;
+          }
 
-    // Generate cross-product of entities x actions as available permission options
-    const perms: string[] = [];
-    for (const e of this.entityOptions) {
-      for (const a of this.actionOptions) {
-        perms.push(`${e}_Allow_${a}`);
+          if (!acc[parsed.entity]) {
+            acc[parsed.entity] = [];
+          }
+
+          acc[parsed.entity].push(permission);
+          return acc;
+        }, {});
+
+        const activeEntities = new Set(
+          allowedPermissions
+            .map(permission => parsePermissionCode(permission))
+            .filter((value): value is { entity: string; action: string } => value !== null)
+            .map(value => value.entity)
+        );
+
+        this.entityOptions = this.entityOptions.filter(entity => activeEntities.has(entity));
+        if (!this.entityOptions.length) {
+          this.entityOptions = [...FORM_BUILDER_PERMISSION_ENTITIES];
+        }
+
+        if (!this.selectedEntity || !this.entityOptions.includes(this.selectedEntity)) {
+          this.selectedEntity = this.entityOptions[0] ?? null;
+        }
+
+        if (!this.addDialogSelectedEntity || !this.entityOptions.includes(this.addDialogSelectedEntity)) {
+          this.addDialogSelectedEntity = this.selectedEntity;
+        }
+
+        this.normalizeAddDialogSelectedActions();
+        this.updateAddDialogPreview();
+
+        this.loading.permissions = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[UserGroupPermissions] Error loading available permissions:', err);
+        this.buildCatalogFromExistingPermissions();
+        this.allPermissions = [];
+        this.availablePermissionsByEntity = {};
+        this.loading.permissions = false;
+        this.cdr.detectChanges();
       }
-    }
-    this.allPermissions = perms.sort((a, b) => a.localeCompare(b));
-
-    this.loading.permissions = false;
-    this.cdr.detectChanges();
+    });
+    this.subs.add(sub);
   }
 
   private buildCatalogFromExistingPermissions(): void {
     const entities = new Set<string>();
     const actions = new Set<string>();
 
-    for (const p of this.allPermissions) {
-      const idx = p.indexOf('_Allow_');
-      if (idx > 0) {
-        entities.add(p.substring(0, idx));
-        actions.add(p.substring(idx + '_Allow_'.length));
+    for (const p of this.rawGroupPermissions) {
+      const parsed = parsePermissionCode(p);
+      if (parsed && isFormBuilderPermission(p)) {
+        entities.add(parsed.entity);
+        actions.add(parsed.action);
       }
     }
 
-    // Seed with well-known FormBuilder entities if DB list is empty
-    const defaultEntities = [
-      'FormBuilder',
-      'FormTab',
-      'FormField',
-      'StoredProcedure',
-      'FormRule',
-      'Document',
-      'DocumentType',
-      'Grid',
-      'GridColumn',
-      'TableMenu',
-      'TableSubMenu',
-      'ApprovalWorkflow',
-      'ApprovalStage',
-      'ApprovalInbox',
-      'ApprovalStageAssignee',
-      'ApprovalDelegation',
-      'Project',
-      'AlertRule',
-      'EmailTemplate',
-      'SmtpConfig',
-      'UserGroupPermission'
-    ];
-
-    defaultEntities.forEach(e => entities.add(e));
-
-    // Fallback defaults if DB list doesn't include any _Allow_ permissions
+    FORM_BUILDER_PERMISSION_ENTITIES.forEach(e => entities.add(e));
     this.entityOptions = [...entities].sort((a, b) => a.localeCompare(b));
-    const defaultActions = ['View', 'Create', 'Edit', 'Delete', 'Manage', 'Configure', 'ViewAll', 'Export', 'Import', 'Approve', 'Reject'];
-    this.actionOptions = [...new Set([...defaultActions, ...actions])].sort((a, b) => a.localeCompare(b));
+    this.actionOptions = [...new Set([...FORM_BUILDER_PERMISSION_ACTIONS, ...actions])].sort((a, b) => a.localeCompare(b));
 
-    // Initialize builder selections
     if (!this.selectedEntity && this.entityOptions.length > 0) {
       this.selectedEntity = this.entityOptions[0];
     }
@@ -343,17 +408,6 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
   }
 
   onBuilderChange(): void {
-    this.updatePreview();
-  }
-
-  useCustomEntity(): void {
-    const cleaned = (this.customEntity || '').trim();
-    if (!cleaned) return;
-    this.selectedEntity = cleaned;
-    if (!this.entityOptions.includes(cleaned)) {
-      this.entityOptions = [...this.entityOptions, cleaned].sort((a, b) => a.localeCompare(b));
-    }
-    this.customEntity = '';
     this.updatePreview();
   }
 
@@ -373,11 +427,13 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
     this.selectedToAdd = [...merged].sort((a, b) => a.localeCompare(b));
   }
 
-  onGroupChange(): void {
+  onGroupChange(groupIdInput?: unknown): void {
     this.selectedToAdd = [];
     this.searchTerm = '';
-    const groupId = this.coerceGroupId(this.selectedGroupId);
+    const groupId = this.coerceGroupId(groupIdInput ?? this.selectedGroupId);
+    this.selectedGroupId = groupId;
     if (!groupId) {
+      this.rawGroupPermissions = [];
       this.groupPermissions = [];
       this.filteredGroupPermissions = [];
       return;
@@ -388,12 +444,16 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
   private loadGroupPermissions(groupId: number): void {
     const sub = this.permissionService.getPermissionsByUserGroup(groupId).subscribe({
       next: (perms) => {
-        this.groupPermissions = [...new Set((perms || []).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        this.rawGroupPermissions = [...new Set((perms || []).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        this.groupPermissions = this.rawGroupPermissions.filter(isFormBuilderPermission);
+        this.buildCatalogFromExistingPermissions();
+        this.loadAllPermissions();
         this.applyFilter();
         this.cdr.detectChanges();
       },
       error: (err) => {
         console.error('[UserGroupPermissions] Error loading group permissions:', err);
+        this.rawGroupPermissions = [];
         this.groupPermissions = [];
         this.filteredGroupPermissions = [];
         this.cdr.detectChanges();
@@ -408,6 +468,30 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
     this.filteredGroupPermissions = !term
       ? rows
       : rows.filter(r => r.permission.toLowerCase().includes(term));
+    this.currentPage = 1;
+    this.updatePaginatedPermissions();
+  }
+
+  updatePaginatedPermissions(): void {
+    this.totalPages = Math.max(1, Math.ceil(this.filteredGroupPermissions.length / this.itemsPerPage));
+    const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+    this.paginatedGroupPermissions = this.filteredGroupPermissions.slice(startIndex, startIndex + this.itemsPerPage);
+  }
+
+  onPageChange(page: number): void {
+    if (page < 1 || page > this.totalPages) return;
+    this.currentPage = page;
+    this.updatePaginatedPermissions();
+  }
+
+  getPageNumbers(): number[] {
+    const pages: number[] = [];
+    const start = Math.max(1, this.currentPage - 2);
+    const end = Math.min(this.totalPages, start + 4);
+    for (let page = start; page <= end; page++) {
+      pages.push(page);
+    }
+    return pages;
   }
 
   canManage(): boolean {
@@ -435,7 +519,8 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
 
     this.loading.save = true;
 
-    const nextPermissions = [...new Set([...this.groupPermissions, ...missing])].sort((a, b) => a.localeCompare(b));
+    const otherSystemPermissions = this.rawGroupPermissions.filter(p => !isFormBuilderPermission(p));
+    const nextPermissions = [...new Set([...otherSystemPermissions, ...this.groupPermissions, ...missing])].sort((a, b) => a.localeCompare(b));
     const sub = this.permissionService.syncPermissionsForGroup(groupId, nextPermissions).subscribe({
       next: (ok) => {
         if (!ok) {
@@ -467,7 +552,9 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
     const groupId = this.coerceGroupId(this.selectedGroupId);
     if (!groupId) return;
     this.loading.save = true;
-    const nextPermissions = this.groupPermissions.filter(p => p !== permission);
+    const otherSystemPermissions = this.rawGroupPermissions.filter(p => !isFormBuilderPermission(p));
+    const nextPermissions = [...otherSystemPermissions, ...this.groupPermissions.filter(p => p !== permission)]
+      .sort((a, b) => a.localeCompare(b));
     const sub = this.permissionService.syncPermissionsForGroup(groupId, nextPermissions).subscribe({
       next: (ok) => {
         if (!ok) {
@@ -506,9 +593,12 @@ export class UserGroupPermissionsManageComponent implements OnInit, OnDestroy {
 
     this.loading.save = true;
 
-    const nextPermissions = this.groupPermissions
-      .filter(p => p !== oldPerm)
-      .concat([newPerm]);
+    const otherSystemPermissions = this.rawGroupPermissions.filter(p => !isFormBuilderPermission(p));
+    const nextPermissions = [...new Set([
+      ...otherSystemPermissions,
+      ...this.groupPermissions.filter(p => p !== oldPerm),
+      newPerm
+    ])].sort((a, b) => a.localeCompare(b));
 
     const sub = this.permissionService.syncPermissionsForGroup(groupId, nextPermissions).subscribe({
       next: (ok) => {

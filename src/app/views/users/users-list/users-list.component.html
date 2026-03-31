@@ -1,0 +1,230 @@
+<div class="security-page-container">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/dashboard" title="Back to Dashboard">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Users</h1>
+          <p class="page-subtitle">Browse users coming from the shared identity database</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadUsers()" [disabled]="loading" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openUserModal()">
+          <i class="pi pi-plus"></i>
+          <span>New User</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-users"></i>
+        <span>Users</span>
+      </span>
+    </nav>
+  </div>
+
+  <div class="main-content">
+    <div class="stats-row" *ngIf="!loading">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-users"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ filteredUsers.length }}</div>
+          <div class="stat-label">Visible Users</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ activeUsersCount }}</div>
+          <div class="stat-label">Active Users</div>
+        </div>
+      </div>
+    </div>
+
+    <app-table-shell title="Users List" icon="pi pi-users">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            placeholder="Search users..."
+            class="search-input"
+            [(ngModel)]="searchTerm"
+            (input)="onSearch()"
+            autocomplete="off"
+          />
+        </div>
+        <div class="results-count">
+          {{ filteredUsers.length }} users found
+        </div>
+      </div>
+
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>Loading users...</p>
+      </div>
+
+      <div *ngIf="!loading && filteredUsers.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-users"></i>
+        </div>
+        <h3>No Users Found</h3>
+        <p>No users were returned from the external source.</p>
+        <button class="btn-primary" (click)="openUserModal()">
+          <i class="pi pi-plus"></i>
+          <span>Create User</span>
+        </button>
+      </div>
+
+      <div *ngIf="!loading && filteredUsers.length > 0" class="table-wrapper">
+        <table class="security-table">
+          <thead>
+            <tr>
+              <th>USERNAME</th>
+              <th>NAME</th>
+              <th>EMAIL</th>
+              <th>PHONE</th>
+              <th>GROUP</th>
+              <th>STATUS</th>
+              <th class="actions-col">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let user of paginatedUsers; trackBy: trackByUserId">
+              <td>
+                <code class="code-badge">{{ user.username || '-' }}</code>
+              </td>
+              <td>{{ user.name || '-' }}</td>
+              <td>{{ user.email || '-' }}</td>
+              <td>{{ user.phone || '-' }}</td>
+              <td>{{ user.groupName || user.groupForeignName || user.idUserType || '-' }}</td>
+              <td>
+                <span class="status-badge" [class.status-active]="user.isActive" [class.status-inactive]="!user.isActive">
+                  {{ user.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="actions-col">
+                <app-table-actions>
+                  <button class="action-btn action-edit" (click)="openUserModal(user)" title="Edit">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                </app-table-actions>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="pagination-wrapper" *ngIf="totalPages > 1">
+          <nav>
+            <ul class="pagination pagination-sm mb-0">
+              <li class="page-item" [class.disabled]="currentPage === 1">
+                <a class="page-link" (click)="onPageChange(currentPage - 1)"><i class="pi pi-chevron-left"></i></a>
+              </li>
+              <li class="page-item" *ngFor="let page of getPageNumbers()" [class.active]="page === currentPage">
+                <a class="page-link" (click)="onPageChange(page)">{{ page }}</a>
+              </li>
+              <li class="page-item" [class.disabled]="currentPage === totalPages">
+                <a class="page-link" (click)="onPageChange(currentPage + 1)"><i class="pi pi-chevron-right"></i></a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </app-table-shell>
+  </div>
+</div>
+
+<app-dialog-shell
+  [(visible)]="showUserModal"
+  [header]="editingUser ? 'Edit User' : 'New User'"
+  [modal]="true"
+  [style]="{ width: '560px', maxWidth: '95vw' }"
+  [dismissableMask]="true"
+  (onHide)="closeUserModal()"
+>
+  <form [formGroup]="userForm" (ngSubmit)="saveUser()" class="entity-form">
+    <div class="form-group">
+      <label for="username">Username <span class="required">*</span></label>
+      <input id="username" type="text" pInputText formControlName="username" placeholder="Enter username" />
+    </div>
+
+    <div class="form-group">
+      <label for="name">Name <span class="required">*</span></label>
+      <input id="name" type="text" pInputText formControlName="name" placeholder="Enter full name" />
+    </div>
+
+    <div class="form-group">
+      <label for="email">Email</label>
+      <input id="email" type="email" pInputText formControlName="email" placeholder="Enter email" />
+    </div>
+
+    <div class="form-group">
+      <label for="phone">Phone</label>
+      <input id="phone" type="text" pInputText formControlName="phone" placeholder="Enter phone number" />
+    </div>
+
+    <div class="form-group">
+      <label for="user-group">Group <span class="required">*</span></label>
+      <select id="user-group" class="native-select" formControlName="idUserType">
+        <option [ngValue]="null" disabled>Select group</option>
+        <option *ngFor="let group of userGroups" [ngValue]="group.id">
+          {{ group.name }}
+        </option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="password">
+        {{ editingUser ? 'Password' : 'Password *' }}
+      </label>
+      <input
+        id="password"
+        type="password"
+        pInputText
+        formControlName="password"
+        [placeholder]="editingUser ? 'Leave empty to keep current password' : 'Enter password'"
+      />
+      <small class="field-hint" *ngIf="editingUser">Leave it empty if you do not want to change the password.</small>
+    </div>
+
+    <div class="form-group form-switch-row">
+      <label class="switch-card" [class.is-active]="userForm.get('isActive')?.value">
+        <div class="switch-copy">
+          <span class="switch-title">Status</span>
+          <span class="switch-value">{{ userForm.get('isActive')?.value ? 'Active' : 'Inactive' }}</span>
+        </div>
+        <span class="switch-control">
+          <input type="checkbox" formControlName="isActive" />
+          <span class="switch-slider"></span>
+        </span>
+      </label>
+    </div>
+
+    <div class="dialog-actions">
+      <button pButton type="button" label="Cancel" class="p-button-text" (click)="closeUserModal()"></button>
+      <button pButton type="submit" [disabled]="saving" label="{{ editingUser ? 'Update' : 'Create' }}"></button>
+    </div>
+  </form>
+</app-dialog-shell>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>

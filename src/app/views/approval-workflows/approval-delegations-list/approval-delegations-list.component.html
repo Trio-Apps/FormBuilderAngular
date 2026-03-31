@@ -152,24 +152,31 @@
           <i class="pi pi-user"></i>
           From User <span class="required">*</span>
         </label>
+        <ng-container *ngIf="isAdminUser; else currentUserField">
           <select
             id="fromUserId"
-          pInputText
+            pInputText
             formControlName="fromUserId"
-          class="p-inputtext w-full"
-          [class.ng-invalid]="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched"
-          [compareWith]="compareUsers"
-          style="width: 100%;">
+            class="p-inputtext w-full"
+            [class.ng-invalid]="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched"
+            [compareWith]="compareUsers"
+            style="width: 100%;">
             <option [ngValue]="null">Select from user...</option>
             <option *ngFor="let user of users" [ngValue]="user">
               {{ getUserDisplayName(user) }} ({{ user.username }}<span *ngIf="user.email"> - {{ user.email }}</span>)
             </option>
           </select>
+        </ng-container>
+        <ng-template #currentUserField>
+          <div class="p-inputtext w-full" style="display: flex; align-items: center; min-height: 44px;">
+            {{ currentUser ? (getUserDisplayName(currentUser) + ' (' + currentUser.username + (currentUser.email ? ' - ' + currentUser.email : '') + ')') : '-' }}
+          </div>
+        </ng-template>
         <div *ngIf="loading.users" class="help-text">
           <i class="pi pi-spin pi-spinner"></i>
           <span>Loading users...</span>
         </div>
-        <small *ngIf="delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched" class="error-text">
+        <small *ngIf="isAdminUser && delegationForm.get('fromUserId')?.invalid && delegationForm.get('fromUserId')?.touched" class="error-text">
           <i class="pi pi-exclamation-circle"></i>
           From user is required
         </small>
@@ -217,9 +224,9 @@
           class="p-inputtext w-full"
           [class.ng-invalid]="delegationForm.get('scopeType')?.invalid && delegationForm.get('scopeType')?.touched"
           style="width: 100%;">
-          <option value="Global">Global (All Workflows)</option>
-          <option value="Workflow">Workflow (Specific Workflow)</option>
-          <option value="Document">Document (Specific Submission)</option>
+          <option *ngFor="let scopeType of scopeTypes" [value]="scopeType">
+            {{ scopeType === 'Global' ? 'Global (All Workflows)' : scopeType === 'Workflow' ? 'Workflow (Specific Workflow)' : 'Document (Specific Submission)' }}
+          </option>
         </select>
         <small *ngIf="delegationForm.get('scopeType')?.invalid && delegationForm.get('scopeType')?.touched" class="error-text">
           <i class="pi pi-exclamation-circle"></i>

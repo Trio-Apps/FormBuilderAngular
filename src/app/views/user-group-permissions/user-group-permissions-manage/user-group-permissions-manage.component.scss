@@ -162,56 +162,103 @@
   gap: 14px;
 }
 
-.toolbar {
-  display: flex;
-  gap: 12px;
-  align-items: end;
-  flex-wrap: wrap;
+.security-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.2fr) minmax(280px, 1fr) auto;
+  gap: 14px;
 }
 
-.builder {
-  width: 100%;
-  padding: 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
-}
-
-.builder-title {
+.toolbar-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(40, 106, 97, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 24px rgba(40, 106, 97, 0.06);
 }
 
-.builder-title-left {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.toolbar-card-primary {
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.06), rgba(20, 184, 166, 0.08));
 }
 
-.title-text {
-  font-weight: 800;
-  letter-spacing: 0.2px;
+.toolbar-card-action {
+  min-width: 200px;
 }
 
-.subtitle {
+.toolbar-copy {
+  display: grid;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.toolbar-copy.grow {
+  flex: 1;
+}
+
+.toolbar-label {
   font-size: 12px;
-  color: #6b7280;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4b5563;
 }
 
-.builder-row {
-  display: flex;
-  gap: 12px;
-  align-items: end;
-  flex-wrap: wrap;
+.toolbar-meta {
+  display: grid;
+  justify-items: end;
+  min-width: 90px;
+}
+
+.meta-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0f766e;
+  line-height: 1;
+}
+
+.meta-label {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.native-select {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.8rem 2.6rem 0.8rem 0.95rem;
+  border: 1px solid #d7e2ec;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #1f2937;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #64748b 50%),
+    linear-gradient(135deg, #64748b 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) calc(50% - 3px),
+    calc(100% - 14px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.native-select:focus {
+  outline: none;
+  border-color: #2dd4bf;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.14);
 }
 
 .inline {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.inline-stretch > *:first-child {
+  flex: 1;
 }
 
 .preview {
@@ -237,26 +284,6 @@
   background: #eef2ff;
   border: 1px solid #e0e7ff;
   font-size: 12px;
-}
-
-.card {
-  width: 100%;
-  padding: 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: #ffffff;
-}
-
-.card-title {
-  font-weight: 800;
-  margin-bottom: 10px;
-}
-
-.assign-row {
-  display: flex;
-  gap: 12px;
-  align-items: end;
-  flex-wrap: wrap;
 }
 
 .field {
@@ -307,6 +334,11 @@
   i {
     color: #94a3b8;
   }
+}
+
+.search-box-compact {
+  min-width: unset;
+  width: 100%;
 }
 
 .search-input {
@@ -396,7 +428,41 @@
 }
 
 .add-dialog {
-  padding-top: 6px;
+  padding-top: 0;
+}
+
+.custom-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: -1.25rem -1.25rem 1rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, #0f766e 0%, #10b981 60%, #2dd4bf 100%);
+  color: #ffffff;
+}
+
+.custom-dialog-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.custom-dialog-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.custom-dialog-close:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .dialog-grid {
@@ -405,15 +471,118 @@
   gap: 12px;
 }
 
+.dialog-grid.single-column {
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
 .dialog-grid .field.grow {
   grid-column: 1 / -1;
 }
 
-.mt-2 {
-  margin-top: 8px;
+.preview-actions {
+  margin-top: 10px;
+}
+
+.selection-card {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 180px;
+  overflow: auto;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid #d7e2ec;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.selection-card-large {
+  max-height: 240px;
+}
+
+.selection-empty {
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
+.selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.selection-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #0f766e;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.selection-link:hover {
+  text-decoration: underline;
+}
+
+.choice-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  color: #1f2937;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.choice-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: #14b8a6;
+  flex: 0 0 auto;
+}
+
+:host ::ng-deep .permissions-dialog .p-dialog-content {
+  padding: 1.25rem 1.25rem 1rem !important;
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+}
+
+:host ::ng-deep .permissions-dialog .p-select,
+:host ::ng-deep .permissions-dialog .p-multiselect,
+:host ::ng-deep .permissions-dialog .p-inputtext {
+  width: 100%;
+}
+
+:host ::ng-deep .permissions-dialog.p-dialog {
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+:host ::ng-deep .permissions-dialog .p-select,
+:host ::ng-deep .permissions-dialog .p-multiselect {
+  min-height: 48px;
+}
+
+:host ::ng-deep .permissions-dialog .p-dialog-footer {
+  padding: 0.9rem 1.25rem 1.1rem !important;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  background: #ffffff;
+}
+
+:host ::ng-deep .permissions-dialog .p-dialog-footer button + button {
+  margin-left: 0.65rem;
 }
 
 @media (max-width: 720px) {
+  .security-toolbar {
+    grid-template-columns: 1fr;
+  }
   .field,
   .field.grow {
     min-width: 100%;

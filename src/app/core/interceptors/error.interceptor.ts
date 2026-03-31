@@ -1,13 +1,11 @@
-import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { MessageService } from 'primeng/api';
 import { catchError, throwError } from 'rxjs';
 
 /**
- * Error Interceptor
- * Handles HTTP errors globally and displays appropriate messages
- * - Duplicate errors (already in use, already exists) → Warning
- * - Other errors → Error
+ * Global HTTP error interceptor.
+ * Duplicate conflicts are shown as warnings. Everything else is shown as errors.
  */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const messageService = inject(MessageService);
@@ -18,7 +16,6 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         return throwError(() => error);
       }
 
-      // Log error for debugging - expand error.error object
       console.log('[ErrorInterceptor] Error caught:', {
         url: req.url,
         method: req.method,
@@ -26,9 +23,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         statusText: error.statusText,
         error: error.error
       });
-      console.log('[ErrorInterceptor] Full error.error object:', JSON.stringify(error.error, null, 2));
 
-      // Check for duplicate error in error.error first (before extracting message)
       let isDuplicateFromError = false;
       if (error.error) {
         if (typeof error.error === 'string') {
@@ -43,64 +38,45 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           if (!isDuplicateFromError && error.error.title) isDuplicateFromError = isDuplicateError(error.error.title);
           if (!isDuplicateFromError && error.error.errors && typeof error.error.errors === 'object') {
             const errorValues = Object.values(error.error.errors).flat() as string[];
-            isDuplicateFromError = errorValues.some((e: string) => isDuplicateError(e));
+            isDuplicateFromError = errorValues.some((value: string) => isDuplicateError(value));
           }
         }
       }
 
-      // Extract error message from different response formats
       const errorMessage = extractErrorMessage(error, req.url, req.method);
-      
-      // Determine if this is a duplicate error (check both original error and extracted message)
-      const isDuplicateFromMessage = isDuplicateError(errorMessage);
-      const isDuplicate = isDuplicateFromError || isDuplicateFromMessage;
-      
-      // Determine severity based on error type
-      const severity = isDuplicate ? 'warn' : 'error';
-      const summary = isDuplicate ? 'تحذير' : 'خطأ';
-      const life = isDuplicate ? 6000 : 5000;
+      const isDuplicate = isDuplicateFromError || isDuplicateError(errorMessage);
 
-      console.log('[ErrorInterceptor] Showing message:', {
-        severity,
-        summary,
-        detail: errorMessage,
-        isDuplicate
-      });
-
-      // Show message to user
       messageService.add({
-        severity,
-        summary,
+        severity: isDuplicate ? 'warn' : 'error',
+        summary: isDuplicate ? 'Warning' : 'Error',
         detail: errorMessage,
-        life
+        life: isDuplicate ? 6000 : 5000
       });
 
-      // Log duplicate warnings for debugging
-      if (isDuplicate) {
-        console.warn('⚠️ [ErrorInterceptor] DUPLICATE DETECTION', {
-          url: req.url,
-          method: req.method,
-          message: errorMessage
-        });
-      }
-
-      // Re-throw error so components can still handle it if needed
       return throwError(() => error);
     })
   );
 };
 
-/**
- * Suppress global toast for expected 404 checks in Crystal layout probing.
- */
 function shouldIgnoreErrorToast(url: string, status: number): boolean {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  const normalizedUrl = (url || '').toLowerCase();
 
   if ((status === 401 || status === 403) && currentPath.includes('/forms/view/')) {
     return true;
   }
 
+  if (status === 404 && currentPath.includes('/forms/view/')) {
+    return normalizedUrl.includes('/api/formsubmissions/latest-document-number/form/')
+      || normalizedUrl.includes('/api/documentseries/document-type/')
+      || normalizedUrl.includes('/api/formbuilderdocumentsettings/form/');
+  }
+
   if ((status === 400 || status === 401 || status === 403) && currentPath.includes('/approval-inbox')) {
+    return true;
+  }
+
+  if (status === 404 && currentPath.includes('/approval-inbox')) {
     return true;
   }
 
@@ -112,54 +88,45 @@ function shouldIgnoreErrorToast(url: string, status: number): boolean {
     return true;
   }
 
-  const normalizedUrl = (url || '').toLowerCase();
   return normalizedUrl.includes('/api/crystalreports/default-layouts')
     || normalizedUrl.includes('/api/crystalreports/default-layout/')
     || normalizedUrl.includes('/api/sapintegration/settings/')
     || normalizedUrl.includes('/api/approvalworkflowruntime/activate-stage')
     || normalizedUrl.includes('/api/approvalworkflowruntime/request-signature')
     || normalizedUrl.includes('/api/approvalworkflow/name/')
+    || normalizedUrl.includes('/api/copytodocument/setups')
     || normalizedUrl.endsWith('/api/approvalworkflow');
 }
 
-/**
- * Extract error message from different response formats
- */
 function extractErrorMessage(error: HttpErrorResponse, url: string, method: string): string {
-  // Blob error payload (common with file download endpoints)
   if (error.error instanceof Blob) {
     if (url.toLowerCase().includes('/api/crystalreports/layout/')) {
-      return 'تعذر تنزيل التقرير. تحقق من إعداد CrystalBridge وأن خدمة التقرير تعمل.';
+      return 'Unable to download the report. Verify the CrystalBridge configuration and confirm the reporting service is running.';
     }
-    return 'حدث خطأ أثناء تنزيل الملف.';
+
+    return 'An error occurred while downloading the file.';
   }
 
-  // Format 1: ProblemDetails (ASP.NET Core) - Most common format
   if (error.error?.detail) {
     return error.error.detail;
   }
 
-  // Format 2: ApiResponse
   if (error.error?.message) {
     return error.error.message;
   }
 
-  // Format 3: ServiceResult
   if (error.error?.errorMessage) {
     return error.error.errorMessage;
   }
 
-  // Format 4: error.error.error (some APIs use this format)
   if (error.error?.error && typeof error.error.error === 'string') {
-    const errorCode = error.error.error;
-    // Translate common error codes to user-friendly messages
-    if (errorCode === 'FormField_FieldCodeExists') {
-      return 'كود الحقل (Field Code) موجود بالفعل. يرجى استخدام كود فريد آخر.';
+    if (error.error.error === 'FormField_FieldCodeExists') {
+      return 'Field Code already exists. Please use a different unique code.';
     }
-    return errorCode;
+
+    return error.error.error;
   }
 
-  // Format 5: Validation errors object
   if (error.error?.errors && typeof error.error.errors === 'object') {
     const errors = Object.values(error.error.errors).flat() as string[];
     if (errors.length > 0) {
@@ -167,121 +134,92 @@ function extractErrorMessage(error: HttpErrorResponse, url: string, method: stri
     }
   }
 
-  // Format 6: String error
   if (typeof error.error === 'string' && error.error.trim() !== '') {
     return error.error;
   }
 
-  // Format 7: ProblemDetails title (fallback)
   if (error.error?.title) {
     return error.error.title;
   }
 
-  // Format 7: Network/CORS error
   if (error.status === 0) {
-    return 'لا يمكن الاتصال بالخادم. يرجى التحقق من الاتصال بالإنترنت والتأكد من أن الخادم يعمل.';
+    return 'Cannot reach the server. Check your network connection and confirm the backend is running.';
   }
 
-  // Format 8: Get user-friendly message based on status code and endpoint
-  // Always use custom message instead of Angular's technical "Http failure response" message
   const operationName = getOperationName(url, method);
-  
-  // Status code based messages
+
   switch (error.status) {
     case 400:
-      return `${operationName}: البيانات المرسلة غير صحيحة. يرجى التحقق من جميع الحقول.`;
+      return `${operationName}: the submitted data is invalid. Please review all fields and try again.`;
     case 401:
-      return 'غير مصرح لك بالوصول. يرجى تسجيل الدخول مرة أخرى.';
-    case 403:
-      // Enhanced 403 Forbidden message - check if there's a specific permission message
+      return 'You are not authorized to access this resource. Please sign in again.';
+    case 403: {
       const permissionMessage = error.error?.message || error.error?.detail || error.error?.errorMessage;
       if (permissionMessage && typeof permissionMessage === 'string') {
-        // Check if the message contains permission-related keywords
-        if (permissionMessage.toLowerCase().includes('permission') || 
-            permissionMessage.toLowerCase().includes('صلاحية') ||
-            permissionMessage.toLowerCase().includes('not authorized') ||
-            permissionMessage.toLowerCase().includes('forbidden')) {
+        const normalized = permissionMessage.toLowerCase();
+        if (normalized.includes('permission')
+          || normalized.includes('not authorized')
+          || normalized.includes('forbidden')
+          || normalized.includes('صلاحية')) {
           return permissionMessage;
         }
       }
-      return 'ليس لديك صلاحية للقيام بهذه العملية. يرجى التواصل مع المسؤول للحصول على الصلاحيات المطلوبة.';
+
+      return 'You do not have permission to perform this action. Contact your administrator if you believe this is incorrect.';
+    }
     case 404:
-      return `${operationName}: العنصر المطلوب غير موجود.`;
+      return `${operationName}: the requested item was not found.`;
     case 409:
-      return `${operationName}: تعارض في البيانات. يرجى تحديث الصفحة والمحاولة مرة أخرى.`;
+      return `${operationName}: a data conflict was detected. Refresh the page and try again.`;
     case 500:
-      return `${operationName}: حدث خطأ في الخادم. يرجى المحاولة مرة أخرى لاحقاً.`;
+      return `${operationName}: the server encountered an error. Please try again later.`;
     case 503:
-      return 'الخدمة غير متاحة حالياً. يرجى المحاولة مرة أخرى لاحقاً.';
+      return 'The service is currently unavailable. Please try again later.';
     default:
-      // Never use Angular's technical "Http failure response" message
-      return `${operationName}: حدث خطأ (${error.status}). يرجى المحاولة مرة أخرى.`;
+      return `${operationName}: an unexpected error occurred (${error.status}). Please try again.`;
   }
 }
 
-/**
- * Get user-friendly operation name from URL and method
- */
 function getOperationName(url: string, method: string): string {
-  const urlLower = url.toLowerCase();
-  const methodUpper = method.toUpperCase();
+  const urlLower = (url || '').toLowerCase();
+  const methodUpper = (method || '').toUpperCase();
 
-  // Extract endpoint name from URL
-  const endpointMatch = url.match(/\/([^\/]+)(?:\/(\d+))?$/);
-  const endpoint = endpointMatch ? endpointMatch[1] : '';
-
-  // Map common endpoints to Arabic names
-  const endpointNames: { [key: string]: string } = {
-    'formbuilder': 'النموذج',
-    'formrules': 'القاعدة',
-    'formfields': 'الحقل',
-    'formtabs': 'التبويب',
-    'formgrids': 'الشبكة',
-    'documenttypes': 'نوع الوثيقة',
-    'documentseries': 'سلسلة الوثائق',
-    'projects': 'المشروع',
-    'fields': 'الحقل',
-    'tabs': 'التبويب',
-    'rules': 'القاعدة'
+  const endpointNames: Record<string, string> = {
+    formbuilder: 'form',
+    formrules: 'rule',
+    formfields: 'field',
+    formtabs: 'tab',
+    formgrids: 'grid',
+    documenttypes: 'document type',
+    documentseries: 'document series',
+    projects: 'project',
+    fields: 'field',
+    tabs: 'tab',
+    rules: 'rule'
   };
 
   let operationType = '';
-  if (methodUpper === 'POST') {
-    operationType = 'إنشاء';
-  } else if (methodUpper === 'PUT' || methodUpper === 'PATCH') {
-    operationType = 'تحديث';
-  } else if (methodUpper === 'DELETE') {
-    operationType = 'حذف';
-  } else if (methodUpper === 'GET') {
-    operationType = 'جلب';
-  }
+  if (methodUpper === 'POST') operationType = 'Create';
+  else if (methodUpper === 'PUT' || methodUpper === 'PATCH') operationType = 'Update';
+  else if (methodUpper === 'DELETE') operationType = 'Delete';
+  else if (methodUpper === 'GET') operationType = 'Load';
 
-  // Find endpoint name
   for (const [key, value] of Object.entries(endpointNames)) {
     if (urlLower.includes(key)) {
       return operationType ? `${operationType} ${value}` : value;
     }
   }
 
-  // Fallback
-  return operationType || 'العملية';
+  return operationType || 'Operation';
 }
 
-/**
- * Check if error message indicates a duplicate value
- */
 function isDuplicateError(message: string): boolean {
   if (!message) return false;
 
   const duplicateKeywords = [
     'already in use',
     'already exists',
-    'مستخدم بالفعل',
-    'موجود بالفعل',
     'duplicate',
-    'مكرر',
-    'rulename',
-    'rule name',
     'fieldcode',
     'field code',
     'tabcode',
@@ -289,11 +227,12 @@ function isDuplicateError(message: string): boolean {
     'formcode',
     'form code',
     'project code',
-    'projectcode'
+    'projectcode',
+    'مستخدم بالفعل',
+    'موجود بالفعل',
+    'مكرر'
   ];
 
-  const messageLower = message.toLowerCase();
-  return duplicateKeywords.some(keyword => 
-    messageLower.includes(keyword.toLowerCase())
-  );
+  const normalized = message.toLowerCase();
+  return duplicateKeywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
 }

@@ -134,10 +134,30 @@ export const routes: Routes = [
 
       // ===== User Group Permissions ===== (Admin only)
       {
-        path: 'user-group-permissions',
+        path: 'users',
+        loadComponent: () => import('./views/users/users-list/users-list.component')
+          .then(m => m.UsersListComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      {
+        path: 'groups',
+        loadComponent: () => import('./views/groups/groups-list/groups-list.component')
+          .then(m => m.GroupsListComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      {
+        path: 'permissions',
         loadComponent: () => import('./views/user-group-permissions/user-group-permissions-manage/user-group-permissions-manage.component')
           .then(m => m.UserGroupPermissionsManageComponent),
         canActivate: [authGuard, adminGuard]
+      },
+
+      {
+        path: 'user-group-permissions',
+        redirectTo: 'permissions',
+        pathMatch: 'full'
       },
 
       // ===== Approval Workflows ===== (Available for all authenticated users)

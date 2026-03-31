@@ -15,6 +15,29 @@ export interface UserDto {
   phone?: string | null;
   isActive: boolean;
   idUserType?: number | null;
+  resolvedGroupId?: number | null;
+  groupName?: string | null;
+  groupForeignName?: string | null;
+}
+
+export interface CreateUserDto {
+  username: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  isActive: boolean;
+  idUserType?: number | null;
+  password?: string | null;
+}
+
+export interface UpdateUserDto {
+  username?: string;
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+  isActive?: boolean;
+  idUserType?: number | null;
+  password?: string | null;
 }
 
 export interface UserGroupDto {
@@ -24,6 +47,20 @@ export interface UserGroupDto {
   description?: string | null;
   isActive: boolean;
   idLegalEntity?: number | null;
+}
+
+export interface CreateUserGroupDto {
+  name: string;
+  foreignName?: string | null;
+  description?: string | null;
+  isActive: boolean;
+}
+
+export interface UpdateUserGroupDto {
+  name?: string;
+  foreignName?: string | null;
+  description?: string | null;
+  isActive?: boolean;
 }
 
 @Injectable({
@@ -253,6 +290,28 @@ export class UsersService {
     );
   }
 
+  createUser(dto: CreateUserDto): Observable<UserDto> {
+    return this.http.post<any>(this.baseUrl, dto).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          return response.data || response.result || response;
+        }
+        return response;
+      })
+    );
+  }
+
+  updateUser(id: number, dto: UpdateUserDto): Observable<UserDto> {
+    return this.http.put<any>(`${this.baseUrl}/${id}`, dto).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          return response.data || response.result || response;
+        }
+        return response;
+      })
+    );
+  }
+
   // ==================== User Groups (Roles) Operations ====================
 
   /**
@@ -417,6 +476,28 @@ export class UsersService {
       catchError((error) => {
         console.error(`Error fetching user group ${id}:`, error);
         return of(null);
+      })
+    );
+  }
+
+  createUserGroup(dto: CreateUserGroupDto): Observable<UserGroupDto> {
+    return this.http.post<any>(this.userGroupsUrl, dto).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          return response.data || response.result || response;
+        }
+        return response;
+      })
+    );
+  }
+
+  updateUserGroup(id: number, dto: UpdateUserGroupDto): Observable<UserGroupDto> {
+    return this.http.put<any>(`${this.userGroupsUrl}/${id}`, dto).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          return response.data || response.result || response;
+        }
+        return response;
       })
     );
   }

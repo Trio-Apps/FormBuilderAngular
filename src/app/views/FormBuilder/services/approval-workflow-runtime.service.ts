@@ -451,6 +451,18 @@ export class ApprovalWorkflowRuntimeService {
         } as PagedApprovalInboxResult;
       }),
       catchError((error) => {
+        if (error?.status === 404) {
+          return of({
+            items: [],
+            totalCount: 0,
+            page: normalizedPage,
+            pageSize: normalizedPageSize,
+            totalPages: 0,
+            hasPrevious: false,
+            hasNext: false
+          } as PagedApprovalInboxResult);
+        }
+
         console.error(`[ApprovalWorkflowRuntimeService] Error fetching paged approval inbox for user ${userId}:`, error);
         const errorMessage = this.extractErrorMessage(error);
         throw new Error(errorMessage);

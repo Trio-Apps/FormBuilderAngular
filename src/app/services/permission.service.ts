@@ -41,6 +41,16 @@ export interface UserGroupUserDto {
   idLegalEntity?: number;
 }
 
+export interface UserPermissionDefinitionDto {
+  name: string;
+  description?: string | null;
+  foreignDescription?: string | null;
+  screenName?: string | null;
+  foreignScreenName?: string | null;
+  isActive?: boolean;
+  idLegalEntity?: number | null;
+}
+
 
 @Injectable({
   providedIn: 'root'
@@ -49,6 +59,7 @@ export class PermissionService {
   // API Endpoints - Based on Tbl_UserGroup_Permission table
   private baseUrl = `${environment.apiUrl}/Permissions`;
   private userGroupPermissionsUrl = `${environment.apiUrl}/UserGroupPermissions`;
+  private userPermissionsUrl = `${environment.apiUrl}/UserPermission`;
   
   // Signals for reactive permission state
   private _permissions = signal<string[]>([]);
@@ -383,22 +394,22 @@ export class PermissionService {
    * Returns unique permission strings
    */
   getAllPermissions(): Observable<string[]> {
-    return this.http.get<any>(`${this.userGroupPermissionsUrl}/all`).pipe(
-      map((response: any) => {
-        let permissions: string[] = [];
+    return this.http.get<any>(this.userPermissionsUrl).pipe(
+      map((response: any): string[] => {
         const data = Array.isArray(response) ? response : (response?.data || response?.items || []);
-        
-        // Extract unique UserPermissionName values
-        permissions = data.map((p: any) => 
-          typeof p === 'string' ? p : (p.userPermissionName || p.UserPermissionName || p.userPermission || p.UserPermission)
-        ).filter(Boolean);
-        
-        // Return unique values
-        return [...new Set(permissions)];
+        const permissions = data
+          .map((p: any): string | null =>
+            typeof p === 'string'
+              ? p
+              : (p.name || p.Name || p.userPermissionName || p.UserPermissionName || p.userPermission || p.UserPermission || null)
+          )
+          .filter((value: string | null): value is string => typeof value === 'string' && value.trim().length > 0);
+
+        return [...new Set<string>(permissions)];
       }),
       catchError((error) => {
         console.error('[PermissionService] Error fetching all permissions:', error);
-        return of([]);
+        return of<string[]>([]);
       })
     );
   }
@@ -462,18 +473,12 @@ export class PermissionService {
   /**
    * Sync permissions for a user group (bulk replace)
    * PUT /api/UserGroupPermissions/by-group/{userGroupId}/sync
-   *
-   * Note: Backend contract may accept either:
-   * - Array of permission strings: ["Dashboard_Allow_View", ...]
-   * - Object wrapper: { permissions: [...] }
-   *
-   * We send the object wrapper to match common backend contracts.
    */
   syncPermissionsForGroup(userGroupId: number, permissions: string[]): Observable<boolean> {
     const normalized = [...new Set((permissions || []).map(p => (p || '').trim()).filter(Boolean))];
     return this.http.put<any>(
       `${this.userGroupPermissionsUrl}/by-group/${userGroupId}/sync`,
-      { permissions: normalized }
+      { permissionNames: normalized }
     ).pipe(
       map(() => true),
       catchError((error) => {

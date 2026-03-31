@@ -2,7 +2,7 @@
 
 const browserProtocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
 const browserHostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-const resolvedApiUrl = `${browserProtocol}//${browserHostname}:5203/api`;
+const resolvedApiUrl = `${browserProtocol}//${browserHostname}:5000/api`;
 
 // إعدادات التطبيق الأساسية
 export const environment = {

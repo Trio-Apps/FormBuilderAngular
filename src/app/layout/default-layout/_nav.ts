@@ -139,6 +139,32 @@ export const navItems: INavData[] = [
     attributes: { roles: ['Administration'], permissionCode: 'SapHanaConfig_Allow_View' }
   },
   {
+    name: 'Security',
+    url: '/permissions',
+    iconComponent: { name: 'cil-lock-locked' },
+    attributes: { roles: ['Administration'] },
+    children: [
+      {
+        name: 'Users',
+        url: '/users',
+        iconComponent: { name: 'cil-user-follow' },
+        attributes: { roles: ['Administration'] }
+      },
+      {
+        name: 'Groups',
+        url: '/groups',
+        iconComponent: { name: 'cil-people' },
+        attributes: { roles: ['Administration'] }
+      },
+      {
+        name: 'Permissions',
+        url: '/permissions',
+        iconComponent: { name: 'cil-lock-locked' },
+        attributes: { roles: ['Administration'], permissionCode: 'UserGroupPermission_Allow_View' }
+      }
+    ]
+  },
+  {
     name: 'Manage Table Menus',
     url: '/table-menus',
     iconComponent: { name: 'cil-layers' },

@@ -1,0 +1,195 @@
+<div class="security-page-container">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <button class="nav-back-btn" routerLink="/dashboard" title="Back to Dashboard">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <div class="nav-title-section">
+          <h1 class="page-title">Groups</h1>
+          <p class="page-subtitle">Browse user groups coming from the shared identity database</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="loadGroups()" [disabled]="loading" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+        <button class="btn-primary" (click)="openGroupModal()">
+          <i class="pi pi-plus"></i>
+          <span>New Group</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="breadcrumb-section">
+    <nav class="breadcrumb-nav">
+      <a routerLink="/dashboard" class="breadcrumb-link">
+        <i class="pi pi-home"></i>
+        <span>Dashboard</span>
+      </a>
+      <i class="pi pi-angle-right breadcrumb-separator"></i>
+      <span class="breadcrumb-current">
+        <i class="pi pi-users"></i>
+        <span>Groups</span>
+      </span>
+    </nav>
+  </div>
+
+  <div class="main-content">
+    <div class="stats-row" *ngIf="!loading">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-primary">
+          <i class="pi pi-users"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ filteredGroups.length }}</div>
+          <div class="stat-label">Visible Groups</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ activeGroupsCount }}</div>
+          <div class="stat-label">Active Groups</div>
+        </div>
+      </div>
+    </div>
+
+    <app-table-shell title="Groups List" icon="pi pi-users">
+      <div table-actions>
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input
+            type="text"
+            placeholder="Search groups..."
+            class="search-input"
+            [(ngModel)]="searchTerm"
+            (input)="onSearch()"
+            autocomplete="off"
+          />
+        </div>
+        <div class="results-count">
+          {{ filteredGroups.length }} groups found
+        </div>
+      </div>
+
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner-wrapper">
+          <i class="pi pi-spin pi-spinner"></i>
+        </div>
+        <p>Loading groups...</p>
+      </div>
+
+      <div *ngIf="!loading && filteredGroups.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <i class="pi pi-users"></i>
+        </div>
+        <h3>No Groups Found</h3>
+        <p>No groups were returned from the external source.</p>
+        <button class="btn-primary" (click)="openGroupModal()">
+          <i class="pi pi-plus"></i>
+          <span>Create Group</span>
+        </button>
+      </div>
+
+      <div *ngIf="!loading && filteredGroups.length > 0" class="table-wrapper">
+        <table class="security-table">
+          <thead>
+            <tr>
+              <th>NAME</th>
+              <th>FOREIGN NAME</th>
+              <th>DESCRIPTION</th>
+              <th>STATUS</th>
+              <th class="actions-col">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let group of paginatedGroups; trackBy: trackByGroupId">
+              <td>{{ group.name || '-' }}</td>
+              <td>{{ group.foreignName || '-' }}</td>
+              <td>{{ group.description || '-' }}</td>
+              <td>
+                <span class="status-badge" [class.status-active]="group.isActive" [class.status-inactive]="!group.isActive">
+                  {{ group.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="actions-col">
+                <app-table-actions>
+                  <button class="action-btn action-edit" (click)="openGroupModal(group)" title="Edit">
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                </app-table-actions>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="pagination-wrapper" *ngIf="totalPages > 1">
+          <nav>
+            <ul class="pagination pagination-sm mb-0">
+              <li class="page-item" [class.disabled]="currentPage === 1">
+                <a class="page-link" (click)="onPageChange(currentPage - 1)"><i class="pi pi-chevron-left"></i></a>
+              </li>
+              <li class="page-item" *ngFor="let page of getPageNumbers()" [class.active]="page === currentPage">
+                <a class="page-link" (click)="onPageChange(page)">{{ page }}</a>
+              </li>
+              <li class="page-item" [class.disabled]="currentPage === totalPages">
+                <a class="page-link" (click)="onPageChange(currentPage + 1)"><i class="pi pi-chevron-right"></i></a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </app-table-shell>
+  </div>
+</div>
+
+<app-dialog-shell
+  [(visible)]="showGroupModal"
+  [header]="editingGroup ? 'Edit Group' : 'New Group'"
+  [modal]="true"
+  [style]="{ width: '560px', maxWidth: '95vw' }"
+  [dismissableMask]="true"
+  (onHide)="closeGroupModal()"
+>
+  <form [formGroup]="groupForm" (ngSubmit)="saveGroup()" class="entity-form">
+    <div class="form-group">
+      <label for="group-name">Name <span class="required">*</span></label>
+      <input id="group-name" type="text" pInputText formControlName="name" placeholder="Enter group name" />
+    </div>
+
+    <div class="form-group">
+      <label for="group-foreign-name">Foreign Name</label>
+      <input id="group-foreign-name" type="text" pInputText formControlName="foreignName" placeholder="Enter foreign name" />
+    </div>
+
+    <div class="form-group">
+      <label for="group-description">Description</label>
+      <input id="group-description" type="text" pInputText formControlName="description" placeholder="Enter description" />
+    </div>
+
+    <div class="form-group form-switch-row">
+      <label class="switch-card" [class.is-active]="groupForm.get('isActive')?.value">
+        <div class="switch-copy">
+          <span class="switch-title">Status</span>
+          <span class="switch-value">{{ groupForm.get('isActive')?.value ? 'Active' : 'Inactive' }}</span>
+        </div>
+        <span class="switch-control">
+          <input type="checkbox" formControlName="isActive" />
+          <span class="switch-slider"></span>
+        </span>
+      </label>
+    </div>
+
+    <div class="dialog-actions">
+      <button pButton type="button" label="Cancel" class="p-button-text" (click)="closeGroupModal()"></button>
+      <button pButton type="submit" [disabled]="saving" label="{{ editingGroup ? 'Update' : 'Create' }}"></button>
+    </div>
+  </form>
+</app-dialog-shell>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>

@@ -40,107 +40,50 @@
   <!-- Main Content -->
   <div class="main-content">
     <div class="page">
-      <div class="toolbar">
-        <div class="builder">
-          <div class="builder-title">
-            <div class="builder-title-left">
-              <span class="title-text">Permission Builder</span>
-              <span class="subtitle">Generate standard permissions like <span class="mono">Entity_Allow_View</span></span>
-            </div>
+      <div class="security-toolbar">
+        <div class="toolbar-card toolbar-card-primary">
+          <div class="toolbar-copy">
+            <span class="toolbar-label">User Group</span>
+            <select class="native-select" [(ngModel)]="selectedGroupId" (ngModelChange)="onGroupChange($event)">
+              <option [ngValue]="null" disabled>Select group</option>
+              <option *ngFor="let group of userGroups" [ngValue]="group.id">
+                {{ group.name }}
+              </option>
+            </select>
           </div>
-          <div class="builder-row">
-            <div class="field">
-              <label>Entity / Table</label>
-              <p-select
-                [options]="entityOptions"
-                placeholder="Select entity..."
-                [(ngModel)]="selectedEntity"
-                (onChange)="onBuilderChange()"
-                [filter]="true"
-                [disabled]="loading.permissions"
-              ></p-select>
-              <div class="inline">
-                <input pInputText type="text" placeholder="Or type custom entity..." [(ngModel)]="customEntity" />
-                <button pButton type="button" class="p-button-secondary" label="Use" (click)="useCustomEntity()"></button>
-              </div>
-            </div>
+          <div class="toolbar-meta">
+            <span class="meta-value">{{ filteredGroupPermissions.length }}</span>
+            <span class="meta-label">Permissions</span>
+          </div>
+        </div>
 
-            <div class="field grow">
-              <label>Actions</label>
-              <p-multiSelect
-                [options]="actionOptions"
-                defaultLabel="Select actions..."
-                [(ngModel)]="selectedActions"
-                (onChange)="onBuilderChange()"
-                [filter]="true"
-              ></p-multiSelect>
-              <div class="preview" *ngIf="generatedPreview.length > 0">
-                <div class="preview-title">Preview</div>
-                <div class="preview-items">
-                  <span class="chip mono" *ngFor="let p of generatedPreview">{{ p }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="field buttons">
-              <label>&nbsp;</label>
-              <button
-                pButton
-                type="button"
-                label="Add generated"
-                icon="pi pi-arrow-down"
-                class="p-button-help"
-                (click)="addGeneratedToSelection()"
-                [disabled]="generatedPreview.length === 0"
-              ></button>
+        <div class="toolbar-card toolbar-card-search">
+          <div class="toolbar-copy grow">
+            <span class="toolbar-label">Search</span>
+            <div class="search-box search-box-compact">
+              <i class="pi pi-search"></i>
+              <input
+                type="text"
+                placeholder="Search permissions..."
+                class="search-input"
+                [(ngModel)]="searchTerm"
+                (input)="applyFilter()"
+              />
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="assign card">
-        <div class="card-title">Assign to Group</div>
-        <div class="assign-row">
-          <div class="field">
-            <label>User Group</label>
-            <p-select
-              [options]="userGroups"
-              optionLabel="name"
-              optionValue="id"
-              placeholder="Select group..."
-              [(ngModel)]="selectedGroupId"
-              (ngModelChange)="onGroupChange()"
-              [showClear]="true"
-              [filter]="true"
-              filterBy="name,foreignName"
-              [disabled]="loading.groups"
-            ></p-select>
-          </div>
-
-          <div class="field grow">
-            <label>Add Permissions</label>
-            <p-multiSelect
-              [options]="allPermissions"
-              [virtualScroll]="true"
-              [virtualScrollItemSize]="34"
-              defaultLabel="Select permission(s)..."
-              [(ngModel)]="selectedToAdd"
-              [disabled]="selectedGroupId == null || loading.permissions"
-              [filter]="true"
-            ></p-multiSelect>
-          </div>
-
-          <div class="field buttons">
-            <label>&nbsp;</label>
+        <div class="toolbar-card toolbar-card-action">
+          <div class="toolbar-copy">
+            <span class="toolbar-label">Actions</span>
             <button
               pButton
               type="button"
-              label="Add"
+              label="Add Permission"
               icon="pi pi-plus"
               class="p-button-success"
               (click)="openAddDialog()"
               [disabled]="selectedGroupId == null || loading.save"
-              pTooltip="Open dialog to pick group/table/actions"
             ></button>
           </div>
         </div>
@@ -148,24 +91,16 @@
 
       <app-table-shell title="Permissions List" icon="pi pi-table">
         <div table-actions>
-          <div class="search-box">
-            <i class="pi pi-search"></i>
-            <input
-              type="text"
-              placeholder="Search permissions..."
-              class="search-input"
-              [(ngModel)]="searchTerm"
-              (input)="applyFilter()"
-              [disabled]="selectedGroupId == null"
-            />
-          </div>
           <div class="results-count" *ngIf="selectedGroupId != null">
             {{ filteredGroupPermissions.length }} permissions
+          </div>
+          <div class="results-count">
+            Showing Form Builder permissions only
           </div>
         </div>
 
         <div class="table-wrapper">
-          <p-table [value]="filteredGroupPermissions" styleClass="p-datatable-sm forms-table">
+          <p-table [value]="paginatedGroupPermissions" styleClass="p-datatable-sm forms-table">
             <ng-template pTemplate="header">
               <tr>
                 <th style="width: 70%">Permission</th>
@@ -200,11 +135,27 @@
             <ng-template pTemplate="emptymessage">
               <tr>
                 <td colspan="2">
-                  {{ selectedGroupId ? 'No permissions found.' : 'Select a group to view permissions.' }}
+                  {{ selectedGroupId ? 'No permissions found for this group yet.' : 'No group selected.' }}
                 </td>
               </tr>
             </ng-template>
           </p-table>
+        </div>
+
+        <div class="pagination-wrapper" *ngIf="totalPages > 1">
+          <nav>
+            <ul class="pagination pagination-sm mb-0">
+              <li class="page-item" [class.disabled]="currentPage === 1">
+                <a class="page-link" (click)="onPageChange(currentPage - 1)"><i class="pi pi-chevron-left"></i></a>
+              </li>
+              <li class="page-item" *ngFor="let page of getPageNumbers()" [class.active]="page === currentPage">
+                <a class="page-link" (click)="onPageChange(page)">{{ page }}</a>
+              </li>
+              <li class="page-item" [class.disabled]="currentPage === totalPages">
+                <a class="page-link" (click)="onPageChange(currentPage + 1)"><i class="pi pi-chevron-right"></i></a>
+              </li>
+            </ul>
+          </nav>
         </div>
       </app-table-shell>
     </div>
@@ -213,62 +164,70 @@
 
 <!-- Add Permissions Dialog -->
 <p-dialog
-  header="Add Permissions"
   [(visible)]="showAddDialog"
   [modal]="true"
   [dismissableMask]="true"
+  [showHeader]="false"
   [style]="{ width: '720px', maxWidth: '95vw' }"
+  styleClass="permissions-dialog"
   (onHide)="closeAddDialog()"
 >
   <div class="add-dialog">
-    <div class="dialog-grid">
+    <div class="custom-dialog-header">
+      <div class="custom-dialog-title">Add Permissions</div>
+      <button type="button" class="custom-dialog-close" (click)="closeAddDialog()" aria-label="Close dialog">
+        <i class="pi pi-times"></i>
+      </button>
+    </div>
+
+    <div class="dialog-grid single-column">
       <div class="field">
         <label>User Group</label>
-        <p-select
-          [options]="userGroups"
-          optionLabel="name"
-          optionValue="id"
-          placeholder="Select group..."
-          [(ngModel)]="addDialogGroupId"
-          [showClear]="true"
-          [filter]="true"
-          filterBy="name,foreignName"
-          [disabled]="loading.groups"
-        ></p-select>
+        <select class="native-select" [(ngModel)]="addDialogGroupId" [disabled]="loading.groups">
+          <option [ngValue]="null">Select group...</option>
+          <option *ngFor="let group of userGroups" [ngValue]="group.id">
+            {{ group.name }}
+          </option>
+        </select>
       </div>
 
       <div class="field">
         <label>Entity / Table</label>
-        <p-select
-          [options]="entityOptions"
-          placeholder="Select entity..."
+        <select
+          class="native-select"
           [(ngModel)]="addDialogSelectedEntity"
-          (onChange)="onAddDialogBuilderChange()"
-          [filter]="true"
+          (ngModelChange)="onAddDialogBuilderChange()"
           [disabled]="loading.permissions"
-        ></p-select>
-        <div class="inline">
-          <input pInputText type="text" placeholder="Or type custom entity..." [(ngModel)]="addDialogCustomEntity" />
-          <button pButton type="button" class="p-button-secondary" label="Use" (click)="useAddDialogCustomEntity()"></button>
-        </div>
+        >
+          <option [ngValue]="null">Select entity...</option>
+          <option *ngFor="let entity of entityOptions" [ngValue]="entity">
+            {{ entity }}
+          </option>
+        </select>
       </div>
 
-      <div class="field grow">
+      <div class="field">
         <label>Actions</label>
-        <p-multiSelect
-          [options]="actionOptions"
-          defaultLabel="Select actions..."
-          [(ngModel)]="addDialogSelectedActions"
-          (onChange)="onAddDialogBuilderChange()"
-          [filter]="true"
-        ></p-multiSelect>
+        <div class="selection-card">
+          <label class="choice-row" *ngFor="let action of getAvailableActionsForEntity(addDialogSelectedEntity)">
+            <input
+              type="checkbox"
+              [checked]="addDialogSelectedActions.includes(action)"
+              (change)="toggleAddDialogAction(action, $any($event.target).checked)"
+            />
+            <span>{{ action }}</span>
+          </label>
+          <div class="selection-empty" *ngIf="getAvailableActionsForEntity(addDialogSelectedEntity).length === 0">
+            No available actions for this entity.
+          </div>
+        </div>
         <div class="preview" *ngIf="addDialogGeneratedPreview.length > 0">
           <div class="preview-title">Generated Preview</div>
           <div class="preview-items">
             <span class="chip mono" *ngFor="let p of addDialogGeneratedPreview">{{ p }}</span>
           </div>
         </div>
-        <div class="mt-2">
+        <div class="preview-actions">
           <button
             pButton
             type="button"
@@ -281,17 +240,23 @@
         </div>
       </div>
 
-      <div class="field grow">
+      <div class="field">
         <label>Permission(s) to Add</label>
-        <p-multiSelect
-          [options]="allPermissions"
-          [virtualScroll]="true"
-          [virtualScrollItemSize]="34"
-          defaultLabel="Select permission(s)..."
-          [(ngModel)]="addDialogSelectedPermissions"
-          [disabled]="loading.permissions"
-          [filter]="true"
-        ></p-multiSelect>
+        <div class="selection-actions">
+          <button type="button" class="selection-link" (click)="selectAllAddDialogPermissions()">Select all</button>
+          <button type="button" class="selection-link" (click)="clearAllAddDialogPermissions()">Clear</button>
+        </div>
+        <div class="selection-card selection-card-large">
+          <label class="choice-row" *ngFor="let permission of allPermissions">
+            <input
+              type="checkbox"
+              [checked]="addDialogSelectedPermissions.includes(permission)"
+              (change)="toggleAddDialogPermission(permission, $any($event.target).checked)"
+              [disabled]="loading.permissions"
+            />
+            <span class="mono">{{ permission }}</span>
+          </label>
+        </div>
       </div>
     </div>
   </div>

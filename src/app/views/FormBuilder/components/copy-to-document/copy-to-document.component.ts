@@ -260,6 +260,12 @@ export class CopyToDocumentComponent implements OnInit {
       error: (error) => {
         this.setupsLoading = false;
         this.setups = [];
+        // Missing setups endpoint or no saved items should not alarm the user on an empty screen.
+        if (error?.status === 404) {
+          this.setupLoadError = null;
+          return;
+        }
+
         this.setupLoadError = this.extractErrorMessage(error, 'Failed to load saved setups.');
       }
     });
@@ -698,12 +704,16 @@ export class CopyToDocumentComponent implements OnInit {
   }
 
   private extractErrorMessage(error: any, fallback: string): string {
+    if (error?.status === 0) {
+      return 'Unable to reach the API. Make sure the backend is running and accessible on port 5000.';
+    }
+
     if (error?.status === 401) {
       return 'Your session is not authorized to load Copy To Document setups right now. Log in again if this continues.';
     }
 
     if (error?.status === 404) {
-      return 'The running API does not expose Copy To Document setups yet. Restart the backend to load the new endpoint.';
+      return 'Copy To Document setup management is not available in the current API response.';
     }
 
     const errors = error?.error?.data?.errors;
