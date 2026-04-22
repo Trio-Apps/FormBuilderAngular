@@ -10,6 +10,8 @@ import { Injectable } from '@angular/core';
 export class StorageService {
   private readonly TOKEN_KEY = 'auth_token';
   private readonly TOKEN_EXPIRES_AT_KEY = 'auth_token_expires_at';
+  private readonly REFRESH_TOKEN_KEY = 'auth_refresh_token';
+  private readonly REFRESH_TOKEN_EXPIRES_AT_KEY = 'auth_refresh_token_expires_at';
   private readonly USER_NAME_KEY = 'user_name';
   private readonly USER_ROLE_KEY = 'user_role';
   private readonly USER_ID_KEY = 'user_id';
@@ -41,9 +43,21 @@ export class StorageService {
   private clearStorage(storage: Storage): void {
     storage.removeItem(this.TOKEN_KEY);
     storage.removeItem(this.TOKEN_EXPIRES_AT_KEY);
+    storage.removeItem(this.REFRESH_TOKEN_KEY);
+    storage.removeItem(this.REFRESH_TOKEN_EXPIRES_AT_KEY);
     storage.removeItem(this.USER_NAME_KEY);
     storage.removeItem(this.USER_ROLE_KEY);
     storage.removeItem(this.USER_ID_KEY);
+  }
+
+  private clearAccessToken(storage: Storage): void {
+    storage.removeItem(this.TOKEN_KEY);
+    storage.removeItem(this.TOKEN_EXPIRES_AT_KEY);
+  }
+
+  private clearRefreshToken(storage: Storage): void {
+    storage.removeItem(this.REFRESH_TOKEN_KEY);
+    storage.removeItem(this.REFRESH_TOKEN_EXPIRES_AT_KEY);
   }
 
   private isTokenExpiredInStorage(storage: Storage): boolean {
@@ -91,6 +105,20 @@ export class StorageService {
     }
   }
 
+  setRefreshToken(refreshToken: string, expiresAtMs?: number): void {
+    const storage = this.getStorage();
+    if (!storage) {
+      return;
+    }
+
+    storage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);
+    if (expiresAtMs) {
+      storage.setItem(this.REFRESH_TOKEN_EXPIRES_AT_KEY, expiresAtMs.toString());
+    } else {
+      storage.removeItem(this.REFRESH_TOKEN_EXPIRES_AT_KEY);
+    }
+  }
+
   /**
    * Get authentication token
    */
@@ -100,19 +128,48 @@ export class StorageService {
       return null;
     }
     if (this.isTokenExpiredInStorage(storage)) {
-      this.clearStorage(storage);
+      this.clearAccessToken(storage);
       return null;
     }
     return storage.getItem(this.TOKEN_KEY);
   }
 
-  private getValue(key: string): string | null {
+  getRefreshTokenExpiryMs(): number | null {
     const storage = this.getStorage();
     if (!storage) {
       return null;
     }
-    if (this.isTokenExpiredInStorage(storage)) {
-      this.clearStorage(storage);
+
+    const expiresAt = storage.getItem(this.REFRESH_TOKEN_EXPIRES_AT_KEY);
+    if (!expiresAt) {
+      return null;
+    }
+
+    const expiryMs = Number(expiresAt);
+    return Number.isNaN(expiryMs) ? null : expiryMs;
+  }
+
+  getRefreshToken(): string | null {
+    const storage = this.getStorage();
+    if (!storage) {
+      return null;
+    }
+
+    const expiresAt = storage.getItem(this.REFRESH_TOKEN_EXPIRES_AT_KEY);
+    if (expiresAt) {
+      const expiryMs = Number(expiresAt);
+      if (Number.isNaN(expiryMs) || Date.now() >= expiryMs) {
+        this.clearStorage(storage);
+        return null;
+      }
+    }
+
+    return storage.getItem(this.REFRESH_TOKEN_KEY);
+  }
+
+  private getValue(key: string): string | null {
+    const storage = this.getStorage();
+    if (!storage) {
       return null;
     }
     return storage.getItem(key);
@@ -172,5 +229,9 @@ export class StorageService {
    */
   hasToken(): boolean {
     return !!this.getToken();
+  }
+
+  hasRefreshToken(): boolean {
+    return !!this.getRefreshToken();
   }
 }

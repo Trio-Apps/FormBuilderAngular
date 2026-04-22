@@ -15,7 +15,10 @@
         <button class="btn-icon" (click)="loadFields()" [disabled]="loading.fields" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-secondary" [routerLink]="['/form-builder/rules', formBuilderId]" title="Manage Form Rules">
+        <button class="btn-secondary"
+                *ngIf="canManageFieldRules()"
+                [routerLink]="['/form-builder/rules', formBuilderId]"
+                title="Manage Form Rules">
           <i class="pi pi-shield"></i>
           <span>Manage Rules</span>
         </button>
@@ -761,7 +764,7 @@
                   </div>
                 </label>
 
-                <!-- Option 4: API Link -->
+                <!-- Option 4: SAP B1 Service Layer / API -->
                 <label class="data-source-option" [class.selected]="dataSourceType === 'Api'"
                   style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
                   [style.border-color]="dataSourceType === 'Api' ? '#667eea' : '#e5e7eb'"
@@ -771,9 +774,10 @@
                     style="width: 20px; height: 20px; cursor: pointer;" />
                   <i class="pi pi-link" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
-                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">{{
-                      translateLabel('fields.dataSourceApi') }}</div>
-                    <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceApiDesc') }}</div>
+                    <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">SAP B1 Service Layer / API</div>
+                    <div style="font-size: 12px; color: #6b7280;">
+                      Use this for SAP B1 Service Layer endpoints like <code>/b1s/v1/...</code> or for any external API endpoint.
+                    </div>
                   </div>
                 </label>
 
@@ -810,7 +814,7 @@
                       SAP HANA Query
                     </div>
                     <div style="font-size: 12px; color: #6b7280;">
-                      Load options from SAP HANA SQL query using the active SAP HANA connection. Use SELECT with ID and NAME columns (e.g. AbsEntry AS ID, PeriodName AS NAME).
+                      Load options from SAP HANA SQL query using the selected SAP connection. Use SELECT with ID and NAME columns (e.g. AbsEntry AS ID, PeriodName AS NAME).
                     </div>
                   </div>
                 </label>
@@ -1035,6 +1039,45 @@
                   </small>
                 </div>
 
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-sitemap" style="margin-right: 6px; color: #667eea;"></i>
+                    Depends On Field
+                  </label>
+                  <select class="form-control"
+                    [(ngModel)]="formSubmissionDependencyConfig.contextFieldCode"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onSubmissionDependencyFieldChange()">
+                    <option value="">-- No Dependency --</option>
+                    <option *ngFor="let field of getAvailableFormSubmissionDependencyFields()" [value]="field.fieldCode">
+                      {{ field.fieldName }} ({{ field.fieldCode }})
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                    Optional. Filter this dropdown using another field from the current form.
+                  </small>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-link" style="margin-right: 6px; color: #667eea;"></i>
+                    Match Source Field
+                  </label>
+                  <select class="form-control"
+                    [(ngModel)]="formSubmissionDependencyConfig.sourceFieldCode"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onSubmissionDependencySourceFieldChange()"
+                    [disabled]="!formSubmissionDependencyConfig.contextFieldCode || !formSubmissionConfig.formId">
+                    <option value="">-- Select Source Field --</option>
+                    <option *ngFor="let field of availableSourceFormFields" [value]="field.fieldCode">
+                      {{ field.fieldName }} ({{ field.fieldCode }})
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                    Choose the field in the source form that should match the selected value from the current form.
+                  </small>
+                </div>
+
                 <div class="form-group" style="display: flex; align-items: flex-end;">
                   <button type="button" class="btn btn-primary" (click)="previewDataSource()"
                     [disabled]="!formSubmissionConfig.formId || !formSubmissionConfig.valueFieldId || !formSubmissionConfig.textFieldId || loadingPreview"
@@ -1170,6 +1213,37 @@
 
             <!-- SAP HANA SQL Query Configuration -->
             <div class="form-group" *ngIf="dataSourceType === 'SapHana'" style="grid-column: 1 / -1;">
+              <div style="margin-bottom: 16px; padding: 12px; background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 8px;">
+                <label class="form-label" style="margin-bottom: 8px; display: block;">
+                  <i class="pi pi-server" style="margin-right: 6px; color: #0891b2;"></i>
+                  SAP Connection <span class="required">*</span>
+                </label>
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end;">
+                  <div>
+                    <select class="form-control"
+                      [(ngModel)]="selectedDataSourceSapConnectionId"
+                      [ngModelOptions]="{standalone: true}"
+                      (change)="onDataSourceSapConnectionChange()">
+                      <option [ngValue]="null">-- Select SAP Connection --</option>
+                      <option *ngFor="let conn of sapConnections" [ngValue]="conn.id">
+                        {{ conn.name }}{{ conn.hanaServer ? '' : ' (No HANA credentials)' }}
+                      </option>
+                    </select>
+                    <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                      HANA query execution will use the HANA credentials saved under this SAP connection.
+                    </small>
+                  </div>
+                  <button type="button"
+                    class="btn btn-outline-secondary"
+                    (click)="onDataSourceSapRelogin()"
+                    [disabled]="!selectedDataSourceSapConnectionId || loadingSapReLogin"
+                    style="height: 42px; white-space: nowrap;">
+                    <i class="pi pi-refresh" [class.pi-spin]="loadingSapReLogin"></i>
+                    Re-Login
+                  </button>
+                </div>
+              </div>
+
               <label class="form-label">
                 <i class="pi pi-database" style="margin-right: 6px; color: #059669;"></i>
                 SAP HANA SQL Query <span class="required">*</span>
@@ -1184,7 +1258,7 @@
                 style="font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;">
               </textarea>
               <small class="form-text text-muted" style="margin-top: 6px; display: block; color: #059669;">
-                <i class="pi pi-info-circle"></i> Connection, database and credentials are taken from the active SAP HANA configuration on the backend.
+                <i class="pi pi-info-circle"></i> Connection, database and credentials are taken from the selected SAP connection and its linked HANA settings.
               </small>
               <small class="form-text text-warning" style="margin-top: 8px; display: block; color: #f59e0b; font-weight: 500;">
                 <i class="pi pi-exclamation-triangle"></i> 
@@ -1284,8 +1358,39 @@
               </div>
             </div>
 
-            <!-- API URL -->
+            <!-- SAP B1 Service Layer / API -->
             <div class="form-group" *ngIf="dataSourceType === 'Api'" style="grid-column: 1 / -1;">
+              <div style="margin-bottom: 16px; padding: 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+                <label class="form-label" style="margin-bottom: 8px; display: block;">
+                  <i class="pi pi-link" style="margin-right: 6px; color: #2563eb;"></i>
+                  SAP Connection (recommended for SAP B1)
+                </label>
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end;">
+                  <div>
+                    <select class="form-control"
+                      [(ngModel)]="selectedDataSourceSapConnectionId"
+                      [ngModelOptions]="{standalone: true}"
+                      (change)="onDataSourceSapConnectionChange()">
+                      <option [ngValue]="null">No SAP connection</option>
+                      <option *ngFor="let conn of sapConnections" [ngValue]="conn.id">
+                        {{ conn.name }}{{ conn.isActive ? ' (Active)' : '' }}
+                      </option>
+                    </select>
+                    <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                      If you are calling SAP B1 Service Layer, select the SAP connection here so login and re-login happen automatically.
+                    </small>
+                  </div>
+                  <button type="button"
+                    class="btn btn-outline-secondary"
+                    (click)="onDataSourceSapRelogin()"
+                    [disabled]="!selectedDataSourceSapConnectionId || loadingSapReLogin"
+                    style="height: 42px; white-space: nowrap;">
+                    <i class="pi pi-refresh" [class.pi-spin]="loadingSapReLogin"></i>
+                    Re-Login
+                  </button>
+                </div>
+              </div>
+
               <!-- HTTP Method Selection -->
               <label class="form-label" style="margin-bottom: 8px;">
                 <i class="pi pi-cog" style="margin-right: 6px; color: #667eea;"></i>
@@ -1306,10 +1411,18 @@
                 </button>
               </div>
 
+              <div style="margin-bottom: 12px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; color: #475569; font-size: 12px; line-height: 1.6;">
+                <strong style="color: #0f172a;">Use this option for SAP B1 Service Layer</strong><br>
+                Example:
+                <code>https://your-sap-host:50000/b1s/v1/BusinessPartners</code>
+                <br>
+                Or any other external API endpoint if needed.
+              </div>
+
               <!-- API URL Input -->
               <label class="form-label" style="margin-top: 16px;">
                 <i class="pi pi-link" style="margin-right: 6px; color: #667eea;"></i>
-                {{ translateLabel('fields.apiUrl') || 'API URL' }} <span class="required">*</span>
+                SAP B1 URL / API URL <span class="required">*</span>
               </label>
               <input type="text" class="form-control" [(ngModel)]="dataSourceConfig.apiUrl"
                 [ngModelOptions]="{standalone: true}" [placeholder]="getApiUrlPlaceholder()">

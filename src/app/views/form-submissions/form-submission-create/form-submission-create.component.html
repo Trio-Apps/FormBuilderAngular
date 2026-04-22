@@ -7,14 +7,27 @@
           <i class="pi pi-arrow-left"></i>
         </button>
         <div class="nav-title-section">
-          <h1 class="page-title">{{ isEditMode ? 'Edit Submission' : 'Create New Submission' }}</h1>
+          <h1 class="page-title">{{ pageTitleText }}</h1>
           <p class="page-subtitle">{{ documentType?.name || 'Form Submission' }}</p>
         </div>
       </div>
       <div class="nav-right">
+        <div class="series-selector" *ngIf="documentSeries.length > 0">
+          <label for="seriesId" class="series-selector-label">Series</label>
+          <select
+            id="seriesId"
+            formControlName="seriesId"
+            class="series-select"
+          >
+            <option value="">Select series</option>
+            <option *ngFor="let series of documentSeries" [value]="series.id">
+              {{ series.seriesCode || ('Series ' + series.id) }}
+            </option>
+          </select>
+        </div>
         <button class="btn-primary" (click)="saveSubmission()" [disabled]="submissionForm.invalid || fieldsForm.invalid || loading.create">
           <i class="pi pi-save"></i>
-          <span>{{ isEditMode ? 'Update Submission' : 'Save Submission' }}</span>
+          <span>{{ pageActionText }}</span>
         </button>
       </div>
     </div>
@@ -34,8 +47,8 @@
       </a>
       <i class="pi pi-angle-right breadcrumb-separator"></i>
       <span class="breadcrumb-current">
-        <i [class]="isEditMode ? 'pi pi-pencil' : 'pi pi-plus'"></i>
-        <span>{{ isEditMode ? 'Edit Submission' : 'New Submission' }}</span>
+        <i [class]="useCreateFlowPresentation ? 'pi pi-plus' : 'pi pi-pencil'"></i>
+        <span>{{ breadcrumbActionText }}</span>
       </span>
     </nav>
   </div>
@@ -44,17 +57,6 @@
   <div class="main-content">
     <div class="form-container">
       <form [formGroup]="submissionForm" (ngSubmit)="saveSubmission()">
-        <!-- Tabs Navigation - Only show if more than one tab -->
-        <div class="tabs-navigation" *ngIf="tabs && tabs.length > 1">
-          <ul class="nav-tabs-list">
-            <li *ngFor="let tab of tabs; let i = index" class="nav-tab-item" [class.active]="i === activeTabIndex">
-              <button type="button" class="nav-tab-button" (click)="setActiveTab(i)">
-                {{ getTabName(tab) }}
-              </button>
-            </li>
-          </ul>
-        </div>
-
         <!-- Form Display Section -->
         <div *ngIf="selectedFormId && selectedTabId" class="form-display-section">
           <!-- Form Header -->
@@ -62,12 +64,23 @@
             <h2 class="form-title">{{ getFormName(selectedFormId) }}</h2>
             
             <!-- Document Number Badge -->
-            <div class="document-number-badge" *ngIf="currentSubmission?.documentNumber && !currentSubmission?.documentNumber?.startsWith('DRAFT-')">
+            <div class="document-number-badge" *ngIf="displayedDocumentNumber">
               <span class="document-number-label">
                 {{ translationService.getCurrentLanguage() === 'ar' ? 'رقم المستند:' : 'Document Number:' }}
               </span>
-              <span class="document-number-value">{{ currentSubmission?.documentNumber }}</span>
+              <span class="document-number-value">{{ displayedDocumentNumber }}</span>
             </div>
+          </div>
+
+          <!-- Tabs Navigation - Only show if more than one tab -->
+          <div class="tabs-navigation" *ngIf="tabs && tabs.length > 1">
+            <ul class="nav-tabs-list">
+              <li *ngFor="let tab of tabs; let i = index" class="nav-tab-item" [class.active]="i === activeTabIndex">
+                <button type="button" class="nav-tab-button" (click)="setActiveTab(i)">
+                  {{ getTabName(tab) }}
+                </button>
+              </li>
+            </ul>
           </div>
 
           <!-- General Blocking Error Message (when no specific field is identified) -->
@@ -84,9 +97,9 @@
 
           <!-- Fields Section -->
           <div *ngIf="!loading.fields && fields.length > 0" class="google-form-fields">
-            <form [formGroup]="fieldsForm">
+            <div [formGroup]="fieldsForm" class="fields-grid">
               <ng-container *ngFor="let field of fields">
-                <div *ngIf="isFieldVisible(field)" class="form-field-wrapper">
+                <div *ngIf="isFieldVisible(field)" class="form-field-wrapper" [class.full-width-field]="isWideLayoutField(field)">
                 <!-- Field Label -->
                 <label 
                   class="field-label" 
@@ -383,7 +396,7 @@
                 </span>
                 </div>
               </ng-container>
-            </form>
+            </div>
           </div>
 
           <!-- Standalone Grids (grids not associated with fields) -->

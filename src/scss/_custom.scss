@@ -310,6 +310,28 @@
   width: min(420px, calc(100vw - 32px)) !important;
 }
 
+body .submission-viewers-multiselect-panel.p-multiselect-panel,
+body .submission-viewers-multiselect-panel {
+  background: #ffffff !important;
+  border: 1px solid #d7dee7 !important;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.16) !important;
+}
+
+body .submission-viewers-multiselect-panel .p-multiselect-header,
+body .submission-viewers-multiselect-panel .p-multiselect-items,
+body .submission-viewers-multiselect-panel .p-multiselect-items-wrapper,
+body .submission-viewers-multiselect-panel .p-multiselect-item,
+body .submission-viewers-multiselect-panel .p-multiselect-option,
+body .submission-viewers-multiselect-panel .p-multiselect-filter-container,
+body .submission-viewers-multiselect-panel .p-multiselect-filter-container .p-inputtext {
+  background: #ffffff !important;
+}
+
+body .submission-viewers-multiselect-panel .p-multiselect-item,
+body .submission-viewers-multiselect-panel .p-multiselect-option {
+  color: #374151 !important;
+}
+
 // Global dialog styling (PrimeNG) - keep sizes per dialog, unify visuals
 :root {
   --dialog-radius: 16px;

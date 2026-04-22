@@ -42,8 +42,8 @@
       var originalInfo = console.info;
       
       function isDeprecationWarning(message) {
-        if (!message || typeof message !== 'string') return false;
-        var lower = message.toLowerCase();
+        var lower = String(message || '').toLowerCase();
+        if (!lower) return false;
         return lower.indexOf('domnodeinsertedintodocument') !== -1 ||
                lower.indexOf('domnoderemovedfromdocument') !== -1 ||
                lower.indexOf('domnodeinserted') !== -1 ||

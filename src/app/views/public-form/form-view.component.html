@@ -67,7 +67,7 @@
 
         <!-- Field Display -->
         <div class="form-field" *ngFor="let field of tab.fields"
-          [ngClass]="getFieldLayoutClass(field)"
+          [ngClass]="[getFieldLayoutClass(field), isSearchableFormSubmissionsField(field) ? 'field-allows-overflow' : '']"
           [style.display]="isFieldVisible(field) ? 'block' : 'none'"
           [attr.data-field-type]="getFieldType(field)"
           [attr.data-grid-id]="field.gridId">
@@ -146,24 +146,59 @@
               <div *ngSwitchCase="'select'" class="select-wrapper" 
                 [class.multiple-select]="field.fieldType?.allowMultiple"
                 [class.has-error]="hasFieldError(field)">
-                <select class="form-select"
-                  [id]="'field_' + field.id"
-                  [name]="'field_' + field.id"
-                  [class.has-error]="hasFieldError(field)"
-                  [multiple]="field.fieldType?.allowMultiple || false"
-                  [value]="getFieldValue(field)"
-                  [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
-                  (change)="clearFieldError(field); onSelectChange(field, $event)">
-                  <option [value]="" [disabled]="isRequired(field) && !(field.fieldType?.allowMultiple)"
-                    *ngIf="!(field.fieldType?.allowMultiple)">
-                    {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') :
-                    getFieldPlaceholder(field) }}
-                  </option>
-                  <option *ngFor="let opt of getFieldOptions(field)" [value]="opt.optionValue"
-                    [selected]="isOptionSelected(field, opt.optionValue)">
-                    {{ getOptionText(opt) }}
-                  </option>
-                </select>
+                <ng-container *ngIf="isSearchableFormSubmissionsField(field); else regularSelectTemplate">
+                  <div class="searchable-select">
+                    <input type="text"
+                      class="form-input searchable-select-input"
+                      [id]="'field_' + field.id"
+                      [name]="'field_' + field.id"
+                      [class.has-error]="hasFieldError(field)"
+                      [placeholder]="isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') : getFieldPlaceholder(field)"
+                      [value]="getSearchableFieldQuery(field)"
+                      [disabled]="!isFieldEditable(field)"
+                      autocomplete="off"
+                      (focus)="clearFieldError(field); openSearchableFieldDropdown(field)"
+                      (input)="clearFieldError(field); onSearchableFieldInput(field, $event)"
+                      (blur)="onSearchableFieldBlur(field)" />
+
+                    <div class="searchable-select-panel" *ngIf="shouldShowSearchableFieldDropdown(field)">
+                      <div class="searchable-select-state" *ngIf="isLoadingFieldOptions(field)">
+                        {{ translationService.translate('formView.loading') || 'Loading...' }}
+                      </div>
+                      <button type="button"
+                        class="searchable-select-option"
+                        *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue"
+                        (mousedown)="$event.preventDefault(); selectSearchableFieldOption(field, opt)">
+                        {{ getOptionText(opt) }}
+                      </button>
+                      <div class="searchable-select-state"
+                        *ngIf="!isLoadingFieldOptions(field) && getFieldOptions(field).length === 0">
+                        No results found.
+                      </div>
+                    </div>
+                  </div>
+                </ng-container>
+
+                <ng-template #regularSelectTemplate>
+                  <select class="form-select"
+                    [id]="'field_' + field.id"
+                    [name]="'field_' + field.id"
+                    [class.has-error]="hasFieldError(field)"
+                    [multiple]="field.fieldType?.allowMultiple || false"
+                    [value]="getFieldValue(field)"
+                    [disabled]="isLoadingFieldOptions(field) || !isFieldEditable(field)"
+                    (change)="clearFieldError(field); onSelectChange(field, $event)">
+                    <option [value]="" [disabled]="isRequired(field) && !(field.fieldType?.allowMultiple)"
+                      *ngIf="!(field.fieldType?.allowMultiple)">
+                      {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') :
+                      getFieldPlaceholder(field) }}
+                    </option>
+                    <option *ngFor="let opt of getFieldOptions(field)" [value]="opt.optionValue"
+                      [selected]="isOptionSelected(field, opt.optionValue)">
+                      {{ getOptionText(opt) }}
+                    </option>
+                  </select>
+                </ng-template>
                 <div class="multiple-select-hint" *ngIf="field.fieldType?.allowMultiple">
                   <small>
                     <i class="pi pi-info-circle"></i>

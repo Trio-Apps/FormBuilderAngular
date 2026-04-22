@@ -105,19 +105,11 @@ export class DocumentTypesService {
           return of(docType);
         }
 
-        return this.getAllDocumentTypes().pipe(
-          switchMap((allTypes: DocumentType[]) => {
-            const fallbackDocType = this.findByFormBuilderId(allTypes, formBuilderId, false);
-            if (fallbackDocType) {
-              return of(fallbackDocType);
-            }
-
-            // Final fallback: read from FormBuilderDocumentSettings endpoint directly.
-            return this.http.get<any>(`${environment.apiUrl}/FormBuilderDocumentSettings/form/${formBuilderId}`).pipe(
-              map((response: any) => this.extractDocumentTypeFromSettingsResponse(response, formBuilderId)),
-              catchError(() => of(null))
-            );
-          })
+        // Final fallback: read from FormBuilderDocumentSettings endpoint directly.
+        // Avoid management endpoints here so assigned form editors do not hit 403s.
+        return this.http.get<any>(`${environment.apiUrl}/FormBuilderDocumentSettings/form/${formBuilderId}`).pipe(
+          map((response: any) => this.extractDocumentTypeFromSettingsResponse(response, formBuilderId)),
+          catchError(() => of(null))
         );
       }),
       catchError((error) => {
@@ -359,6 +351,14 @@ export class DocumentTypesService {
       cleanDto.defaultSeriesId = null;
     } else if (dto.defaultSeriesId === undefined) {
       delete cleanDto.defaultSeriesId;
+    }
+
+    if (dto.seriesDateFieldId === null) {
+      cleanDto.seriesDateFieldId = null;
+    } else if (dto.seriesDateFieldId === 0) {
+      cleanDto.seriesDateFieldId = null;
+    } else if (dto.seriesDateFieldId === undefined) {
+      delete cleanDto.seriesDateFieldId;
     }
 
     console.log('[DocumentTypesService] Updating document type:', { id: documentTypeId, dto: cleanDto });

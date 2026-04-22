@@ -1,6 +1,11 @@
 @use "../../../../scss/shared-design" as *;
 @use '../approval-stages-list/approval-stages-list.component.scss';
 
+:host {
+  --page-pad-x: 32px;
+  --page-pad-y: 16px;
+}
+
 // Page layout
 .fields-page-container {
   padding: 16px 18px 28px;
@@ -61,8 +66,15 @@
 // Main card
 .main-content {
   margin-top: 18px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
 
   .document-types-section {
+    width: 100% !important;
+    max-width: none !important;
     background: #fff;
     border-radius: 14px;
     box-shadow: 0 10px 30px rgba(21, 94, 239, 0.05);
@@ -277,6 +289,16 @@
       }
     }
   }
+}
+
+::ng-deep app-table-shell,
+::ng-deep app-table-shell .table-shell,
+::ng-deep app-table-shell .table-card,
+::ng-deep app-table-shell .table-wrapper,
+::ng-deep app-table-shell .p-datatable,
+::ng-deep app-table-shell .p-paginator {
+  width: 100% !important;
+  max-width: none !important;
 }
 
 // Submission Fields Modal Styles

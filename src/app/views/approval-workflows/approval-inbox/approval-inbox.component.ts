@@ -22,6 +22,23 @@ import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
+import { FormFieldDto, FormTabDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { TabsService } from '../../FormBuilder/services/tabs.service';
+import { FieldsService } from '../../FormBuilder/services/fields.service';
+
+interface SubmissionDetailFieldViewModel {
+  id: string;
+  fieldId: number;
+  label: string;
+  value: string;
+  fullWidth: boolean;
+}
+
+interface SubmissionDetailTabViewModel {
+  id: number;
+  label: string;
+  fields: SubmissionDetailFieldViewModel[];
+}
 
 @Component({
   selector: 'app-approval-inbox',
@@ -47,7 +64,6 @@ import { TableShellComponent } from '../../../shared/table-shell/table-shell.com
 export class ApprovalInboxComponent implements OnInit {
   inboxItems: ApprovalInboxItemDto[] = [];
   filteredItems: ApprovalInboxItemDto[] = [];
-  allSubmissions: FormSubmissionDto[] = []; // All submissions with Submitted status
   currentUserId: string | null = null;
   currentUsername: string | null = null; // Store username separately in case backend needs it
   showAllSubmissions = false; // Toggle between inbox and all submissions
@@ -78,8 +94,11 @@ export class ApprovalInboxComponent implements OnInit {
   isAmountValid: boolean = true;
   showSubmissionDetails = false;
   loadingSubmissionDetails = false;
+  postingSelectedSubmission = false;
   submissionDetailsError = '';
   selectedSubmissionDetail: FormSubmissionDetailDto | null = null;
+  submissionDetailTabs: SubmissionDetailTabViewModel[] = [];
+  selectedSubmissionDetailTabId: number | null = null;
 
   searchTerm = '';
   first = 0;
@@ -99,7 +118,9 @@ export class ApprovalInboxComponent implements OnInit {
     private cdr: ChangeDetectorRef,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
-    public translationService: TranslationService
+    public translationService: TranslationService,
+    private tabsService: TabsService,
+    private fieldsService: FieldsService
   ) {
     this.actionForm = this.fb.group({
       comments: ['']
@@ -164,8 +185,6 @@ export class ApprovalInboxComponent implements OnInit {
     if (this.currentUserId) {
       // Load inbox - this will show only items where user is assigned as Stage Assignee
       this.loadInbox();
-      // Also load all submissions with Submitted status to show when inbox is empty
-      this.loadAllSubmittedSubmissions();
     } else {
       console.error('[ApprovalInbox] No user ID or username found');
       this.messageService.add({
@@ -583,122 +602,10 @@ export class ApprovalInboxComponent implements OnInit {
   }
 
   /**
-   * Load all submissions with Submitted status (for display when inbox is empty)
-   * تحميل جميع الـ Submissions بحالة Submitted (للعرض عندما لا توجد pending approvals)
-   * ✅ Non-admin users only see their own submissions
-   */
-  loadAllSubmittedSubmissions(): void {
-    this.formSubmissionsService.getAllSubmissions().subscribe({
-      next: (submissions: FormSubmissionDto[]) => {
-        // Filter only Submitted status submissions
-        let filtered = (submissions || []).filter(sub => 
-          sub.status === 'Submitted'
-        );
-        
-        // ✅ Non-admin users can only see their own submissions
-        if (!this.isAdmin) {
-          filtered = filtered.filter(sub => {
-            const submittedBy = sub.submittedByUserId?.trim().toLowerCase();
-            const currentUser = this.currentUsername?.trim().toLowerCase();
-            const currentId = this.currentUserId?.trim().toLowerCase();
-            return submittedBy === currentUser || submittedBy === currentId;
-          });
-          console.log('[ApprovalInbox] 👤 User view - showing only own submissions:', filtered.length);
-        }
-        
-        this.allSubmissions = this.sortSubmissionsByNewest(filtered);
-        this.cdr.detectChanges();
-      },
-      error: (error) => {
-        console.error('Error loading all submitted submissions:', error);
-        this.allSubmissions = [];
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  /**
-   * Load all submissions with Submitted status (for "Show All Submissions" toggle)
-   * تحميل جميع الـ Submissions بحالة Submitted (للعرض فقط، لا للموافقة)
-   * Note: This is only for viewing, not for approval. Only inbox items can be approved.
-   * ✅ Non-admin users only see their own submissions
-   */
-  loadAllSubmissions(): void {
-    // Only load if user wants to see all submissions (not for approval)
-    if (!this.showAllSubmissions) {
-      return;
-    }
-    
-    this.loading.inbox = true;
-    this.formSubmissionsService.getAllSubmissions().subscribe({
-      next: (submissions: FormSubmissionDto[]) => {
-        // Filter only Submitted status submissions (for viewing only)
-        let filtered = (submissions || []).filter(sub => 
-          sub.status === 'Submitted' || sub.status === 'Pending'
-        );
-        
-        // ✅ Non-admin users can only see their own submissions
-        if (!this.isAdmin) {
-          filtered = filtered.filter(sub => {
-            const submittedBy = sub.submittedByUserId?.trim().toLowerCase();
-            const currentUser = this.currentUsername?.trim().toLowerCase();
-            const currentId = this.currentUserId?.trim().toLowerCase();
-            return submittedBy === currentUser || submittedBy === currentId;
-          });
-        }
-        
-        this.allSubmissions = this.sortSubmissionsByNewest(filtered);
-        this.loading.inbox = false;
-        this.cdr.detectChanges();
-      },
-      error: (error) => {
-        console.error('Error loading all submissions:', error);
-        this.allSubmissions = [];
-        this.loading.inbox = false;
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  /**
    * Refresh inbox (only items where user is assigned as Stage Assignee)
    */
   refreshData(): void {
     this.loadInbox();
-    // Always load submitted submissions to show when inbox is empty
-    this.loadAllSubmittedSubmissions();
-    // Only load all submissions if user is viewing "Show All Submissions"
-    if (this.showAllSubmissions) {
-      this.loadAllSubmissions();
-    }
-  }
-
-  /**
-   * Toggle between inbox items and all submissions
-   * IMPORTANT: Only inbox items (where user is Stage Assignee) can be approved
-   * When showing all submissions, we still only show assigned items (stageId > 0)
-   */
-  toggleView(): void {
-    this.showAllSubmissions = !this.showAllSubmissions;
-    if (this.showAllSubmissions) {
-      // Load all submissions for reference, but still only show assigned items
-      this.loadAllSubmissions();
-      // Keep showing only inbox items (assigned items with stageId > 0)
-      // Don't convert all submissions because user can only approve assigned items
-      this.messageService.add({
-        severity: 'info',
-        summary: 'Info',
-        detail: 'You can only approve items assigned to you in Stage Assignees.',
-        life: 5000
-      });
-    } else {
-      // Reload inbox items (only items where user is Stage Assignee)
-      this.loadInbox();
-    }
-    // CRITICAL: Always filter to show only assigned items (stageId > 0)
-    this.filteredItems = this.sortInboxItemsByNewest(this.inboxItems.filter(item => item.stageId > 0));
-    this.totalRecords = this.filteredItems.length;
-    this.first = 0;
   }
 
   filterItems(): void {
@@ -719,40 +626,6 @@ export class ApprovalInboxComponent implements OnInit {
       item.submittedByUserName?.toLowerCase().includes(term)
     );
     this.totalRecords = this.filteredItems.length;
-  }
-
-  /**
-   * Get filtered submitted submissions based on search term
-   */
-  getFilteredSubmittedSubmissions(): FormSubmissionDto[] {
-    if (!this.searchTerm.trim()) {
-      return this.sortSubmissionsByNewest(this.allSubmissions);
-    }
-
-    const term = this.searchTerm.toLowerCase();
-    return this.sortSubmissionsByNewest(this.allSubmissions.filter(sub =>
-      sub.documentNumber?.toLowerCase().includes(term) ||
-      sub.documentTypeName?.toLowerCase().includes(term) ||
-      sub.submittedByUserName?.toLowerCase().includes(term) ||
-      sub.formName?.toLowerCase().includes(term)
-    ));
-  }
-
-  /**
-   * Get paginated submitted submissions
-   */
-  getPaginatedSubmittedSubmissions(): FormSubmissionDto[] {
-    const filtered = this.getFilteredSubmittedSubmissions();
-    const start = this.first;
-    const end = start + this.rows;
-    return filtered.slice(start, end);
-  }
-
-  /**
-   * Get total records for submitted submissions
-   */
-  getSubmittedSubmissionsTotalRecords(): number {
-    return this.getFilteredSubmittedSubmissions().length;
   }
 
   onSearchChange(): void {
@@ -1344,8 +1217,6 @@ export class ApprovalInboxComponent implements OnInit {
           this.removeProcessedItemFromLists(this.selectedItem!.submissionId);
           this.closeActionModal();
           this.loadInbox();
-          this.loadAllSubmittedSubmissions();
-          this.loadAllSubmissions();
           this.cdr.detectChanges();
         },
         error: (error) => {
@@ -1393,8 +1264,6 @@ export class ApprovalInboxComponent implements OnInit {
           this.removeProcessedItemFromLists(this.selectedItem!.submissionId);
           this.closeActionModal();
           this.loadInbox();
-          this.loadAllSubmittedSubmissions();
-          this.loadAllSubmissions();
           this.cdr.detectChanges();
         },
         error: (error) => {
@@ -1466,8 +1335,6 @@ export class ApprovalInboxComponent implements OnInit {
         this.handleInboxItemAfterAction(currentItem, response, newStatus);
         this.closeActionModal();
         this.loadInbox();
-        this.loadAllSubmittedSubmissions(); // Reload all submitted submissions
-        this.loadAllSubmissions(); // Reload all submissions
         this.cdr.detectChanges();
       },
       error: (error: any) => {
@@ -1752,8 +1619,6 @@ export class ApprovalInboxComponent implements OnInit {
           }
           this.closeActionModal();
           this.loadInbox();
-          this.loadAllSubmittedSubmissions();
-          this.loadAllSubmissions();
           this.cdr.detectChanges();
         },
         error: (error) => {
@@ -1825,8 +1690,6 @@ export class ApprovalInboxComponent implements OnInit {
           }
           this.closeActionModal();
           this.loadInbox();
-          this.loadAllSubmittedSubmissions();
-          this.loadAllSubmissions();
           this.cdr.detectChanges();
         },
         error: (error) => {
@@ -1908,6 +1771,8 @@ export class ApprovalInboxComponent implements OnInit {
     this.loadingSubmissionDetails = true;
     this.submissionDetailsError = '';
     this.selectedSubmissionDetail = null;
+    this.submissionDetailTabs = [];
+    this.selectedSubmissionDetailTabId = null;
 
     this.formSubmissionsService.getSubmissionById(submissionId)
       .pipe(
@@ -1919,6 +1784,16 @@ export class ApprovalInboxComponent implements OnInit {
       )
       .subscribe((detail) => {
         this.selectedSubmissionDetail = detail;
+        const formBuilderId = Number(detail?.formBuilderId || 0);
+        if (detail && formBuilderId > 0) {
+          this.loadSubmissionDetailLayout(formBuilderId, detail);
+          return;
+        }
+
+        if (detail) {
+          this.buildSubmissionDetailLayout(detail, [], []);
+        }
+
         this.loadingSubmissionDetails = false;
         this.cdr.detectChanges();
       });
@@ -1929,6 +1804,8 @@ export class ApprovalInboxComponent implements OnInit {
     this.loadingSubmissionDetails = false;
     this.submissionDetailsError = '';
     this.selectedSubmissionDetail = null;
+    this.submissionDetailTabs = [];
+    this.selectedSubmissionDetailTabId = null;
   }
 
   getVisibleFieldValues(): FormSubmissionValueDto[] {
@@ -1964,6 +1841,315 @@ export class ApprovalInboxComponent implements OnInit {
     }
 
     return '-';
+  }
+
+  getSubmissionDetailsDisplayNumber(detail: FormSubmissionDetailDto | null): string {
+    const finalNumber = (detail?.documentNumber || '').trim();
+    if (finalNumber) {
+      return finalNumber;
+    }
+
+    const pendingPreview = (detail?.pendingDocumentNumberPreview || '').trim();
+    if (pendingPreview) {
+      return pendingPreview;
+    }
+
+    return 'Pending Number';
+  }
+
+  getInboxDisplayNumber(item: ApprovalInboxItemDto | null | undefined): string {
+    const finalNumber = (item?.documentNumber || '').trim();
+    if (finalNumber) {
+      return finalNumber;
+    }
+
+    const pendingPreview = ((item as any)?.pendingDocumentNumberPreview || '').trim();
+    if (pendingPreview) {
+      return pendingPreview;
+    }
+
+    return 'Pending Number';
+  }
+
+  canPostSubmissionListItem(submission: FormSubmissionDto | null | undefined): boolean {
+    const normalizedStatus = (submission?.status || '').trim().toLowerCase();
+    if (normalizedStatus === 'approved') {
+      return true;
+    }
+
+    return normalizedStatus === 'submitted' && !Number(submission?.stageId || 0);
+  }
+
+  canPostApprovalInboxItem(item: ApprovalInboxItemDto | null | undefined): boolean {
+    const normalizedStatus = (item?.status || '').trim().toLowerCase();
+    return normalizedStatus === 'approved';
+  }
+
+  canPostSubmissionDetail(detail: FormSubmissionDetailDto | null): boolean {
+    if (!detail) {
+      return false;
+    }
+
+    const normalizedStatus = (detail.status || '').trim().toLowerCase();
+    if (normalizedStatus === 'approved') {
+      return true;
+    }
+
+    return normalizedStatus === 'submitted' && !Number(detail.stageId || 0);
+  }
+
+  postSelectedSubmission(): void {
+    const submissionId = Number(this.selectedSubmissionDetail?.id || 0);
+    if (!submissionId || this.postingSelectedSubmission || !this.canPostSubmissionDetail(this.selectedSubmissionDetail)) {
+      return;
+    }
+
+    this.postingSelectedSubmission = true;
+
+    this.formSubmissionsService.postSubmission(submissionId).subscribe({
+      next: (response) => {
+        const detail = this.selectedSubmissionDetail;
+        if (detail) {
+          detail.status = response?.status || 'Posted';
+          detail.documentNumber = response?.documentNumber || detail.documentNumber;
+          detail.pendingDocumentNumberPreview = response?.pendingDocumentNumberPreview || detail.pendingDocumentNumberPreview;
+        }
+
+        this.postingSelectedSubmission = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Document posted successfully.',
+          life: 4000
+        });
+
+        window.location.reload();
+      },
+      error: (error) => {
+        const detail = error?.message || error?.error?.message || error?.error?.detail || 'Failed to post the approved submission.';
+        this.postingSelectedSubmission = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail,
+          life: 5000
+        });
+      }
+    });
+  }
+
+  postSubmissionListItem(submissionId: number): void {
+    const normalizedSubmissionId = Number(submissionId || 0);
+    if (!normalizedSubmissionId || this.postingSelectedSubmission) {
+      return;
+    }
+
+    this.postingSelectedSubmission = true;
+    this.formSubmissionsService.postSubmission(normalizedSubmissionId).subscribe({
+      next: () => {
+        window.location.reload();
+      },
+      error: (error) => {
+        const detail = error?.message || error?.error?.message || error?.error?.detail || 'Failed to post the approved submission.';
+        this.postingSelectedSubmission = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail,
+          life: 5000
+        });
+      }
+    });
+  }
+
+  getActiveSubmissionDetailTab(): SubmissionDetailTabViewModel | null {
+    if (!this.submissionDetailTabs.length) {
+      return null;
+    }
+
+    const activeTab = this.submissionDetailTabs.find((tab) => tab.id === this.selectedSubmissionDetailTabId);
+    return activeTab || this.submissionDetailTabs[0] || null;
+  }
+
+  selectSubmissionDetailTab(tabId: number): void {
+    this.selectedSubmissionDetailTabId = tabId;
+  }
+
+  trackBySubmissionDetailTab(_: number, tab: SubmissionDetailTabViewModel): number {
+    return tab.id;
+  }
+
+  trackBySubmissionDetailField(_: number, field: SubmissionDetailFieldViewModel): string {
+    return field.id;
+  }
+
+  private loadSubmissionDetailLayout(formBuilderId: number, detail: FormSubmissionDetailDto): void {
+    this.tabsService.getTabs(formBuilderId).subscribe({
+      next: (tabs) => {
+        const activeTabs = (tabs || [])
+          .filter((tab) => tab && tab.id > 0 && tab.isDeleted !== true && tab.isActive !== false)
+          .sort((a, b) => Number(a.tabOrder || 0) - Number(b.tabOrder || 0));
+
+        if (!activeTabs.length) {
+          this.buildSubmissionDetailLayout(detail, [], []);
+          this.loadingSubmissionDetails = false;
+          this.cdr.detectChanges();
+          return;
+        }
+
+        forkJoin(activeTabs.map((tab) => this.fieldsService.getFieldsByTabId(tab.id))).subscribe({
+          next: (fieldsByTab) => {
+            const allFields = (fieldsByTab || []).flatMap((fields) =>
+              (fields || [])
+                .filter((field) => field && field.isDeleted !== true && field.isActive !== false)
+                .sort((a, b) => Number(a.fieldOrder || 0) - Number(b.fieldOrder || 0))
+            );
+            this.buildSubmissionDetailLayout(detail, activeTabs, allFields);
+            this.loadingSubmissionDetails = false;
+            this.cdr.detectChanges();
+          },
+          error: () => {
+            this.buildSubmissionDetailLayout(detail, activeTabs, []);
+            this.loadingSubmissionDetails = false;
+            this.cdr.detectChanges();
+          }
+        });
+      },
+      error: () => {
+        this.buildSubmissionDetailLayout(detail, [], []);
+        this.loadingSubmissionDetails = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  private buildSubmissionDetailLayout(
+    detail: FormSubmissionDetailDto,
+    tabs: FormTabDto[],
+    fields: FormFieldDto[]
+  ): void {
+    const visibleValues = this.getVisibleFieldValues();
+    const valueByFieldId = new Map<number, FormSubmissionValueDto>();
+    const valueByFieldCode = new Map<string, FormSubmissionValueDto>();
+
+    for (const fieldValue of visibleValues) {
+      if (fieldValue.fieldId) {
+        valueByFieldId.set(Number(fieldValue.fieldId), fieldValue);
+      }
+
+      const fieldCode = (fieldValue.fieldCode || '').trim().toLowerCase();
+      if (fieldCode) {
+        valueByFieldCode.set(fieldCode, fieldValue);
+      }
+    }
+
+    const usedFieldValueIds = new Set<number>();
+    const detailTabs: SubmissionDetailTabViewModel[] = [];
+
+    for (const tab of tabs) {
+      const tabFields = (fields || [])
+        .filter((field) => Number(field.tabId || 0) === Number(tab.id || 0))
+        .sort((a, b) => Number(a.fieldOrder || 0) - Number(b.fieldOrder || 0));
+
+      const fieldCards: SubmissionDetailFieldViewModel[] = [];
+
+      for (const field of tabFields) {
+        const fieldValue = valueByFieldId.get(Number(field.id || 0))
+          || valueByFieldCode.get((field.fieldCode || '').trim().toLowerCase());
+
+        if (!fieldValue) {
+          continue;
+        }
+
+        const displayValue = this.getFieldDisplayValue(fieldValue);
+        if (!displayValue || displayValue === '-') {
+          continue;
+        }
+
+        usedFieldValueIds.add(Number(fieldValue.id || 0));
+        fieldCards.push({
+          id: `field-${field.id}-${fieldValue.id}`,
+          fieldId: Number(field.id || 0),
+          label: field.fieldName || fieldValue.fieldName || fieldValue.fieldCode || `Field #${fieldValue.fieldId}`,
+          value: displayValue,
+          fullWidth: this.isSubmissionDetailFieldWide(field, displayValue)
+        });
+      }
+
+      if (!fieldCards.length) {
+        continue;
+      }
+
+      detailTabs.push({
+        id: Number(tab.id || 0),
+        label: tab.tabName || `Tab ${tab.id}`,
+        fields: fieldCards
+      });
+    }
+
+    const unmatchedFields = visibleValues
+      .filter((fieldValue) => !usedFieldValueIds.has(Number(fieldValue.id || 0)))
+      .map((fieldValue) => {
+        const displayValue = this.getFieldDisplayValue(fieldValue);
+        return {
+          id: `unmatched-${fieldValue.id}`,
+          fieldId: Number(fieldValue.fieldId || 0),
+          label: fieldValue.fieldName || fieldValue.fieldCode || `Field #${fieldValue.fieldId}`,
+          value: displayValue,
+          fullWidth: displayValue.length > 120 || displayValue.includes('\n')
+        } as SubmissionDetailFieldViewModel;
+      })
+      .filter((field) => !!field.value && field.value !== '-');
+
+    if (unmatchedFields.length) {
+      detailTabs.push({
+        id: -1,
+        label: 'Other Fields',
+        fields: unmatchedFields
+      });
+    }
+
+    if (!detailTabs.length && visibleValues.length) {
+      detailTabs.push({
+        id: 0,
+        label: 'Details',
+        fields: visibleValues
+          .map((fieldValue) => {
+            const displayValue = this.getFieldDisplayValue(fieldValue);
+            return {
+              id: `fallback-${fieldValue.id}`,
+              fieldId: Number(fieldValue.fieldId || 0),
+              label: fieldValue.fieldName || fieldValue.fieldCode || `Field #${fieldValue.fieldId}`,
+              value: displayValue,
+              fullWidth: displayValue.length > 120 || displayValue.includes('\n')
+            };
+          })
+          .filter((field) => !!field.value && field.value !== '-')
+      });
+    }
+
+    this.submissionDetailTabs = detailTabs;
+    this.selectedSubmissionDetailTabId = detailTabs[0]?.id ?? null;
+  }
+
+  private isSubmissionDetailFieldWide(field: FormFieldDto, value: string): boolean {
+    const fieldTypeName = (field.fieldTypeName || field.type || '').toLowerCase();
+    if (
+      fieldTypeName.includes('textarea')
+      || fieldTypeName.includes('text area')
+      || fieldTypeName.includes('file')
+      || fieldTypeName.includes('grid')
+      || fieldTypeName.includes('table')
+      || fieldTypeName.includes('radio')
+      || fieldTypeName.includes('checkbox')
+      || fieldTypeName.includes('editor')
+      || fieldTypeName.includes('html')
+      || fieldTypeName.includes('rich')
+    ) {
+      return true;
+    }
+
+    return value.length > 120 || value.includes('\n');
   }
 
   getActionVerb(actionType: 'Approved' | 'Rejected' | 'Returned'): string {

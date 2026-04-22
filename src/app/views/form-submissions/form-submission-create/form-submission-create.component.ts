@@ -135,6 +135,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   // Document Series
   documentSeries: DocumentSeries[] = [];
+  private pendingSubmissionSeriesId: number | null = null;
 
   // Loading States
   loading = {
@@ -189,6 +190,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.submissionForm = this.fb.group({
       formBuilderId: [null], // Will be set from documentType
       tabId: [null, [Validators.required]],
+      seriesId: [null],
       status: ['Submitted'] // Default status is Submitted
     });
 
@@ -303,6 +305,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             this.documentSeries = [];
           }
         }
+        this.applySeriesSelectionFromContext();
         this.loading.series = false;
         this.cdr.detectChanges();
       },
@@ -373,6 +376,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         console.log('[FormSubmissionCreate] ✅ Default document series created successfully:', newSeries.id);
         // Add to documentSeries array
         this.documentSeries = [newSeries];
+        this.applySeriesSelectionFromContext();
         return newSeries;
       } else {
         throw new Error('Failed to create document series - no ID returned');
@@ -380,6 +384,58 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     } catch (error: any) {
       console.error('[FormSubmissionCreate] Failed to create default document series:', error);
       return null;
+    }
+  }
+
+  private getSeriesIdFromForm(): number | null {
+    const controlValue = this.submissionForm.get('seriesId')?.value;
+    const parsed = controlValue !== null && controlValue !== undefined && controlValue !== ''
+      ? Number(controlValue)
+      : NaN;
+
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  private getDefaultSeriesCandidate(): DocumentSeries | null {
+    const selectedSeriesId = this.getSeriesIdFromForm();
+    if (selectedSeriesId) {
+      const selectedSeries = this.documentSeries.find(series => series.id === selectedSeriesId);
+      if (selectedSeries) {
+        return selectedSeries;
+      }
+    }
+
+    const querySeriesId = this.route.snapshot.queryParams['seriesId']
+      ? Number(this.route.snapshot.queryParams['seriesId'])
+      : null;
+    if (querySeriesId) {
+      const querySeries = this.documentSeries.find(series => series.id === querySeriesId);
+      if (querySeries) {
+        return querySeries;
+      }
+    }
+
+    if (this.pendingSubmissionSeriesId) {
+      const submissionSeries = this.documentSeries.find(series => series.id === this.pendingSubmissionSeriesId);
+      if (submissionSeries) {
+        return submissionSeries;
+      }
+    }
+
+    return this.documentSeries.find(s => s.isDefault) || this.documentSeries[0] || null;
+  }
+
+  private applySeriesSelectionFromContext(): void {
+    if (this.documentSeries.length === 0) {
+      return;
+    }
+
+    const candidateSeries = this.getDefaultSeriesCandidate();
+    if (candidateSeries?.id) {
+      const selectedValue = this.getSeriesIdFromForm();
+      if (!selectedValue || selectedValue !== candidateSeries.id) {
+        this.submissionForm.patchValue({ seriesId: candidateSeries.id });
+      }
     }
   }
 
@@ -617,9 +673,24 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     // Get seriesId from query params first, then fallback to documentSeries
     let seriesId: number | undefined;
-    const querySeriesId = routeQueryParams['seriesId'] ? +routeQueryParams['seriesId'] : null;
+    const formSeriesId = this.getSeriesIdFromForm();
+    if (formSeriesId && this.documentSeries.find(s => s.id === formSeriesId)) {
+      seriesId = formSeriesId;
+      const selectedSeries = this.documentSeries.find(s => s.id === formSeriesId);
+      if (selectedSeries?.projectId) {
+        projectId = selectedSeries.projectId;
+      }
+
+      console.log('[FormSubmissionCreate] Using seriesId from submission form:', {
+        seriesId,
+        projectId,
+        documentTypeId: this.documentTypeId
+      });
+    }
     
-    if (querySeriesId && querySeriesId > 0) {
+    const querySeriesId = routeQueryParams['seriesId'] ? +routeQueryParams['seriesId'] : null;
+
+    if (!seriesId && querySeriesId && querySeriesId > 0) {
       // Verify seriesId from query params - if 404, ignore error and continue without seriesId
       try {
         const verifiedSeries = await this.documentTypesService.getDocumentSeriesById(querySeriesId).pipe(
@@ -1748,11 +1819,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     
     // Check if DataSource failed or returned no options
     const dataSource = field.fieldDataSource;
-    const isSqlQuery = dataSource?.sourceType === 'SqlQuery' || dataSource?.sourceType === 'DataSourceSqlQuery';
-    const isSapHana = dataSource?.sourceType === 'SapHana';
-    const hasExternalDataSource = dataSource && 
-                                 dataSource.isActive && 
-                                 (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana);
+      const isSqlQuery = dataSource?.sourceType === 'SqlQuery' || dataSource?.sourceType === 'DataSourceSqlQuery';
+      const isSapHana = dataSource?.sourceType === 'SapHana';
+      const isFormSubmissions = dataSource?.sourceType === 'FormSubmissions';
+      const hasExternalDataSource = dataSource && 
+                                   dataSource.isActive && 
+                                   (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana || isFormSubmissions);
     const dataSourceFailed = hasExternalDataSource && 
                             (!this.fieldDataSourceOptions[field.id] || this.fieldDataSourceOptions[field.id].length === 0);
 
@@ -2469,11 +2541,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     // For Api, LookupTable, SqlQuery, or SapHana, load options dynamically
     // Note: Backend stores SqlQuery as "DataSourceSqlQuery", so check for both
-    const isSqlQuery = dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery';
-    const isSapHana = dataSource.sourceType === 'SapHana';
-    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana) {
-      console.log(`[FormSubmissionCreate] Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`);
-      this.loadingFieldOptions[field.id] = true;
+      const isSqlQuery = dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery';
+      const isSapHana = dataSource.sourceType === 'SapHana';
+      const isFormSubmissions = dataSource.sourceType === 'FormSubmissions';
+      if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana || isFormSubmissions) {
+        console.log(`[FormSubmissionCreate] Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`);
+        this.loadingFieldOptions[field.id] = true;
       
       // Disable control while loading
       this.updateFieldDisabledState(field);
@@ -3417,11 +3490,61 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   }
 
   goBack(): void {
-    this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
+    this.router.navigate(['/submissions']);
+  }
+
+  private isCopiedSubmissionContext(): boolean {
+    return Number(this.currentSubmission?.parentDocumentId || this.currentSubmissionDetail?.parentDocumentId || 0) > 0;
+  }
+
+  private shouldActivateWorkflowForCurrentSubmission(): boolean {
+    return !this.isCopiedSubmissionContext();
+  }
+
+  get isEditingDraftSubmission(): boolean {
+    return this.isEditMode && (this.currentSubmission?.status || '').toLowerCase() === 'draft';
+  }
+
+  get useCreateFlowPresentation(): boolean {
+    return !this.isEditMode || this.isEditingDraftSubmission;
+  }
+
+  get pageTitleText(): string {
+    return this.useCreateFlowPresentation ? 'Create New Submission' : 'Edit Submission';
+  }
+
+  get pageActionText(): string {
+    return this.useCreateFlowPresentation ? 'Save Submission' : 'Update Submission';
+  }
+
+  get breadcrumbActionText(): string {
+    return this.useCreateFlowPresentation ? 'New Submission' : 'Edit Submission';
+  }
+
+  get displayedDocumentNumber(): string {
+    const currentNumber = this.currentSubmission?.documentNumber?.trim();
+    if (currentNumber && !currentNumber.startsWith('DRAFT-')) {
+      return currentNumber;
+    }
+
+    const previewNumber =
+      ((this.currentSubmission as any)?.pendingDocumentNumberPreview as string | undefined)?.trim() ||
+      ((this.currentSubmissionDetail as any)?.pendingDocumentNumberPreview as string | undefined)?.trim();
+
+    return previewNumber || '';
   }
 
   get canShowSignNow(): boolean {
     return this.signatureRequired && this.signatureStatus === 'pending' && !!this.signingUrl;
+  }
+
+  isWideLayoutField(field: FormFieldDto): boolean {
+    const fieldType = (this.getFieldType(field) || '').toLowerCase();
+    return fieldType === 'textarea'
+      || fieldType === 'grid'
+      || fieldType === 'file'
+      || fieldType === 'radio'
+      || fieldType === 'checkbox';
   }
 
   openSigningUrl(): void {
@@ -3488,7 +3611,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Store current status
         (this as any)._currentSubmissionStatus = submission.status;
         // Update form with current status
-        this.submissionForm.patchValue({ status: submission.status });
+        this.submissionForm.patchValue({
+          status: submission.status,
+          seriesId: submission.seriesId || null
+        });
+        this.pendingSubmissionSeriesId = submission.seriesId || null;
+        this.applySeriesSelectionFromContext();
         
         // If submission status is Draft, mark as draft (case-insensitive check)
         if (submission.status?.toLowerCase() === 'draft') {
@@ -3771,6 +3899,21 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           value = `${year}-${month}-${day}`;
         }
       }
+
+      if ((currentFieldType === 'select' || currentFieldType === 'radio') && value !== null && value !== undefined && value !== '') {
+        value = String(value).trim();
+      }
+
+      if (currentFieldType === 'checkbox' && value !== null && value !== undefined && value !== '') {
+        if (Array.isArray(value)) {
+          value = value.map(item => String(item).trim()).filter(item => item.length > 0);
+        } else {
+          value = String(value)
+            .split(',')
+            .map(item => item.trim())
+            .filter(item => item.length > 0);
+        }
+      }
       
       if (value !== null && value !== undefined && value !== '') {
         const fieldKey = `field_${field.id}`;
@@ -4004,7 +4147,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Get default series (fixed value) - create one automatically if not available
+    // Get default/selected series (fixed fallback) - create one automatically if list is empty
     if (this.documentSeries.length === 0) {
       console.log('[FormSubmissionCreate] No document series available, attempting to create default series...');
       const defaultSeries = await this.createDefaultSeries();
@@ -4024,7 +4167,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       }
     }
 
-    const defaultSeries = this.documentSeries.find(s => s.isDefault) || this.documentSeries[0];
+    const defaultSeries = this.getDefaultSeriesCandidate();
     if (!defaultSeries || !defaultSeries.id) {
       const currentLang = this.translationService.getCurrentLanguage();
       const errorMessage = currentLang === 'ar' 
@@ -4246,17 +4389,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           this.isSubmitting = false;
           this.loading.create = false;
 
-          // Keep stage activation behavior for submitted documents
-          this.approvalWorkflowRuntimeService.activateStage(this.submissionId!).subscribe({
-            next: () => {
-              console.log('[FormSubmissionCreate] activate-stage succeeded in background (already submitted after create)');
-            },
-            error: (activateError) => {
-              console.warn('[FormSubmissionCreate] Failed to activate workflow stage in background (already submitted after create):', activateError);
-            }
-          });
+          if (this.shouldActivateWorkflowForCurrentSubmission()) {
+            this.approvalWorkflowRuntimeService.activateStage(this.submissionId!).subscribe({
+              next: () => {
+                console.log('[FormSubmissionCreate] activate-stage succeeded in background (already submitted after create)');
+              },
+              error: (activateError) => {
+                console.warn('[FormSubmissionCreate] Failed to activate workflow stage in background (already submitted after create):', activateError);
+              }
+            });
+          }
 
-          this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
+          this.router.navigate(['/submissions']);
           this.cdr.detectChanges();
           return;
         }
@@ -4307,7 +4451,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             }
 
             // Navigate to submissions list page
-            this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
+            this.router.navigate(['/submissions']);
             this.cdr.detectChanges();
           },
           error: (error) => {
@@ -4419,16 +4563,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               this.isSubmitting = false;
               this.loading.create = false;
 
-              this.approvalWorkflowRuntimeService.activateStage(this.submissionId).subscribe({
-                next: () => {
-                  console.log('[FormSubmissionCreate] activate-stage succeeded after already-submitted response');
-                },
-                error: (activateError) => {
-                  console.warn('[FormSubmissionCreate] Failed to activate workflow stage after already-submitted response:', activateError);
-                }
-              });
+              if (this.shouldActivateWorkflowForCurrentSubmission()) {
+                this.approvalWorkflowRuntimeService.activateStage(this.submissionId).subscribe({
+                  next: () => {
+                    console.log('[FormSubmissionCreate] activate-stage succeeded after already-submitted response');
+                  },
+                  error: (activateError) => {
+                    console.warn('[FormSubmissionCreate] Failed to activate workflow stage after already-submitted response:', activateError);
+                  }
+                });
+              }
 
-              this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
+              this.router.navigate(['/submissions']);
               this.cdr.detectChanges();
               return;
             }
@@ -4532,10 +4678,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             }
 
             // Navigate to submissions list page immediately
-        this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
+        this.router.navigate(['/submissions']);
 
         // Activate workflow stage in background (don't wait for it)
-        if (this.submissionId) {
+        if (this.submissionId && this.shouldActivateWorkflowForCurrentSubmission()) {
           this.approvalWorkflowRuntimeService.activateStage(this.submissionId).subscribe({
             next: () => {
               console.log('[FormSubmissionCreate] ✅ activate-stage succeeded in background');
@@ -4632,6 +4778,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         const isAlreadySubmitted = backendMsg.toLowerCase().includes('already submitted');
 
         if (isAlreadySubmitted && this.submissionId) {
+          if (!this.shouldActivateWorkflowForCurrentSubmission()) {
+            this.isSubmitting = false;
+            this.loading.create = false;
+            this.cdr.detectChanges();
+            this.router.navigate(['/submissions']);
+            return;
+          }
+
           console.warn('[FormSubmissionCreate] Submit returned "already submitted". Activating stage anyway...', backendMsg);
           this.approvalWorkflowRuntimeService.activateStage(this.submissionId).subscribe({
             next: () => {
@@ -4643,13 +4797,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
                   this.isSubmitting = false;
                   this.loading.create = false;
                   this.cdr.detectChanges();
-                  this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
+                  this.router.navigate(['/submissions']);
                 },
                 error: () => {
                   this.isSubmitting = false;
                   this.loading.create = false;
                   this.cdr.detectChanges();
-                  this.router.navigate(['/document-types', this.documentTypeId, 'submissions']);
+                  this.router.navigate(['/submissions']);
                 }
               });
             },
@@ -4773,7 +4927,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    * Set submission stageId and activate workflow stage
    */
   private setSubmissionStageId(submissionId: number, approvalWorkflowId: number): void {
-    if (!approvalWorkflowId) {
+    if (!approvalWorkflowId || !this.shouldActivateWorkflowForCurrentSubmission()) {
       return;
     }
 

@@ -38,7 +38,7 @@ export const navItems: INavData[] = [
         name: 'Copy To Document',
         url: '/form-builder/copy-to-document',
         iconComponent: { name: 'cil-share-boxed' },
-        attributes: { permissionCode: 'FormBuilder_Allow_View' }
+        attributes: { roles: ['Administration'], permissionCode: 'FormRule_Allow_View' }
       },
       
       // Tabs و Fields تحتاج IDs ديناميكية، فلا يمكن وضع رابط ثابت هنا

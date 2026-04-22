@@ -202,25 +202,67 @@
 
       <div class="form-row">
         <label class="form-label">Authentication Method</label>
-        <p-select
-          [options]="[{label:'Session',value:'Session'},{label:'Token',value:'Token'}]"
-          optionLabel="label"
-          optionValue="value"
-          [(ngModel)]="connectionForm.authenticationMethod"
-          [ngModelOptions]="{standalone:true}"
-          [style]="{ width: '100%' }"
-        ></p-select>
+        <select class="form-control" [(ngModel)]="connectionForm.authenticationMethod" [ngModelOptions]="{standalone:true}">
+          <option value="Session">Session</option>
+          <option value="Token">Token</option>
+        </select>
+      </div>
+
+      <div class="form-row section-intro">
+        <label class="form-label">HANA Connection (for dropdown queries)</label>
+        <small class="section-help">
+          Optional. Use this when field dropdowns should read data from SAP HANA through the same SAP connection.
+        </small>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">HANA Server</label>
+        <input pInputText type="text" [(ngModel)]="connectionForm.hanaServer" [ngModelOptions]="{standalone:true}" placeholder="hana-server:30015" />
       </div>
 
       <div class="form-row two-cols">
-        <div class="col checkbox-col">
-          <p-checkbox [(ngModel)]="connectionForm.verifySsl" [ngModelOptions]="{standalone:true}" [binary]="true" inputId="verifySsl"></p-checkbox>
-          <label for="verifySsl" class="checkbox-label">Verify SSL certificate</label>
+        <div class="col">
+          <label class="form-label">HANA Username</label>
+          <input pInputText type="text" [(ngModel)]="connectionForm.hanaUserName" [ngModelOptions]="{standalone:true}" placeholder="SYSTEM" />
         </div>
-        <div class="col checkbox-col">
-          <p-checkbox [(ngModel)]="connectionForm.isActive" [ngModelOptions]="{standalone:true}" [binary]="true" inputId="connIsActive"></p-checkbox>
-          <label for="connIsActive" class="checkbox-label">Active</label>
+        <div class="col">
+          <label class="form-label">HANA Password {{ editingConnectionId ? '(optional)' : '' }}</label>
+          <input
+            pInputText
+            type="password"
+            [(ngModel)]="connectionForm.hanaPassword"
+            [ngModelOptions]="{standalone:true}"
+            [placeholder]="editingConnectionId ? 'Leave empty to keep current HANA password' : 'Enter HANA password'"
+          />
         </div>
+      </div>
+
+      <div class="form-row two-cols">
+        <div class="col">
+          <label class="form-label">HANA Schema</label>
+          <input pInputText type="text" [(ngModel)]="connectionForm.hanaSchema" [ngModelOptions]="{standalone:true}" placeholder="SBODEMO" />
+        </div>
+        <div class="col">
+          <label class="form-label">HANA Max Pool Size</label>
+          <input pInputText type="number" [(ngModel)]="connectionForm.hanaMaxPoolSize" [ngModelOptions]="{standalone:true}" placeholder="50" />
+        </div>
+      </div>
+
+      <div class="form-row two-cols toggle-row">
+        <label class="toggle-card" for="verifySsl">
+          <input id="verifySsl" type="checkbox" [(ngModel)]="connectionForm.verifySsl" [ngModelOptions]="{standalone:true}">
+          <span class="toggle-copy">
+            <span class="toggle-title">Verify SSL certificate</span>
+            <span class="toggle-subtitle">Keep certificate validation enabled for Service Layer requests.</span>
+          </span>
+        </label>
+        <label class="toggle-card" for="connIsActive">
+          <input id="connIsActive" type="checkbox" [(ngModel)]="connectionForm.isActive" [ngModelOptions]="{standalone:true}">
+          <span class="toggle-copy">
+            <span class="toggle-title">Active</span>
+            <span class="toggle-subtitle">Use this connection as the active default for SAP-related operations.</span>
+          </span>
+        </label>
       </div>
 
       <div class="dialog-actions">

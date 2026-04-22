@@ -29,6 +29,7 @@ export interface ApprovalInboxItemDto {
   stageOrder: number;
   submissionTitle?: string;
   documentNumber?: string;
+  pendingDocumentNumberPreview?: string;
   documentTypeName?: string;
   submittedByUserId?: string;
   submittedByUserName?: string;

@@ -76,6 +76,12 @@ export const routes: Routes = [
           .then(m => m.TableMenusListComponent),
         canActivate: [authGuard, adminGuard] // Admin only
       },
+      {
+        path: 'table-menus/:menuId',
+        loadComponent: () => import('./views/table-menus/table-menu-detail/table-menu-detail.component')
+          .then(m => m.TableMenuDetailComponent),
+        canActivate: [authGuard, adminGuard]
+      },
 
       // ===== Projects =====
       {
@@ -242,6 +248,21 @@ export const routes: Routes = [
         canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions
       },
 
+      // ===== Authenticated Form Preview =====
+      {
+        path: 'form-preview/:formCode',
+        loadComponent: () => import('./views/public-form/form-view.component')
+          .then(m => m.FormViewComponent),
+        canActivate: [authGuard]
+      },
+
+      {
+        path: 'form-preview/submission/success',
+        loadComponent: () => import('./views/public-form/form-submission-success/form-submission-success.component')
+          .then(m => m.FormSubmissionSuccessComponent),
+        canActivate: [authGuard]
+      },
+
       // ===== Create New Form Submission =====
       {
         path: 'document-types/:documentTypeId/submissions/new',
@@ -258,12 +279,12 @@ export const routes: Routes = [
         canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions
       },
 
-      // ===== Form Builder System ===== (Admin only)
+      // ===== Form Builder System =====
       {
         path: 'form-builder',
         loadComponent: () => import('./views/FormBuilder/form-builder/form-builder.component')
           .then(m => m.FormBuilderComponent),
-        canActivate: [authGuard, adminGuard], // Admin only - protect all form-builder routes
+        canActivate: [authGuard],
         children: [
           // Default route للـ form-builder
           { 
@@ -297,7 +318,8 @@ export const routes: Routes = [
           { 
             path: 'stored-procedures', 
             loadComponent: () => import('./views/FormBuilder/components/stored-procedures-list/stored-procedures-list.component')
-              .then(m => m.StoredProceduresListComponent) 
+              .then(m => m.StoredProceduresListComponent),
+            canActivate: [authGuard, adminGuard]
           },
           
           // حقول تبويب معين (مثال: form-builder/fields/10)
@@ -332,14 +354,16 @@ export const routes: Routes = [
           { 
             path: 'attachment-types', 
             loadComponent: () => import('./views/attachment-types/attachment-types-list/attachment-types-list.component')
-              .then(m => m.AttachmentTypesListComponent) 
+              .then(m => m.AttachmentTypesListComponent),
+            canActivate: [authGuard, adminGuard]
           },
           
           // Copy To Document
           { 
             path: 'copy-to-document', 
             loadComponent: () => import('./views/FormBuilder/components/copy-to-document/copy-to-document.component')
-              .then(m => m.CopyToDocumentComponent) 
+              .then(m => m.CopyToDocumentComponent),
+            canActivate: [authGuard, adminGuard]
           },
           
           // NOTE: Field options are now managed directly inside the Fields screen

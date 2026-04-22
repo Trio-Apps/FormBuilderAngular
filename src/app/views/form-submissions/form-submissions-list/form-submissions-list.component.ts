@@ -3848,12 +3848,12 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     if (!submission?.id) return false;
     if (this.loadingCopyToDocumentSubmissionId === submission.id) return false;
     const normalizedStatus = (submission.status || '').trim().toLowerCase();
-    return normalizedStatus === 'submitted' || normalizedStatus === 'draft' || normalizedStatus === 'approved';
+    return normalizedStatus === 'posted';
   }
 
   getManualCopyButtonTitle(submission: FormSubmissionDto): string {
     if (!this.canExecuteManualCopyToDocument(submission)) {
-      return 'Copy is available only for draft, submitted, or approved records.';
+      return 'Copy is available only for posted records.';
     }
     return 'Run manual Copy To Document setups for this submission.';
   }
@@ -3901,9 +3901,11 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         }
 
         this.messageService.add({
-          severity: 'warn',
+          severity: successCount > 0 ? 'warn' : 'error',
           summary: 'Copy To Document',
-          detail: `${successCount} succeeded, ${failedCount} failed.`
+          detail: successCount > 0
+            ? `${successCount} succeeded, ${failedCount} failed. ${this.getManualCopyFailureMessage(response)}`
+            : this.getManualCopyFailureMessage(response)
         });
       },
       error: (error) => {
@@ -3915,6 +3917,23 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         });
       }
     });
+  }
+
+  private getManualCopyFailureMessage(response: any): string {
+    const failedItems = Array.isArray(response?.items)
+      ? response.items.filter((item: any) => !item?.success)
+      : [];
+
+    const messages = failedItems
+      .map((item: any) => String(item?.errorMessage || '').trim())
+      .filter((message: string) => !!message);
+
+    if (messages.length === 0) {
+      return 'Manual Copy To Document setups failed for this submission.';
+    }
+
+    const uniqueMessages = Array.from(new Set(messages));
+    return uniqueMessages.slice(0, 2).join(' | ');
   }
 
   canDownloadCrystalReport(submission: FormSubmissionDto): boolean {

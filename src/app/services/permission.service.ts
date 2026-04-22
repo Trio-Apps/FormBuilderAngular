@@ -75,9 +75,9 @@ export class PermissionService {
   private permissionsSubject = new BehaviorSubject<string[]>([]);
   public permissions$ = this.permissionsSubject.asObservable();
   
-  // Cache key for localStorage
-  private readonly CACHE_KEY = 'user_permissions';
-  private readonly CACHE_EXPIRY_KEY = 'user_permissions_expiry';
+  // Legacy cache keys kept for cleanup only
+  private readonly LEGACY_CACHE_KEY = 'user_permissions';
+  private readonly LEGACY_CACHE_EXPIRY_KEY = 'user_permissions_expiry';
   private readonly CACHE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
   
   constructor(
@@ -354,8 +354,8 @@ export class PermissionService {
   
   private cachePermissions(permissions: string[]): void {
     try {
-      localStorage.setItem(this.CACHE_KEY, JSON.stringify(permissions));
-      localStorage.setItem(this.CACHE_EXPIRY_KEY, (Date.now() + this.CACHE_DURATION_MS).toString());
+      localStorage.setItem(this.getCacheKey(), JSON.stringify(permissions));
+      localStorage.setItem(this.getCacheExpiryKey(), (Date.now() + this.CACHE_DURATION_MS).toString());
     } catch (e) {
       console.warn('[PermissionService] Failed to cache permissions:', e);
     }
@@ -363,8 +363,10 @@ export class PermissionService {
   
   private loadCachedPermissions(): void {
     try {
-      const expiry = localStorage.getItem(this.CACHE_EXPIRY_KEY);
-      const cached = localStorage.getItem(this.CACHE_KEY);
+      this.clearLegacyCache();
+
+      const expiry = localStorage.getItem(this.getCacheExpiryKey());
+      const cached = localStorage.getItem(this.getCacheKey());
       
       if (expiry && cached && Date.now() < parseInt(expiry, 10)) {
         const permissions = JSON.parse(cached) as string[];
@@ -380,11 +382,29 @@ export class PermissionService {
   
   private clearCache(): void {
     try {
-      localStorage.removeItem(this.CACHE_KEY);
-      localStorage.removeItem(this.CACHE_EXPIRY_KEY);
+      localStorage.removeItem(this.getCacheKey());
+      localStorage.removeItem(this.getCacheExpiryKey());
+      this.clearLegacyCache();
     } catch (e) {
       console.warn('[PermissionService] Failed to clear cache:', e);
     }
+  }
+
+  private getCacheKey(): string {
+    const userId = this.storageService.getUserId();
+    const username = this.storageService.getUsername();
+    return `user_permissions:${userId ?? username ?? 'anonymous'}`;
+  }
+
+  private getCacheExpiryKey(): string {
+    const userId = this.storageService.getUserId();
+    const username = this.storageService.getUsername();
+    return `user_permissions_expiry:${userId ?? username ?? 'anonymous'}`;
+  }
+
+  private clearLegacyCache(): void {
+    localStorage.removeItem(this.LEGACY_CACHE_KEY);
+    localStorage.removeItem(this.LEGACY_CACHE_EXPIRY_KEY);
   }
   
   // ==================== Admin API Methods ====================

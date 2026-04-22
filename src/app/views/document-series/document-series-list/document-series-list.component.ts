@@ -107,6 +107,7 @@ export class DocumentSeriesListComponent implements OnInit {
       template: ['', [Validators.required, Validators.maxLength(150)]],
       sequenceStart: [1, [Validators.required, Validators.min(1)]],
       sequencePadding: [3, [Validators.required, Validators.min(1), Validators.max(10)]],
+      allowSequenceOverflow: [false],
       resetPolicy: ['Yearly' as DocumentSeriesResetPolicy, [Validators.required]],
       generateOn: ['Submit' as DocumentSeriesGenerateOn, [Validators.required]],
       nextNumber: [1, [Validators.required, Validators.min(1)]],
@@ -164,6 +165,7 @@ export class DocumentSeriesListComponent implements OnInit {
       template: this.templatePresets[0].value,
       sequenceStart: 1,
       sequencePadding: 3,
+      allowSequenceOverflow: false,
       resetPolicy: 'Yearly',
       generateOn: 'Submit',
       nextNumber: 1,
@@ -189,6 +191,7 @@ export class DocumentSeriesListComponent implements OnInit {
       template: currentTemplate,
       sequenceStart: item.sequenceStart || item.nextNumber || 1,
       sequencePadding: item.sequencePadding || 3,
+      allowSequenceOverflow: !!item.allowSequenceOverflow,
       resetPolicy: item.resetPolicy || 'Yearly',
       generateOn: item.generateOn || 'Submit',
       nextNumber: item.nextNumber || 1,
@@ -352,7 +355,9 @@ export class DocumentSeriesListComponent implements OnInit {
     const sequenceStart = Number(formData.sequenceStart || 1);
     const sequencePadding = Number(formData.sequencePadding || 3);
     const nextNumber = Number(formData.nextNumber || sequenceStart || 1);
-    const generatedSeriesCode = this.generateSeriesCodeForCompatibility(template, formData.seriesName);
+    const allowSequenceOverflow = !!formData.allowSequenceOverflow;
+    const generatedSeriesCode = this.editingSeries?.seriesCode
+      || this.generateSeriesCodeForCompatibility(template, formData.seriesName, formData.projectId);
 
     if (this.editingSeries?.id) {
       const isLocked = this.isEditingLocked();
@@ -368,6 +373,7 @@ export class DocumentSeriesListComponent implements OnInit {
         updateDto.seriesCode = generatedSeriesCode;
         updateDto.sequenceStart = sequenceStart;
         updateDto.sequencePadding = sequencePadding;
+        updateDto.allowSequenceOverflow = allowSequenceOverflow;
         updateDto.resetPolicy = formData.resetPolicy;
         updateDto.generateOn = formData.generateOn;
         updateDto.nextNumber = nextNumber;
@@ -399,6 +405,7 @@ export class DocumentSeriesListComponent implements OnInit {
       seriesCode: generatedSeriesCode,
       sequenceStart,
       sequencePadding,
+      allowSequenceOverflow,
       resetPolicy: formData.resetPolicy,
       generateOn: formData.generateOn,
       nextNumber,
@@ -523,7 +530,7 @@ export class DocumentSeriesListComponent implements OnInit {
     return [...new Set(matches)].filter(token => !this.supportedSeriesPlaceholders.includes(token));
   }
 
-  private generateSeriesCodeForCompatibility(template: string, seriesName: string): string {
+  private generateSeriesCodeForCompatibility(template: string, seriesName: string, projectId?: number | null): string {
     const staticPart = template
       .replace(/\{[A-Z]+\}/g, '')
       .replace(/[^A-Za-z0-9\-_\/]/g, '')
@@ -532,11 +539,15 @@ export class DocumentSeriesListComponent implements OnInit {
       .replace(/\/{2,}/g, '/')
       .replace(/^[-_/]+|[-_/]+$/g, '');
 
-    if (staticPart) {
-      return staticPart.slice(0, 50);
-    }
+    const baseCode = (staticPart || String(seriesName || 'SERIES'))
+      .toUpperCase()
+      .replace(/[^A-Z0-9\-_\/]/g, '')
+      .slice(0, 35) || 'SERIES';
 
-    return String(seriesName || 'SERIES').toUpperCase().replace(/[^A-Z0-9\-_]/g, '').slice(0, 50);
+    const scopePart = projectId ? `P${projectId}` : 'GLOBAL';
+    const uniquePart = Date.now().toString().slice(-8);
+
+    return `${baseCode}-${scopePart}-${uniquePart}`.slice(0, 50);
   }
 
   private applyEditabilityState(): void {

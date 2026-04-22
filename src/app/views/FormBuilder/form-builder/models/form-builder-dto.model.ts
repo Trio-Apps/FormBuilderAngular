@@ -20,6 +20,8 @@ export interface FormBuilderDto {
   tabs?: FormTabDto[];
   fieldsCount?: number;
   tabsCount?: number;
+  submissionViewerUserIds?: number[];
+  formEditorUserIds?: number[];
   formRules?: FormRule[]; // ✅ Form Rules for dynamic behavior
 }
 
@@ -34,6 +36,8 @@ export interface CreateFormBuilderDto {
   sapExecutionMode?: 'OnSubmit' | 'OnFinalApproval' | 'OnSpecificWorkflowStage';
   isActive?: boolean;
   isDeleted?: boolean;
+  submissionViewerUserIds?: number[];
+  formEditorUserIds?: number[];
 }
 
 export interface UpdateFormBuilderDto {
@@ -47,6 +51,8 @@ export interface UpdateFormBuilderDto {
   sapExecutionMode?: 'OnSubmit' | 'OnFinalApproval' | 'OnSpecificWorkflowStage';
   isActive?: boolean;
   isDeleted?: boolean;
+  submissionViewerUserIds?: number[];
+  formEditorUserIds?: number[];
 }
 
 export interface FormTabDto {
@@ -324,6 +330,9 @@ export interface GetFieldOptionsRequestDto {
   fieldId: number;
   context?: Record<string, any> | null;
   requestBodyJson?: string | null; // For API sources only
+  search?: string | null;
+  skip?: number | null;
+  take?: number | null;
 }
 
 export interface PreviewDataSourceRequestDto {
@@ -449,6 +458,8 @@ export interface CopyToDocumentResultDto {
   success: boolean;
   targetDocumentId?: number;
   targetDocumentNumber?: string;
+  targetDocumentTypeId?: number;
+  targetFormId?: number;
   errorMessage?: string;
   fieldsCopied?: number;
   gridRowsCopied?: number;

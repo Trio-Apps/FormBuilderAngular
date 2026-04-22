@@ -12,6 +12,8 @@ export interface DocumentType {
   parentMenuName?: string;
   defaultSeriesId?: number | null;
   defaultSeriesName?: string | null;
+  seriesDateFieldId?: number | null;
+  seriesDateFieldName?: string | null;
   approvalWorkflowId?: number | null;
   approvalWorkflowName?: string;
 }
@@ -24,6 +26,7 @@ export interface CreateDocumentTypeDto {
   menuOrder?: number;
   parentMenuId?: number;
   defaultSeriesId?: number | null;
+  seriesDateFieldId?: number | null;
   isActive?: boolean;
   isDeleted?: boolean;
   approvalWorkflowId?: number | null; // Optional - null means no workflow (auto-approve)
@@ -37,6 +40,7 @@ export interface UpdateDocumentTypeDto {
   menuOrder?: number;
   parentMenuId?: number | null; // Allow null to explicitly remove parent relationship
   defaultSeriesId?: number | null;
+  seriesDateFieldId?: number | null;
   isActive?: boolean;
   approvalWorkflowId?: number | null; // Optional - null means no workflow (auto-approve)
 }
@@ -65,6 +69,7 @@ export interface DocumentSeries {
   seriesCode: string; // Prefix (e.g., LC-AND1-2025), max 50 chars
   sequenceStart?: number;
   sequencePadding?: number;
+  allowSequenceOverflow?: boolean;
   resetPolicy?: DocumentSeriesResetPolicy;
   generateOn?: DocumentSeriesGenerateOn;
   nextNumber: number; // Next running value
@@ -89,6 +94,7 @@ export interface CreateDocumentSeriesDto {
   seriesCode: string; // Required - Prefix, max 50 chars
   sequenceStart?: number;
   sequencePadding?: number;
+  allowSequenceOverflow?: boolean;
   resetPolicy?: DocumentSeriesResetPolicy;
   generateOn?: DocumentSeriesGenerateOn;
   nextNumber?: number; // Optional - default: 1
@@ -108,6 +114,7 @@ export interface UpdateDocumentSeriesDto {
   seriesCode?: string;
   sequenceStart?: number;
   sequencePadding?: number;
+  allowSequenceOverflow?: boolean;
   resetPolicy?: DocumentSeriesResetPolicy;
   generateOn?: DocumentSeriesGenerateOn;
   nextNumber?: number;

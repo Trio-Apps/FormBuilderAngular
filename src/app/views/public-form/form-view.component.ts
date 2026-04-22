@@ -105,10 +105,15 @@ export class FormViewComponent implements OnInit {
   // Field DataSource state
   fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
   loadingFieldOptions: { [fieldId: number]: boolean } = {}; // Loading state for each field
+  searchableFieldQueries: { [fieldId: number]: string } = {};
+  searchableFieldSelectedLabels: { [fieldId: number]: string } = {};
+  searchableFieldDropdownOpen: { [fieldId: number]: boolean } = {};
   private _attemptedLoadOptions: { [fieldId: number]: boolean } = {}; // Track if we've attempted to load options for a field
+  private _resolvedExternalFieldOptions: { [fieldId: number]: boolean } = {}; // Track completed datasource loads, even when result is empty
   private _loggedFieldOptions: { [fieldId: number]: boolean } = {}; // Track logged fields to avoid console spam
   private _loggedFieldNoOptions: { [fieldId: number]: boolean } = {}; // Track logged "no options" warnings
   private _fieldTypeCache: { [fieldId: number]: string } = {}; // Cache field types to avoid recalculation
+  private searchableFieldSearchTimers: { [fieldId: number]: ReturnType<typeof setTimeout> | undefined } = {};
   
   // Field Types cache - loaded from API
   fieldTypes: FieldTypeDto[] = []; // Active field types loaded from API
@@ -733,7 +738,7 @@ export class FormViewComponent implements OnInit {
    * Only loads from API/LookupTable, not from Static (Static options are already in field.fieldOptions)
    * Automatically builds context from formValues if not provided
    */
-  loadFieldOptionsFromDataSource(field: FormFieldDto, context?: Record<string, any>): void {
+  loadFieldOptionsFromDataSource(field: FormFieldDto, context?: Record<string, any>, searchTerm?: string): void {
     if (!field.id) return;
 
     // Check if field has options type (select, radio, checkbox)
@@ -858,6 +863,7 @@ export class FormViewComponent implements OnInit {
       // narrow it inside the subscribe handlers.
       const dataSourceSourceType = dataSource.sourceType;
       // Set loading state
+      this._resolvedExternalFieldOptions[field.id] = false;
       this.loadingFieldOptions[field.id] = true;
 
       // Build context if not provided and DataSource requires it
@@ -875,6 +881,7 @@ export class FormViewComponent implements OnInit {
       // Set timeout for DataSource loading (5 seconds)
       const dataSourceTimeoutId = setTimeout(() => {
         if (this.loadingFieldOptions[field.id]) {
+          this._resolvedExternalFieldOptions[field.id] = true;
           this.loadingFieldOptions[field.id] = false;
           this.cdr.detectChanges();
         }
@@ -886,7 +893,14 @@ export class FormViewComponent implements OnInit {
         sourceType: dataSourceSourceType
       });
       
-      this.fieldDataSourceService.getFieldOptions(field.id, finalContext).subscribe({
+      const requestOptions = isFormSubmissions
+        ? {
+            search: searchTerm?.trim() || undefined,
+            take: 50
+          }
+        : undefined;
+
+      this.fieldDataSourceService.getFieldOptions(field.id, finalContext, requestOptions).subscribe({
         next: (options: FieldOptionResponse[]) => {
           clearTimeout(dataSourceTimeoutId);
           
@@ -919,6 +933,7 @@ export class FormViewComponent implements OnInit {
           });
           // Fallback to static options on error
           this.fieldDataSourceOptions[field.id] = [];
+          this._resolvedExternalFieldOptions[field.id] = true;
           this.loadingFieldOptions[field.id] = false;
           this.cdr.detectChanges();
         },
@@ -1112,11 +1127,12 @@ export class FormViewComponent implements OnInit {
     const hasExternalDataSource = dataSource && 
                                  dataSource.isActive && 
                                  (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana || isFormSubmissions);
+    const externalOptionsResolved = !!this._resolvedExternalFieldOptions[field.id];
 
     // External data sources should always be retried when no options are loaded yet.
     // This avoids getting stuck in a state where a previous lazy-load attempt happened
     // before the datasource or field type metadata was fully available.
-    if (staticOptions.length === 0 && hasExternalDataSource && !this.loadingFieldOptions[field.id]) {
+    if (staticOptions.length === 0 && hasExternalDataSource && !this.loadingFieldOptions[field.id] && !externalOptionsResolved) {
       this.loadFieldOptionsFromDataSource(field);
       return [];
     }
@@ -1171,6 +1187,142 @@ export class FormViewComponent implements OnInit {
     // Removed verbose logging
 
     return processedOptions;
+  }
+
+  /**
+   * Use a searchable server-backed input for Form Submissions dropdowns.
+   */
+  isSearchableFormSubmissionsField(field: FormFieldDto): boolean {
+    const sourceType = (field.fieldDataSource?.sourceType || '').trim().toLowerCase();
+    return this.getFieldType(field) === 'select' &&
+      !field.fieldType?.allowMultiple &&
+      sourceType === 'formsubmissions';
+  }
+
+  getSearchableFieldQuery(field: FormFieldDto): string {
+    if (!field.id) {
+      return '';
+    }
+
+    if (this.searchableFieldQueries[field.id] !== undefined) {
+      return this.searchableFieldQueries[field.id];
+    }
+
+    const currentValue = this.getFieldValue(field);
+    if (currentValue === null || currentValue === undefined || currentValue === '') {
+      return '';
+    }
+
+    const selectedOption = this.getFieldOptions(field)
+      .find(opt => String(opt.optionValue ?? opt.value ?? '') === String(currentValue));
+
+    if (selectedOption) {
+      const selectedLabel = this.getOptionText(selectedOption);
+      this.searchableFieldSelectedLabels[field.id] = selectedLabel;
+      return selectedLabel;
+    }
+
+    return this.searchableFieldSelectedLabels[field.id] || String(currentValue);
+  }
+
+  openSearchableFieldDropdown(field: FormFieldDto): void {
+    if (!field.id || !this.isFieldEditable(field)) {
+      return;
+    }
+
+    this.searchableFieldDropdownOpen[field.id] = true;
+    this.loadFieldOptionsFromDataSource(field, undefined, this.searchableFieldQueries[field.id] || '');
+  }
+
+  onSearchableFieldInput(field: FormFieldDto, event: Event): void {
+    if (!field.id) {
+      return;
+    }
+
+    const value = (event.target as HTMLInputElement).value || '';
+    this.searchableFieldQueries[field.id] = value;
+    this.searchableFieldDropdownOpen[field.id] = true;
+    const selectedLabel = this.searchableFieldSelectedLabels[field.id];
+
+    if (selectedLabel !== undefined && value !== selectedLabel) {
+      delete this.searchableFieldSelectedLabels[field.id];
+      this.onFieldValueChange(field.id, '', field.fieldCode);
+    }
+
+    if (value.trim() === '') {
+      delete this.searchableFieldSelectedLabels[field.id];
+      this.onFieldValueChange(field.id, '', field.fieldCode);
+    }
+
+    if (this.searchableFieldSearchTimers[field.id]) {
+      clearTimeout(this.searchableFieldSearchTimers[field.id]);
+    }
+
+    this.searchableFieldSearchTimers[field.id] = setTimeout(() => {
+      this.loadFieldOptionsFromDataSource(field, undefined, value);
+    }, 250);
+  }
+
+  selectSearchableFieldOption(field: FormFieldDto, option: any): void {
+    if (!field.id) {
+      return;
+    }
+
+    const optionText = this.getOptionText(option);
+    const optionValue = option?.optionValue ?? option?.value ?? '';
+
+    this.searchableFieldQueries[field.id] = optionText;
+    this.searchableFieldSelectedLabels[field.id] = optionText;
+    this.searchableFieldDropdownOpen[field.id] = false;
+    this.onFieldValueChange(field.id, optionValue, field.fieldCode);
+  }
+
+  onSearchableFieldBlur(field: FormFieldDto): void {
+    if (!field.id) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      this.searchableFieldDropdownOpen[field.id!] = false;
+      this.validateSearchableFieldSelection(field);
+    }, 150);
+  }
+
+  private validateSearchableFieldSelection(field: FormFieldDto): string | null {
+    if (!field.id || !this.isSearchableFormSubmissionsField(field)) {
+      return null;
+    }
+
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    const query = (this.searchableFieldQueries[field.id] || '').trim();
+    const value = this.getFieldValue(field);
+
+    if (!query && (value === undefined || value === null || value === '')) {
+      return null;
+    }
+
+    if (value === undefined || value === null || value === '') {
+      const errorMsg = this.translationService.getCurrentLanguage() === 'ar'
+        ? 'يرجى اختيار قيمة من القائمة'
+        : 'Please select a value from the list';
+      this.fieldValidationErrors[fieldCode] = errorMsg;
+      return errorMsg;
+    }
+
+    const selectedLabel = (this.searchableFieldSelectedLabels[field.id] || '').trim();
+    if (query && selectedLabel && query !== selectedLabel) {
+      const errorMsg = this.translationService.getCurrentLanguage() === 'ar'
+        ? 'يرجى اختيار قيمة من القائمة'
+        : 'Please select a value from the list';
+      this.fieldValidationErrors[fieldCode] = errorMsg;
+      return errorMsg;
+    }
+
+    return null;
+  }
+
+  shouldShowSearchableFieldDropdown(field: FormFieldDto): boolean {
+    return !!field.id && !!this.searchableFieldDropdownOpen[field.id];
   }
 
   /**
@@ -2172,6 +2324,14 @@ export class FormViewComponent implements OnInit {
 
           // Validate field-specific formats (email, phone, password)
           // Only validate if field has a value (required validation is handled above)
+          if (this.isSearchableFormSubmissionsField(field)) {
+            const searchableSelectionError = this.validateSearchableFieldSelection(field);
+            if (searchableSelectionError) {
+              errors.push(searchableSelectionError);
+              return;
+            }
+          }
+
           if (value !== undefined && value !== null && value !== '' && 
               !(Array.isArray(value) && value.length === 0)) {
             const validationError = this.validateFieldValue(field, value);
@@ -3099,6 +3259,10 @@ export class FormViewComponent implements OnInit {
     const target = event.target as HTMLElement;
     if (!target.closest('.language-dropdown-wrapper')) {
       this.showLanguageDropdown = false;
+    }
+
+    if (!target.closest('.searchable-select')) {
+      this.searchableFieldDropdownOpen = {};
     }
   }
 
@@ -5791,7 +5955,11 @@ export class FormViewComponent implements OnInit {
         }
         
         // Navigate to success page
-        this.router.navigate(['/forms/submission/success'], { queryParams });
+    const isAuthenticatedPreview = this.router.url.includes('/form-preview/');
+    this.router.navigate(
+      [isAuthenticatedPreview ? '/form-preview/submission/success' : '/forms/submission/success'],
+      { queryParams }
+    );
       } catch (submitError: any) {
         console.error('[FormView] Error during final submit:', submitError);
         const currentLang = this.translationService.getCurrentLanguage();

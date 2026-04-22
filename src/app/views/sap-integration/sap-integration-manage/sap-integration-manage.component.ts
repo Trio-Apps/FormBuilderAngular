@@ -63,6 +63,11 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
     userName: '',
     password: '',
     verifySsl: true,
+    hanaServer: '',
+    hanaUserName: '',
+    hanaPassword: '',
+    hanaSchema: '',
+    hanaMaxPoolSize: null,
     isActive: true
   };
 
@@ -144,6 +149,11 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
       userName: '',
       password: '',
       verifySsl: true,
+      hanaServer: '',
+      hanaUserName: '',
+      hanaPassword: '',
+      hanaSchema: '',
+      hanaMaxPoolSize: null,
       isActive: true
     };
   }
@@ -169,6 +179,11 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
       userName: row.userName || '',
       password: '',
       verifySsl: row.verifySsl !== false,
+      hanaServer: row.hanaServer || '',
+      hanaUserName: row.hanaUserName || '',
+      hanaPassword: '',
+      hanaSchema: row.hanaSchema || '',
+      hanaMaxPoolSize: row.hanaMaxPoolSize ?? null,
       isActive: row.isActive !== false
     };
     this.showModal = true;
@@ -182,6 +197,32 @@ export class SapIntegrationManageComponent implements OnInit, OnDestroy {
 
     if (!this.editingConnectionId && !this.connectionForm.password) {
       this.messageService.add({ severity: 'warn', summary: 'Validation', detail: 'Password is required for new connection.' });
+      return;
+    }
+
+    const hasAnyHanaValue = !!(
+      (this.connectionForm.hanaServer || '').trim() ||
+      (this.connectionForm.hanaUserName || '').trim() ||
+      (this.connectionForm.hanaPassword || '').trim() ||
+      (this.connectionForm.hanaSchema || '').trim() ||
+      this.connectionForm.hanaMaxPoolSize
+    );
+
+    if (hasAnyHanaValue && (!(this.connectionForm.hanaServer || '').trim() || !(this.connectionForm.hanaUserName || '').trim())) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'When using HANA settings, HANA Server and HANA Username are required.'
+      });
+      return;
+    }
+
+    if (hasAnyHanaValue && !this.editingConnectionId && !(this.connectionForm.hanaPassword || '').trim()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation',
+        detail: 'HANA Password is required for a new connection when HANA settings are provided.'
+      });
       return;
     }
 

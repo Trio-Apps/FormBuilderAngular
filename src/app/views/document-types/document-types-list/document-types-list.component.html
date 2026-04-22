@@ -16,7 +16,7 @@
         <button class="btn-icon" (click)="loadDocumentTypes()" [disabled]="loading.documentTypes" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" 
+        <button *ngIf="isAdmin" class="btn-primary" 
                 (click)="openAddModal()" 
                 [disabled]="loading.documentTypes || (!permissionService.canCreateDocuments() && !permissionService.canManageDocuments())"
                 [title]="permissionService.canCreateDocuments() || permissionService.canManageDocuments() ? 'Add New Document Type' : 'You do not have permission to create document types'">
@@ -60,9 +60,9 @@
           <i class="pi pi-file"></i>
         </div>
         <h4>No Document Types Configured</h4>
-        <p *ngIf="canCreateDocuments || canManageDocuments">There are no document types yet. Click "Add Document Type" to create one.</p>
-        <p *ngIf="!canCreateDocuments && !canManageDocuments">There are no document types available for submission.</p>
-        <button pButton 
+        <p *ngIf="isAdmin && (canCreateDocuments || canManageDocuments)">There are no document types yet. Click "Add Document Type" to create one.</p>
+        <p *ngIf="!isAdmin || (!canCreateDocuments && !canManageDocuments)">There are no document types available for submission.</p>
+        <button *ngIf="isAdmin" pButton 
                 label="Add Document Type" 
                 icon="pi pi-plus" 
                 class="p-button-primary btn-primary" 
@@ -126,36 +126,30 @@
                   </button>
 
                   <!-- Permission-based management -->
-                  <button
-                    *appHasPermission="'FormRule_Allow_View'"
-                    class="action-btn action-rules"
-                    [routerLink]="['/form-builder/rules', documentType.formBuilderId]"
-                    [disabled]="!documentType.formBuilderId || (!permissionService.canViewFormRules() && !permissionService.canManageFormRules())"
-                    [title]="permissionService.canViewFormRules() || permissionService.canManageFormRules() ? 'Copy To Document Mapping' : 'You do not have permission to view form rules'">
-                    <i class="pi pi-share-alt"></i>
-                  </button>
-                  <button 
-                    *appHasPermission="'Document_Allow_Manage'"
-                    class="action-btn action-rules"
-                    [routerLink]="['/approval-workflows']"
-                    [queryParams]="{ documentTypeId: documentType.id }"
-                    [title]="'Manage Approval Workflow'">
-                    <i class="pi pi-sitemap"></i>
-                  </button>
-                  <button 
-                    *appHasPermission="'Document_Allow_Edit'"
-                    class="action-btn action-edit"
-                    (click)="openEditModal(documentType)"
-                    [title]="canEditDocuments || canManageDocuments ? 'Edit' : 'No permission to edit'">
-                    <i class="pi pi-pencil"></i>
-                  </button>
-                  <button 
-                    *appHasPermission="'Document_Allow_Delete'"
-                    class="action-btn action-delete"
-                    (click)="deleteDocumentType(documentType)"
-                    [title]="canDeleteDocuments || canManageDocuments ? 'Delete' : 'No permission to delete'">
-                    <i class="pi pi-trash"></i>
-                  </button>
+                  <ng-container *ngIf="isAdmin">
+                    <button 
+                      *appHasPermission="'Document_Allow_Manage'"
+                      class="action-btn action-rules"
+                      [routerLink]="['/approval-workflows']"
+                      [queryParams]="{ documentTypeId: documentType.id }"
+                      [title]="'Manage Approval Workflow'">
+                      <i class="pi pi-sitemap"></i>
+                    </button>
+                    <button 
+                      *appHasPermission="'Document_Allow_Edit'"
+                      class="action-btn action-edit"
+                      (click)="openEditModal(documentType)"
+                      [title]="canEditDocuments || canManageDocuments ? 'Edit' : 'No permission to edit'">
+                      <i class="pi pi-pencil"></i>
+                    </button>
+                    <button 
+                      *appHasPermission="'Document_Allow_Delete'"
+                      class="action-btn action-delete"
+                      (click)="deleteDocumentType(documentType)"
+                      [title]="canDeleteDocuments || canManageDocuments ? 'Delete' : 'No permission to delete'">
+                      <i class="pi pi-trash"></i>
+                    </button>
+                  </ng-container>
                 </app-table-actions>
               </td>
             </tr>
@@ -277,6 +271,28 @@
         </select>
         <small class="form-text text-muted" *ngIf="loading.allSeries">
           <i class="pi pi-spin pi-spinner"></i> Loading document series...
+        </small>
+      </div>
+
+      <div class="form-group" *ngIf="requiresSeriesDateField()">
+        <label for="seriesDateFieldId">Series Date Field</label>
+        <select
+          id="seriesDateFieldId"
+          formControlName="seriesDateFieldId"
+          class="p-inputtext w-full">
+          <option [ngValue]="null">Use current date</option>
+          <option *ngFor="let field of availableSeriesDateFields" [ngValue]="field.id">
+            {{ getSeriesDateFieldDisplayName(field) }}
+          </option>
+        </select>
+        <small class="form-text text-muted" *ngIf="loadingSeriesDateFields">
+          <i class="pi pi-spin pi-spinner"></i> Loading date fields from the selected form...
+        </small>
+        <small class="form-text text-muted" *ngIf="!loadingSeriesDateFields && availableSeriesDateFields.length === 0">
+          No date fields were found in the selected form. The system will fall back to the current date.
+        </small>
+        <small class="form-text text-muted" *ngIf="!loadingSeriesDateFields && availableSeriesDateFields.length > 0">
+          Choose which date field should drive the year/month/day tokens in the selected series. Leave empty to use the current date.
         </small>
       </div>
 
@@ -510,6 +526,7 @@
           <small class="p-error" *ngIf="seriesForm.get('sequencePadding')?.invalid && seriesForm.get('sequencePadding')?.touched">
             Sequence padding must be between 1 and 10
           </small>
+          <small class="form-text">If overflow is disabled, numbering stops at the last value allowed by this padding.</small>
         </div>
 
         <div class="form-group">
@@ -547,6 +564,14 @@
           <small class="p-error" *ngIf="seriesForm.get('nextNumber')?.invalid && seriesForm.get('nextNumber')?.touched">
             Current next sequence is required (minimum 1)
           </small>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <p-checkbox formControlName="allowSequenceOverflow" [binary]="true" inputId="seriesAllowOverflow"></p-checkbox>
+            <span>Allow sequence overflow beyond padding</span>
+          </label>
+          <small class="form-text">When disabled, 3 digits stop at 999. When enabled, numbering can continue to 1000 and beyond.</small>
         </div>
 
         <div class="form-group">

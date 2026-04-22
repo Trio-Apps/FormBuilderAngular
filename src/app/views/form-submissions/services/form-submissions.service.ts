@@ -6,16 +6,18 @@ import { environment } from '../../../environments/environment';
 import { ApproveSubmissionDto, RejectSubmissionDto, ApiResponse } from '../models/approve-reject-submission.model';
 
 export interface FormSubmissionDto {
-  id: number;
-  formBuilderId: number;
-  formName?: string;
+    id: number;
+    formBuilderId: number;
+    formName?: string;
   version: number;
   documentTypeId: number;
   documentTypeName?: string | null; // Can be null from backend
-  seriesId: number;
-  seriesCode?: string;
-  documentNumber?: string;
-  submittedByUserId?: string;
+    seriesId: number;
+    seriesCode?: string;
+    documentNumber?: string;
+    pendingDocumentNumberPreview?: string;
+    parentDocumentId?: number | null;
+    submittedByUserId?: string;
   submittedByUserName?: string;
   submittedDate: Date;
   status: string;
@@ -183,10 +185,12 @@ export class FormSubmissionsService {
       docuSignEnvelopeId: item?.docuSignEnvelopeId ?? item?.DocuSignEnvelopeId ?? null,
       signedAt: item?.signedAt ?? item?.SignedAt ?? null,
       sapIntegrationEnabled: Boolean(item?.sapIntegrationEnabled ?? item?.SapIntegrationEnabled),
-      submittedByUserId: item?.submittedByUserId ?? item?.SubmittedByUserId ?? '',
-      submittedByUserName: item?.submittedByUserName ?? item?.SubmittedByUserName ?? '',
-      documentNumber: item?.documentNumber ?? item?.DocumentNumber ?? '',
-      formName: item?.formName ?? item?.FormName ?? '',
+        submittedByUserId: item?.submittedByUserId ?? item?.SubmittedByUserId ?? '',
+        submittedByUserName: item?.submittedByUserName ?? item?.SubmittedByUserName ?? '',
+        documentNumber: item?.documentNumber ?? item?.DocumentNumber ?? '',
+        pendingDocumentNumberPreview: item?.pendingDocumentNumberPreview ?? item?.PendingDocumentNumberPreview ?? '',
+        parentDocumentId: item?.parentDocumentId ?? item?.ParentDocumentId ?? null,
+        formName: item?.formName ?? item?.FormName ?? '',
       documentTypeName: item?.documentTypeName ?? item?.DocumentTypeName ?? '',
       seriesCode: item?.seriesCode ?? item?.SeriesCode ?? '',
       submittedDate: item?.submittedDate ?? item?.SubmittedDate ?? null,

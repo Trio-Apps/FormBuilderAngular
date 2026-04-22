@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap, throwError, catchError, switchMap, of } from 'rxjs';
+import { Observable, tap, throwError, catchError, map, finalize, shareReplay } from 'rxjs';
 import { StorageService } from './storage.service';
 import { environment } from '../environments/environment';
 import { PermissionService } from '../services/permission.service';
@@ -15,11 +15,22 @@ export interface LoginCredentials {
 export interface LoginResponse {
   success: boolean;
   token?: string;
+  refreshToken?: string;
   role?: string;
   userId?: string | number; // User ID from backend
   expiresAt?: string;
+  refreshTokenExpiresAt?: string;
   errorMessage?: string;
   permissions?: string[]; // Optional: permissions from login response
+}
+
+export interface RefreshTokenResponse {
+  success: boolean;
+  token?: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  refreshTokenExpiresAt?: string;
+  errorMessage?: string;
 }
 
 @Injectable({
@@ -28,6 +39,7 @@ export interface LoginResponse {
 export class AuthService {
   private apiUrl = `${environment.apiUrl}/account`;
   private permissionService = inject(PermissionService);
+  private refreshRequest$: Observable<string> | null = null;
 
   constructor(
     private http: HttpClient,
@@ -68,10 +80,12 @@ export class AuthService {
 
           this.setSession(
             response.token,
+            response.refreshToken,
             credentials.username,
             response.role || 'User',
             userId,
-            expiresAtMs
+            expiresAtMs,
+            this.parseExpiryMs(response.refreshTokenExpiresAt)
           );
           
           // Load user permissions after successful login
@@ -106,11 +120,13 @@ export class AuthService {
   isAuthenticated(): boolean {
     const token = this.getToken();
     const isExpired = token ? this.isTokenExpired(token) : true;
-    const result = !!token && !isExpired;
+    const hasRefreshToken = this.storageService.hasRefreshToken();
+    const result = (!!token && !isExpired) || hasRefreshToken;
     
     console.log('[AuthService] isAuthenticated check:', {
       hasToken: !!token,
       isExpired,
+      hasRefreshToken,
       result,
       tokenPreview: token ? token.substring(0, 20) + '...' : null
     });
@@ -122,6 +138,10 @@ export class AuthService {
     return this.storageService.getToken();
   }
 
+  getRefreshToken(): string | null {
+    return this.storageService.getRefreshToken();
+  }
+
   userName(): string | null {
     return this.storageService.getUsername();
   }
@@ -130,8 +150,64 @@ export class AuthService {
     return this.storageService.getRole();
   }
 
-  private setSession(token: string, username: string, role: string, userId?: number, expiresAtMs?: number): void {
+  refreshAccessToken(): Observable<string> {
+    const currentRefreshToken = this.storageService.getRefreshToken();
+    if (!currentRefreshToken) {
+      return throwError(() => new Error('No refresh token available.'));
+    }
+
+    if (!this.refreshRequest$) {
+      this.refreshRequest$ = this.http.post<RefreshTokenResponse>(`${this.apiUrl}/refresh-token`, {
+        refreshToken: currentRefreshToken
+      }).pipe(
+        map((response) => {
+          if (!response.success || !response.token) {
+            throw new Error(response.errorMessage || 'Failed to refresh session.');
+          }
+
+          const accessTokenExpiryMs = this.parseExpiryMs(response.expiresAt);
+          const refreshTokenExpiryMs = this.parseExpiryMs(response.refreshTokenExpiresAt);
+
+          this.setSession(
+            response.token,
+            response.refreshToken || currentRefreshToken,
+            this.userName() || '',
+            this.role() || 'User',
+            this.storageService.getUserId() || undefined,
+            accessTokenExpiryMs,
+            refreshTokenExpiryMs
+          );
+
+          return response.token;
+        }),
+        catchError((error) => {
+          this.permissionService.clearPermissions();
+          this.clearSession();
+          return throwError(() => error);
+        }),
+        finalize(() => {
+          this.refreshRequest$ = null;
+        }),
+        shareReplay(1)
+      );
+    }
+
+    return this.refreshRequest$;
+  }
+
+  private setSession(
+    token: string,
+    refreshToken: string | undefined,
+    username: string,
+    role: string,
+    userId?: number,
+    expiresAtMs?: number,
+    refreshTokenExpiresAtMs?: number
+  ): void {
     this.storageService.setToken(token, expiresAtMs);
+    if (refreshToken) {
+      this.storageService.setRefreshToken(refreshToken, refreshTokenExpiresAtMs);
+    }
     this.storageService.setUserInfo(username, role, userId);
     
     console.log('[AuthService] Session set:', {
@@ -144,6 +220,15 @@ export class AuthService {
 
   private clearSession(): void {
     this.storageService.clear();
+  }
+
+  private parseExpiryMs(value?: string): number | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    const parsedExpiry = Date.parse(value);
+    return Number.isNaN(parsedExpiry) ? undefined : parsedExpiry;
   }
 
   private isTokenExpired(token: string): boolean {
@@ -180,8 +265,18 @@ export class AuthService {
     let errorMessage = 'حدث خطأ غير متوقع.';
     if (error.error instanceof ErrorEvent) {
       errorMessage = `خطأ في الشبكة: ${error.error.message}`;
+    } else if (typeof error.error === 'string' && error.error.trim()) {
+      errorMessage = error.error;
+    } else if (error.error && typeof error.error.message === 'string' && error.error.message.trim()) {
+      errorMessage = error.error.message;
+    } else if (error.error && error.error.message && typeof error.error.message.value === 'string' && error.error.message.value.trim()) {
+      errorMessage = error.error.message.value;
+    } else if (error.error && error.error.message && typeof error.error.message.name === 'string' && error.error.message.name.trim()) {
+      errorMessage = error.error.message.name;
     } else if (error.error && error.error.errorMessage) {
       errorMessage = error.error.errorMessage;
+    } else if (error.message) {
+      errorMessage = error.message;
     }
     return throwError(() => new Error(errorMessage));
   }

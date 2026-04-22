@@ -42,6 +42,8 @@ export interface CopyToDocumentResultDto {
   success: boolean;
   targetDocumentId?: number;
   targetDocumentNumber?: string;
+  targetDocumentTypeId?: number;
+  targetFormId?: number;
   errorMessage?: string;
   fieldsCopied: number;
   gridRowsCopied: number;

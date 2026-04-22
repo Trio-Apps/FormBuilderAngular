@@ -1,3 +1,8 @@
+:host {
+  --page-pad-x: 32px;
+  --page-pad-y: 16px;
+}
+
 .alert-rules-page-container {
   padding: 1rem;
 }
@@ -217,6 +222,22 @@
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
+}
+
+.main-content {
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
+}
+
+:host ::ng-deep app-table-shell,
+:host ::ng-deep app-table-shell .table-shell,
+:host ::ng-deep app-table-shell .table-card,
+:host ::ng-deep app-table-shell .table-wrapper,
+:host ::ng-deep app-table-shell .p-datatable,
+:host ::ng-deep app-table-shell .p-paginator {
+  width: 100% !important;
+  max-width: none !important;
 }
 
 .empty-message {
@@ -478,6 +499,25 @@
 @media (max-width: 900px) {
   .stats-row { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 1200px) {
+  :host {
+    --page-pad-x: 32px;
+  }
+}
+
+@media (max-width: 992px) {
+  :host {
+    --page-pad-x: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  :host {
+    --page-pad-x: 16px;
+    --page-pad-y: 14px;
+  }
 }
 
 

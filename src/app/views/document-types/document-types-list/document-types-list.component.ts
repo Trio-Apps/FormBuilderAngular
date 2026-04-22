@@ -9,6 +9,7 @@ import { DocumentTypesService } from '../../FormBuilder/services/document-types.
 import { FormsService } from '../../FormBuilder/services/forms.service';
 import { ProjectsService } from '../../projects/services/projects.service';
 import { ApprovalWorkflowService, ApprovalWorkflowDto } from '../../FormBuilder/services/approval-workflow.service';
+import { FieldsService } from '../../FormBuilder/services/fields.service';
 import {
   DocumentType,
   CreateDocumentTypeDto,
@@ -20,7 +21,7 @@ import {
   DocumentSeriesGenerateOn
 } from '../../FormBuilder/form-builder/models/document-types.model';
 import { ProjectDto } from '../../projects/models/project-dto.model';
-import { FormBuilderDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { FormBuilderDto, FormFieldDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -39,6 +40,7 @@ import { catchError, map } from 'rxjs/operators';
 import { AuthService } from '../../../auth/auth.service';
 import { PermissionService } from '../../../services/permission.service';
 import { HasPermissionDirective } from '../../../directives/has-permission.directive';
+import { StorageService } from '../../../auth/storage.service';
 
 @Component({
   selector: 'app-document-types-list',
@@ -125,6 +127,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
   // Parent Menu Options
   parentMenuOptions: DocumentType[] = [];
   loadingParentOptions = false;
+  availableSeriesDateFields: FormFieldDto[] = [];
+  loadingSeriesDateFields = false;
+  private loadedSeriesDateFieldsFormId: number | null = null;
 
   // Search Filter
   searchTerm = '';
@@ -136,14 +141,17 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
 
   // Subscription for permissions
   private permissionsSubscription?: Subscription;
+  private readonly formDependenciesSubscription = new Subscription();
 
   constructor(
     private route: ActivatedRoute,
     private documentTypesService: DocumentTypesService,
     private formsService: FormsService,
+    private fieldsService: FieldsService,
     private projectsService: ProjectsService,
     private approvalWorkflowService: ApprovalWorkflowService,
     private authService: AuthService,
+    private storageService: StorageService,
     public permissionService: PermissionService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
@@ -162,6 +170,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       menuOrder: [0, [Validators.min(0)]],
       parentMenuId: [null],
       defaultSeriesId: [null],
+      seriesDateFieldId: [null],
       isActive: [true]
     });
     
@@ -174,6 +183,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       seriesCode: ['', [Validators.maxLength(50)]],
       sequenceStart: [1, [Validators.required, Validators.min(1)]],
       sequencePadding: [3, [Validators.required, Validators.min(1), Validators.max(10)]],
+      allowSequenceOverflow: [false],
       resetPolicy: ['Yearly' as DocumentSeriesResetPolicy, [Validators.required]],
       generateOn: ['Submit' as DocumentSeriesGenerateOn, [Validators.required]],
       nextNumber: [1, [Validators.required, Validators.min(1)]],
@@ -219,6 +229,18 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     });
 
+    this.formDependenciesSubscription.add(
+      this.documentTypeForm.get('formBuilderId')!.valueChanges.subscribe(() => {
+        this.handleSeriesDateFieldDependencies();
+      })
+    );
+
+    this.formDependenciesSubscription.add(
+      this.documentTypeForm.get('defaultSeriesId')!.valueChanges.subscribe(() => {
+        this.handleSeriesDateFieldDependencies();
+      })
+    );
+
     const adminLanguagePreference = localStorage.getItem('adminLanguagePreference');
     if (adminLanguagePreference) {
       this.translationService.setLanguage(adminLanguagePreference as 'en' | 'ar');
@@ -244,18 +266,18 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       permissionServiceCanManage: this.permissionService.canManageDocuments()
     });
     
-    // Load all forms, document types, and projects
-    console.log('[DocumentTypesList] Calling loadForms()...');
-    this.loadForms();
-    
     console.log('[DocumentTypesList] Calling loadDocumentTypes()...');
     this.loadDocumentTypes();
 
-    console.log('[DocumentTypesList] Calling loadAllSeries()...');
-    this.loadAllSeries();
-    
-    // Projects / workflows are admin-only features (series/workflow management)
+    // Admin-only dependencies. Non-admin users only need the document types list
+    // used to create submissions, and should not hit management endpoints.
     if (this.isAdmin) {
+      console.log('[DocumentTypesList] Calling loadForms()...');
+      this.loadForms();
+
+      console.log('[DocumentTypesList] Calling loadAllSeries()...');
+      this.loadAllSeries();
+
       console.log('[DocumentTypesList] Admin user, loading projects...');
       this.loadProjects();
     }
@@ -304,14 +326,20 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     if (this.permissionsSubscription) {
       this.permissionsSubscription.unsubscribe();
     }
+    this.formDependenciesSubscription.unsubscribe();
   }
 
   /**
    * Load deleted document type IDs from localStorage (persists across sessions and logins)
    */
   private loadDeletedDocumentTypeIds(): void {
+    if (!this.isAdmin) {
+      this.deletedDocumentTypeIds = new Set();
+      return;
+    }
+
     try {
-      const savedIds = localStorage.getItem('deletedDocumentTypeIds');
+      const savedIds = localStorage.getItem(this.getDeletedDocumentTypeIdsStorageKey());
       if (savedIds) {
         const idsArray = JSON.parse(savedIds) as number[];
         this.deletedDocumentTypeIds = new Set(idsArray);
@@ -327,13 +355,23 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
    * Save deleted document type IDs to localStorage (persists across sessions and logins)
    */
   private saveDeletedDocumentTypeIds(): void {
+    if (!this.isAdmin) {
+      return;
+    }
+
     try {
       const idsArray = Array.from(this.deletedDocumentTypeIds);
-      localStorage.setItem('deletedDocumentTypeIds', JSON.stringify(idsArray));
+      localStorage.setItem(this.getDeletedDocumentTypeIdsStorageKey(), JSON.stringify(idsArray));
       console.log('[DocumentTypesList] Saved deleted document type IDs to localStorage:', idsArray);
     } catch (error) {
       console.error('[DocumentTypesList] Error saving deleted document type IDs to localStorage:', error);
     }
+  }
+
+  private getDeletedDocumentTypeIdsStorageKey(): string {
+    const userId = this.storageService.getUserId();
+    const username = this.storageService.getUsername();
+    return `deletedDocumentTypeIds:${userId ?? username ?? 'anonymous'}`;
   }
 
   loadForms(): void {
@@ -362,6 +400,98 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     });
   }
 
+  private handleSeriesDateFieldDependencies(): void {
+    const formBuilderId = Number(this.documentTypeForm.get('formBuilderId')?.value || 0);
+
+    if (!this.requiresSeriesDateField()) {
+      this.availableSeriesDateFields = [];
+      this.loadedSeriesDateFieldsFormId = null;
+      this.documentTypeForm.patchValue({ seriesDateFieldId: null }, { emitEvent: false });
+      this.cdr.detectChanges();
+      return;
+    }
+
+    if (!formBuilderId || Number.isNaN(formBuilderId)) {
+      this.availableSeriesDateFields = [];
+      this.loadedSeriesDateFieldsFormId = null;
+      this.documentTypeForm.patchValue({ seriesDateFieldId: null }, { emitEvent: false });
+      this.cdr.detectChanges();
+      return;
+    }
+
+    if (this.loadedSeriesDateFieldsFormId === formBuilderId && this.availableSeriesDateFields.length > 0) {
+      this.ensureSelectedSeriesDateFieldStillValid();
+      return;
+    }
+
+    this.loadSeriesDateFields(formBuilderId);
+  }
+
+  private loadSeriesDateFields(formBuilderId: number): void {
+    this.loadingSeriesDateFields = true;
+    this.fieldsService.getFieldsByFormId(formBuilderId).subscribe({
+      next: (fields: FormFieldDto[]) => {
+        this.availableSeriesDateFields = (fields || [])
+          .filter(field => field.isActive !== false)
+          .filter(field => this.isDateField(field))
+          .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
+        this.loadedSeriesDateFieldsFormId = formBuilderId;
+        this.loadingSeriesDateFields = false;
+        this.ensureSelectedSeriesDateFieldStillValid();
+        this.cdr.detectChanges();
+      },
+      error: (error: any) => {
+        console.error('Error loading series date fields:', error);
+        this.availableSeriesDateFields = [];
+        this.loadedSeriesDateFieldsFormId = null;
+        this.loadingSeriesDateFields = false;
+        this.documentTypeForm.patchValue({ seriesDateFieldId: null }, { emitEvent: false });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  private ensureSelectedSeriesDateFieldStillValid(): void {
+    const selectedFieldId = Number(this.documentTypeForm.get('seriesDateFieldId')?.value || 0);
+    if (!selectedFieldId) {
+      return;
+    }
+
+    const exists = this.availableSeriesDateFields.some(field => field.id === selectedFieldId);
+    if (!exists) {
+      this.documentTypeForm.patchValue({ seriesDateFieldId: null }, { emitEvent: false });
+    }
+  }
+
+  private isDateField(field: FormFieldDto): boolean {
+    const fieldTypeName = String(field.fieldTypeName || '').trim().toLowerCase();
+    if (fieldTypeName === 'date' || fieldTypeName === 'datetime') {
+      return true;
+    }
+
+    const fallbackType = String(field.type || '').trim().toLowerCase();
+    return fallbackType === 'date' || fallbackType === 'datetime';
+  }
+
+  requiresSeriesDateField(): boolean {
+    const selectedSeriesId = Number(this.documentTypeForm.get('defaultSeriesId')?.value || 0);
+    if (!selectedSeriesId) {
+      return false;
+    }
+
+    const selectedSeries = this.allSeries.find(series => Number(series.id) === selectedSeriesId);
+    return this.seriesUsesDateTokens(selectedSeries);
+  }
+
+  private seriesUsesDateTokens(series?: DocumentSeries | null): boolean {
+    const template = String(series?.template || '').toUpperCase();
+    return template.includes('{YYYY}') || template.includes('{YY}') || template.includes('{MM}') || template.includes('{DD}');
+  }
+
+  getSeriesDateFieldDisplayName(field: FormFieldDto): string {
+    return `${field.fieldName} (${field.fieldCode})`;
+  }
+
   loadDocumentTypes(): void {
     console.log('[DocumentTypesList] ========== loadDocumentTypes STARTED ==========');
     console.log('[DocumentTypesList] Permission check:', {
@@ -371,8 +501,8 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       permissionServiceCanManage: this.permissionService.canManageDocuments()
     });
     
-    // Check permissions - but don't block loading
-    // API will handle permission checks on backend
+    // Check permissions - but don't block loading for admins.
+    // For non-admin users, keep the flow quiet and load only the submission-safe endpoint.
     const hasPermission = this.canViewDocuments || this.canManageDocuments || 
                          this.permissionService.canViewDocuments() || 
                          this.permissionService.canManageDocuments();
@@ -386,34 +516,30 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       allDocumentPermissions: this.permissionService.permissions().filter(p => p.toLowerCase().includes('document'))
     });
     
-    if (!hasPermission) {
+    if (!hasPermission && this.isAdmin) {
       console.warn('[DocumentTypesList] ⚠️ User does not have Document_Allow_View permission');
       console.warn('[DocumentTypesList] Available permissions:', this.permissionService.permissions());
       console.warn('[DocumentTypesList] Document-related permissions:', 
         this.permissionService.permissions().filter(p => p.toLowerCase().includes('document')));
       console.warn('[DocumentTypesList] ⚠️ Proceeding to load anyway - API will handle permission check');
       
-      // Show warning but don't block - let API decide
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Permission Warning',
-        detail: 'You may not have permission to view document types. If you see no data, please contact administrator to grant Document_Allow_View permission.',
-        life: 5000
-      });
-    } else {
+      } else {
       console.log('[DocumentTypesList] ✅ User has permission, proceeding to load document types...');
     }
 
-    // Load all document types (not filtered by form)
     this.loading.documentTypes = true;
     console.log('[DocumentTypesList] Loading document types...');
-    
-    this.documentTypesService.getAllDocumentTypes().subscribe({
+
+    const load$ = this.isAdmin
+      ? this.documentTypesService.getAllDocumentTypes()
+      : this.documentTypesService.getActiveDocumentTypes();
+
+    load$.subscribe({
       next: (types: DocumentType[]) => {
         console.log('[DocumentTypesList] Document types loaded from API:', types?.length || 0, 'types');
         const allTypes = types || [];
         
-        if (allTypes.length === 0) {
+        if (allTypes.length === 0 && this.isAdmin) {
           console.warn('[DocumentTypesList] No document types returned from API');
           // Try fallback: getActiveDocumentTypes
           this.documentTypesService.getActiveDocumentTypes().subscribe({
@@ -477,9 +603,11 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       console.log('[DocumentTypesList] Cleaned up deleted document type IDs:', idsToRemove);
     }
 
-    // Show all document types (including inactive ones) - don't filter by isActive
-    // User can see inactive types and reactivate them
-    const visibleTypes = activeTypes; // Keep all types, including inactive ones
+    // Admin sees all available types. Non-admin users only need active types
+    // that can be used for creating submissions.
+    const visibleTypes = this.isAdmin
+      ? activeTypes
+      : activeTypes.filter(type => type.isActive !== false);
     
     this.documentTypes = visibleTypes;
     this.filteredDocumentTypes = [...this.documentTypes];
@@ -545,6 +673,12 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       error: error?.error
     });
     
+    if (!this.isAdmin && (error?.status === 401 || error?.status === 403)) {
+      // Non-admin users should see an empty-state, not management toasts.
+      this.cdr.detectChanges();
+      return;
+    }
+
     this.messageService.add({ 
       severity: 'error', 
       summary: `Error (${error?.status || 'Unknown'})`, 
@@ -619,8 +753,11 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       menuOrder: 0,
       parentMenuId: null,
       defaultSeriesId: null,
+      seriesDateFieldId: null,
       isActive: true
     });
+    this.availableSeriesDateFields = [];
+    this.loadedSeriesDateFieldsFormId = null;
     
     // Enable form controls
     this.documentTypeForm.get('formBuilderId')?.enable();
@@ -650,8 +787,10 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       menuOrder: documentType.menuOrder || 0,
       parentMenuId: documentType.parentMenuId || null,
       defaultSeriesId: documentType.defaultSeriesId ?? null,
+      seriesDateFieldId: documentType.seriesDateFieldId ?? null,
       isActive: documentType.isActive !== false
     });
+    this.handleSeriesDateFieldDependencies();
     
     // Enable form controls
     this.documentTypeForm.get('formBuilderId')?.enable();
@@ -701,6 +840,8 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     this.showModal = false;
     this.editingDocumentType = null;
     this.documentTypeForm.reset();
+    this.availableSeriesDateFields = [];
+    this.loadedSeriesDateFieldsFormId = null;
     // Ensure controls are enabled when closing
     this.documentTypeForm.get('formBuilderId')?.enable();
     this.documentTypeForm.get('parentMenuId')?.enable();
@@ -815,7 +956,8 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
         formBuilderId: Number(formData.formBuilderId),
         menuCaption: formData.menuCaption.trim(),
         menuOrder: formData.menuOrder !== null && formData.menuOrder !== undefined ? Number(formData.menuOrder) : 0,
-        defaultSeriesId: formData.defaultSeriesId ? Number(formData.defaultSeriesId) : null
+        defaultSeriesId: formData.defaultSeriesId ? Number(formData.defaultSeriesId) : null,
+        seriesDateFieldId: formData.seriesDateFieldId ? Number(formData.seriesDateFieldId) : null
       };
       
       console.log('[DocumentTypesList] Creating document type with DTO:', createDto);
@@ -889,6 +1031,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       menuOrder: formData.menuOrder !== null && formData.menuOrder !== undefined ? Number(formData.menuOrder) : undefined,
       parentMenuId: updateParentMenuId,
       defaultSeriesId: formData.defaultSeriesId ? Number(formData.defaultSeriesId) : null,
+      seriesDateFieldId: formData.seriesDateFieldId ? Number(formData.seriesDateFieldId) : null,
       isActive: formData.isActive !== false
     };
 
@@ -1151,6 +1294,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       seriesCode: '',
       sequenceStart: 1,
       sequencePadding: 3,
+      allowSequenceOverflow: false,
       resetPolicy: 'Yearly',
       generateOn: 'Submit',
       nextNumber: 1,
@@ -1173,6 +1317,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       seriesCode: series.seriesCode,
       sequenceStart: series.sequenceStart || series.nextNumber || 1,
       sequencePadding: series.sequencePadding || 3,
+      allowSequenceOverflow: !!series.allowSequenceOverflow,
       resetPolicy: series.resetPolicy || 'Yearly',
       generateOn: series.generateOn || 'Submit',
       nextNumber: series.nextNumber || 1,
@@ -1220,7 +1365,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     const sequenceStart = Number(formData.sequenceStart || 1);
     const sequencePadding = Number(formData.sequencePadding || 3);
     const nextNumber = Number(formData.nextNumber || sequenceStart || 1);
-    const seriesCode = this.generateSeriesCodeForCompatibility(template, formData.seriesName);
+    const allowSequenceOverflow = !!formData.allowSequenceOverflow;
+    const seriesCode = this.editingSeries?.seriesCode
+      || this.generateSeriesCodeForCompatibility(template, formData.seriesName, formData.projectId);
 
     if (this.editingSeries && this.editingSeries.id) {
       // Update existing series
@@ -1231,6 +1378,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
         seriesCode,
         sequenceStart,
         sequencePadding,
+        allowSequenceOverflow,
         resetPolicy: formData.resetPolicy,
         generateOn: formData.generateOn,
         nextNumber,
@@ -1273,6 +1421,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
         seriesCode,
         sequenceStart,
         sequencePadding,
+        allowSequenceOverflow,
         resetPolicy: formData.resetPolicy,
         generateOn: formData.generateOn,
         nextNumber,
@@ -1443,6 +1592,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       next: (series: DocumentSeries[]) => {
         // Include all series in the dropdown (active and inactive)
         this.allSeries = (series || []);
+        if (this.showModal) {
+          this.handleSeriesDateFieldDependencies();
+        }
         this.loading.allSeries = false;
         this.cdr.detectChanges();
       },
@@ -1506,7 +1658,7 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
     return [...new Set(matches)].filter(token => !this.supportedSeriesPlaceholders.includes(token));
   }
 
-  private generateSeriesCodeForCompatibility(template: string, seriesName: string): string {
+  private generateSeriesCodeForCompatibility(template: string, seriesName: string, projectId?: number | null): string {
     const staticPart = template
       .replace(/\{[A-Z]+\}/g, '')
       .replace(/[^A-Za-z0-9\-_\/]/g, '')
@@ -1515,14 +1667,15 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       .replace(/\/{2,}/g, '/')
       .replace(/^[-_/]+|[-_/]+$/g, '');
 
-    if (staticPart) {
-      return staticPart.slice(0, 50);
-    }
-
-    return String(seriesName || 'SERIES')
+    const baseCode = (staticPart || String(seriesName || 'SERIES'))
       .toUpperCase()
-      .replace(/[^A-Z0-9\-_]/g, '')
-      .slice(0, 50);
+      .replace(/[^A-Z0-9\-_\/]/g, '')
+      .slice(0, 35) || 'SERIES';
+
+    const scopePart = projectId ? `P${projectId}` : 'GLOBAL';
+    const uniquePart = Date.now().toString().slice(-8);
+
+    return `${baseCode}-${scopePart}-${uniquePart}`.slice(0, 50);
   }
 
   /**

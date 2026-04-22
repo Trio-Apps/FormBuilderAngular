@@ -80,6 +80,36 @@ function shouldIgnoreErrorToast(url: string, status: number): boolean {
     return true;
   }
 
+  if ((status === 401 || status === 403)
+    && currentPath.includes('/document-types')
+    && (normalizedUrl.includes('/api/documenttypes/active')
+      || normalizedUrl.includes('/api/formbuilderdocumentsettings/form/')
+      || (normalizedUrl.includes('/api/documenttypes')
+        && !normalizedUrl.includes('/api/documenttypes/')))) {
+    return true;
+  }
+
+  if ((status === 401 || status === 403)
+    && currentPath.includes('/form-builder/forms')
+    && normalizedUrl.includes('/api/formbuilder')) {
+    return true;
+  }
+
+  if ((status === 401 || status === 403)
+    && currentPath.includes('/fields')
+    && (normalizedUrl.includes('/api/formbuilder/')
+      || normalizedUrl.includes('/api/documenttypes/active')
+      || normalizedUrl.includes('/api/formbuilderdocumentsettings/form/')
+      || normalizedUrl.includes('/api/sapintegration/')
+      || normalizedUrl.includes('/api/approvalworkflow')
+      || normalizedUrl.includes('/api/approvalstage'))) {
+    return true;
+  }
+
+  if (currentPath.includes('/fields') && normalizedUrl.includes('/api/fielddatasources/preview')) {
+    return true;
+  }
+
   if (status !== 404) {
     return false;
   }
@@ -111,8 +141,16 @@ function extractErrorMessage(error: HttpErrorResponse, url: string, method: stri
     return error.error.detail;
   }
 
-  if (error.error?.message) {
+  if (typeof error.error?.message === 'string' && error.error.message.trim()) {
     return error.error.message;
+  }
+
+  if (typeof error.error?.message?.value === 'string' && error.error.message.value.trim()) {
+    return error.error.message.value;
+  }
+
+  if (typeof error.error?.message?.name === 'string' && error.error.message.name.trim()) {
+    return error.error.message.name;
   }
 
   if (error.error?.errorMessage) {
@@ -213,8 +251,9 @@ function getOperationName(url: string, method: string): string {
   return operationType || 'Operation';
 }
 
-function isDuplicateError(message: string): boolean {
-  if (!message) return false;
+function isDuplicateError(message: unknown): boolean {
+  const normalized = String(message ?? '').toLowerCase();
+  if (!normalized) return false;
 
   const duplicateKeywords = [
     'already in use',
@@ -233,6 +272,5 @@ function isDuplicateError(message: string): boolean {
     'مكرر'
   ];
 
-  const normalized = message.toLowerCase();
   return duplicateKeywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
 }

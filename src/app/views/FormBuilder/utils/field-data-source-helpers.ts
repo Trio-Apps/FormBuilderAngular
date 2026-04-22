@@ -8,13 +8,35 @@ export function buildContext(
   dataSource: FieldDataSource | undefined,
   formValues: Record<string, any>
 ): Record<string, any> | undefined {
-  if (!dataSource || !dataSource.requestBodyJson) {
+  if (!dataSource) {
     return undefined;
   }
 
   try {
-    // Parse configurationJson to get contextFields
-    const config = JSON.parse(dataSource.requestBodyJson);
+    const rawConfig = dataSource.configurationJson || dataSource.requestBodyJson;
+    if (!rawConfig) {
+      return undefined;
+    }
+
+    const config = JSON.parse(rawConfig);
+
+    if (Array.isArray(config.contextBindings)) {
+      const context: Record<string, any> = {};
+      config.contextBindings.forEach((binding: any) => {
+        const contextFieldCode = binding?.contextFieldCode;
+        const sourceFieldCode = binding?.sourceFieldCode;
+        if (!contextFieldCode || !sourceFieldCode) {
+          return;
+        }
+
+        const fieldValue = formValues[contextFieldCode];
+        if (fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
+          context[sourceFieldCode] = fieldValue;
+        }
+      });
+
+      return Object.keys(context).length > 0 ? context : undefined;
+    }
 
     // If contextFields is specified in configuration
     if (config.contextFields && Array.isArray(config.contextFields)) {
@@ -52,13 +74,21 @@ export function buildContext(
  * Check if a field's DataSource requires context
  */
 export function requiresContext(dataSource: FieldDataSource | undefined): boolean {
-  if (!dataSource || !dataSource.requestBodyJson) {
+  if (!dataSource) {
     return false;
   }
 
   try {
-    const config = JSON.parse(dataSource.requestBodyJson);
-    return !!(config.contextFields && Array.isArray(config.contextFields) && config.contextFields.length > 0);
+    const rawConfig = dataSource.configurationJson || dataSource.requestBodyJson;
+    if (!rawConfig) {
+      return false;
+    }
+
+    const config = JSON.parse(rawConfig);
+    return !!(
+      (config.contextBindings && Array.isArray(config.contextBindings) && config.contextBindings.length > 0) ||
+      (config.contextFields && Array.isArray(config.contextFields) && config.contextFields.length > 0)
+    );
   } catch {
     return false;
   }
@@ -68,12 +98,23 @@ export function requiresContext(dataSource: FieldDataSource | undefined): boolea
  * Get context field codes that a DataSource depends on
  */
 export function getContextFieldCodes(dataSource: FieldDataSource | undefined): string[] {
-  if (!dataSource || !dataSource.requestBodyJson) {
+  if (!dataSource) {
     return [];
   }
 
   try {
-    const config = JSON.parse(dataSource.requestBodyJson);
+    const rawConfig = dataSource.configurationJson || dataSource.requestBodyJson;
+    if (!rawConfig) {
+      return [];
+    }
+
+    const config = JSON.parse(rawConfig);
+    if (config.contextBindings && Array.isArray(config.contextBindings)) {
+      return config.contextBindings
+        .map((binding: any) => binding?.contextFieldCode)
+        .filter((fieldCode: any): fieldCode is string => typeof fieldCode === 'string' && fieldCode.trim().length > 0);
+    }
+
     if (config.contextFields && Array.isArray(config.contextFields)) {
       return config.contextFields;
     }

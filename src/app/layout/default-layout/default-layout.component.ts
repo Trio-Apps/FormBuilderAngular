@@ -54,6 +54,7 @@ import { PermissionService } from '../../services/permission.service';
 })
 export class DefaultLayoutComponent implements OnInit, OnDestroy {
   public navItems: INavData[] = [];
+  public isWideContentRoute = false;
   private roleSubscription?: Subscription;
   private routerSubscription?: Subscription;
   documentTypes: DocumentType[] = [];
@@ -114,12 +115,15 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
       this.loadUserGroups();
     }
     
+    this.updateWideContentRoute(this.router.url);
+
     // Redirect to dashboard if Admin and on root/document-types
     this.routerSubscription = this.router.events
       .pipe(filter(event => event instanceof NavigationEnd))
       .subscribe((event: any) => {
         const userRole = this.authService.role();
         const currentPath = event.urlAfterRedirects || event.url;
+        this.updateWideContentRoute(currentPath);
         
         // Check if user is admin based on user groups
         const isAdmin = this.isUserAdmin();
@@ -127,6 +131,33 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
           this.router.navigate(['/dashboard']);
         }
       });
+  }
+
+  private updateWideContentRoute(url: string): void {
+    const currentPath = (url || '').toLowerCase();
+      this.isWideContentRoute =
+        currentPath.includes('/form-preview/')
+        || currentPath === '/submissions'
+        || currentPath === '/document-types'
+        || currentPath === '/document-series'
+        || currentPath === '/approval-workflows'
+        || currentPath === '/approval-inbox'
+        || currentPath === '/approval-delegations'
+        || currentPath === '/approvals-history'
+        || currentPath === '/alert-rules'
+        || currentPath === '/email-templates'
+        || currentPath === '/smtp-configs'
+        || currentPath === '/sap-integration'
+        || currentPath === '/users'
+        || currentPath === '/groups'
+        || currentPath === '/permissions'
+        || currentPath === '/table-menus'
+        || currentPath === '/projects'
+        || currentPath === '/forms'
+        || currentPath === '/copy-to-document'
+        || currentPath === '/form-builder/forms'
+        || currentPath === '/form-builder/copy-to-document'
+        || /\/document-types\/[^/]+\/submissions(\/|$)/.test(currentPath);
   }
 
   loadUserGroups(): void {
@@ -141,16 +172,24 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
             g.foreignName?.toLowerCase() === userRole.toLowerCase()
           ) || null;
         }
-        // Load table menus after user groups are loaded
-        this.loadTableMenus();
+        this.loadTableMenusIfAllowed();
       },
       error: (error) => {
         console.error('Error loading user groups:', error);
         this.userGroups = [];
-        // Still load table menus even if user groups fail
-        this.loadTableMenus();
+        this.loadTableMenusIfAllowed();
       }
     });
+  }
+
+  private loadTableMenusIfAllowed(): void {
+    if (this.isUserAdmin() || this.permissionService.canViewTableMenus()) {
+      this.loadTableMenus();
+      return;
+    }
+
+    this.tableMenus = [];
+    this.filterNavItemsByRole();
   }
 
   loadTableMenus(): void {
@@ -406,122 +445,85 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // If role is "User" or any other role, filter items بالمنطق القديم + permissions
-    // Hide: Dashboard, Form Builder section and Projects section
-    // Show: Document Types, Logout
-    const filteredItems: INavData[] = [];
-    let skipNext = false;
+    const hasNavAccess = (item: INavData): boolean => {
+      const attrs: any = item.attributes || {};
+      const requiredRoles = attrs.roles as string[] | undefined;
+      const permissionCode = attrs.permissionCode as string | undefined;
 
-    for (let i = 0; i < navItems.length; i++) {
-      const item = navItems[i];
-      
-      // Skip if previous item was Form Builder title
-      if (skipNext) {
-        skipNext = false;
-        continue;
+      if (requiredRoles && requiredRoles.length > 0 && !this.hasRoleAccess(requiredRoles)) {
+        return false;
       }
 
-      // Hide Dashboard for User role, but show Dashboard Menus
-      if (item.name === 'Dashboard') {
-        continue; // Skip Dashboard
-      }
-      
-      // Show Dashboard Menus for all users
-      if (item.name === 'Dashboard Menus') {
-        filteredItems.push(item);
-        continue;
+      if (permissionCode && !this.permissionsSnapshot.includes(permissionCode)) {
+        return false;
       }
 
-      // Hide Form Builder section
-      if (item.title === true && item.name === 'Form Builder') {
-        // Skip this title and the next Form Builder item
-        skipNext = true;
-        continue;
-      }
-      if (item.name === 'Form Builder') {
-        continue; // Skip Form Builder menu item
-      }
+      return true;
+    };
 
-      // Show Documents Setup title
-      if (item.title === true && item.name === 'Documents Setup') {
-        filteredItems.push(item);
-        // Add dynamic menus from table menus after Documents Setup title
-        this.addTableMenusToSidebar(filteredItems);
-        continue;
-      }
+    const filterItemsForUser = (items: INavData[]): INavData[] => {
+      const result: INavData[] = [];
 
-      // Hide static Document Types/Document Series tree for non-admin users.
-      // Users should access submissions through dynamic table menus only.
-      if (item.name === 'Document Types') {
-        continue;
-      }
-
-      // Show Manage Table Menus based on roles from UserGroups table
-      if (item.name === 'Manage Table Menus') {
-        // Check if item has attributes with roles requirement
-        const requiredRoles = item.attributes?.['roles'] as string[] | undefined;
-        // Use UserGroups table to check permissions instead of static values
-        if (this.hasRoleAccess(requiredRoles) || isAdmin) {
-          filteredItems.push(item);
+      for (const item of items) {
+        if (item.name === 'Logout') {
+          result.push(item);
+          continue;
         }
-        continue;
-      }
 
-      // Show Email Test only for Admin users
-      if (item.name === 'Email Test') {
-        const requiredRoles = item.attributes?.['roles'] as string[] | undefined;
-        if (this.hasRoleAccess(requiredRoles) || isAdmin) {
-          filteredItems.push(item);
-        }
-        continue;
-      }
-
-      // Show Approval Workflows with children (for all users)
-      if (item.name === 'Approval Workflows') {
-        // For User role, only show Approval Inbox (not Manage Workflows or Approvals History)
-        if (!isAdmin) {
-          const allowedChildren = (item.children || []).filter((child: any) => {
-            if (!(child.name === 'Approval Inbox' || child.name === 'Delegations')) {
-              return false;
-            }
-
-            const childPermissionCode = child.attributes?.['permissionCode'] as string | undefined;
-            return !childPermissionCode || this.permissionsSnapshot.includes(childPermissionCode);
-          });
-
-          if (allowedChildren.length === 0) {
+        if (item.title === true) {
+          if (item.name === 'Documents Setup') {
+            result.push(item);
+            this.addTableMenusToSidebar(result);
             continue;
           }
 
-          filteredItems.push({
-            ...item,
-            children: allowedChildren
-          });
-        } else {
-          // For Admin, show all children including Approvals History
-          filteredItems.push(item);
+          result.push(item);
+          continue;
         }
-        continue;
+
+        const filteredChildren = item.children?.length
+          ? filterItemsForUser(item.children)
+          : undefined;
+
+        const itemVisible = hasNavAccess(item);
+        const hasVisibleChildren = !!filteredChildren?.some(child => !child.title);
+
+        if (!itemVisible && !hasVisibleChildren) {
+          continue;
+        }
+
+        if (filteredChildren && filteredChildren.length > 0) {
+          result.push({
+            ...item,
+            children: filteredChildren
+          });
+          continue;
+        }
+
+        if (itemVisible) {
+          result.push(item);
+        }
       }
 
-      // Hide Projects section
-      if (item.title === true && item.name === 'Projects') {
-        continue; // Skip Projects title
-      }
-      if (item.name === 'Projects') {
-        continue; // Skip Projects menu item
-      }
+      return result.filter((item, index, array) => {
+        if (!item.title) {
+          return true;
+        }
 
-      // Show Logout
-      if (item.name === 'Logout') {
-        filteredItems.push(item);
-        continue;
-      }
-    }
+        for (let i = index + 1; i < array.length; i++) {
+          if (array[i].title) {
+            break;
+          }
+          return true;
+        }
+
+        return false;
+      });
+    };
 
     // For non-admin users, show the curated navigation by default
     // without permission-code filtering.
-    this.navItems = filteredItems;
+    this.navItems = filterItemsForUser(navItems);
     // Freeze navItems to prevent any future modifications
     Object.freeze(this.navItems);
     // Mark sidebar as initialized to prevent future updates

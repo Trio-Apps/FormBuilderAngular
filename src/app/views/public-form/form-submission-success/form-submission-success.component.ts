@@ -53,6 +53,7 @@ export class FormSubmissionSuccessComponent implements OnInit {
     // Go back to form view if formCode is available
     if (this.formCode) {
       const queryParams: any = {};
+      const isAuthenticatedPreview = this.router.url.includes('/form-preview/submission/success');
 
       // Preserve original context if present.
       const passthroughParams = ['documentTypeId', 'projectId', 'seriesId', 'userId', 'lang'];
@@ -63,7 +64,10 @@ export class FormSubmissionSuccessComponent implements OnInit {
         }
       }
 
-      this.router.navigate(['/forms/view', this.formCode], { queryParams });
+      this.router.navigate(
+        [isAuthenticatedPreview ? '/form-preview' : '/forms/view', this.formCode],
+        { queryParams }
+      );
     } else {
       // Otherwise go to home
       this.router.navigate(['/']);

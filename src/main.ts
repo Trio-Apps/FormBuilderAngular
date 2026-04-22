@@ -24,8 +24,8 @@ import { appConfig } from './app/app.config';
   const originalLog = console.log.bind(console);
   
   // Helper function to check if message is a deprecation warning
-  const isDeprecationWarning = (message: string): boolean => {
-    const lowerMessage = message.toLowerCase();
+  const isDeprecationWarning = (message: unknown): boolean => {
+    const lowerMessage = String(message ?? '').toLowerCase();
     return lowerMessage.includes('domnodeinsertedintodocument') ||
            lowerMessage.includes('domnoderemovedfromdocument') ||
            lowerMessage.includes('domnodeinserted') ||

@@ -232,10 +232,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       valueFieldCode: '',
       textFieldCode: ''
     };
+  formSubmissionDependencyConfig: {
+    contextFieldCode: string;
+    sourceFieldCode: string;
+  } = {
+      contextFieldCode: '',
+      sourceFieldCode: ''
+    };
   availableSourceForms: FormBuilderDto[] = [];
   loadingSourceForms = false;
   availableSourceFormFields: FormFieldDto[] = [];
   loadingSourceFormFields = false;
+  private readonly formSubmissionSystemFields: FormFieldDto[] = [
+    this.createFormSubmissionSystemField(-1, 'Document Number', 'SYSTEM_DOCUMENT_NUMBER')
+  ];
   availableLookupTables: string[] = [];
   availableColumns: string[] = []; // Available columns from selected table
   previewOptions: FieldOptionResponse[] = [];
@@ -247,6 +257,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   apiDebugError: string | null = null;
   availableProperties: string[] = []; // Available properties from API response
   hasSuggestedPaths: boolean = false; // Flag to indicate if suggested paths are available
+  private apiPreviewAutoRetryPending = false;
 
   // Saved SQL Queries
   savedQueries: UserQueryDto[] = [];
@@ -262,6 +273,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     { label: 'Line', value: 'Line' }
   ];
   sapConnections: SapHanaConfigDto[] = [];
+  selectedDataSourceSapConnectionId: number | null = null;
   selectedSapConnectionId: number | null = null;
   loadingSapConnections: boolean = false;
   sapEndpointOptions: SapServiceLayerEndpointDto[] = [];
@@ -450,6 +462,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     });
   }
 
+  canManageFieldRules(): boolean {
+    return this.permissionService.canCreateFormRules() || this.permissionService.canManageFormRules();
+  }
+
+  private canLoadFieldManagementIntegrations(): boolean {
+    return this.permissionService.isAdmin()
+      || this.permissionService.canViewApprovalWorkflows()
+      || this.permissionService.canViewApprovalStages()
+      || this.permissionService.hasPermission('SapConfig_Allow_View')
+      || this.permissionService.hasPermission('SapIntegration_Allow_View');
+  }
+
   loadTabAndFormId(): void {
     if (!this.tabId) return;
 
@@ -458,7 +482,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         if (tab && tab.formBuilderId) {
           this.formBuilderId = tab.formBuilderId;
           this.tabName = tab.tabName || '';
-          this.loadFormDocumentTypeId();
+          if (this.canLoadFieldManagementIntegrations()) {
+            this.loadFormDocumentTypeId();
+          }
           // Load fields with correct formBuilderId
           this.loadFields();
           // Load all form fields for expression builder
@@ -2627,7 +2653,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   private loadFormDocumentTypeId(): void {
-    if (!this.formBuilderId) {
+    if (!this.formBuilderId || !this.canLoadFieldManagementIntegrations()) {
       return;
     }
 
@@ -2643,7 +2669,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         if (formMode === 'OnSubmit' || formMode === 'OnFinalApproval' || formMode === 'OnSpecificWorkflowStage') {
           this.sapExecutionMode = formMode;
         }
-        this.loadSapWorkflowStages();
+
+        if (this.canLoadFieldManagementIntegrations()) {
+          this.loadSapWorkflowStages();
+        }
       },
       error: () => {
         this.sapDocumentTypeId = null;
@@ -2655,7 +2684,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   private resolveDocumentTypeIdFallback(): void {
-    if (!this.formBuilderId) {
+    if (!this.formBuilderId || !this.canLoadFieldManagementIntegrations()) {
       return;
     }
 
@@ -2667,8 +2696,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         }
 
         this.sapDocumentTypeId = fallbackId;
-        this.loadSapDefaults();
-        this.loadSapWorkflowStages();
+        if (this.canLoadFieldManagementIntegrations()) {
+          this.loadSapDefaults();
+          this.loadSapWorkflowStages();
+        }
       },
       error: () => {
         // no-op: keep existing behavior if fallback also fails
@@ -2677,6 +2708,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   private loadSapConnections(): void {
+    if (!this.canLoadFieldManagementIntegrations()) {
+      this.sapConnections = [];
+      this.loadingSapConnections = false;
+      return;
+    }
+
     if (this.sapConnections.length > 0) {
       return;
     }
@@ -2687,6 +2724,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.sapConnections = (connections || [])
           .filter(c => c.integrationType !== 'HanaOdbc')
           .sort((a, b) => Number(b.isActive === true) - Number(a.isActive === true));
+        this.ensureDataSourceSapConnectionSelected();
         this.loadingSapConnections = false;
         this.cdr.detectChanges();
       },
@@ -2698,6 +2736,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   private loadSapDefaults(): void {
+    if (!this.canLoadFieldManagementIntegrations()) {
+      return;
+    }
+
     if (!this.sapDocumentTypeId || this.sapDocumentTypeId <= 0) {
       return;
     }
@@ -3124,6 +3166,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   private loadSapWorkflowStages(): void {
+    if (!this.canLoadFieldManagementIntegrations()) {
+      this.sapWorkflowStages = [];
+      this.sapTriggerStageId = null;
+      this.loadingSapWorkflowStages = false;
+      return;
+    }
+
     if (!this.sapDocumentTypeId || this.sapDocumentTypeId <= 0) {
       this.sapWorkflowStages = [];
       this.sapTriggerStageId = null;
@@ -3848,6 +3897,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           const dataSource = dataSources[0];
           this.existingDataSource = dataSource;
           this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana';
+          this.selectedDataSourceSapConnectionId = null;
 
           // Parse LookupTable configuration
           if (dataSource.sourceType === 'LookupTable' && dataSource.apiUrl) {
@@ -3930,6 +3980,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             let formCode = '';
             let valueFieldCode = dataSource.valuePath || '';
             let textFieldCode = dataSource.textPath || '';
+            let contextFieldCode = '';
+            let sourceFieldCode = '';
 
             if ((dataSource as any).configurationJson) {
               try {
@@ -3938,6 +3990,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 formCode = parsed.formCode || '';
                 valueFieldCode = parsed.valueFieldCode || valueFieldCode;
                 textFieldCode = parsed.textFieldCode || textFieldCode;
+                const firstBinding = Array.isArray(parsed.contextBindings) ? parsed.contextBindings[0] : null;
+                contextFieldCode = firstBinding?.contextFieldCode || '';
+                sourceFieldCode = firstBinding?.sourceFieldCode || '';
               } catch {
                 // ignore invalid historical config
               }
@@ -3950,6 +4005,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               textFieldId: null,
               valueFieldCode,
               textFieldCode
+            };
+            this.formSubmissionDependencyConfig = {
+              contextFieldCode,
+              sourceFieldCode
             };
 
             this.dataSourceConfig = {
@@ -4120,6 +4179,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               textPath: dataSource.textPath || 'NAME'
             });
 
+            if ((dataSource as any).configurationJson) {
+              try {
+                const parsed = JSON.parse((dataSource as any).configurationJson);
+                this.selectedDataSourceSapConnectionId = parsed?.sapConfigId ? Number(parsed.sapConfigId) : null;
+              } catch {
+                this.selectedDataSourceSapConnectionId = null;
+              }
+            } else {
+              this.selectedDataSourceSapConnectionId = null;
+            }
+
             // Reuse sqlQueryConfig for SapHana queries (database is ignored for SapHana)
             this.sqlQueryConfig = {
               sqlQuery: sqlQuery,
@@ -4138,14 +4208,29 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               isActive: dataSource.isActive
             };
           } else {
+            let parsedApiConfig: any = null;
+            if ((dataSource as any).configurationJson) {
+              try {
+                parsedApiConfig = JSON.parse((dataSource as any).configurationJson);
+              } catch {
+                parsedApiConfig = null;
+              }
+            }
+
+            if (dataSource.sourceType === 'Api') {
+              this.selectedDataSourceSapConnectionId = parsedApiConfig?.sapConfigId
+                ? Number(parsedApiConfig.sapConfigId)
+                : null;
+            }
+
             // For Api and Static types
             this.dataSourceConfig = {
               sourceType: dataSource.sourceType,
-              apiUrl: dataSource.apiUrl || null,
-              httpMethod: dataSource.httpMethod || 'GET',
-              requestBodyJson: dataSource.requestBodyJson || null,
-              valuePath: dataSource.valuePath || null,
-              textPath: dataSource.textPath || null,
+              apiUrl: parsedApiConfig?.url || dataSource.apiUrl || null,
+              httpMethod: parsedApiConfig?.httpMethod || dataSource.httpMethod || 'GET',
+              requestBodyJson: parsedApiConfig?.requestBodyJson || dataSource.requestBodyJson || null,
+              valuePath: parsedApiConfig?.valuePath || dataSource.valuePath || null,
+              textPath: parsedApiConfig?.textPath || dataSource.textPath || null,
               isActive: dataSource.isActive
             };
 
@@ -4200,6 +4285,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   resetDataSourceConfig(): void {
     this.dataSourceType = 'Static';
     this.existingDataSource = null;
+    this.selectedDataSourceSapConnectionId = null;
     this.dataSourceConfig = {
       sourceType: 'Static',
       apiUrl: null,
@@ -4221,7 +4307,22 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       textPath: 'Name',
       database: 'FormBuilder'
     };
+    this.formSubmissionConfig = {
+      formId: null,
+      formCode: '',
+      valueFieldId: null,
+      textFieldId: null,
+      valueFieldCode: '',
+      textFieldCode: ''
+    };
+    this.formSubmissionDependencyConfig = {
+      contextFieldCode: '',
+      sourceFieldCode: ''
+    };
     this.previewOptions = [];
+    this.selectedPreviewOption = null;
+    this.availableSourceFormFields = [];
+    this.loadingSourceFormFields = false;
     this.availableLookupTables = [];
     this.availableColumns = [];
     this.availableProperties = []; // Reset available properties
@@ -4313,6 +4414,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.previewOptions = [];
       // Clear static options when using DataSource
       this.clearFieldOptions();
+      this.loadSapConnections();
+      this.ensureDataSourceSapConnectionSelected();
     } else if (this.dataSourceType === 'SqlQuery') {
       // Set default SQL Query config - preserve existing database if set
       if (!this.sqlQueryConfig.sqlQuery) {
@@ -4367,6 +4470,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.previewOptions = [];
       // Clear static options when using DataSource
       this.clearFieldOptions();
+      this.loadSapConnections();
+      this.ensureDataSourceSapConnectionSelected();
     }
 
     this.cdr.detectChanges();
@@ -4401,6 +4506,83 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     });
   }
 
+  private ensureDataSourceSapConnectionSelected(): void {
+    if (this.selectedDataSourceSapConnectionId || this.sapConnections.length === 0) {
+      return;
+    }
+
+    const active = this.sapConnections.find(c => c.isActive === true);
+    this.selectedDataSourceSapConnectionId = active?.id ?? this.sapConnections[0].id;
+  }
+
+  onDataSourceSapConnectionChange(): void {
+    if (this.dataSourceType === 'SapHana') {
+      this.previewOptions = [];
+    }
+  }
+
+  onDataSourceSapRelogin(): void {
+    if (!this.selectedDataSourceSapConnectionId) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'SAP Connection',
+        detail: 'Please select SAP connection first.'
+      });
+      return;
+    }
+
+    this.loadingSapReLogin = true;
+    this.sapIntegrationService.reloginConnection(this.selectedDataSourceSapConnectionId).subscribe({
+      next: () => {
+        this.loadingSapReLogin = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'SAP Connection',
+          detail: 'SAP session refreshed successfully.'
+        });
+      },
+      error: (error) => {
+        this.loadingSapReLogin = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'SAP Connection',
+          detail: this.extractErrorMessage(error) || 'Failed to refresh SAP session.'
+        });
+      }
+    });
+  }
+
+  private createFormSubmissionSystemField(id: number, fieldName: string, fieldCode: string): FormFieldDto {
+    return {
+      id,
+      tabId: 0,
+      fieldTypeId: 0,
+      fieldName,
+      fieldCode,
+      fieldOrder: -Math.abs(id),
+      hintText: '',
+      isMandatory: false,
+      isEditable: false,
+      isVisible: true,
+      isActive: true,
+      createdDate: new Date(0).toISOString(),
+      isDeleted: false,
+      fieldOptions: []
+    };
+  }
+
+  private mergeSubmissionSourceFields(fields: FormFieldDto[]): FormFieldDto[] {
+    const merged = [...this.formSubmissionSystemFields, ...(fields || [])];
+    return merged.sort((a, b) => {
+      const orderCompare = (a.fieldOrder || 0) - (b.fieldOrder || 0);
+      if (orderCompare !== 0) {
+        return orderCompare;
+      }
+
+      return (a.fieldName || '').localeCompare(b.fieldName || '');
+    });
+  }
+
   onSubmissionSourceFormChange(): void {
     this.previewOptions = [];
     this.availableSourceFormFields = [];
@@ -4408,6 +4590,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.formSubmissionConfig.textFieldId = null;
     this.formSubmissionConfig.valueFieldCode = '';
     this.formSubmissionConfig.textFieldCode = '';
+    this.formSubmissionDependencyConfig.sourceFieldCode = '';
 
     const selectedForm = this.availableSourceForms.find(form => form.id === this.formSubmissionConfig.formId);
     this.formSubmissionConfig.formCode = selectedForm?.formCode || '';
@@ -4421,9 +4604,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.loadingSourceFormFields = true;
     this.fieldsService.getFieldsByFormId(formId).subscribe({
       next: (fields) => {
-        this.availableSourceFormFields = (fields || [])
-          .filter(field => !field.isDeleted && (field.isActive ?? true))
-          .sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
+        const activeFields = (fields || [])
+          .filter(field => !field.isDeleted && (field.isActive ?? true));
+
+        this.availableSourceFormFields = this.mergeSubmissionSourceFields(activeFields);
 
         const valueField = this.availableSourceFormFields.find(field =>
           field.id === this.formSubmissionConfig.valueFieldId ||
@@ -4467,6 +4651,31 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.formSubmissionConfig.textFieldCode = selectedField?.fieldCode || '';
     this.dataSourceConfig.textPath = this.formSubmissionConfig.textFieldCode || null;
     this.previewOptions = [];
+  }
+
+  onSubmissionDependencyFieldChange(): void {
+    this.formSubmissionDependencyConfig.sourceFieldCode = '';
+    this.previewOptions = [];
+  }
+
+  onSubmissionDependencySourceFieldChange(): void {
+    this.previewOptions = [];
+  }
+
+  getAvailableFormSubmissionDependencyFields(): FormFieldDto[] {
+    const currentFieldCode = (this.fieldForm.get('fieldCode')?.value || '').toString().trim().toUpperCase();
+
+    return this.allFormFields.filter(field => {
+      if (!field || field.isDeleted || field.isActive === false) {
+        return false;
+      }
+
+      if (this.editingField && field.id === this.editingField.id) {
+        return false;
+      }
+
+      return (field.fieldCode || '').trim().toUpperCase() !== currentFieldCode;
+    });
   }
 
   /**
@@ -5300,19 +5509,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const url = this.dataSourceConfig.apiUrl.trim();
+    const apiTarget = this.resolveApiRequestTarget(this.dataSourceConfig.apiUrl.trim());
+    if (!apiTarget) {
+      return;
+    }
 
-    // Validate URL format for API type (must be absolute)
-    if (this.dataSourceType === 'Api') {
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        // this.messageService.add({
-        //   severity: 'error',
-        //   summary: 'Invalid URL',
-        //   detail: 'API URL must be an absolute URL starting with http:// or https://. Example: https://api.example.com/endpoint',
-        //   life: 8000
-        // });
-        return;
-      }
+    const url = apiTarget.fullUrl;
+
+    if (apiTarget.usesSapConnection) {
+      return;
     }
 
     this.loadingPreview = true;
@@ -5713,6 +5918,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
 
     // Validate required fields
+    let resolvedApiTarget: { baseUrl: string; apiPath: string | null; fullUrl: string; usesSapConnection: boolean } | null = null;
     if (this.dataSourceType === 'Api') {
       if (!this.dataSourceConfig.apiUrl || !this.dataSourceConfig.apiUrl.trim()) {
         this.messageService.add({
@@ -5723,15 +5929,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // Validate that API URL is absolute (must start with http:// or https://)
-      const apiUrl = this.dataSourceConfig.apiUrl.trim();
-      if (!apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
-        // this.messageService.add({
-        //   severity: 'error',
-        //   summary: 'Invalid URL',
-        //   detail: 'API URL must be an absolute URL starting with http:// or https://. Example: https://api.example.com/endpoint',
-        //   life: 8000
-        // });
+      resolvedApiTarget = this.resolveApiRequestTarget(this.dataSourceConfig.apiUrl.trim());
+      if (!resolvedApiTarget) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation',
+          detail: 'For SAP B1, enter an endpoint like BusinessPartners and select SAP connection. For a normal API, enter a full URL.'
+        });
         return;
       }
     } else if (this.dataSourceType === 'LookupTable') {
@@ -5903,6 +6107,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     } else if (this.dataSourceType === 'SapHana') {
       // For SapHana, backend expects the SQL query string directly in RequestBodyJson
       requestBodyJsonForPreview = this.sqlQueryConfig.sqlQuery ? this.sqlQueryConfig.sqlQuery.trim() : '';
+      configurationJsonForPreview = JSON.stringify({
+        sqlQuery: requestBodyJsonForPreview,
+        valueColumn: valuePath,
+        textColumn: textPath,
+        sapConfigId: this.selectedDataSourceSapConnectionId ?? undefined
+      });
       console.log('[FieldsList] SapHana RequestBodyJson (SQL string):', requestBodyJsonForPreview);
     } else if (this.dataSourceType === 'LookupTable') {
       // For LookupTable, include database in requestBodyJson
@@ -5926,6 +6136,17 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       });
     } else {
       requestBodyJsonForPreview = this.dataSourceConfig.requestBodyJson || undefined;
+      if (this.dataSourceType === 'Api') {
+        configurationJsonForPreview = JSON.stringify({
+          url: resolvedApiTarget?.baseUrl || this.dataSourceConfig.apiUrl || undefined,
+          apiPath: resolvedApiTarget?.apiPath || undefined,
+          httpMethod: this.dataSourceConfig.httpMethod || 'GET',
+          requestBodyJson: requestBodyJsonForPreview,
+          valuePath,
+          textPath,
+          sapConfigId: this.selectedDataSourceSapConnectionId ?? undefined
+        });
+      }
     }
 
     // Prepare request payload
@@ -5956,16 +6177,24 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     } else if (this.dataSourceType === 'SapHana') {
       // For SapHana, RequestBodyJson is the SAP HANA SQL query string, SourceType is already "SapHana"
       requestPayload.RequestBodyJson = requestBodyJsonForPreview;
+      requestPayload.ConfigurationJson = configurationJsonForPreview;
+      requestPayload.SapConfigId = this.selectedDataSourceSapConnectionId ?? undefined;
     } else {
       // For other types, include apiUrl and httpMethod if needed
       if (apiUrlForPreview) {
-        requestPayload.ApiUrl = apiUrlForPreview; // PascalCase
+        requestPayload.ApiUrl = this.dataSourceType === 'Api'
+          ? (resolvedApiTarget?.baseUrl || apiUrlForPreview)
+          : apiUrlForPreview; // PascalCase
       }
       if (this.dataSourceConfig.httpMethod && this.dataSourceConfig.httpMethod !== 'GET') {
         requestPayload.HttpMethod = this.dataSourceConfig.httpMethod; // PascalCase
       }
       if (requestBodyJsonForPreview) {
         requestPayload.RequestBodyJson = requestBodyJsonForPreview; // PascalCase
+      }
+      if (this.dataSourceType === 'Api') {
+        requestPayload.ConfigurationJson = configurationJsonForPreview;
+        requestPayload.SapConfigId = this.selectedDataSourceSapConnectionId ?? undefined;
       }
     }
 
@@ -6007,6 +6236,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     this.fieldDataSourceService.previewDataSource(requestPayload).subscribe({
       next: (options) => {
+        this.apiPreviewAutoRetryPending = false;
         console.log('[FieldsList] ========== PREVIEW RESPONSE START ==========');
         console.log('[FieldsList] Raw options received:', options);
         console.log('[FieldsList] Options type:', typeof options);
@@ -6285,6 +6515,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       },
       error: (error) => {
+        this.apiPreviewAutoRetryPending = false;
         this.loadingPreview = false;
         this.previewOptions = []; // Clear options on error
         console.error('[FieldsList] Error previewing DataSource:', error);
@@ -6475,22 +6706,35 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           errorMessage.toLowerCase().includes('no options found')
         );
 
-        // Try to extract available properties from error message if mentioned (only if not a network error)
-        if (!isNetworkError) {
-          const availablePropsMatch = errorMessage.match(/available properties[^:]*:\s*([^.]+)/i);
-          if (availablePropsMatch && availablePropsMatch[1]) {
-            const propsFromError = availablePropsMatch[1].split(',').map(p => p.trim()).filter(p => p.length > 0);
-            if (propsFromError.length > 0 && this.availableProperties.length === 0) {
-              // this.availableProperties = propsFromError;
-              // Extract properties from raw response if available
-              if (this.rawApiResponse) {
-                // this.extractAvailableProperties();
-              }
-            }
-          }
+        const propsFromError = !isNetworkError
+          ? this.extractAvailablePropertiesFromErrorMessage(errorMessage)
+          : [];
+
+        if (propsFromError.length > 0) {
+          this.availableProperties = propsFromError;
         }
 
         if (isNoOptionsError) {
+          const inferredPaths = this.inferPathsFromProperties(propsFromError);
+          if (this.dataSourceType === 'Api' &&
+              inferredPaths &&
+              (this.dataSourceConfig.valuePath !== inferredPaths.valuePath || this.dataSourceConfig.textPath !== inferredPaths.textPath)) {
+            this.dataSourceConfig.valuePath = inferredPaths.valuePath;
+            this.dataSourceConfig.textPath = inferredPaths.textPath;
+
+            if (!this.apiPreviewAutoRetryPending) {
+              this.apiPreviewAutoRetryPending = true;
+              this.messageService.add({
+                severity: 'info',
+                summary: 'Paths Auto-Selected',
+                detail: `Using "${inferredPaths.valuePath}" as value and "${inferredPaths.textPath}" as text.`
+              });
+              setTimeout(() => this.previewDataSource(), 150);
+              this.cdr.detectChanges();
+              return;
+            }
+          }
+
           // Ensure we have available properties - try to extract from raw response if not already done
           // if (this.availableProperties.length === 0 && this.rawApiResponse) {
           //   this.extractAvailableProperties();
@@ -6643,6 +6887,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             textColumn: textPathValue || 'Name',
             database: this.sqlQueryConfig.database
           });
+        } else if (this.dataSourceType === 'SapHana') {
+          configurationJsonValue = JSON.stringify({
+            sqlQuery: requestBodyJsonValue,
+            valueColumn: valuePathValue || 'ID',
+            textColumn: textPathValue || 'NAME',
+            sapConfigId: this.selectedDataSourceSapConnectionId ?? undefined
+          });
         }
         console.log('[FieldsList] Saving raw SqlQuery (no JSON wrapper) for execution:', {
           length: requestBodyJsonValue.length
@@ -6657,16 +6908,35 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         });
       } else if (this.dataSourceType === 'FormSubmissions') {
         requestBodyJsonValue = this.formSubmissionConfig.formCode || null;
+        const contextBindings = this.formSubmissionDependencyConfig.contextFieldCode && this.formSubmissionDependencyConfig.sourceFieldCode
+          ? [{
+              contextFieldCode: this.formSubmissionDependencyConfig.contextFieldCode,
+              sourceFieldCode: this.formSubmissionDependencyConfig.sourceFieldCode
+            }]
+          : [];
         configurationJsonValue = JSON.stringify({
           formId: this.formSubmissionConfig.formId,
           formCode: this.formSubmissionConfig.formCode,
           valueFieldId: this.formSubmissionConfig.valueFieldId,
           textFieldId: this.formSubmissionConfig.textFieldId,
           valueFieldCode: this.formSubmissionConfig.valueFieldCode,
-          textFieldCode: this.formSubmissionConfig.textFieldCode
+          textFieldCode: this.formSubmissionConfig.textFieldCode,
+          contextBindings
         });
       } else {
         requestBodyJsonValue = this.dataSourceConfig.requestBodyJson || null;
+        if (this.dataSourceType === 'Api') {
+          const resolvedApiTarget = this.resolveApiRequestTarget(this.dataSourceConfig.apiUrl || '');
+          configurationJsonValue = JSON.stringify({
+            url: resolvedApiTarget?.baseUrl || this.dataSourceConfig.apiUrl || undefined,
+            apiPath: resolvedApiTarget?.apiPath || undefined,
+            httpMethod: this.dataSourceConfig.httpMethod || 'GET',
+            requestBodyJson: requestBodyJsonValue || undefined,
+            valuePath: valuePathValue || undefined,
+            textPath: textPathValue || undefined,
+            sapConfigId: this.selectedDataSourceSapConnectionId ?? undefined
+          });
+        }
       }
 
       const dataSourceDto: CreateFieldDataSourceDto = {
@@ -6826,6 +7096,66 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       return `${environment.apiUrl}/FieldDataSources/field-options`;
     }
     return `${environment.apiUrl}/FieldDataSources/field-options?fieldId=123`;
+  }
+
+  private extractAvailablePropertiesFromErrorMessage(message: string): string[] {
+    const match = message.match(/available properties[^:]*:\s*([^.]+(?:\.[^.]+)?(?:,\s*[^.]+(?:\.[^.]+)?)*)/i);
+    if (!match || !match[1]) {
+      return [];
+    }
+
+    return match[1]
+      .split(',')
+      .map(p => p.trim().replace(/[.\s]+$/g, ''))
+      .filter(p => !!p);
+  }
+
+  private inferPathsFromProperties(properties: string[]): { valuePath: string; textPath: string } | null {
+    if (!properties.length) {
+      return null;
+    }
+
+    const valuePath = properties.find(p => {
+      const x = p.toLowerCase();
+      return x === 'id' || x === 'value' || x === 'key' || x.endsWith('id') || x.endsWith('code');
+    }) || properties[0];
+
+    const textPath = properties.find(p => {
+      const x = p.toLowerCase();
+      return x === 'name' || x.endsWith('name') || x === 'text' || x === 'label' || x === 'title' || x.endsWith('desc');
+    }) || properties.find(p => p !== valuePath) || properties[0];
+
+    return { valuePath, textPath };
+  }
+
+  private resolveApiRequestTarget(rawValue: string): { baseUrl: string; apiPath: string | null; fullUrl: string; usesSapConnection: boolean } | null {
+    const input = (rawValue || '').trim();
+    if (!input) {
+      return null;
+    }
+
+    if (input.startsWith('http://') || input.startsWith('https://')) {
+      return {
+        baseUrl: input,
+        apiPath: null,
+        fullUrl: input,
+        usesSapConnection: false
+      };
+    }
+
+    const selectedConnection = this.sapConnections.find(c => c.id === this.selectedDataSourceSapConnectionId);
+    const baseUrl = (selectedConnection?.baseUrl || '').trim().replace(/\/+$/, '');
+    if (!baseUrl) {
+      return null;
+    }
+
+    const normalizedPath = input.replace(/^\/+/, '');
+    return {
+      baseUrl,
+      apiPath: normalizedPath,
+      fullUrl: `${baseUrl}/${normalizedPath}`,
+      usesSapConnection: true
+    };
   }
 
   /**

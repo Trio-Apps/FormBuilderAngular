@@ -71,4 +71,20 @@
   }
 }
 
+.main-content {
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
+}
+
+:host ::ng-deep app-table-shell,
+:host ::ng-deep app-table-shell .table-shell,
+:host ::ng-deep app-table-shell .table-card,
+:host ::ng-deep app-table-shell .table-wrapper,
+:host ::ng-deep app-table-shell .p-datatable,
+:host ::ng-deep app-table-shell .p-paginator {
+  width: 100% !important;
+  max-width: none !important;
+}
+
 

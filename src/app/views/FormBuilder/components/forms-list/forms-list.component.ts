@@ -23,12 +23,15 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
 import { PaginatorModule } from 'primeng/paginator';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { TranslationService } from '../../../../core/services/translation.service';
 import { DuplicateValidationHelper } from '../../../../core/utils/duplicate-validation.helper';
 import { TableShellComponent } from '../../../../shared/table-shell/table-shell.component';
 import { HasPermissionDirective } from '../../../../directives/has-permission.directive';
 import { PermissionService } from '../../../../services/permission.service';
+import { UsersService, UserDto } from '../../services/users.service';
+import { StorageService } from '../../../../auth/storage.service';
 
 @Component({
   selector: 'app-forms-list',
@@ -47,6 +50,7 @@ import { PermissionService } from '../../../../services/permission.service';
     ConfirmDialogModule,
     TooltipModule,
     PaginatorModule,
+    MultiSelectModule,
     TranslatePipe,
     TableShellComponent,
     HasPermissionDirective
@@ -77,6 +81,9 @@ export class FormsListComponent implements OnInit, OnDestroy {
   isActive = true;
   editingForm: FormBuilderDto | null = null;
   currentInputLanguage: 'en' | 'ar' = 'en'; // Language toggle for input fields
+  availableSubmissionViewerUsers: UserDto[] = [];
+  selectedSubmissionViewerUserIds: number[] = [];
+  selectedFormEditorUserIds: number[] = [];
 
   // Pagination
   paginatedForms: FormBuilderDto[] = [];
@@ -94,7 +101,9 @@ export class FormsListComponent implements OnInit, OnDestroy {
     private router: Router,
     private cdr: ChangeDetectorRef,
     public translationService: TranslationService,
-    public permissionService: PermissionService
+    public permissionService: PermissionService,
+    private usersService: UsersService,
+    private storageService: StorageService
   ) {
     // Bind window focus handler to preserve reference for cleanup
     this.windowFocusHandler = this.onWindowFocus.bind(this);
@@ -127,9 +136,6 @@ export class FormsListComponent implements OnInit, OnDestroy {
       this.translationService.setLanguage('en');
       localStorage.setItem('adminLanguagePreference', 'en');
     }
-    
-    // Load deleted form IDs from sessionStorage to persist across page refreshes
-    this.loadDeletedFormIds();
     
     this.loadForms();
     
@@ -183,8 +189,13 @@ export class FormsListComponent implements OnInit, OnDestroy {
    * Load deleted form IDs from localStorage (persists across sessions and logins)
    */
   private loadDeletedFormIds(): void {
+    if (!this.permissionService.isAdmin()) {
+      this.deletedFormIds = new Set();
+      return;
+    }
+
     try {
-      const savedIds = localStorage.getItem('deletedFormIds');
+      const savedIds = localStorage.getItem(this.getDeletedFormIdsStorageKey());
       if (savedIds) {
         const idsArray = JSON.parse(savedIds) as number[];
         this.deletedFormIds = new Set(idsArray);
@@ -200,22 +211,29 @@ export class FormsListComponent implements OnInit, OnDestroy {
    * Save deleted form IDs to localStorage (persists across sessions and logins)
    */
   private saveDeletedFormIds(): void {
+    if (!this.permissionService.isAdmin()) {
+      return;
+    }
+
     try {
       const idsArray = Array.from(this.deletedFormIds);
-      localStorage.setItem('deletedFormIds', JSON.stringify(idsArray));
+      localStorage.setItem(this.getDeletedFormIdsStorageKey(), JSON.stringify(idsArray));
       console.log('[FormsList] Saved deleted form IDs to localStorage:', idsArray);
     } catch (error) {
       console.error('[FormsList] Error saving deleted form IDs to localStorage:', error);
     }
   }
 
+  private getDeletedFormIdsStorageKey(): string {
+    const userId = this.storageService.getUserId();
+    const username = this.storageService.getUsername();
+    return `deletedFormIds:${userId ?? username ?? 'anonymous'}`;
+  }
+
   loadForms(page: number = this.currentPage): void {
     this.loading = true;
     this.forms = [];
     this.filteredForms = [];
-    
-    // Reload deleted form IDs from localStorage to ensure they persist across refreshes
-    this.loadDeletedFormIds();
     
     // Removed console.log to reduce console noise in production
     // console.log('[FormsList] Loading forms, page:', page);
@@ -226,14 +244,7 @@ export class FormsListComponent implements OnInit, OnDestroy {
         // Removed console.log to reduce console noise in production
         // console.log('[FormsList] Forms loaded from API:', forms.map(f => ({ id: f.id, formName: f.formName, formCode: f.formCode })));
         
-        // Filter out forms that are in deletedFormIds (soft deleted - hide them completely)
-        const processedForms = forms.filter(form => {
-          if (this.deletedFormIds.has(form.id!)) {
-            console.log('[FormsList] Hiding deleted form (in deletedFormIds):', form.id, form.formName);
-            return false; // Hide this form completely
-          }
-          return true; // Show this form
-        });
+        const processedForms = forms;
         
         console.log('[FormsList] After filtering - Total forms:', processedForms.length, 
           'Deleted forms hidden:', forms.length - processedForms.length);
@@ -483,9 +494,11 @@ export class FormsListComponent implements OnInit, OnDestroy {
   }
 
   openFormModal(form?: FormBuilderDto): void {
+    this.ensureViewerUsersLoaded();
+
     // Permission check: Create for new, Edit for existing
     if (form) {
-      if (!this.permissionService.hasPermission('FormBuilder_Allow_Edit')) {
+      if (!this.canEditForm(form)) {
         this.messageService.add({
           severity: 'warn',
           summary: 'Permission Denied',
@@ -493,20 +506,24 @@ export class FormsListComponent implements OnInit, OnDestroy {
         });
         return;
       }
-      this.editingForm = form;
-      this.formName = form.formName;
-      this.foreignFormName = form.foreignFormName || '';
-      this.formCode = form.formCode;
-      this.description = form.description || '';
-      this.foreignDescription = form.foreignDescription || '';
-      this.isPublished = form.isPublished ?? false;
-      this.isSapEnabled = form.isSapEnabled ?? false;
-      if (form.sapExecutionMode === 'OnFinalApproval' || form.sapExecutionMode === 'OnSpecificWorkflowStage') {
-        this.sapExecutionMode = form.sapExecutionMode;
-      } else {
-        this.sapExecutionMode = 'OnSubmit';
-      }
-      this.isActive = form.isActive !== false;
+      this.loading = true;
+      this.formsService.getFormById(form.id).subscribe({
+        next: (fullForm) => {
+          this.populateFormModal(fullForm);
+          this.currentInputLanguage = 'en';
+          this.showFormModal = true;
+          this.loading = false;
+        },
+        error: () => {
+          this.loading = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load form details.'
+          });
+        }
+      });
+      return;
     } else {
       if (!this.permissionService.hasPermission('FormBuilder_Allow_Create')) {
         this.messageService.add({
@@ -526,9 +543,98 @@ export class FormsListComponent implements OnInit, OnDestroy {
       this.isSapEnabled = false;
       this.sapExecutionMode = 'OnSubmit';
       this.isActive = true;
+      this.selectedSubmissionViewerUserIds = [];
+      this.selectedFormEditorUserIds = [];
     }
     this.currentInputLanguage = 'en'; // Reset to English when opening modal
     this.showFormModal = true;
+  }
+
+  private populateFormModal(form: FormBuilderDto): void {
+    this.editingForm = form;
+    this.formName = form.formName;
+    this.foreignFormName = form.foreignFormName || '';
+    this.formCode = form.formCode;
+    this.description = form.description || '';
+    this.foreignDescription = form.foreignDescription || '';
+    this.isPublished = form.isPublished ?? false;
+    this.isSapEnabled = form.isSapEnabled ?? false;
+    if (form.sapExecutionMode === 'OnFinalApproval' || form.sapExecutionMode === 'OnSpecificWorkflowStage') {
+      this.sapExecutionMode = form.sapExecutionMode;
+    } else {
+      this.sapExecutionMode = 'OnSubmit';
+    }
+    this.isActive = form.isActive !== false;
+    this.selectedSubmissionViewerUserIds = [...(form.submissionViewerUserIds || [])];
+    this.selectedFormEditorUserIds = [...(form.formEditorUserIds || [])];
+  }
+
+  private loadSubmissionViewerUsers(): void {
+    this.usersService.getActiveUsers().subscribe({
+      next: (users) => {
+        this.availableSubmissionViewerUsers = users || [];
+      },
+      error: () => {
+        this.availableSubmissionViewerUsers = [];
+      }
+    });
+  }
+
+  get submissionViewerOptions(): Array<{ label: string; value: number }> {
+    return this.availableSubmissionViewerUsers.map((user) => ({
+      value: user.id,
+      label: user.email ? `${user.name} (${user.email})` : user.name
+    }));
+  }
+
+  getSubmissionViewersSummary(): string {
+    if (!this.selectedSubmissionViewerUserIds.length) {
+      return 'Select users who can see this form\'s submissions';
+    }
+
+    if (this.selectedSubmissionViewerUserIds.length === 1) {
+      const selectedUser = this.submissionViewerOptions.find(
+        (option) => option.value === this.selectedSubmissionViewerUserIds[0]
+      );
+      return selectedUser?.label ?? '1 user selected';
+    }
+
+    return `${this.selectedSubmissionViewerUserIds.length} users selected`;
+  }
+
+  get formEditorOptions(): Array<{ label: string; value: number }> {
+    return this.availableSubmissionViewerUsers.map((user) => ({
+      value: user.id,
+      label: user.email ? `${user.name} (${user.email})` : user.name
+    }));
+  }
+
+  getFormEditorsSummary(): string {
+    if (!this.selectedFormEditorUserIds.length) {
+      return 'Select users who can edit this form';
+    }
+
+    if (this.selectedFormEditorUserIds.length === 1) {
+      const selectedUser = this.formEditorOptions.find(
+        (option) => option.value === this.selectedFormEditorUserIds[0]
+      );
+      return selectedUser?.label ?? '1 user selected';
+    }
+
+    return `${this.selectedFormEditorUserIds.length} users selected`;
+  }
+
+  canEditForm(form: FormBuilderDto): boolean {
+    if (this.permissionService.hasPermission('FormBuilder_Allow_Edit') || this.permissionService.isAdmin()) {
+      return true;
+    }
+
+    const currentUserId = this.storageService.getUserId();
+    return currentUserId != null && (form.formEditorUserIds || []).includes(currentUserId);
+  }
+
+  canManageTabs(form: FormBuilderDto): boolean {
+    return this.canEditForm(form);
   }
 
   closeFormModal(): void {
@@ -543,6 +649,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
     this.isSapEnabled = false;
     this.sapExecutionMode = 'OnSubmit';
     this.isActive = true;
+    this.selectedSubmissionViewerUserIds = [];
+    this.selectedFormEditorUserIds = [];
     this.currentInputLanguage = 'en'; // Reset to English when closing modal
   }
 
@@ -594,6 +702,8 @@ export class FormsListComponent implements OnInit, OnDestroy {
       }
     }
 
+    this.ensureViewerUsersLoaded();
+
     this.loading = true;
 
     if (this.editingForm) {
@@ -610,7 +720,9 @@ export class FormsListComponent implements OnInit, OnDestroy {
         isPublished: this.isPublished,
         isSapEnabled: this.isSapEnabled,
         sapExecutionMode: this.isSapEnabled ? this.sapExecutionMode : undefined,
-        isActive: this.isActive
+        isActive: this.isActive,
+        submissionViewerUserIds: [...this.selectedSubmissionViewerUserIds],
+        formEditorUserIds: [...this.selectedFormEditorUserIds]
       };
 
       // Log the exact structure being sent
@@ -847,7 +959,9 @@ export class FormsListComponent implements OnInit, OnDestroy {
         isPublished: this.isPublished,
         isSapEnabled: this.isSapEnabled,
         sapExecutionMode: this.isSapEnabled ? this.sapExecutionMode : undefined,
-        isActive: this.isActive
+        isActive: this.isActive,
+        submissionViewerUserIds: [...this.selectedSubmissionViewerUserIds],
+        formEditorUserIds: [...this.selectedFormEditorUserIds]
       };
 
       this.formsService.createForm(createDto).subscribe({
@@ -1276,12 +1390,26 @@ export class FormsListComponent implements OnInit, OnDestroy {
       });
       return;
     }
+    this.router.navigate(['/form-preview', form.formCode]);
+  }
 
-    const publicFormUrl = this.router.serializeUrl(
-      this.router.createUrlTree(['/forms/view', form.formCode])
-    );
+  private ensureViewerUsersLoaded(): void {
+    if (this.availableSubmissionViewerUsers.length > 0) {
+      return;
+    }
 
-    window.open(publicFormUrl, '_blank', 'noopener,noreferrer');
+    const canManageEditors =
+      this.permissionService.isAdmin() ||
+      this.permissionService.hasPermission('FormBuilder_Allow_Create') ||
+      this.permissionService.hasPermission('FormBuilder_Allow_Edit') ||
+      this.permissionService.hasPermission('FormBuilder_Allow_Manage');
+
+    if (!canManageEditors) {
+      this.availableSubmissionViewerUsers = [];
+      return;
+    }
+
+    this.loadSubmissionViewerUsers();
   }
 
   duplicateForm(form: FormBuilderDto): void {

@@ -165,9 +165,9 @@
                   </button>
                   <button
                     class="action-btn action-edit"
-                    [title]="permissionService.hasPermission('FormBuilder_Allow_Edit') ? ('common.edit' | translate) : 'No permission to edit'"
+                    [title]="canEditForm(form) ? ('common.edit' | translate) : 'No permission to edit'"
                     (click)="openFormModal(form)"
-                    [disabled]="!permissionService.hasPermission('FormBuilder_Allow_Edit')"
+                    [disabled]="!canEditForm(form)"
                   >
                     <i class="pi pi-pencil"></i>
                   </button>
@@ -182,7 +182,11 @@
                   <button
                     class="action-btn action-duplicate"
                     [title]="'forms.manageTabs' | translate"
+                    [class.action-disabled]="!canManageTabs(form)"
+                    [attr.aria-disabled]="!canManageTabs(form)"
+                    [tabindex]="canManageTabs(form) ? null : -1"
                     [routerLink]="['../tabs', form.id]"
+                    (click)="!canManageTabs(form) && $event.preventDefault()"
                   >
                     <i class="pi pi-th-large"></i>
                   </button>
@@ -390,6 +394,66 @@
             <option [ngValue]="'OnFinalApproval'">Approval</option>
             <option [ngValue]="'OnSpecificWorkflowStage'">Specific Workflow Stage</option>
           </select>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label text-muted small fw-bold d-block">Submission Viewers</label>
+          <p-multiSelect
+            [options]="submissionViewerOptions"
+            [(ngModel)]="selectedSubmissionViewerUserIds"
+            name="submissionViewerUserIds"
+            optionLabel="label"
+            optionValue="value"
+            [filter]="true"
+            filterBy="label"
+            [showToggleAll]="false"
+            defaultLabel="Select users who can see this form's submissions"
+            [appendTo]="'body'"
+            styleClass="w-full submission-viewers-multiselect"
+            panelStyleClass="submission-viewers-multiselect-panel"
+          >
+            <ng-template pTemplate="selectedItems">
+              <span class="submission-viewers-selected-summary">{{ getSubmissionViewersSummary() }}</span>
+            </ng-template>
+            <ng-template let-option pTemplate="item">
+              <div class="submission-viewers-option">
+                <div class="submission-viewers-option-title">{{ option.label }}</div>
+              </div>
+            </ng-template>
+          </p-multiSelect>
+          <small class="text-muted d-block mt-2">
+            Administration users always see all submissions. Selected users will also be able to see submissions for this form.
+          </small>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label text-muted small fw-bold d-block">Form Editors</label>
+          <p-multiSelect
+            [options]="formEditorOptions"
+            [(ngModel)]="selectedFormEditorUserIds"
+            name="formEditorUserIds"
+            optionLabel="label"
+            optionValue="value"
+            [filter]="true"
+            filterBy="label"
+            [showToggleAll]="false"
+            defaultLabel="Select users who can edit this form"
+            [appendTo]="'body'"
+            styleClass="w-full submission-viewers-multiselect"
+            panelStyleClass="submission-viewers-multiselect-panel"
+          >
+            <ng-template pTemplate="selectedItems">
+              <span class="submission-viewers-selected-summary">{{ getFormEditorsSummary() }}</span>
+            </ng-template>
+            <ng-template let-option pTemplate="item">
+              <div class="submission-viewers-option">
+                <div class="submission-viewers-option-title">{{ option.label }}</div>
+              </div>
+            </ng-template>
+          </p-multiSelect>
+          <small class="text-muted d-block mt-2">
+            Selected users can edit this form and manage its tabs even if they do not have the full form builder edit permission.
+          </small>
         </div>
 
         <div class="d-flex justify-content-end gap-2 pt-3">

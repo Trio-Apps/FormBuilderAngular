@@ -93,11 +93,11 @@
                 class="cell-primary document-link"
                 type="button"
                 (click)="openSubmissionDetails(submission)"
-                [title]="'Open submission ' + (submission.documentNumber || ('#' + submission.id))">
-                {{ submission.documentNumber || 'Pending Number' }}
+                [title]="'Open submission ' + (getSubmissionDisplayNumber(submission) || ('#' + submission.id))">
+                {{ getSubmissionDisplayNumber(submission) }}
               </button>
               <ng-template #submissionNumberText>
-                <div class="cell-primary">{{ submission.documentNumber || 'Pending Number' }}</div>
+                <div class="cell-primary">{{ getSubmissionDisplayNumber(submission) }}</div>
               </ng-template>
               <div class="cell-muted">#{{ submission.id }}</div>
             </td>
@@ -161,13 +161,35 @@
             </td>
 
             <td>
-              <div class="action-stack" *ngIf="canPost(submission); else noPostAction">
+              <div
+                class="action-stack"
+                *ngIf="canEditDraft(submission) || canPost(submission) || canExecuteManualCopyToDocument(submission); else noPostAction">
                 <button
+                  *ngIf="canEditDraft(submission)"
+                  class="btn-secondary btn-secondary--compact"
+                  type="button"
+                  (click)="editDraft(submission)"
+                  title="Open this draft for editing.">
+                  Edit
+                </button>
+
+                <button
+                  *ngIf="canExecuteManualCopyToDocument(submission)"
+                  class="btn-secondary btn-secondary--compact"
+                  type="button"
+                  (click)="executeManualCopyToDocument(submission)"
+                  [disabled]="loadingCopyToDocumentSubmissionId === submission.id"
+                  [title]="getManualCopyButtonTitle(submission)">
+                  {{ getManualCopyButtonText(submission) }}
+                </button>
+
+                <button
+                  *ngIf="canPost(submission)"
                   class="btn-secondary btn-secondary--accent btn-secondary--compact"
                   type="button"
                   (click)="postSubmission(submission)"
                   [disabled]="postingBySubmission[submission.id]"
-                  title="Convert this approved submission into a posted document.">
+                  title="Post this document now. Approved items can always be posted, and submitted items can be posted directly when no approval workflow is active.">
                   {{ getPostButtonText(submission) }}
                 </button>
               </div>
@@ -221,7 +243,8 @@
   [(visible)]="showSubmissionDetails"
   [header]="'Submission Details'"
   [modal]="true"
-  [style]="{ width: '760px', maxWidth: '95vw' }"
+  [style]="{ width: '1280px', maxWidth: '96vw' }"
+  [styleClass]="'submission-details-dialog'"
   [dismissableMask]="true"
   [closeOnEscape]="true"
   [closable]="true"
@@ -254,7 +277,7 @@
     <div class="details-meta" *ngIf="selectedSubmissionDetail as detail">
       <div class="details-meta__item">
         <span class="details-meta__label">Document Number</span>
-        <strong class="details-meta__value">{{ detail.documentNumber || '-' }}</strong>
+        <strong class="details-meta__value">{{ getSubmissionDetailsDisplayNumber(detail, selectedSubmissionSummary) }}</strong>
       </div>
       <div class="details-meta__item">
         <span class="details-meta__label">Submission ID</span>
@@ -282,14 +305,40 @@
     </section>
 
     <section *ngIf="!loadingSubmissionDetails && selectedSubmissionDetail && !submissionDetailsError" class="details-list">
-      <div class="details-row" *ngFor="let fieldValue of getVisibleFieldValues()">
-        <div class="details-row__label">{{ fieldValue.fieldName || fieldValue.fieldCode || ('Field #' + fieldValue.fieldId) }}</div>
-        <div class="details-row__value">{{ getFieldDisplayValue(fieldValue) }}</div>
+      <div class="details-tabs" *ngIf="submissionDetailTabs.length > 1">
+        <button
+          *ngFor="let tab of submissionDetailTabs; trackBy: trackBySubmissionDetailTab"
+          type="button"
+          class="details-tab-btn"
+          [class.details-tab-btn--active]="tab.id === selectedSubmissionDetailTabId"
+          (click)="selectSubmissionDetailTab(tab.id)">
+          <span>{{ tab.label }}</span>
+          <small>{{ tab.fields.length }}</small>
+        </button>
       </div>
 
-      <div class="details-empty" *ngIf="getVisibleFieldValues().length === 0">
-        No saved field values were found for this submission.
+      <div class="details-tab-panel" *ngIf="getActiveSubmissionDetailTab() as activeTab; else emptyDetailsState">
+        <div class="details-tab-title" *ngIf="submissionDetailTabs.length === 1">
+          {{ activeTab.label }}
+        </div>
+
+        <div class="details-grid">
+          <article
+            *ngFor="let field of activeTab.fields; trackBy: trackBySubmissionDetailField"
+            class="details-card"
+            [class.details-card--wide]="field.fullWidth">
+            <div class="details-card__label">{{ field.label }}</div>
+            <div class="details-card__value">{{ field.value }}</div>
+          </article>
+        </div>
       </div>
+
+      <ng-template #emptyDetailsState>
+        <div class="details-empty">
+          No saved field values were found for this submission.
+        </div>
+      </ng-template>
+
     </section>
 
     <div class="details-footer">

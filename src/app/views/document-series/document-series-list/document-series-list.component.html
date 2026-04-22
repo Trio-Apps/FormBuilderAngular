@@ -271,6 +271,7 @@
         <label class="ds-label" for="sequencePadding">Sequence Padding <span class="required">*</span></label>
         <p-inputNumber id="sequencePadding" formControlName="sequencePadding" [min]="1" [max]="10" [showButtons]="true"></p-inputNumber>
         <small class="hint">{{ getSequenceDigitsPreview() }}</small>
+        <small class="hint">If overflow is disabled, numbering stops at the last value allowed by this padding.</small>
       </div>
 
       <div class="form-group">
@@ -312,6 +313,14 @@
           <span class="ds-option-label">Set as default</span>
         </div>
         <span class="ds-option-copy">Use this series as the default numbering option for the selected project.</span>
+      </label>
+
+      <label class="ds-option-card" for="allowSequenceOverflow">
+        <div class="ds-option-head">
+          <p-checkbox formControlName="allowSequenceOverflow" [binary]="true" inputId="allowSequenceOverflow"></p-checkbox>
+          <span class="ds-option-label">Allow overflow beyond padding</span>
+        </div>
+        <span class="ds-option-copy">When disabled, 3 digits stop at 999. When enabled, the series can continue to 1000 and beyond.</span>
       </label>
 
       <label class="ds-option-card" for="isActive">

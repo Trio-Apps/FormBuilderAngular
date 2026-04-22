@@ -19,7 +19,7 @@ import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { PaginatorModule } from 'primeng/paginator';
 import { MultiSelectModule } from 'primeng/multiselect';
-import { RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { TranslationService } from '../../../core/services/translation.service';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
@@ -127,6 +127,7 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private cdr: ChangeDetectorRef,
+    private router: Router,
     public translationService: TranslationService,
     public permissionService: PermissionService
   ) {
@@ -237,7 +238,7 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     this.menuForm = this.fb.group({
       name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(200)]],
       foreignName: ['', [Validators.maxLength(200)]],
-      menuCode: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50), Validators.pattern('^[A-Z0-9_]+$')]],
+      menuCode: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50), Validators.pattern('^[A-Za-z0-9_]+$')]],
       icon: ['', [Validators.maxLength(100)]],
       displayOrder: [1, [Validators.required, Validators.min(1)]],
       isActive: [true],
@@ -286,6 +287,15 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
       }
     });
     this.subscriptions.add(sub);
+  }
+
+  openMenuWorkspace(menu: TableMenuDto, tab: 'submenus' | 'documents' = 'submenus', subMenu?: TableSubMenuDto): void {
+    const queryParams: Record<string, string> = { tab };
+    if (tab === 'documents' && subMenu) {
+      queryParams['subMenuId'] = String(subMenu.id);
+    }
+
+    this.router.navigate(['/table-menus', menu.id], { queryParams });
   }
 
   loadDocumentTypes(): void {
@@ -532,7 +542,7 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
       const createDto: CreateTableMenuDto = {
         name: formValue.name,
         foreignName: formValue.foreignName || undefined,
-        menuCode: formValue.menuCode.toUpperCase(),
+        menuCode: formValue.menuCode.trim(),
         icon: formValue.icon || undefined,
         displayOrder: formValue.displayOrder,
         isActive: formValue.isActive,
@@ -926,6 +936,32 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
     }
   }
 
+  private resetMenuDocumentFormForNextAssignment(formValue: any): void {
+    this.editingMenuDocument = null;
+    this.menuDocumentForm.get('documentTypeId')?.enable();
+
+    if (this.currentMenuForDocument || formValue.menuId) {
+      this.menuDocumentForm.get('menuId')?.disable();
+    } else {
+      this.menuDocumentForm.get('menuId')?.enable();
+    }
+
+    if (this.currentSubMenuForDocument || formValue.subMenuId) {
+      this.menuDocumentForm.get('subMenuId')?.disable();
+    } else {
+      this.menuDocumentForm.get('subMenuId')?.enable();
+    }
+
+    this.menuDocumentForm.reset({
+      documentTypeId: null,
+      menuId: formValue.menuId || this.currentMenuForDocument?.id || null,
+      subMenuId: formValue.subMenuId || this.currentSubMenuForDocument?.id || null,
+      displayOrder: 1,
+      isActive: true,
+      permissions: []
+    });
+  }
+
   saveMenuDocument(): void {
     if (this.menuDocumentForm.invalid) {
       this.messageService.add({
@@ -1004,12 +1040,12 @@ export class TableMenusListComponent implements OnInit, OnDestroy {
             summary: 'Success',
             detail: 'Menu document created successfully'
           });
-          this.closeMenuDocumentModal();
           if (formValue.subMenuId) {
             this.loadMenuDocuments(undefined, formValue.subMenuId);
           } else if (formValue.menuId) {
             this.loadMenuDocuments(formValue.menuId);
           }
+          this.resetMenuDocumentFormForNextAssignment(formValue);
           this.loading.save = false;
         },
         error: (error) => {

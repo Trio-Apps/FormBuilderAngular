@@ -106,6 +106,10 @@ export interface SapHanaConfigDto {
   authenticationMethod?: string | null;
   companyDb?: string | null;
   verifySsl?: boolean;
+  hanaServer?: string | null;
+  hanaUserName?: string | null;
+  hanaSchema?: string | null;
+  hanaMaxPoolSize?: number | null;
   isActive?: boolean;
 }
 
@@ -118,6 +122,11 @@ export interface CreateSapConnectionDto {
   userName: string;
   password: string;
   verifySsl: boolean;
+  hanaServer?: string | null;
+  hanaUserName?: string | null;
+  hanaPassword?: string | null;
+  hanaSchema?: string | null;
+  hanaMaxPoolSize?: number | null;
   isActive: boolean;
 }
 
@@ -130,6 +139,11 @@ export interface UpdateSapConnectionDto {
   userName?: string;
   password?: string;
   verifySsl?: boolean;
+  hanaServer?: string | null;
+  hanaUserName?: string | null;
+  hanaPassword?: string | null;
+  hanaSchema?: string | null;
+  hanaMaxPoolSize?: number | null;
   isActive?: boolean;
 }
 

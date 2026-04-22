@@ -139,16 +139,16 @@
                   pButton
                   icon="pi pi-list"
                   class="p-button-text p-button-sm action-btn"
-                  (click)="loadSubMenus(menu.id)"
-                  pTooltip="View Sub Menus"
+                  (click)="openMenuWorkspace(menu, 'submenus')"
+                  pTooltip="Open Sub Menus"
                   tooltipPosition="top">
                 </button>
                 <button
                   pButton
                   icon="pi pi-file"
                   class="p-button-text p-button-sm action-btn"
-                  (click)="loadMenuDocuments(menu.id)"
-                  pTooltip="View Documents"
+                  (click)="openMenuWorkspace(menu, 'documents')"
+                  pTooltip="Open Documents"
                   tooltipPosition="top">
                 </button>
                 <button
@@ -196,217 +196,6 @@
       </p-table>
     </app-table-shell>
 
-    <!-- Sub Menus Section (when a menu is selected) -->
-    <div *ngIf="currentMenuForSubMenu" class="sub-menus-section">
-      <div class="section-header">
-        <div>
-          <h3>
-            <i class="pi pi-list"></i>
-            Sub Menus
-            <span class="menu-context" *ngIf="currentMenuForSubMenu">
-              - {{ currentMenuForSubMenu.name }}
-            </span>
-          </h3>
-          <p class="section-subtitle" *ngIf="subMenus.length === 0 && !loading.subMenus">
-            No sub menus found. Click "New Sub Menu" to create one.
-          </p>
-        </div>
-        <div class="section-actions">
-          <button
-            pButton
-            icon="pi pi-times"
-            class="p-button-text p-button-sm"
-            (click)="closeSubMenusSection()"
-            pTooltip="Close"
-            tooltipPosition="top">
-          </button>
-          <button
-            pButton
-            icon="pi pi-plus"
-            label="New Sub Menu"
-            class="p-button-success p-button-sm"
-            (click)="openSubMenuModal(currentMenuForSubMenu)"
-            [disabled]="!currentMenuForSubMenu || loading.subMenus || (!permissionService.canCreateTableSubMenus() && !permissionService.canManageTableSubMenus())"
-            [title]="permissionService.canCreateTableSubMenus() || permissionService.canManageTableSubMenus() ? '' : 'You do not have permission to create table sub menus'">
-          </button>
-        </div>
-      </div>
-      
-      <div *ngIf="loading.subMenus" class="loading-state">
-        <i class="pi pi-spin pi-spinner"></i>
-        <span>Loading sub menus...</span>
-      </div>
-      <p-table 
-        *ngIf="!loading.subMenus && subMenus.length > 0"
-        [value]="subMenus" 
-        styleClass="p-datatable-striped">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>Sub Menu Name</th>
-            <th style="width: 100px">Status</th>
-            <th style="width: 150px">Actions</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-subMenu>
-          <tr>
-            <td>
-              <div class="menu-name-cell">
-                <strong>{{ subMenu.name }}</strong>
-                <span *ngIf="subMenu.foreignName" class="foreign-name">{{ subMenu.foreignName }}</span>
-              </div>
-            </td>
-            <td>
-              <span [class]="subMenu.isActive ? 'status-badge active' : 'status-badge inactive'">
-                <i [class]="subMenu.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
-                {{ subMenu.isActive ? 'Active' : 'Inactive' }}
-              </span>
-            </td>
-            <td>
-              <app-table-actions>
-                <button
-                  pButton
-                  icon="pi pi-file"
-                  class="p-button-text p-button-sm action-btn"
-                  (click)="loadMenuDocuments(currentMenuForSubMenu.id, subMenu.id)"
-                  pTooltip="View Documents"
-                  tooltipPosition="top">
-                </button>
-                <button
-                  pButton
-                  icon="pi pi-pencil"
-                  class="p-button-text p-button-sm action-btn"
-                  (click)="openSubMenuModal(currentMenuForSubMenu, subMenu)"
-                  [pTooltip]="permissionService.canEditTableSubMenus() || permissionService.canManageTableSubMenus() ? 'Edit' : 'You do not have permission to edit table sub menus'"
-                  [disabled]="!permissionService.canEditTableSubMenus() && !permissionService.canManageTableSubMenus()"
-                  tooltipPosition="top">
-                </button>
-                <button
-                  pButton
-                  icon="pi pi-trash"
-                  class="p-button-text p-button-sm action-btn action-btn-danger"
-                  (click)="deleteSubMenu(subMenu)"
-                  [disabled]="loading.delete || (!permissionService.canDeleteTableSubMenus() && !permissionService.canManageTableSubMenus())"
-                  [pTooltip]="permissionService.canDeleteTableSubMenus() || permissionService.canManageTableSubMenus() ? 'Delete' : 'You do not have permission to delete table sub menus'"
-                  tooltipPosition="top">
-                </button>
-              </app-table-actions>
-</td>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="emptymessage">
-          <tr>
-            <td colspan="3" class="empty-message">
-              <div class="empty-state">
-                <i class="pi pi-inbox"></i>
-                <p>No sub menus found for this menu.</p>
-              </div>
-            </td>
-          </tr>
-        </ng-template>
-      </p-table>
-    </div>
-
-    <!-- Menu Documents Section -->
-    <div *ngIf="currentMenuForDocument || currentSubMenuForDocument" class="menu-documents-section">
-      <div class="section-header">
-        <div>
-          <h3>
-            <i class="pi pi-file"></i>
-            Menu Documents
-            <span class="menu-context" *ngIf="currentMenuForDocument">
-              - {{ currentMenuForDocument.name }}
-            </span>
-            <span class="menu-context" *ngIf="currentSubMenuForDocument">
-              / {{ currentSubMenuForDocument.name }}
-            </span>
-          </h3>
-          <p class="section-subtitle" *ngIf="menuDocuments.length === 0 && !loading.documents">
-            No documents assigned. Click "Assign Document" to add one.
-          </p>
-        </div>
-        <div class="section-actions">
-          <button
-            pButton
-            icon="pi pi-times"
-            class="p-button-text p-button-sm"
-            (click)="closeMenuDocumentsSection()"
-            pTooltip="Close"
-            tooltipPosition="top">
-          </button>
-          <button
-            pButton
-            icon="pi pi-plus"
-            label="Assign Document"
-            class="p-button-success p-button-sm"
-            (click)="openMenuDocumentModal(currentMenuForDocument || undefined, currentSubMenuForDocument || undefined)"
-            [disabled]="(!currentMenuForDocument && !currentSubMenuForDocument) || loading.documents">
-          </button>
-        </div>
-      </div>
-      
-      <div *ngIf="loading.documents" class="loading-state">
-        <i class="pi pi-spin pi-spinner"></i>
-        <span>Loading documents...</span>
-      </div>
-      <p-table 
-        *ngIf="!loading.documents && menuDocuments.length > 0"
-        [value]="menuDocuments" 
-        styleClass="p-datatable-striped">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>Document Type</th>
-            <th>Menu</th>
-            <th>Sub Menu</th>
-            <th style="width: 100px">Status</th>
-            <th style="width: 120px">Actions</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-document>
-          <tr>
-            <td>{{ getDocumentTypeName(document.documentTypeId) }}</td>
-            <td>{{ document.menuName || '-' }}</td>
-            <td>{{ document.subMenuName || '-' }}</td>
-            <td>
-              <span [class]="document.isActive ? 'status-badge active' : 'status-badge inactive'">
-                <i [class]="document.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
-                {{ document.isActive ? 'Active' : 'Inactive' }}
-              </span>
-            </td>
-            <td>
-              <app-table-actions>
-                <button
-                  pButton
-                  icon="pi pi-pencil"
-                  class="p-button-text p-button-sm action-btn"
-                  (click)="openMenuDocumentModal(currentMenuForDocument || undefined, currentSubMenuForDocument || undefined, document)"
-                  pTooltip="Edit"
-                  tooltipPosition="top">
-                </button>
-                <button
-                  pButton
-                  icon="pi pi-trash"
-                  class="p-button-text p-button-sm action-btn action-btn-danger"
-                  (click)="deleteMenuDocument(document)"
-                  [disabled]="loading.delete"
-                  pTooltip="Remove"
-                  tooltipPosition="top">
-                </button>
-              </app-table-actions>
-</td>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="emptymessage">
-          <tr>
-            <td colspan="5" class="empty-message">
-              <div class="empty-state">
-                <i class="pi pi-inbox"></i>
-                <p>No documents found for this menu.</p>
-              </div>
-            </td>
-          </tr>
-        </ng-template>
-      </p-table>
-    </div>
   </div>
 </div>
 
@@ -451,17 +240,14 @@
           <i class="pi pi-tag"></i>
           Menu Name <span class="required">*</span>
         </label>
-        <span class="p-input-icon-left" style="width: 100%;">
-          <i class="pi pi-pencil"></i>
-          <input
-            id="name"
-            type="text"
-            pInputText
-            formControlName="name"
-            placeholder="e.g., Sales Management"
-            [class.ng-invalid]="menuForm.get('name')?.invalid && menuForm.get('name')?.touched"
-            style="width: 100%;">
-        </span>
+        <input
+          id="name"
+          type="text"
+          pInputText
+          formControlName="name"
+          placeholder="e.g., Sales Management"
+          [class.ng-invalid]="menuForm.get('name')?.invalid && menuForm.get('name')?.touched"
+          class="w-full">
         <small *ngIf="menuForm.get('name')?.invalid && menuForm.get('name')?.touched" class="error-text">
           <i class="pi pi-exclamation-circle"></i>
           Menu name is required (2-200 characters)
@@ -474,16 +260,15 @@
           <i class="pi pi-language"></i>
           Foreign Name (Arabic)
         </label>
-        <span class="p-input-icon-left" style="width: 100%;">
-          <i class="pi pi-pencil"></i>
+        
           <input
             id="foreignName"
             type="text"
             pInputText
             formControlName="foreignName"
             placeholder="e.g., إدارة المبيعات"
-            style="width: 100%;">
-        </span>
+            class="w-full">
+        
       </div>
 
       <div class="form-group">
@@ -491,8 +276,7 @@
           <i class="pi pi-code"></i>
           Menu Code <span class="required">*</span>
         </label>
-        <span class="p-input-icon-left" style="width: 100%;">
-          <i class="pi pi-key"></i>
+        
           <input
             id="menuCode"
             type="text"
@@ -500,15 +284,15 @@
             formControlName="menuCode"
             placeholder="e.g., SALES_MGMT"
             [class.ng-invalid]="menuForm.get('menuCode')?.invalid && menuForm.get('menuCode')?.touched"
-            style="width: 100%;">
-        </span>
+            class="w-full">
+        
         <small *ngIf="menuForm.get('menuCode')?.invalid && menuForm.get('menuCode')?.touched" class="error-text">
           <i class="pi pi-exclamation-circle"></i>
-          Menu code is required (uppercase letters, numbers, and underscores only)
+          Menu code is required (letters, numbers, and underscores only)
         </small>
         <small *ngIf="!menuForm.get('menuCode')?.invalid && !editingMenu" class="help-text">
           <i class="pi pi-info-circle"></i>
-          Uppercase letters, numbers, and underscores only. Cannot be changed after creation.
+          Letters, numbers, and underscores only. Cannot be changed after creation.
         </small>
         <small *ngIf="editingMenu" class="help-text">
           <i class="pi pi-lock"></i>
@@ -605,8 +389,7 @@
           <i class="pi pi-tag"></i>
           Sub Menu Name <span class="required">*</span>
         </label>
-        <span class="p-input-icon-left" style="width: 100%;">
-          <i class="pi pi-pencil"></i>
+        
           <input
             id="subMenuName"
             type="text"
@@ -614,8 +397,8 @@
             formControlName="name"
             placeholder="e.g., Customer Orders"
             [class.ng-invalid]="subMenuForm.get('name')?.invalid && subMenuForm.get('name')?.touched"
-            style="width: 100%;">
-        </span>
+            class="w-full">
+        
         <small *ngIf="subMenuForm.get('name')?.invalid && subMenuForm.get('name')?.touched" class="error-text">
           <i class="pi pi-exclamation-circle"></i>
           Sub menu name is required (2-200 characters)
@@ -628,16 +411,15 @@
           <i class="pi pi-language"></i>
           Foreign Name (Arabic)
         </label>
-        <span class="p-input-icon-left" style="width: 100%;">
-          <i class="pi pi-pencil"></i>
+        
           <input
             id="subMenuForeignName"
             type="text"
             pInputText
             formControlName="foreignName"
             placeholder="e.g., طلبات العملاء"
-            style="width: 100%;">
-        </span>
+            class="w-full">
+        
       </div>
 
       <div class="form-group">

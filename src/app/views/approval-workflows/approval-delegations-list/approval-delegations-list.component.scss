@@ -1,6 +1,54 @@
 @use "../../../../scss/shared-design" as *;
 @use '../approval-stages-list/approval-stages-list.component.scss';
 
+:host {
+  --page-pad-x: 32px;
+  --page-pad-y: 16px;
+}
+
+.main-content {
+  margin-top: 18px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
+
+  .document-types-section {
+    width: 100% !important;
+    max-width: none !important;
+  }
+}
+
+::ng-deep app-table-shell,
+::ng-deep app-table-shell .table-shell,
+::ng-deep app-table-shell .table-card,
+::ng-deep app-table-shell .table-wrapper,
+::ng-deep app-table-shell .p-datatable,
+::ng-deep app-table-shell .p-paginator {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+@media (max-width: 1200px) {
+  :host {
+    --page-pad-x: 32px;
+  }
+}
+
+@media (max-width: 992px) {
+  :host {
+    --page-pad-x: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  :host {
+    --page-pad-x: 16px;
+    --page-pad-y: 14px;
+  }
+}
+
 // Dialog footer styling
 .dialog-footer {
   display: flex !important;

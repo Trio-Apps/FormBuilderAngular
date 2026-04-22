@@ -1,0 +1,269 @@
+<div class="detail-page">
+  <div class="hero">
+    <button class="back-btn" type="button" (click)="goBack()">
+      <i class="pi pi-arrow-left"></i>
+    </button>
+    <div class="hero-copy">
+      <h1>{{ menu?.name || 'Menu Details' }}</h1>
+      <p *ngIf="menu">{{ menu.menuCode }} · Manage sub menus and document assignments in one workspace.</p>
+    </div>
+    <div class="hero-actions">
+      <button
+        pButton
+        type="button"
+        label="New Sub Menu"
+        icon="pi pi-plus"
+        class="p-button-outlined"
+        (click)="openSubMenuModal()"
+        *ngIf="activeTab === 'submenus'">
+      </button>
+      <button
+        pButton
+        type="button"
+        label="Assign Document"
+        icon="pi pi-plus"
+        class="p-button-success"
+        (click)="openMenuDocumentModal(selectedSubMenuForDocuments || undefined)"
+        *ngIf="activeTab === 'documents'">
+      </button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === 'submenus'"
+      (click)="switchTab('submenus')">
+      <i class="pi pi-list"></i>
+      <span>Sub Menus</span>
+      <strong>{{ subMenus.length }}</strong>
+    </button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === 'documents'"
+      (click)="switchTab('documents')">
+      <i class="pi pi-file"></i>
+      <span>Documents</span>
+      <strong>{{ documents.length }}</strong>
+    </button>
+  </div>
+
+  <app-table-shell *ngIf="activeTab === 'submenus'" title="Sub Menus" icon="pi pi-list">
+    <div table-actions class="panel-actions">
+      <div class="context-hint">Everything for <strong>{{ menu?.name }}</strong> lives here now, not under the list page.</div>
+    </div>
+
+    <p-table [value]="subMenus" [loading]="loading.subMenus" styleClass="p-datatable-striped">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Sub Menu Name</th>
+          <th style="width: 140px;">Status</th>
+          <th style="width: 160px;">Actions</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-subMenu>
+        <tr>
+          <td>
+            <div class="name-block">
+              <strong>{{ subMenu.name }}</strong>
+              <span *ngIf="subMenu.foreignName">{{ subMenu.foreignName }}</span>
+            </div>
+          </td>
+          <td>
+            <span class="status-badge" [class.inactive]="!subMenu.isActive">
+              {{ subMenu.isActive ? 'Active' : 'Inactive' }}
+            </span>
+          </td>
+          <td>
+            <app-table-actions>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-file"
+                class="p-button-text p-button-sm"
+                (click)="showDocumentsForSubMenu(subMenu)"
+                pTooltip="Open documents for this sub menu">
+              </button>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-pencil"
+                class="p-button-text p-button-sm"
+                (click)="openSubMenuModal(subMenu)">
+              </button>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-trash"
+                class="p-button-text p-button-sm"
+                (click)="deleteSubMenu(subMenu)">
+              </button>
+            </app-table-actions>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="3" class="empty-cell">
+            <div class="empty-state">
+              <i class="pi pi-list"></i>
+              <p>No sub menus yet.</p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </app-table-shell>
+
+  <app-table-shell *ngIf="activeTab === 'documents'" title="Documents" icon="pi pi-file">
+    <div table-actions class="panel-actions">
+      <div class="context-hint" *ngIf="selectedSubMenuForDocuments">
+        Showing documents for sub menu <strong>{{ selectedSubMenuForDocuments.name }}</strong>
+        <button type="button" class="link-btn" (click)="clearDocumentFilter()">Show all menu documents</button>
+      </div>
+      <div class="context-hint" *ngIf="!selectedSubMenuForDocuments">
+        Showing documents assigned directly to <strong>{{ menu?.name }}</strong> and its current context.
+      </div>
+    </div>
+
+    <p-table [value]="documents" [loading]="loading.documents" styleClass="p-datatable-striped">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Document Type</th>
+          <th>Sub Menu</th>
+          <th style="width: 140px;">Status</th>
+          <th style="width: 140px;">Actions</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-document>
+        <tr>
+          <td>{{ getDocumentTypeName(document.documentTypeId) }}</td>
+          <td>{{ document.subMenuName || '-' }}</td>
+          <td>
+            <span class="status-badge" [class.inactive]="!document.isActive">
+              {{ document.isActive ? 'Active' : 'Inactive' }}
+            </span>
+          </td>
+          <td>
+            <app-table-actions>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-pencil"
+                class="p-button-text p-button-sm"
+                (click)="openMenuDocumentModal(selectedSubMenuForDocuments || undefined, document)">
+              </button>
+              <button
+                pButton
+                type="button"
+                icon="pi pi-trash"
+                class="p-button-text p-button-sm"
+                (click)="deleteMenuDocument(document)">
+              </button>
+            </app-table-actions>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="4" class="empty-cell">
+            <div class="empty-state">
+              <i class="pi pi-file"></i>
+              <p>No documents assigned yet.</p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </app-table-shell>
+</div>
+
+<app-dialog-shell
+  [(visible)]="showSubMenuModal"
+  [modal]="true"
+  [closable]="true"
+  [dismissableMask]="true"
+  [closeOnEscape]="true"
+  [header]="editingSubMenu ? 'Edit Sub Menu' : 'New Sub Menu'"
+  [style]="{ width: '680px' }"
+  (onHide)="closeSubMenuModal()">
+  <form [formGroup]="subMenuForm" class="dialog-form">
+    <div class="language-tabs">
+      <button type="button" class="language-btn" [class.active]="currentInputLanguage === 'en'" (click)="setInputLanguage('en')">English</button>
+      <button type="button" class="language-btn" [class.active]="currentInputLanguage === 'ar'" (click)="setInputLanguage('ar')">العربية</button>
+    </div>
+
+    <div class="field-group" *ngIf="currentInputLanguage === 'en'">
+      <label for="subMenuName">Sub Menu Name</label>
+      <input id="subMenuName" pInputText formControlName="name" class="w-full" />
+    </div>
+
+    <div class="field-group" *ngIf="currentInputLanguage === 'ar'">
+      <label for="subMenuForeignName">Foreign Name</label>
+      <input id="subMenuForeignName" pInputText formControlName="foreignName" class="w-full" />
+    </div>
+
+    <div class="field-group">
+      <label for="subMenuDisplayOrder">Display Order</label>
+      <input id="subMenuDisplayOrder" pInputText type="number" formControlName="displayOrder" class="w-full" />
+    </div>
+
+    <div class="toggle-row">
+      <p-checkbox inputId="subMenuActive" formControlName="isActive" [binary]="true"></p-checkbox>
+      <label for="subMenuActive">Active</label>
+    </div>
+
+    <div class="dialog-actions">
+      <button pButton type="button" label="Cancel" class="p-button-text" (click)="closeSubMenuModal()"></button>
+      <button pButton type="button" [label]="editingSubMenu ? 'Update' : 'Create'" class="p-button-success" [loading]="loading.save" (click)="saveSubMenu()"></button>
+    </div>
+  </form>
+</app-dialog-shell>
+
+<app-dialog-shell
+  [(visible)]="showMenuDocumentModal"
+  [modal]="true"
+  [closable]="true"
+  [dismissableMask]="true"
+  [closeOnEscape]="true"
+  [header]="editingMenuDocument ? 'Edit Document' : 'Assign Document'"
+  [style]="{ width: '680px' }"
+  (onHide)="closeMenuDocumentModal()">
+  <form [formGroup]="menuDocumentForm" class="dialog-form">
+    <div class="field-group">
+      <label for="documentTypeId">Document Type</label>
+      <select id="documentTypeId" formControlName="documentTypeId" class="p-inputtext w-full">
+        <option [ngValue]="null">Select document type</option>
+        <option *ngFor="let docType of documentTypes" [ngValue]="docType.id">{{ docType.menuCaption || docType.name }}</option>
+      </select>
+    </div>
+
+    <div class="field-group">
+      <label for="subMenuId">Sub Menu</label>
+      <select id="subMenuId" formControlName="subMenuId" class="p-inputtext w-full">
+        <option [ngValue]="null">Assign directly to menu</option>
+        <option *ngFor="let subMenu of subMenus" [ngValue]="subMenu.id">{{ subMenu.name }}</option>
+      </select>
+    </div>
+
+    <div class="field-group">
+      <label for="documentDisplayOrder">Display Order</label>
+      <input id="documentDisplayOrder" pInputText type="number" formControlName="displayOrder" class="w-full" />
+    </div>
+
+    <div class="toggle-row">
+      <p-checkbox inputId="documentActive" formControlName="isActive" [binary]="true"></p-checkbox>
+      <label for="documentActive">Active</label>
+    </div>
+
+    <div class="dialog-actions">
+      <button pButton type="button" label="Cancel" class="p-button-text" (click)="closeMenuDocumentModal()"></button>
+      <button pButton type="button" [label]="editingMenuDocument ? 'Update' : 'Assign'" class="p-button-success" [loading]="loading.save" (click)="saveMenuDocument()"></button>
+    </div>
+  </form>
+</app-dialog-shell>
+
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>

@@ -1,11 +1,35 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { forkJoin } from 'rxjs';
 import { finalize } from 'rxjs/operators';
+import { MessageService } from 'primeng/api';
 import { CrystalLayoutByDocumentTypeDto, CrystalReportsService } from '../../FormBuilder/services/crystal-reports.service';
+import { CopyToDocumentService } from '../../FormBuilder/services/copy-to-document.service';
+import { DocumentSeriesService } from '../../FormBuilder/services/document-series.service';
 import { SapIntegrationExecuteResultDto, SapIntegrationService } from '../../FormBuilder/services/sap-integration.service';
 import { FormSubmissionDetailDto, FormSubmissionDto, FormSubmissionsService, FormSubmissionValueDto } from '../../form-submissions/services/form-submissions.service';
+import { CopyToDocumentSetupDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.component';
+import { FormFieldDto, FormTabDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
+import { TabsService } from '../../FormBuilder/services/tabs.service';
+import { FieldsService } from '../../FormBuilder/services/fields.service';
+import { PermissionService } from '../../../services/permission.service';
+
+interface SubmissionDetailFieldViewModel {
+  id: string;
+  fieldId: number;
+  label: string;
+  value: string;
+  fullWidth: boolean;
+}
+
+interface SubmissionDetailTabViewModel {
+  id: number;
+  label: string;
+  fields: SubmissionDetailFieldViewModel[];
+}
 
 @Component({
   selector: 'app-submissions-list',
@@ -16,6 +40,7 @@ import { DialogShellComponent } from '../../../shared/dialog-shell/dialog-shell.
 })
 export class SubmissionsListComponent implements OnInit {
   private readonly unavailableLayoutsStorageKey = 'submissions_unavailable_crystal_layout_doc_types';
+  private readonly manualCopyStateStorageKey = 'submissions_manual_copy_completed';
   submissions: FormSubmissionDto[] = [];
   loading = false;
   pageError = '';
@@ -27,6 +52,12 @@ export class SubmissionsListComponent implements OnInit {
   executingBySubmission: Record<number, boolean> = {};
   postingBySubmission: Record<number, boolean> = {};
   executionResultsBySubmission: Record<number, SapIntegrationExecuteResultDto> = {};
+  loadingCopyToDocumentSubmissionId: number | null = null;
+  copySetupEligibilityBySubmission: Record<number, boolean> = {};
+  successfulCopyBySubmission: Record<number, boolean> = {};
+  applicableManualSetupKeysBySubmission: Record<number, string> = {};
+  pendingNumberPreviewBySeries: Record<number, string> = {};
+  pendingNumberPreviewBySubmission: Record<number, string> = {};
   downloadingPdfBySubmission: Record<number, boolean> = {};
   pdfErrorBySubmission: Record<number, string> = {};
   defaultLayoutByDocumentType: Record<number, CrystalLayoutByDocumentTypeDto | null> = {};
@@ -37,15 +68,25 @@ export class SubmissionsListComponent implements OnInit {
   submissionDetailsError = '';
   selectedSubmissionDetail: FormSubmissionDetailDto | null = null;
   selectedSubmissionSummary: FormSubmissionDto | null = null;
+  submissionDetailTabs: SubmissionDetailTabViewModel[] = [];
+  selectedSubmissionDetailTabId: number | null = null;
 
   constructor(
     private formSubmissionsService: FormSubmissionsService,
     private sapIntegrationService: SapIntegrationService,
-    private crystalReportsService: CrystalReportsService
+    private crystalReportsService: CrystalReportsService,
+    private copyToDocumentService: CopyToDocumentService,
+    private documentSeriesService: DocumentSeriesService,
+    private messageService: MessageService,
+    private tabsService: TabsService,
+    private fieldsService: FieldsService,
+    private permissionService: PermissionService,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
     this.loadUnavailableLayoutDocTypesFromStorage();
+    this.loadManualCopyStateFromStorage();
     this.loadSubmissions();
   }
 
@@ -128,15 +169,66 @@ export class SubmissionsListComponent implements OnInit {
         });
 
         this.currentPage = 1;
-        this.prefetchAvailableLayouts();
+        this.loadSubmissionEnhancements();
         this.loading = false;
       },
       error: () => {
         this.submissions = [];
+        this.copySetupEligibilityBySubmission = {};
+        this.applicableManualSetupKeysBySubmission = {};
+        this.pendingNumberPreviewBySeries = {};
+        this.pendingNumberPreviewBySubmission = {};
         this.pageError = 'Unable to load submissions right now.';
         this.loading = false;
       }
     });
+  }
+
+  getSubmissionDisplayNumber(submission: FormSubmissionDto): string {
+    const finalNumber = (submission?.documentNumber || '').trim();
+    if (finalNumber) {
+      return finalNumber;
+    }
+
+    const serverPreview = (submission?.pendingDocumentNumberPreview || '').trim();
+    if (serverPreview) {
+      return serverPreview;
+    }
+
+    const seriesId = Number(submission?.seriesId || 0);
+    if (seriesId > 0 && this.pendingNumberPreviewBySeries[seriesId]) {
+      return this.pendingNumberPreviewBySeries[seriesId];
+    }
+
+    const submissionId = Number(submission?.id || 0);
+    if (submissionId > 0 && this.pendingNumberPreviewBySubmission[submissionId]) {
+      return this.pendingNumberPreviewBySubmission[submissionId];
+    }
+
+    const derivedPreview = this.buildContextualPendingNumberPreview(submission);
+    if (derivedPreview) {
+      return derivedPreview;
+    }
+
+    return 'Pending Number';
+  }
+
+  getSubmissionDetailsDisplayNumber(detail: FormSubmissionDetailDto | null, summary?: FormSubmissionDto | null): string {
+    const finalNumber = (detail?.documentNumber || summary?.documentNumber || '').trim();
+    if (finalNumber) {
+      return finalNumber;
+    }
+
+    const pendingPreview = (detail?.pendingDocumentNumberPreview || summary?.pendingDocumentNumberPreview || '').trim();
+    if (pendingPreview) {
+      return pendingPreview;
+    }
+
+    if (summary) {
+      return this.getSubmissionDisplayNumber(summary);
+    }
+
+    return 'Pending Number';
   }
 
   executeSap(submission: FormSubmissionDto): void {
@@ -232,6 +324,28 @@ export class SubmissionsListComponent implements OnInit {
 
   canDownloadReport(submission: FormSubmissionDto): boolean {
     return this.canShowPdfButton(submission);
+  }
+
+  canEditDraft(submission: FormSubmissionDto): boolean {
+    if (!submission?.id || !submission?.documentTypeId) {
+      return false;
+    }
+
+    return (submission.status || '').trim().toLowerCase() === 'draft';
+  }
+
+  editDraft(submission: FormSubmissionDto): void {
+    if (!this.canEditDraft(submission)) {
+      return;
+    }
+
+    this.router.navigate([
+      '/document-types',
+      Number(submission.documentTypeId),
+      'submissions',
+      Number(submission.id),
+      'edit'
+    ]);
   }
 
   getReportButtonText(submission: FormSubmissionDto): string {
@@ -333,11 +447,20 @@ export class SubmissionsListComponent implements OnInit {
     this.submissionDetailsError = '';
     this.selectedSubmissionDetail = null;
     this.selectedSubmissionSummary = submission;
+    this.submissionDetailTabs = [];
+    this.selectedSubmissionDetailTabId = null;
     this.showSubmissionDetails = true;
 
     this.formSubmissionsService.getSubmissionById(submissionId).subscribe({
       next: (detail) => {
         this.selectedSubmissionDetail = detail;
+        const formBuilderId = Number(detail?.formBuilderId || submission?.formBuilderId || 0);
+        if (formBuilderId > 0) {
+          this.loadSubmissionDetailLayout(formBuilderId, detail);
+          return;
+        }
+
+        this.buildSubmissionDetailLayout(detail, [], []);
         this.loadingSubmissionDetails = false;
       },
       error: (error: Error) => {
@@ -353,6 +476,8 @@ export class SubmissionsListComponent implements OnInit {
     this.submissionDetailsError = '';
     this.selectedSubmissionDetail = null;
     this.selectedSubmissionSummary = null;
+    this.submissionDetailTabs = [];
+    this.selectedSubmissionDetailTabId = null;
   }
 
   getVisibleFieldValues(): FormSubmissionValueDto[] {
@@ -390,9 +515,46 @@ export class SubmissionsListComponent implements OnInit {
     return '';
   }
 
+  getActiveSubmissionDetailTab(): SubmissionDetailTabViewModel | null {
+    if (!this.submissionDetailTabs.length) {
+      return null;
+    }
+
+    const activeTab = this.submissionDetailTabs.find((tab) => tab.id === this.selectedSubmissionDetailTabId);
+    return activeTab || this.submissionDetailTabs[0] || null;
+  }
+
+  selectSubmissionDetailTab(tabId: number): void {
+    this.selectedSubmissionDetailTabId = tabId;
+  }
+
+  trackBySubmissionDetailTab(_: number, tab: SubmissionDetailTabViewModel): number {
+    return tab.id;
+  }
+
+  trackBySubmissionDetailField(_: number, field: SubmissionDetailFieldViewModel): string {
+    return field.id;
+  }
+
   get postedSubmissions(): FormSubmissionDto[] {
+    const currentDetail = this.selectedSubmissionDetail;
+    const currentSummary = this.selectedSubmissionSummary;
+    const currentDocumentTypeId = Number(currentDetail?.documentTypeId || currentSummary?.documentTypeId || 0);
+    const currentFormBuilderId = Number(currentDetail?.formBuilderId || currentSummary?.formBuilderId || 0);
+
     return this.submissions
       .filter((submission) => (submission.status || '').trim().toLowerCase() === 'posted')
+      .filter((submission) => {
+        if (currentDocumentTypeId > 0 && Number(submission?.documentTypeId || 0) !== currentDocumentTypeId) {
+          return false;
+        }
+
+        if (currentFormBuilderId > 0 && Number(submission?.formBuilderId || 0) !== currentFormBuilderId) {
+          return false;
+        }
+
+        return true;
+      })
       .slice()
       .sort((a, b) => {
         const aTime = new Date((a.lastUpdatedDate || a.createdDate || a.submittedDate) as any).getTime() || 0;
@@ -448,7 +610,426 @@ export class SubmissionsListComponent implements OnInit {
 
   canPost(submission: FormSubmissionDto): boolean {
     const normalized = (submission?.status || '').trim().toLowerCase();
-    return normalized === 'approved';
+    if (normalized === 'approved') {
+      return true;
+    }
+
+    const isCopiedSubmission = Number(submission?.parentDocumentId || 0) > 0;
+    return normalized === 'submitted' && (!Number(submission?.stageId || 0) || isCopiedSubmission);
+  }
+
+  private loadPendingNumberPreviews(): void {
+    const pendingSubmissions = (this.submissions || []).filter(
+      (submission) => !(submission?.documentNumber || '').trim() && Number(submission?.id || 0) > 0
+    );
+
+    if (!pendingSubmissions.length) {
+      this.pendingNumberPreviewBySeries = {};
+      this.pendingNumberPreviewBySubmission = {};
+      return;
+    }
+
+    const submissionPreviewMap: Record<number, string> = {};
+    const nextMap: Record<number, string> = {};
+
+    for (const submission of pendingSubmissions) {
+      const submissionId = Number(submission?.id || 0);
+      const seriesId = Number(submission?.seriesId || 0);
+      const fullNumber = (submission?.pendingDocumentNumberPreview || '').trim();
+
+      if (submissionId > 0 && fullNumber) {
+        submissionPreviewMap[submissionId] = fullNumber;
+      }
+
+      if (seriesId > 0 && fullNumber) {
+        nextMap[seriesId] = fullNumber;
+      }
+    }
+
+    this.pendingNumberPreviewBySubmission = submissionPreviewMap;
+    this.pendingNumberPreviewBySeries = Object.keys(nextMap).length
+      ? nextMap
+      : this.buildFallbackPendingNumberPreviews();
+  }
+
+  private buildFallbackPendingNumberPreviews(): Record<number, string> {
+    const previewBySeries: Record<number, string> = {};
+    const submissionsBySeries = new Map<number, FormSubmissionDto[]>();
+
+    for (const submission of this.submissions || []) {
+      const seriesId = Number(submission?.seriesId || 0);
+      if (seriesId <= 0) {
+        continue;
+      }
+
+      const existing = submissionsBySeries.get(seriesId) || [];
+      existing.push(submission);
+      submissionsBySeries.set(seriesId, existing);
+    }
+
+    for (const [seriesId, seriesSubmissions] of submissionsBySeries.entries()) {
+      const preview = this.buildFallbackSeriesPreview(seriesSubmissions);
+      if (preview) {
+        previewBySeries[seriesId] = preview;
+      }
+    }
+
+    return previewBySeries;
+  }
+
+  private buildFallbackSeriesPreview(seriesSubmissions: FormSubmissionDto[]): string {
+    let bestPrefix = '';
+    let bestPadding = 0;
+    let maxSequence = 0;
+
+    for (const submission of seriesSubmissions || []) {
+      const documentNumber = (submission?.documentNumber || '').trim();
+      if (!documentNumber) {
+        continue;
+      }
+
+      const match = /^(.*?)(\d+)$/.exec(documentNumber);
+      if (!match) {
+        continue;
+      }
+
+      const prefix = match[1];
+      const numericPart = match[2];
+      const sequence = Number(numericPart);
+      if (!Number.isFinite(sequence)) {
+        continue;
+      }
+
+      if (!bestPrefix) {
+        bestPrefix = prefix;
+        bestPadding = numericPart.length;
+      }
+
+      if (sequence > maxSequence) {
+        maxSequence = sequence;
+        bestPrefix = prefix;
+        bestPadding = numericPart.length;
+      }
+    }
+
+    if (!bestPrefix && maxSequence === 0) {
+      return '';
+    }
+
+    const nextSequence = maxSequence + 1;
+    const formattedSequence = bestPadding > 0
+      ? String(nextSequence).padStart(bestPadding, '0')
+      : String(nextSequence);
+
+    return `${bestPrefix}${formattedSequence}`;
+  }
+
+  private buildContextualPendingNumberPreview(submission: FormSubmissionDto): string {
+    const formBuilderId = Number(submission?.formBuilderId || 0);
+    const documentTypeId = Number(submission?.documentTypeId || 0);
+    const seriesId = Number(submission?.seriesId || 0);
+
+    const relatedSubmissions = (this.submissions || []).filter((candidate) => {
+      if ((candidate?.documentNumber || '').trim()) {
+        if (seriesId > 0) {
+          return Number(candidate?.seriesId || 0) === seriesId;
+        }
+
+        return Number(candidate?.formBuilderId || 0) === formBuilderId
+          && Number(candidate?.documentTypeId || 0) === documentTypeId;
+      }
+
+      return false;
+    });
+
+    return this.buildFallbackSeriesPreview(relatedSubmissions);
+  }
+
+  private loadSubmissionDetailLayout(formBuilderId: number, detail: FormSubmissionDetailDto): void {
+    this.tabsService.getTabs(formBuilderId).subscribe({
+      next: (tabs) => {
+        const activeTabs = (tabs || [])
+          .filter((tab) => tab && tab.id > 0 && tab.isDeleted !== true && tab.isActive !== false)
+          .sort((a, b) => Number(a.tabOrder || 0) - Number(b.tabOrder || 0));
+
+        if (!activeTabs.length) {
+          this.buildSubmissionDetailLayout(detail, [], []);
+          this.loadingSubmissionDetails = false;
+          return;
+        }
+
+        forkJoin(activeTabs.map((tab) => this.fieldsService.getFieldsByTabId(tab.id))).subscribe({
+          next: (fieldsByTab) => {
+            const allFields = (fieldsByTab || []).flatMap((fields) =>
+              (fields || [])
+                .filter((field) => field && field.isDeleted !== true && field.isActive !== false)
+                .sort((a, b) => Number(a.fieldOrder || 0) - Number(b.fieldOrder || 0))
+            );
+            this.buildSubmissionDetailLayout(detail, activeTabs, allFields);
+            this.loadingSubmissionDetails = false;
+          },
+          error: () => {
+            this.buildSubmissionDetailLayout(detail, activeTabs, []);
+            this.loadingSubmissionDetails = false;
+          }
+        });
+      },
+      error: () => {
+        this.buildSubmissionDetailLayout(detail, [], []);
+        this.loadingSubmissionDetails = false;
+      }
+    });
+  }
+
+  private buildSubmissionDetailLayout(
+    detail: FormSubmissionDetailDto,
+    tabs: FormTabDto[],
+    fields: FormFieldDto[]
+  ): void {
+    const visibleValues = this.getVisibleFieldValues();
+    const valueByFieldId = new Map<number, FormSubmissionValueDto>();
+    const valueByFieldCode = new Map<string, FormSubmissionValueDto>();
+
+    for (const fieldValue of visibleValues) {
+      if (fieldValue.fieldId) {
+        valueByFieldId.set(Number(fieldValue.fieldId), fieldValue);
+      }
+
+      const fieldCode = (fieldValue.fieldCode || '').trim().toLowerCase();
+      if (fieldCode) {
+        valueByFieldCode.set(fieldCode, fieldValue);
+      }
+    }
+
+    const usedFieldValueIds = new Set<number>();
+    const detailTabs: SubmissionDetailTabViewModel[] = [];
+
+    for (const tab of tabs) {
+      const tabFields = (fields || [])
+        .filter((field) => Number(field.tabId || 0) === Number(tab.id || 0))
+        .sort((a, b) => Number(a.fieldOrder || 0) - Number(b.fieldOrder || 0));
+
+      const fieldCards: SubmissionDetailFieldViewModel[] = [];
+
+      for (const field of tabFields) {
+        const fieldValue = valueByFieldId.get(Number(field.id || 0))
+          || valueByFieldCode.get((field.fieldCode || '').trim().toLowerCase());
+
+        if (!fieldValue) {
+          continue;
+        }
+
+        const displayValue = this.getFieldDisplayValue(fieldValue);
+        if (!displayValue) {
+          continue;
+        }
+
+        usedFieldValueIds.add(Number(fieldValue.id || 0));
+        fieldCards.push({
+          id: `field-${field.id}-${fieldValue.id}`,
+          fieldId: Number(field.id || 0),
+          label: field.fieldName || fieldValue.fieldName || fieldValue.fieldCode || `Field #${fieldValue.fieldId}`,
+          value: displayValue,
+          fullWidth: this.isSubmissionDetailFieldWide(field, displayValue)
+        });
+      }
+
+      if (!fieldCards.length) {
+        continue;
+      }
+
+      detailTabs.push({
+        id: Number(tab.id || 0),
+        label: tab.tabName || `Tab ${tab.id}`,
+        fields: fieldCards
+      });
+    }
+
+    const unmatchedFields = visibleValues
+      .filter((fieldValue) => !usedFieldValueIds.has(Number(fieldValue.id || 0)))
+      .map((fieldValue) => {
+        const displayValue = this.getFieldDisplayValue(fieldValue);
+        return {
+          id: `unmatched-${fieldValue.id}`,
+          fieldId: Number(fieldValue.fieldId || 0),
+          label: fieldValue.fieldName || fieldValue.fieldCode || `Field #${fieldValue.fieldId}`,
+          value: displayValue,
+          fullWidth: displayValue.length > 120 || displayValue.includes('\n')
+        } as SubmissionDetailFieldViewModel;
+      })
+      .filter((field) => !!field.value);
+
+    if (unmatchedFields.length) {
+      detailTabs.push({
+        id: -1,
+        label: 'Other Fields',
+        fields: unmatchedFields
+      });
+    }
+
+    if (!detailTabs.length && visibleValues.length) {
+      detailTabs.push({
+        id: 0,
+        label: 'Details',
+        fields: visibleValues.map((fieldValue) => {
+          const displayValue = this.getFieldDisplayValue(fieldValue);
+          return {
+            id: `fallback-${fieldValue.id}`,
+            fieldId: Number(fieldValue.fieldId || 0),
+            label: fieldValue.fieldName || fieldValue.fieldCode || `Field #${fieldValue.fieldId}`,
+            value: displayValue,
+            fullWidth: displayValue.length > 120 || displayValue.includes('\n')
+          };
+        })
+      });
+    }
+
+    this.submissionDetailTabs = detailTabs;
+    this.selectedSubmissionDetailTabId = detailTabs[0]?.id ?? null;
+  }
+
+  private isSubmissionDetailFieldWide(field: FormFieldDto, value: string): boolean {
+    const fieldTypeName = (field.fieldTypeName || field.type || '').toLowerCase();
+    if (
+      fieldTypeName.includes('textarea')
+      || fieldTypeName.includes('text area')
+      || fieldTypeName.includes('file')
+      || fieldTypeName.includes('grid')
+      || fieldTypeName.includes('table')
+      || fieldTypeName.includes('radio')
+      || fieldTypeName.includes('checkbox')
+      || fieldTypeName.includes('editor')
+      || fieldTypeName.includes('html')
+      || fieldTypeName.includes('rich')
+    ) {
+      return true;
+    }
+
+    return value.length > 120 || value.includes('\n');
+  }
+
+  canExecuteManualCopyToDocument(submission: FormSubmissionDto): boolean {
+    if (!submission?.id) return false;
+    if (this.loadingCopyToDocumentSubmissionId === submission.id) return false;
+    if (Number(submission.parentDocumentId || 0) > 0) return false;
+    const normalizedStatus = (submission.status || '').trim().toLowerCase();
+    if (normalizedStatus !== 'posted') {
+      return false;
+    }
+
+    if (!this.copySetupEligibilityBySubmission[submission.id]) {
+      return false;
+    }
+
+    return true;
+  }
+
+  getManualCopyButtonTitle(submission: FormSubmissionDto): string {
+    if (!submission?.id) {
+      return 'Copy is unavailable for this record.';
+    }
+
+    if (Number(submission.parentDocumentId || 0) > 0) {
+      return 'This submission was created from another document and cannot be copied again from here.';
+    }
+
+    if (!this.copySetupEligibilityBySubmission[submission.id]) {
+      return 'No active manual Copy To Document setup applies to this submission.';
+    }
+
+    if (!this.canExecuteManualCopyToDocument(submission)) {
+      return 'Copy is available only for posted records.';
+    }
+
+    return 'Run manual Copy To Document setups for this submission.';
+  }
+
+  getManualCopyButtonText(submission: FormSubmissionDto): string {
+    return this.loadingCopyToDocumentSubmissionId === submission.id ? 'Copying...' : 'Copy';
+  }
+
+  executeManualCopyToDocument(submission: FormSubmissionDto): void {
+    if (!this.canExecuteManualCopyToDocument(submission)) {
+      return;
+    }
+
+    this.loadingCopyToDocumentSubmissionId = submission.id;
+
+    this.copyToDocumentService.executeManualSetupsForSubmission(submission.id).pipe(
+      finalize(() => {
+        this.loadingCopyToDocumentSubmissionId = null;
+      })
+    ).subscribe({
+      next: (response) => {
+        const total = Number(response?.total || 0);
+        const successCount = Number(response?.successCount || 0);
+        const failedCount = Number(response?.failedCount || 0);
+        const successfulTargets = (response?.items || [])
+          .filter(item => item?.success && Number(item?.targetDocumentId || 0) > 0 && Number(item?.targetDocumentTypeId || 0) > 0);
+        const createdTargetNumbers = (response?.items || [])
+          .filter(item => item?.success && (item?.targetDocumentId || item?.targetDocumentNumber))
+          .map(item => item.targetDocumentNumber || `#${item.targetDocumentId}`)
+          .filter((value): value is string => !!value);
+
+        if (total === 0) {
+          this.messageService.add({
+            severity: 'info',
+            summary: 'Copy To Document',
+            detail: 'No active manual setups matched this submission.'
+          });
+          return;
+        }
+
+          if (failedCount === 0) {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Copy To Document',
+              detail: createdTargetNumbers.length > 0
+                ? `${successCount} setup(s) executed successfully. Draft created: ${createdTargetNumbers.join(', ')}`
+                : `${successCount} setup(s) executed successfully.`
+            });
+            if (successfulTargets.length === 1) {
+              const target = successfulTargets[0];
+              this.router.navigate([
+                '/document-types',
+                Number(target.targetDocumentTypeId),
+                'submissions',
+                Number(target.targetDocumentId),
+                'edit'
+              ]);
+              return;
+            }
+            this.loadSubmissions();
+            return;
+          }
+
+          if (successCount > 0) {
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'Copy To Document',
+              detail: createdTargetNumbers.length > 0
+              ? `${successCount} setup(s) succeeded, ${failedCount} failed. Draft created: ${createdTargetNumbers.join(', ')}`
+              : `${successCount} setup(s) succeeded, ${failedCount} failed.`
+          });
+          this.loadSubmissions();
+          return;
+        }
+
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Copy To Document',
+          detail: this.getManualCopyFailureMessage(response)
+        });
+      },
+      error: (error) => {
+        const message = error?.error?.message || error?.message || 'Failed to execute manual copy setups.';
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Copy To Document',
+          detail: message
+        });
+      }
+    });
   }
 
   getPostButtonText(submission: FormSubmissionDto): string {
@@ -466,10 +1047,8 @@ export class SubmissionsListComponent implements OnInit {
     this.pageError = '';
 
     this.formSubmissionsService.postSubmission(submissionId).subscribe({
-      next: (updatedSubmission) => {
-        this.submissions = this.submissions.map((item) =>
-          item.id === submissionId ? { ...item, ...updatedSubmission } : item
-        );
+      next: () => {
+        this.loadSubmissions();
         this.postingBySubmission[submissionId] = false;
       },
       error: (error: Error) => {
@@ -515,6 +1094,11 @@ export class SubmissionsListComponent implements OnInit {
   }
 
   private prefetchAvailableLayouts(): void {
+    if (!this.permissionService.canViewSubmissions()) {
+      this.defaultLayoutByDocumentType = {};
+      return;
+    }
+
     const nextMap: Record<number, CrystalLayoutByDocumentTypeDto | null> = {};
     const documentTypeIds = Array.from(
       new Set(
@@ -560,6 +1144,198 @@ export class SubmissionsListComponent implements OnInit {
         this.defaultLayoutByDocumentType = nextMap;
       }
     });
+  }
+
+  private getManualCopyFailureMessage(response: any): string {
+    const failedItems = Array.isArray(response?.items)
+      ? response.items.filter((item: any) => !item?.success)
+      : [];
+
+    const messages = failedItems
+      .map((item: any) => String(item?.errorMessage || '').trim())
+      .filter((message: string) => !!message);
+
+    if (messages.length === 0) {
+      return 'Manual Copy To Document setups failed for this submission.';
+    }
+
+    const uniqueMessages = Array.from(new Set(messages));
+    return uniqueMessages.slice(0, 2).join(' | ');
+  }
+
+  private loadCopyToDocumentAvailability(): void {
+    if (!this.permissionService.canViewForms()) {
+      this.copySetupEligibilityBySubmission = {};
+      this.successfulCopyBySubmission = {};
+      this.applicableManualSetupKeysBySubmission = {};
+      return;
+    }
+
+    const submissions = this.submissions || [];
+    if (!submissions.length) {
+      this.copySetupEligibilityBySubmission = {};
+      this.successfulCopyBySubmission = {};
+      return;
+    }
+
+    this.copyToDocumentService.getSetups().subscribe({
+      next: (setups) => {
+        const activeManualSetups = (setups || []).filter((setup) => this.isManualActiveSetup(setup));
+        const eligibilityMap: Record<number, boolean> = {};
+        const setupKeysMap: Record<number, string> = {};
+
+        for (const submission of submissions) {
+          const submissionId = Number(submission?.id || 0);
+          if (!submissionId) {
+            continue;
+          }
+
+          const matchingSetups = activeManualSetups.filter((setup) =>
+            this.doesSetupApplyToSubmission(setup, submission)
+          );
+
+          eligibilityMap[submissionId] = matchingSetups.length > 0;
+          setupKeysMap[submissionId] = this.buildSetupKey(matchingSetups);
+        }
+
+        this.copySetupEligibilityBySubmission = eligibilityMap;
+        this.applicableManualSetupKeysBySubmission = setupKeysMap;
+        this.reconcileManualCopyCompletionState();
+      },
+      error: () => {
+        this.copySetupEligibilityBySubmission = {};
+        this.successfulCopyBySubmission = {};
+        this.applicableManualSetupKeysBySubmission = {};
+      }
+    });
+  }
+
+  private loadSubmissionEnhancements(): void {
+    this.prefetchAvailableLayouts();
+    this.loadCopyToDocumentAvailability();
+    this.loadPendingNumberPreviews();
+  }
+
+  private isManualActiveSetup(setup: CopyToDocumentSetupDto | null | undefined): boolean {
+    if (!setup) {
+      return false;
+    }
+
+    const isActive = setup.isActive !== false;
+    const executeAutomatically = !!setup.config?.executeAutomatically;
+    return isActive && !executeAutomatically;
+  }
+
+  private doesSetupApplyToSubmission(setup: CopyToDocumentSetupDto, submission: FormSubmissionDto): boolean {
+    const sourceDocumentTypeId = Number(setup.config?.sourceDocumentTypeId || 0);
+    const sourceFormId = Number(setup.config?.sourceFormId || 0);
+    const submissionDocumentTypeId = Number(submission?.documentTypeId || 0);
+    const submissionFormId = Number(submission?.formBuilderId || 0);
+
+    if (!sourceDocumentTypeId || !sourceFormId) {
+      return false;
+    }
+
+    if (sourceDocumentTypeId !== submissionDocumentTypeId || sourceFormId !== submissionFormId) {
+      return false;
+    }
+
+    const setupCreatedAt = this.parseDateValue(setup.createdDate);
+    const submissionCreatedAt = this.parseDateValue(
+      submission.submittedDate || submission.createdDate || submission.lastUpdatedDate
+    );
+
+    if (setupCreatedAt && submissionCreatedAt && submissionCreatedAt < setupCreatedAt) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private parseDateValue(value: unknown): number | null {
+    if (!value) {
+      return null;
+    }
+
+    const timestamp = new Date(value as string | number | Date).getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  private loadManualCopyStateFromStorage(): void {
+    try {
+      const stored = localStorage.getItem(this.manualCopyStateStorageKey);
+      if (!stored) {
+        this.successfulCopyBySubmission = {};
+        return;
+      }
+
+      const parsed = JSON.parse(stored);
+      if (!parsed || typeof parsed !== 'object') {
+        this.successfulCopyBySubmission = {};
+        return;
+      }
+
+      const nextState: Record<number, boolean> = {};
+      Object.keys(parsed).forEach((submissionId) => {
+        const numericId = Number(submissionId);
+        if (numericId > 0 && typeof parsed[submissionId] === 'string') {
+          nextState[numericId] = true;
+        }
+      });
+      this.successfulCopyBySubmission = nextState;
+    } catch {
+      this.successfulCopyBySubmission = {};
+    }
+  }
+
+  private reconcileManualCopyCompletionState(): void {
+    try {
+      const stored = localStorage.getItem(this.manualCopyStateStorageKey);
+      const parsed = stored ? JSON.parse(stored) : {};
+      const nextState: Record<number, boolean> = {};
+
+      Object.keys(this.applicableManualSetupKeysBySubmission).forEach((submissionId) => {
+        const numericId = Number(submissionId);
+        const currentKey = this.applicableManualSetupKeysBySubmission[numericId];
+        if (!numericId || !currentKey) {
+          return;
+        }
+
+        if (parsed?.[submissionId] === currentKey) {
+          nextState[numericId] = true;
+        }
+      });
+
+      this.successfulCopyBySubmission = nextState;
+    } catch {
+      this.successfulCopyBySubmission = {};
+    }
+  }
+
+  private markSubmissionCopyCompleted(submissionId: number): void {
+    const setupKey = this.applicableManualSetupKeysBySubmission[submissionId];
+    if (!setupKey) {
+      return;
+    }
+
+    this.successfulCopyBySubmission[submissionId] = true;
+
+    try {
+      const stored = localStorage.getItem(this.manualCopyStateStorageKey);
+      const parsed = stored ? JSON.parse(stored) : {};
+      parsed[submissionId] = setupKey;
+      localStorage.setItem(this.manualCopyStateStorageKey, JSON.stringify(parsed));
+    } catch {
+      // Ignore storage access issues.
+    }
+  }
+
+  private buildSetupKey(setups: CopyToDocumentSetupDto[]): string {
+    return setups
+      .map((setup) => Number(setup.ruleId || setup.id || 0))
+      .filter((value) => value > 0)
+      .sort((a, b) => a - b)
+      .join(',');
   }
 
   private resolveFileName(contentDisposition: string | null): string | null {

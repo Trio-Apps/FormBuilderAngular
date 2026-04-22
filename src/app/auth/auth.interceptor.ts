@@ -1,14 +1,19 @@
-import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
+import { HttpInterceptorFn, HttpErrorResponse, HttpContextToken } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { StorageService } from './storage.service';
-import { catchError, throwError, tap } from 'rxjs';
+import { catchError, switchMap, throwError, tap } from 'rxjs';
 import { environment } from '../environments/environment';
+import { AuthService } from './auth.service';
+
+const AUTH_REFRESH_ATTEMPTED = new HttpContextToken<boolean>(() => false);
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
+  const authService = inject(AuthService);
   const storageService = inject(StorageService);
   const router = inject(Router);
   const token = storageService.getToken();
+  const refreshToken = storageService.getRefreshToken();
   const isSubmissionEndpoint =
     req.url.includes('/FormSubmissions/draft') ||
     req.url.includes('/FormSubmissions/draft-or-create') ||
@@ -20,6 +25,8 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   // For authenticated app routes (e.g. /document-types/.../submissions/new), token must be sent.
   const forceAnonymousSubmissionEndpoint = isSubmissionEndpoint && isPublicFormViewRoute;
   const allow401WithoutRedirect = req.url.includes('/CopyToDocument/setups');
+  const isLoginRequest = req.url.includes('/account/login');
+  const isRefreshRequest = req.url.includes('/account/refresh-token');
   const isPublicFormEndpoint = req.url.includes('/FormBuilder/code/') || 
                                req.url.includes('/FormBuilder/by-code/') ||
                                req.url.includes('/FormBuilder/public/') ||
@@ -42,6 +49,46 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       console.log('[AuthInterceptor] Token preview:', token.substring(0, 20) + '...');
     }
   }
+
+  const canAttemptRefresh = () =>
+    !allow401WithoutRedirect &&
+    !isPublicFormEndpoint &&
+    !isPublicFormViewRoute &&
+    !isPublicSubmissionSuccessRoute &&
+    !forceAnonymousSubmissionEndpoint &&
+    !isLoginRequest &&
+    !isRefreshRequest &&
+    !req.context.get(AUTH_REFRESH_ATTEMPTED) &&
+    !!refreshToken;
+
+  const redirectToLogin = () => {
+    const isLoginPage = router.url.includes('/pages/login');
+    if (!isLoginPage) {
+      storageService.clear();
+      router.navigate(['/pages/login'], {
+        queryParams: { returnUrl: router.url }
+      });
+    }
+  };
+
+  const retryWithRefreshedToken = () =>
+    authService.refreshAccessToken().pipe(
+      switchMap((newToken) => {
+        const retriedRequest = req.clone({
+          headers: req.headers.set('Authorization', `Bearer ${newToken}`),
+          context: req.context.set(AUTH_REFRESH_ATTEMPTED, true)
+        });
+
+        return next(retriedRequest);
+      }),
+      catchError((refreshError) => {
+        if (isDebugMode) {
+          console.warn('[AuthInterceptor] Refresh token failed - redirecting to login');
+        }
+        redirectToLogin();
+        return throwError(() => refreshError);
+      })
+    );
   
   // Add token to request if available
   if (token && !forceAnonymousSubmissionEndpoint) {
@@ -101,17 +148,19 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
             return throwError(() => error);
           }
 
-          // Don't redirect if already on login page or if it's a login request
-          const isLoginRequest = req.url.includes('/account/login');
-          const isLoginPage = router.url.includes('/pages/login');
-          
-          if (!isLoginRequest && !isLoginPage) {
+          if (canAttemptRefresh()) {
             if (isDebugMode) {
-              console.warn('[AuthInterceptor] 401 Unauthorized - clearing token and redirecting to login');
+              console.warn('[AuthInterceptor] 401 Unauthorized - attempting token refresh');
             }
-            // Clear invalid token and redirect to login
-            storageService.clear();
-            router.navigate(['/pages/login']);
+            return retryWithRefreshedToken();
+          }
+
+          const isLoginPage = router.url.includes('/pages/login');
+          if (!isLoginRequest && !isRefreshRequest && !isLoginPage) {
+            if (isDebugMode) {
+              console.warn('[AuthInterceptor] 401 Unauthorized - redirecting to login');
+            }
+            redirectToLogin();
           }
         }
         
@@ -193,16 +242,20 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
           return throwError(() => error);
         }
         
+        if (canAttemptRefresh()) {
+          if (isDebugMode) {
+            console.warn('[AuthInterceptor] 401 Unauthorized without access token - attempting token refresh');
+          }
+          return retryWithRefreshedToken();
+        }
+
         // For other endpoints, redirect to login if not already there
         const isLoginPage = router.url.includes('/pages/login');
-        if (!isLoginPage) {
+        if (!isLoginPage && !isRefreshRequest) {
           if (isDebugMode) {
             console.warn('[AuthInterceptor] 401 Unauthorized (no token) - redirecting to login');
           }
-          storageService.clear();
-          router.navigate(['/pages/login'], {
-            queryParams: { returnUrl: router.url }
-          });
+          redirectToLogin();
         }
       }
       

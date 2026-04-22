@@ -239,11 +239,27 @@ export class FieldDataSourceService {
    * @param fieldId - ID الحقل
    * @param context - JSON object للفلترة (مثل: {LegalEntityId: 1})
    */
-  getFieldOptions(fieldId: number, context?: Record<string, any>): Observable<FieldOptionResponse[]> {
+  getFieldOptions(
+    fieldId: number,
+    context?: Record<string, any>,
+    options?: { search?: string; skip?: number; take?: number }
+  ): Observable<FieldOptionResponse[]> {
     let params = new HttpParams().set('fieldId', fieldId.toString());
 
     if (context) {
       params = params.set('context', JSON.stringify(context));
+    }
+
+    if (options?.search && options.search.trim() !== '') {
+      params = params.set('search', options.search.trim());
+    }
+
+    if (options?.skip !== undefined && options.skip !== null) {
+      params = params.set('skip', options.skip.toString());
+    }
+
+    if (options?.take !== undefined && options.take !== null) {
+      params = params.set('take', options.take.toString());
     }
 
     const url = `${this.baseUrl}/field-options`;
