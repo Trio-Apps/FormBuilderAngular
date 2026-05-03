@@ -64,9 +64,11 @@
         <select [value]="statusFilter" (change)="onStatusFilterChange(($any($event.target).value || 'all').toString())">
           <option value="all">All statuses</option>
           <option value="draft">Draft</option>
-          <option value="submitted">Submitted</option>
+          <option value="pending">Pending</option>
           <option value="approved">Approved</option>
-          <option value="posted">Posted</option>
+          <option value="posted open">Posted Open</option>
+          <option value="posted closed">Posted Closed</option>
+          <option value="cancelled">Cancelled</option>
           <option value="rejected">Rejected</option>
         </select>
       </label>
@@ -163,7 +165,7 @@
             <td>
               <div
                 class="action-stack"
-                *ngIf="canEditDraft(submission) || canPost(submission) || canExecuteManualCopyToDocument(submission); else noPostAction">
+                *ngIf="canEditDraft(submission) || canPost(submission) || canCancel(submission) || canExecuteManualCopyToDocument(submission); else noPostAction">
                 <button
                   *ngIf="canEditDraft(submission)"
                   class="btn-secondary btn-secondary--compact"
@@ -189,8 +191,18 @@
                   type="button"
                   (click)="postSubmission(submission)"
                   [disabled]="postingBySubmission[submission.id]"
-                  title="Post this document now. Approved items can always be posted, and submitted items can be posted directly when no approval workflow is active.">
+                  title="Post this approved document now.">
                   {{ getPostButtonText(submission) }}
+                </button>
+
+                <button
+                  *ngIf="canCancel(submission)"
+                  class="btn-secondary btn-secondary--compact"
+                  type="button"
+                  (click)="cancelSubmission(submission)"
+                  [disabled]="cancellingBySubmission[submission.id]"
+                  title="Cancel this document. If it has an active copied document, cancel the copied document first.">
+                  {{ getCancelButtonText(submission) }}
                 </button>
               </div>
 
@@ -252,7 +264,7 @@
   <div class="submission-details-modal">
     <div
       class="details-navigation"
-      *ngIf="selectedSubmissionDetail && (selectedSubmissionDetail.status || '').toLowerCase() === 'posted'">
+      *ngIf="selectedSubmissionDetail && ((selectedSubmissionDetail.status || '').toLowerCase() === 'posted' || (selectedSubmissionDetail.status || '').toLowerCase() === 'posted open' || (selectedSubmissionDetail.status || '').toLowerCase() === 'posted closed')">
       <button
         type="button"
         class="btn-secondary btn-secondary--compact details-nav-btn"
@@ -278,6 +290,10 @@
       <div class="details-meta__item">
         <span class="details-meta__label">Document Number</span>
         <strong class="details-meta__value">{{ getSubmissionDetailsDisplayNumber(detail, selectedSubmissionSummary) }}</strong>
+      </div>
+      <div class="details-meta__item">
+        <span class="details-meta__label">Form</span>
+        <strong class="details-meta__value">{{ detail.formName || selectedSubmissionSummary?.formName || '-' }}</strong>
       </div>
       <div class="details-meta__item">
         <span class="details-meta__label">Submission ID</span>

@@ -9,6 +9,7 @@ import { ColorModeService } from '@coreui/angular';
 import { IconSetService } from '@coreui/icons-angular';
 import { iconSubset } from './icons/icon-subset';
 import { TranslationService } from './core/services/translation.service';
+import { UnifiedTableFilterService } from './services/unified-table-filter.service';
 
 @Component({
     selector: 'app-root',
@@ -29,6 +30,7 @@ export class AppComponent implements OnInit {
   readonly #colorModeService = inject(ColorModeService);
   readonly #iconSetService = inject(IconSetService);
   readonly #translationService = inject(TranslationService);
+  readonly #unifiedTableFilterService = inject(UnifiedTableFilterService);
 
   constructor() {
     this.#titleService.setTitle(this.title);
@@ -40,6 +42,7 @@ export class AppComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.#unifiedTableFilterService.init();
 
     this.#router.events.pipe(
         takeUntilDestroyed(this.#destroyRef)

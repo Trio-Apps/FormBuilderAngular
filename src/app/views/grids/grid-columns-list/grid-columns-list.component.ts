@@ -28,6 +28,8 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { PermissionService } from '../../../services/permission.service';
 
+type GridColumnDataSourceType = 'Static' | 'API' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana';
+
 // PrimeNG Modules
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
@@ -102,7 +104,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
   dataSourceForm!: FormGroup;
   dropdownOptions: DropdownOptionDto[] = [];
   loadingOptions = false;
-  dataSourceType: 'Static' | 'API' | 'LookupTable' = 'Static';
+  dataSourceType: GridColumnDataSourceType = 'Static';
   existingColumnDataSource: GridColumnDataSourceDto | null = null;
   
   // DataSource Configuration (for Column Modal - similar to FieldsListComponent)
@@ -143,6 +145,16 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
 
   // Data Types
   dataTypes = [
+    { value: 'textarea', label: 'TextArea', labelAr: 'TextArea' },
+    { value: 'integer', label: 'Integer', labelAr: 'Integer' },
+    { value: 'datetime-local', label: 'DateTime', labelAr: 'DateTime' },
+    { value: 'time', label: 'Time', labelAr: 'Time' },
+    { value: 'tel', label: 'Phone', labelAr: 'Phone' },
+    { value: 'radio', label: 'Radio', labelAr: 'Radio' },
+    { value: 'checkbox', label: 'Checkbox', labelAr: 'Checkbox' },
+    { value: 'file', label: 'File', labelAr: 'File' },
+    { value: 'password', label: 'Password', labelAr: 'Password' },
+    { value: 'calculated', label: 'Calculated', labelAr: 'Calculated' },
     { value: 'text', label: 'Text', labelAr: 'نص' },
     { value: 'number', label: 'Number', labelAr: 'رقم' },
     { value: 'date', label: 'Date', labelAr: 'تاريخ' },
@@ -197,6 +209,10 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
 
     // Watch fieldTypeId changes to show/hide options section (based on fieldType.hasOptions)
     this.columnForm.get('fieldTypeId')?.valueChanges.subscribe(fieldTypeId => {
+      this.syncDataTypeWithFieldType(fieldTypeId);
+      if (this.isSelectedDateLikeFieldType()) {
+        this.syncDateDefaultValue();
+      }
       const selectedFieldType = this.getSelectedFieldType();
       const dataSourceType = this.getDataSourceType();
       this.showOptionsSection = selectedFieldType?.hasOptions === true && dataSourceType === 'Static';
@@ -277,6 +293,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         
         // Sort by typeName for better UX
         this.fieldTypes.sort((a, b) => (a.typeName || '').localeCompare(b.typeName || ''));
+        this.dataTypes = this.buildDataTypesFromFieldTypes(this.fieldTypes);
         
         console.log(`[GridColumnsList] Loaded ${this.fieldTypes.length} active field types:`, this.fieldTypes.map(t => ({ id: t.id, name: t.typeName, isActive: t.isActive })));
       },
@@ -970,7 +987,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         foreignColumnName: column.foreignColumnName || '',
         columnCode: column.columnCode,
         columnOrder: column.columnOrder || 1,
-        dataType: column.dataType || 'text',
+        dataType: this.getDataTypeForFieldType(column.fieldTypeId) || column.dataType || 'text',
         isRequired: column.isRequired || false,
         isActive: isActiveValue,
         isReadOnly: column.isReadOnly || false,
@@ -1017,7 +1034,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         foreignColumnName: '',
         columnCode: '',
         columnOrder: nextOrder,
-        dataType: 'text',
+        dataType: this.getDataTypeForFieldType(defaultFieldTypeId) || 'text',
         isRequired: false,
         isActive: true,
         isReadOnly: false,
@@ -1058,61 +1075,43 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
    * Load Column DataSource when editing (similar to FieldsListComponent)
    */
   loadColumnDataSource(columnId: number): void {
-    // احفظ قيمة isActive قبل أي شيء - هذه القيمة يجب أن تبقى كما هي
     const preservedIsActive = this.columnForm.get('isActive')?.value;
     console.log('[GridColumnsList] loadColumnDataSource START - preservedIsActive:', preservedIsActive);
-    
-    // لا تعيد تعيين isActive هنا - القيمة موجودة بالفعل في الـ form من openColumnModal()
-    // فقط قم بتحميل DataSource وتحديث dataSourceType
-    
-    // Try to load DataSource for each type (Api, LookupTable)
-    // We'll check both types and use the one that exists
-    forkJoin({
-      api: this.dataSourcesService.getDataSourceByColumnIdAndType(columnId, 'API'),
-      lookupTable: this.dataSourcesService.getDataSourceByColumnIdAndType(columnId, 'LookupTable')
-    }).subscribe({
-      next: (results) => {
-        const apiDataSource = results.api;
-        const lookupTableDataSource = results.lookupTable;
-        
-        // احفظ قيمة isActive قبل أي تغيير
+
+    this.dataSourcesService.getActiveDataSourcesByColumnId(columnId).subscribe({
+      next: (activeDataSources) => {
+        const activeDataSource = activeDataSources?.[0] || null;
         const isActiveBeforeChange = this.columnForm.get('isActive')?.value;
         console.log('[GridColumnsList] loadColumnDataSource - isActive before change:', isActiveBeforeChange);
-        
-        if (apiDataSource) {
-          this.existingColumnDataSource = apiDataSource;
-          this.dataSourceType = 'API';
+
+        if (activeDataSource) {
+          this.existingColumnDataSource = activeDataSource;
+          this.dataSourceType = this.normalizeColumnDataSourceType(activeDataSource.sourceType);
           this.columnDataSourceConfig = {
-            apiUrl: apiDataSource.apiUrl || null,
-            httpMethod: apiDataSource.httpMethod || 'GET',
-            requestBodyJson: apiDataSource.requestBodyJson || null,
-            valuePath: apiDataSource.valuePath || null,
-            textPath: apiDataSource.textPath || null
+            apiUrl: activeDataSource.apiUrl || null,
+            httpMethod: activeDataSource.httpMethod || 'GET',
+            requestBodyJson: activeDataSource.requestBodyJson || null,
+            valuePath: activeDataSource.valuePath || null,
+            textPath: activeDataSource.textPath || null
           };
-          // لا تعيد تعيين isActive - احتفظ بالقيمة الحالية في النموذج
-        } else if (lookupTableDataSource) {
-          this.existingColumnDataSource = lookupTableDataSource;
-          this.dataSourceType = 'LookupTable';
-          // For LookupTable, apiUrl contains the table name
-          this.columnLookupTableConfig = {
-            table: lookupTableDataSource.apiUrl || '',
-            valueColumn: lookupTableDataSource.valuePath || 'Id',
-            textColumn: lookupTableDataSource.textPath || 'Name'
-          };
-          // لا تعيد تعيين isActive - احتفظ بالقيمة الحالية في النموذج
-          // Load table columns if table is selected
-          if (this.columnLookupTableConfig.table) {
-            this.loadColumnTableColumns(this.columnLookupTableConfig.table);
+
+          if (this.dataSourceType === 'LookupTable') {
+            this.columnLookupTableConfig = {
+              table: activeDataSource.apiUrl || '',
+              valueColumn: activeDataSource.valuePath || 'Id',
+              textColumn: activeDataSource.textPath || 'Name'
+            };
+            if (this.columnLookupTableConfig.table) {
+              this.loadColumnTableColumns(this.columnLookupTableConfig.table);
+            }
           }
         } else {
           // No DataSource found, use Static
           this.existingColumnDataSource = null;
           this.dataSourceType = 'Static';
           this.resetColumnDataSourceConfig();
-          // لا تعيد تعيين isActive - احتفظ بالقيمة الحالية في النموذج
         }
-        
-        // تأكد من أن isActive لم يتغير - استخدم القيمة المحفوظة في البداية
+
         const isActiveAfterChange = this.columnForm.get('isActive')?.value;
         console.log('[GridColumnsList] loadColumnDataSource - isActive after change:', {
           preservedIsActive,
@@ -1121,7 +1120,6 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         });
         if (preservedIsActive !== isActiveAfterChange) {
           console.warn('[GridColumnsList] WARNING: isActive changed from', preservedIsActive, 'to', isActiveAfterChange, '- Restoring original value');
-          // استعد القيمة الأصلية المحفوظة في البداية
           this.columnForm.patchValue({ 
             isActive: preservedIsActive
           }, { emitEvent: false });
@@ -1134,7 +1132,6 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         this.existingColumnDataSource = null;
         this.dataSourceType = 'Static';
         this.resetColumnDataSourceConfig();
-        // لا تعيد تعيين isActive - احتفظ بالقيمة الحالية في النموذج
         this.cdr.detectChanges();
       }
     });
@@ -1287,7 +1284,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     this.columnForm.reset({
       fieldTypeId: defaultFieldTypeId,
       columnOrder: 1,
-      dataType: 'text',
+      dataType: this.getDataTypeForFieldType(defaultFieldTypeId) || 'text',
       isRequired: false,
       isActive: true,
       isReadOnly: false,
@@ -1332,7 +1329,98 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     return this.fieldTypes.find(t => t.id === fieldTypeId);
   }
 
-  getDataSourceType(): 'Static' | 'API' | 'LookupTable' {
+  isSelectedDateFieldType(): boolean {
+    const selectedType = this.getSelectedFieldType();
+    const typeName = (selectedType?.typeName || '').toLowerCase().trim();
+    return typeName === 'date' || typeName === 'date picker' || typeName === 'datepicker';
+  }
+
+  isSelectedDateTimeFieldType(): boolean {
+    const selectedType = this.getSelectedFieldType();
+    const typeName = (selectedType?.typeName || '').toLowerCase().trim();
+    if (this.isSelectedDateFieldType()) {
+      return false;
+    }
+    return typeName === 'datetime' || typeName === 'date time' ||
+      typeName.includes('datetime') || typeName.includes('date time');
+  }
+
+  isSelectedDateLikeFieldType(): boolean {
+    return this.isSelectedDateFieldType() || this.isSelectedDateTimeFieldType();
+  }
+
+  getSelectedDateDefaultToken(): string {
+    return this.isSelectedDateTimeFieldType() ? '__now__' : '__today__';
+  }
+
+  private syncDateDefaultValue(): void {
+    const defaultValue = this.columnForm.get('defaultValue')?.value;
+    if (defaultValue === '__today__' && this.isSelectedDateTimeFieldType()) {
+      this.columnForm.patchValue({ defaultValue: '__now__' }, { emitEvent: false });
+    } else if (defaultValue === '__now__' && this.isSelectedDateFieldType()) {
+      this.columnForm.patchValue({ defaultValue: '__today__' }, { emitEvent: false });
+    }
+  }
+
+  private buildDataTypesFromFieldTypes(fieldTypes: FieldTypeDto[]): { value: string; label: string; labelAr: string }[] {
+    const fallbackTypes = [...this.dataTypes];
+    const seen = new Set<string>();
+    const derived = fieldTypes
+      .map(type => ({
+        value: this.normalizeDataType(type),
+        label: type.typeName || this.normalizeDataType(type),
+        labelAr: type.foreignTypeName || type.typeName || this.normalizeDataType(type)
+      }))
+      .filter(type => {
+        if (!type.value || seen.has(type.value)) {
+          return false;
+        }
+        seen.add(type.value);
+        return true;
+      });
+
+    return derived.length > 0 ? derived : fallbackTypes;
+  }
+
+  private normalizeDataType(fieldType?: FieldTypeDto): string {
+    const typeName = (fieldType?.typeName || '').toLowerCase().trim();
+    const dataType = (fieldType?.dataType || '').toLowerCase().trim();
+    const combined = `${typeName} ${dataType}`;
+
+    if (combined.includes('textarea') || combined.includes('text area')) return 'textarea';
+    if (typeName === 'date' || typeName === 'datepicker' || typeName === 'date picker') return 'date';
+    if (combined.includes('datetime') || combined.includes('date time')) return 'datetime-local';
+    if (typeName === 'time' || dataType === 'timespan' || (combined.includes('time') && !combined.includes('datetime'))) return 'time';
+    if (combined.includes('date')) return 'date';
+    if (combined.includes('integer') || combined.includes('int')) return 'integer';
+    if (combined.includes('number') || combined.includes('decimal') || combined.includes('float') || combined.includes('double')) return 'number';
+    if (combined.includes('email')) return 'email';
+    if (combined.includes('phone') || combined.includes('tel') || combined.includes('mobile')) return 'tel';
+    if (combined.includes('password')) return 'password';
+    if (combined.includes('boolean') || combined.includes('bool') || combined.includes('switch') || combined.includes('toggle')) return 'boolean';
+    if (combined.includes('checkbox') || combined.includes('multi')) return 'checkbox';
+    if (combined.includes('radio')) return 'radio';
+    if (combined.includes('dropdown') || combined.includes('select') || combined.includes('combo')) return 'select';
+    if (combined.includes('file') || combined.includes('attachment') || combined.includes('image')) return 'file';
+    if (combined.includes('calculated')) return 'calculated';
+    return dataType || 'text';
+  }
+
+  private getDataTypeForFieldType(fieldTypeId: number | string | undefined): string {
+    const id = Number(fieldTypeId);
+    if (!id) return 'text';
+    return this.normalizeDataType(this.fieldTypes.find(type => type.id === id));
+  }
+
+  private syncDataTypeWithFieldType(fieldTypeId: number | string | undefined): void {
+    const nextDataType = this.getDataTypeForFieldType(fieldTypeId);
+    const currentDataType = this.columnForm.get('dataType')?.value;
+    if (nextDataType && currentDataType !== nextDataType) {
+      this.columnForm.patchValue({ dataType: nextDataType }, { emitEvent: false });
+    }
+  }
+
+  getDataSourceType(): GridColumnDataSourceType {
     // First check if dataSourceType is explicitly set (from radio buttons)
     if (this.dataSourceType) {
       return this.dataSourceType;
@@ -1347,7 +1435,17 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     if (!dataSource) {
       return 'Static';
     }
-    return dataSource.sourceType as 'Static' | 'API' | 'LookupTable';
+    return this.normalizeColumnDataSourceType(dataSource.sourceType);
+  }
+
+  private normalizeColumnDataSourceType(sourceType?: string | null): GridColumnDataSourceType {
+    const normalized = (sourceType || '').trim().toLowerCase();
+    if (normalized === 'lookuptable') return 'LookupTable';
+    if (normalized === 'formsubmissions') return 'FormSubmissions';
+    if (normalized === 'sqlquery') return 'SqlQuery';
+    if (normalized === 'saphana') return 'SapHana';
+    if (normalized === 'api') return 'API';
+    return 'Static';
   }
   
   /**
@@ -1414,6 +1512,20 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       this.availableProperties = [];
       
       // Clear options when switching to Api
+      while (this.columnOptionsFormArray.length !== 0) {
+        this.columnOptionsFormArray.removeAt(0);
+      }
+    } else {
+      this.columnDataSourceConfig = {
+        apiUrl: null,
+        httpMethod: 'GET',
+        requestBodyJson: null,
+        valuePath: this.dataSourceType === 'SapHana' ? 'ID' : 'Id',
+        textPath: this.dataSourceType === 'SapHana' ? 'NAME' : 'Name'
+      };
+      this.availableProperties = [];
+      this.availableColumns = [];
+
       while (this.columnOptionsFormArray.length !== 0) {
         this.columnOptionsFormArray.removeAt(0);
       }
@@ -1866,15 +1978,39 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
       let apiUrlValue: string | null = null;
       let valuePathValue: string | null = null;
       let textPathValue: string | null = null;
+      let requestBodyJsonValue: string | null = null;
+      let configurationJsonValue: string | null = null;
+      let httpMethodValue: string | undefined;
 
       if (this.dataSourceType === 'LookupTable') {
         // Backend expects only the table name in apiUrl, not JSON object
         apiUrlValue = this.columnLookupTableConfig.table || null;
         valuePathValue = this.columnLookupTableConfig.valueColumn || null;
         textPathValue = this.columnLookupTableConfig.textColumn || null;
+      } else if (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') {
+        requestBodyJsonValue = (this.columnDataSourceConfig.requestBodyJson || '').trim() || null;
+        valuePathValue = this.columnDataSourceConfig.valuePath || (this.dataSourceType === 'SapHana' ? 'ID' : 'Id');
+        textPathValue = this.columnDataSourceConfig.textPath || (this.dataSourceType === 'SapHana' ? 'NAME' : 'Name');
+        configurationJsonValue = JSON.stringify({
+          sqlQuery: requestBodyJsonValue,
+          valueColumn: valuePathValue,
+          textColumn: textPathValue
+        });
+      } else if (this.dataSourceType === 'FormSubmissions') {
+        apiUrlValue = this.columnDataSourceConfig.apiUrl || null;
+        requestBodyJsonValue = this.columnDataSourceConfig.apiUrl || null;
+        valuePathValue = this.columnDataSourceConfig.valuePath || null;
+        textPathValue = this.columnDataSourceConfig.textPath || null;
+        configurationJsonValue = JSON.stringify({
+          formCode: apiUrlValue,
+          valueFieldCode: valuePathValue,
+          textFieldCode: textPathValue
+        });
       } else {
         // For Api type, use the URL directly
         apiUrlValue = this.columnDataSourceConfig.apiUrl || null;
+        httpMethodValue = this.columnDataSourceConfig.httpMethod || undefined;
+        requestBodyJsonValue = this.columnDataSourceConfig.requestBodyJson || null;
         valuePathValue = this.columnDataSourceConfig.valuePath || null;
         textPathValue = this.columnDataSourceConfig.textPath || null;
         
@@ -1899,10 +2035,11 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         columnId: columnId,
         sourceType: this.dataSourceType,
         apiUrl: apiUrlValue || undefined,
-        httpMethod: this.dataSourceType === 'API' ? (this.columnDataSourceConfig.httpMethod || undefined) : undefined,
-        requestBodyJson: this.dataSourceType === 'API' ? (this.columnDataSourceConfig.requestBodyJson || undefined) : undefined,
+        httpMethod: httpMethodValue,
+        requestBodyJson: requestBodyJsonValue || undefined,
         valuePath: valuePathValue || undefined,
         textPath: textPathValue || undefined,
+        configurationJson: configurationJsonValue || undefined,
         isActive: true
       };
 
@@ -1958,6 +2095,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
             requestBodyJson: dataSourceDto.requestBodyJson,
             valuePath: dataSourceDto.valuePath,
             textPath: dataSourceDto.textPath,
+            configurationJson: dataSourceDto.configurationJson,
             isActive: dataSourceDto.isActive
           }).subscribe({
             next: (updatedDataSource) => {
@@ -2047,6 +2185,9 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
     }
 
     this.loading = true;
+    if (this.isSelectedDateLikeFieldType()) {
+      this.syncDateDefaultValue();
+    }
     const columnData = this.columnForm.value;
     
     // Normalize isActive value - handle all possible types
@@ -2099,9 +2240,7 @@ export class GridColumnsListComponent implements OnInit, OnDestroy {
         isVisible: normalizedIsVisible
       };
 
-      if (columnData.defaultValue) {
-        updateDto.defaultValue = columnData.defaultValue;
-      }
+      updateDto.defaultValue = columnData.defaultValue || '';
 
       if (!this.editingColumn || !this.editingColumn.id) {
         this.loading = false;

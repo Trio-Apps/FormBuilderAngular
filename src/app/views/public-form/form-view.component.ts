@@ -1,6 +1,7 @@
 import { Component, OnInit, HostListener, ViewChildren, QueryList, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { FormsService } from '../FormBuilder/services/forms.service';
 import { TabsService } from '../FormBuilder/services/tabs.service';
 import { FieldsService } from '../FormBuilder/services/fields.service';
@@ -16,7 +17,7 @@ import { DocumentTypesService } from '../FormBuilder/services/document-types.ser
 import { DocumentType, DocumentSeries, CreateDocumentSeriesDto } from '../FormBuilder/form-builder/models/document-types.model';
 import { ProjectsService } from '../projects/services/projects.service';
 import { StorageService } from '../../auth/storage.service';
-import { buildContext, getContextFieldCodes, requiresContext } from '../FormBuilder/utils/field-data-source-helpers';
+import { buildContext, getContextFieldCodes, isContextValueAutoFill, isLookupTableValueAutoFill, requiresContext } from '../FormBuilder/utils/field-data-source-helpers';
 import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse, FormRule, RuleCondition, FieldCondition, RuleAction, FieldTypeDto } from '../FormBuilder/form-builder/models/form-builder-dto.model';
 import { TranslationService } from '../../core/services/translation.service';
 import { environment } from '../../environments/environment';
@@ -57,6 +58,10 @@ export class FormViewComponent implements OnInit {
   activeTabIndex = 0;
   showLanguageDropdown = false;
   isSubmitting = false;
+
+  get isAuthenticatedPreview(): boolean {
+    return this.router.url.toLowerCase().includes('/form-preview/');
+  }
   
   // Draft → Save → Submit workflow state
   hasDraft = false; // Whether a draft has been created
@@ -97,10 +102,11 @@ export class FormViewComponent implements OnInit {
   uploadedFiles: { [fieldId: number]: FormSubmissionAttachmentDto[] } = {};
   submissionId: number = 0; // Will be set when form is submitted
   fileUploadErrors: { [fieldId: number]: string } = {}; // File upload error messages
-  filePreviewUrls: { [attachmentId: number]: string } = {}; // File preview URLs for images/PDFs
+  filePreviewUrls: { [attachmentId: number]: SafeResourceUrl } = {}; // File preview URLs for images/PDFs
   showPreviewModal: boolean = false;
   previewFile: FormSubmissionAttachmentDto | null = null;
   pendingFiles: { [fieldId: number]: File[] } = {}; // Files selected but not yet uploaded (waiting for submission)
+  pendingFileAttachmentIds: { [attachmentId: number]: { fieldId: number; fileName: string; fileSize: number; lastModified: number } } = {};
 
   // Field DataSource state
   fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
@@ -114,10 +120,13 @@ export class FormViewComponent implements OnInit {
   private _loggedFieldNoOptions: { [fieldId: number]: boolean } = {}; // Track logged "no options" warnings
   private _fieldTypeCache: { [fieldId: number]: string } = {}; // Cache field types to avoid recalculation
   private searchableFieldSearchTimers: { [fieldId: number]: ReturnType<typeof setTimeout> | undefined } = {};
+  private fieldOptionsRequestKeys: { [fieldId: number]: string } = {};
+  private fieldOptionsLoadedKeys: { [fieldId: number]: string } = {};
   
   // Field Types cache - loaded from API
   fieldTypes: FieldTypeDto[] = []; // Active field types loaded from API
   fieldTypesMap: { [id: number]: FieldTypeDto } = {}; // Map for quick lookup by ID
+  private fieldTypesLoaded = false;
 
   // Form Rules state - Dynamic field states based on rules
   dynamicFieldStates: {
@@ -169,15 +178,11 @@ export class FormViewComponent implements OnInit {
     private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService,
     private approvalStageService: ApprovalStageService,
     private approvalWorkflowService: ApprovalWorkflowService,
+    private sanitizer: DomSanitizer,
     private messageService: MessageService
   ) { }
 
   ngOnInit(): void {
-    // Load field types first (they will be used as fallback in getFieldType)
-    if (this.canRunAuthenticatedApprovalActions()) {
-      this.loadFieldTypes();
-    }
-    
     this.route.paramMap.subscribe(params => {
       const code = params.get('formCode');
       if (code) {
@@ -198,7 +203,7 @@ export class FormViewComponent implements OnInit {
           return;
         }
         
-        this.loadForm();
+        this.loadFieldTypes(() => this.loadForm());
       } else {
         this.notFound = true;
       }
@@ -383,12 +388,20 @@ export class FormViewComponent implements OnInit {
         // This ensures files are properly linked to a submission
         // Example: this.createSubmission(form.id).subscribe(submission => { this.submissionId = submission.id; });
 
+        if (this.isAuthenticatedPreview && form.id) {
+          // The public form-code endpoint intentionally embeds only active tabs.
+          // In authenticated preview, builders need to see every non-deleted tab.
+          this.loadTabsAndFields(form.id);
+          return;
+        }
 
         if (apiTabs && apiTabs.length > 0) {
           // API returned Tabs + Fields (or just Tabs)
-          // Filter and sort tabs (only active ones)
+          // Filter and sort tabs.
+          // Admin preview should show every non-deleted tab so builders can verify the full form.
+          // Public form view still hides explicitly inactive tabs.
           this.tabs = apiTabs
-            .filter(tab => tab.isActive)
+            .filter(tab => this.shouldDisplayTab(tab))
             .sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0))
             .map(tab => ({
               ...tab,
@@ -507,7 +520,12 @@ export class FormViewComponent implements OnInit {
                 dataSourceIsActive: field.fieldDataSource?.isActive
               });
               
-              if (isOptionsField && field.id) {
+              const shouldAutoPopulateFromDataSource =
+                !!field.fieldDataSource &&
+                requiresContext(field.fieldDataSource) &&
+                ['formsubmissions', 'formsubmission', 'lookuptable'].includes(this.normalizeDataSourceType(field.fieldDataSource.sourceType));
+
+              if ((isOptionsField || shouldAutoPopulateFromDataSource) && field.id) {
                 // Load options from DataSource if field has DataSource configured
                 console.log(`[FormView] ✅ Will load options for field ${field.id} (${field.fieldCode || 'no-code'})`);
                 this.loadFieldOptionsFromDataSource(field);
@@ -603,13 +621,25 @@ export class FormViewComponent implements OnInit {
     });
   }
 
+  private shouldDisplayTab(tab: FormTabDto): boolean {
+    if (!tab || (tab as any).isDeleted === true) {
+      return false;
+    }
+
+    if (this.isAuthenticatedPreview) {
+      return true;
+    }
+
+    return tab.isActive !== false;
+  }
+
   // Load tabs and fields from services if API doesn't return them
   private loadTabsAndFields(formId: number): void {
     this.tabsService.getTabs(formId).subscribe({
       next: (tabs) => {
-        // Filter only active tabs
+        // Filter tabs using the same public/preview visibility rules as the embedded response path.
         const safeTabs = (Array.isArray(tabs) ? tabs : [])
-          .filter(tab => tab.isActive);
+          .filter(tab => this.shouldDisplayTab(tab));
         if (!safeTabs.length) {
           this.tabs = [];
           this.loading = false;
@@ -667,7 +697,12 @@ export class FormViewComponent implements OnInit {
 
                     // Load field options from DataSource if field has options type
                     const fieldType = this.getFieldType(field);
-                    if (['select', 'radio', 'checkbox'].includes(fieldType)) {
+                    const shouldAutoPopulateFromDataSource =
+                      !!field.fieldDataSource &&
+                      requiresContext(field.fieldDataSource) &&
+                      ['formsubmissions', 'formsubmission', 'lookuptable'].includes(this.normalizeDataSourceType(field.fieldDataSource.sourceType));
+
+                    if (['select', 'radio', 'checkbox'].includes(fieldType) || shouldAutoPopulateFromDataSource) {
                       this.loadFieldOptionsFromDataSource(field);
                     }
 
@@ -694,7 +729,7 @@ export class FormViewComponent implements OnInit {
               remaining--;
               if (remaining === 0) {
                 this.tabs = tabsWithFields
-                  .filter(t => t.isActive)
+                  .filter(tab => this.shouldDisplayTab(tab))
                   .sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
                 this.activeTabIndex = 0;
                 this.loading = false;
@@ -749,10 +784,17 @@ export class FormViewComponent implements OnInit {
     const hasOptionsFromFieldType = ft?.hasOptions === true;
     const hasFieldOptions = !!(field.fieldOptions && field.fieldOptions.length > 0);
     const isOptionsType = ['select', 'radio', 'checkbox'].includes(fieldType);
+    const sourceType = this.normalizeDataSourceType(field.fieldDataSource?.sourceType);
+    const isAutoFillLookupField =
+      !!field.fieldDataSource &&
+      requiresContext(field.fieldDataSource) &&
+      (sourceType === 'formsubmissions' || sourceType === 'formsubmission' || sourceType === 'lookuptable') &&
+      (!isOptionsType || isLookupTableValueAutoFill(field.fieldDataSource)) &&
+      (!hasOptionsFromFieldType || isLookupTableValueAutoFill(field.fieldDataSource));
     
     // If fieldType has hasOptions = true, treat it as an options field even if getFieldType() didn't detect it
     // This ensures we load options for fields that should have options
-    if (!isOptionsType && !hasOptionsFromFieldType) {
+    if (!isOptionsType && !hasOptionsFromFieldType && !isAutoFillLookupField) {
       return;
     }
 
@@ -795,7 +837,7 @@ export class FormViewComponent implements OnInit {
               fullDataSource: activeDataSource
             });
             // Retry loading options with the loaded DataSource
-            this.loadFieldOptionsFromDataSource(field, context);
+            this.loadFieldOptionsFromDataSource(field, context, searchTerm);
           } else {
             // No DataSource found - use static options from field.fieldOptions
             console.warn(`[FormView] ⚠️ No active DataSource found for field ${field.id} after API load`);
@@ -836,20 +878,21 @@ export class FormViewComponent implements OnInit {
 
     // For Api, LookupTable, SqlQuery, or SapHana, load options dynamically
     // Note: Backend stores SqlQuery as "DataSourceSqlQuery", so check for both
-    const isSqlQuery = dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery';
-    const isSapHana = dataSource.sourceType === 'SapHana';
-    const isFormSubmissions = dataSource.sourceType === 'FormSubmissions';
+    const normalizedSourceType = this.normalizeDataSourceType(dataSource.sourceType);
+    const isSqlQuery = normalizedSourceType === 'sqlquery' || normalizedSourceType === 'datasourcesqlquery';
+    const isSapHana = normalizedSourceType === 'saphana' || normalizedSourceType === 'sap';
+    const isFormSubmissions = normalizedSourceType === 'formsubmissions' || normalizedSourceType === 'formsubmission';
     console.log(`[FormView] Checking DataSource type for field ${field.id}:`, {
       sourceType: dataSource.sourceType,
       isSqlQuery: isSqlQuery,
       isSapHana: isSapHana,
       isFormSubmissions: isFormSubmissions,
-      isApi: dataSource.sourceType === 'Api',
-      isLookupTable: dataSource.sourceType === 'LookupTable',
-      willLoad: dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana || isFormSubmissions
+      isApi: normalizedSourceType === 'api',
+      isLookupTable: normalizedSourceType === 'lookuptable',
+      willLoad: normalizedSourceType === 'api' || normalizedSourceType === 'lookuptable' || isSqlQuery || isSapHana || isFormSubmissions
     });
     
-    if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana || isFormSubmissions) {
+    if (normalizedSourceType === 'api' || normalizedSourceType === 'lookuptable' || isSqlQuery || isSapHana || isFormSubmissions) {
       console.log(`[FormView] ✅ Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`, {
         sourceType: dataSource.sourceType,
         requestBodyJson: dataSource.requestBodyJson,
@@ -862,9 +905,6 @@ export class FormViewComponent implements OnInit {
       // `dataSource` is a mutable variable (`let`) and can be reassigned, so TS can't safely
       // narrow it inside the subscribe handlers.
       const dataSourceSourceType = dataSource.sourceType;
-      // Set loading state
-      this._resolvedExternalFieldOptions[field.id] = false;
-      this.loadingFieldOptions[field.id] = true;
 
       // Build context if not provided and DataSource requires it
       let finalContext = context;
@@ -878,9 +918,44 @@ export class FormViewComponent implements OnInit {
         this.contextDependencies[field.id] = contextFields;
       }
 
+      if (isContextValueAutoFill(dataSource)) {
+        const contextValue = finalContext ? Object.values(finalContext)[0] : '';
+        this.fieldDataSourceOptions[field.id] = [];
+        this.loadingFieldOptions[field.id] = false;
+        this.setAutoFilledFieldValue(field, contextValue ?? '');
+        return;
+      }
+
+      if (isLookupTableValueAutoFill(dataSource) && (!finalContext || Object.keys(finalContext).length === 0)) {
+        this.fieldDataSourceOptions[field.id] = [];
+        this.loadingFieldOptions[field.id] = false;
+        this.setAutoFilledFieldValue(field, '');
+        return;
+      }
+      
+      const trimmedSearch = searchTerm?.trim() || '';
+      const requestOptions = {
+        search: trimmedSearch || undefined,
+        take: 50
+      };
+      const requestKey = this.buildFieldOptionsRequestKey(field.id, finalContext, requestOptions.search, requestOptions.take);
+
+      if (this.fieldOptionsRequestKeys[field.id] === requestKey) {
+        return;
+      }
+
+      if (this.fieldOptionsLoadedKeys[field.id] === requestKey) {
+        return;
+      }
+
+      this.fieldOptionsRequestKeys[field.id] = requestKey;
+      this._resolvedExternalFieldOptions[field.id] = false;
+      this.loadingFieldOptions[field.id] = true;
+
       // Set timeout for DataSource loading (5 seconds)
       const dataSourceTimeoutId = setTimeout(() => {
-        if (this.loadingFieldOptions[field.id]) {
+        if (this.fieldOptionsRequestKeys[field.id] === requestKey) {
+          delete this.fieldOptionsRequestKeys[field.id];
           this._resolvedExternalFieldOptions[field.id] = true;
           this.loadingFieldOptions[field.id] = false;
           this.cdr.detectChanges();
@@ -892,17 +967,16 @@ export class FormViewComponent implements OnInit {
         context: finalContext,
         sourceType: dataSourceSourceType
       });
-      
-      const requestOptions = isFormSubmissions
-        ? {
-            search: searchTerm?.trim() || undefined,
-            take: 50
-          }
-        : undefined;
 
       this.fieldDataSourceService.getFieldOptions(field.id, finalContext, requestOptions).subscribe({
         next: (options: FieldOptionResponse[]) => {
+          if (this.fieldOptionsRequestKeys[field.id] !== requestKey) {
+            return;
+          }
+
           clearTimeout(dataSourceTimeoutId);
+          delete this.fieldOptionsRequestKeys[field.id];
+          this.fieldOptionsLoadedKeys[field.id] = requestKey;
           
           console.log(`[FormView] ✅ Received options for field ${field.id}:`, {
             optionsCount: options?.length || 0,
@@ -911,8 +985,16 @@ export class FormViewComponent implements OnInit {
           });
           
           if (options && options.length > 0) {
-            this.fieldDataSourceOptions[field.id] = options;
-            console.log(`[FormView] Set fieldDataSourceOptions[${field.id}] to ${options.length} options`);
+            this.applyContextDrivenValue(field, options);
+            const fieldType = this.getFieldType(field);
+            const ft = this.getFieldTypeFromCache(field) || field.fieldType;
+            const isOptionsField = !isLookupTableValueAutoFill(field.fieldDataSource) &&
+              (['select', 'radio', 'checkbox'].includes(fieldType) || ft?.hasOptions === true);
+            this.fieldDataSourceOptions[field.id] = isOptionsField ? options : [];
+            if (!isOptionsField) {
+              this.searchableFieldDropdownOpen[field.id] = false;
+            }
+            console.log(`[FormView] Set fieldDataSourceOptions[${field.id}] to ${isOptionsField ? options.length : 0} options`);
           } else {
             // If no options from DataSource, fallback to static options from database
             console.warn(`[FormView] ⚠️ No options received for field ${field.id}, will use static options`);
@@ -922,7 +1004,12 @@ export class FormViewComponent implements OnInit {
           this.cdr.detectChanges();
         },
         error: (error) => {
+          if (this.fieldOptionsRequestKeys[field.id] !== requestKey) {
+            return;
+          }
+
           clearTimeout(dataSourceTimeoutId);
+          delete this.fieldOptionsRequestKeys[field.id];
           console.error(`[FormView] ❌ Error loading options for field ${field.id}:`, {
             error: error,
             status: error?.status,
@@ -940,6 +1027,7 @@ export class FormViewComponent implements OnInit {
         complete: () => {
           // Ensure loading state is cleared when observable completes
           clearTimeout(dataSourceTimeoutId);
+          delete this.fieldOptionsRequestKeys[field.id];
           if (this.loadingFieldOptions[field.id]) {
             this.loadingFieldOptions[field.id] = false;
             this.cdr.detectChanges();
@@ -951,6 +1039,76 @@ export class FormViewComponent implements OnInit {
       console.warn(`[FormView] Field ${field.id} has unknown DataSource type: ${dataSource.sourceType}, using static options`);
       this.fieldDataSourceOptions[field.id] = [];
     }
+  }
+
+  private applyContextDrivenValue(field: FormFieldDto, options: FieldOptionResponse[]): void {
+    if (!field.id || !field.fieldDataSource || !requiresContext(field.fieldDataSource) || options.length === 0) {
+      return;
+    }
+
+    const sourceType = this.normalizeDataSourceType(field.fieldDataSource.sourceType);
+    if (sourceType !== 'formsubmissions' && sourceType !== 'formsubmission' && sourceType !== 'lookuptable') {
+      return;
+    }
+
+    const fieldType = this.getFieldType(field);
+    const ft = this.getFieldTypeFromCache(field) || field.fieldType;
+    const isOptionsField = !isLookupTableValueAutoFill(field.fieldDataSource) &&
+      (['select', 'radio', 'checkbox'].includes(fieldType) || ft?.hasOptions === true);
+    if (isOptionsField && options.length !== 1) {
+      return;
+    }
+
+    const option = options[0] as any;
+    const optionValue = option?.optionValue ?? option?.value ?? option?.Value ?? '';
+    if (optionValue === undefined || optionValue === null || String(optionValue).trim() === '') {
+      return;
+    }
+
+    const currentValue = this.fieldValues[String(field.id)] ?? (field.fieldCode ? this.fieldValues[field.fieldCode] : undefined);
+    if (String(currentValue ?? '') === String(optionValue)) {
+      return;
+    }
+
+    if (isOptionsField) {
+      const optionText = this.getOptionText(option);
+      this.searchableFieldQueries[field.id] = optionText;
+      this.searchableFieldSelectedLabels[field.id] = optionText;
+      this.searchableFieldDropdownOpen[field.id] = false;
+    }
+
+    if (isOptionsField) {
+      this.onFieldValueChange(field.id, optionValue, field.fieldCode);
+    } else {
+      this.setAutoFilledFieldValue(field, optionValue);
+      this.fieldDataSourceOptions[field.id] = [];
+      this.searchableFieldDropdownOpen[field.id] = false;
+    }
+  }
+
+  private setAutoFilledFieldValue(field: FormFieldDto, value: any): void {
+    if (!field.id) {
+      return;
+    }
+
+    const idKey = String(field.id);
+    const currentValue = this.fieldValues[idKey] ?? (field.fieldCode ? this.fieldValues[field.fieldCode] : undefined);
+    if (String(currentValue ?? '') === String(value ?? '')) {
+      return;
+    }
+
+    this.fieldValues = {
+      ...this.fieldValues,
+      [idKey]: value,
+      ...(field.fieldCode ? { [field.fieldCode]: value } : {})
+    };
+
+    this.evaluateFormRules();
+    this.calculateFields(field.fieldCode || idKey)
+      .then(() => this.cdr.markForCheck())
+      .catch(error => console.error(`[FormView] Error calculating auto-filled field ${field.fieldCode || idKey}:`, error));
+
+    this.cdr.markForCheck();
   }
 
   /**
@@ -1189,14 +1347,33 @@ export class FormViewComponent implements OnInit {
     return processedOptions;
   }
 
+  private normalizeDataSourceType(sourceType?: string | null): string {
+    return (sourceType || '').trim().replace(/\s+/g, '').toLowerCase();
+  }
+
+  private buildFieldOptionsRequestKey(
+    fieldId: number,
+    context?: Record<string, any>,
+    search?: string,
+    take?: number
+  ): string {
+    return JSON.stringify({
+      fieldId,
+      context: context || null,
+      search: (search || '').trim().toLowerCase(),
+      take: take || 50
+    });
+  }
+
   /**
-   * Use a searchable server-backed input for Form Submissions dropdowns.
+   * Use a searchable, limited server-backed input for dynamic single-select dropdowns.
    */
-  isSearchableFormSubmissionsField(field: FormFieldDto): boolean {
-    const sourceType = (field.fieldDataSource?.sourceType || '').trim().toLowerCase();
+  isSearchableSelectField(field: FormFieldDto): boolean {
+    const sourceType = this.normalizeDataSourceType(field.fieldDataSource?.sourceType);
+    const dynamicSources = ['api', 'lookuptable', 'sqlquery', 'datasourcesqlquery', 'saphana', 'sap', 'formsubmissions', 'formsubmission'];
     return this.getFieldType(field) === 'select' &&
       !field.fieldType?.allowMultiple &&
-      sourceType === 'formsubmissions';
+      dynamicSources.includes(sourceType);
   }
 
   getSearchableFieldQuery(field: FormFieldDto): string {
@@ -1289,7 +1466,7 @@ export class FormViewComponent implements OnInit {
   }
 
   private validateSearchableFieldSelection(field: FormFieldDto): string | null {
-    if (!field.id || !this.isSearchableFormSubmissionsField(field)) {
+    if (!field.id || !this.isSearchableSelectField(field)) {
       return null;
     }
 
@@ -1322,7 +1499,10 @@ export class FormViewComponent implements OnInit {
   }
 
   shouldShowSearchableFieldDropdown(field: FormFieldDto): boolean {
-    return !!field.id && !!this.searchableFieldDropdownOpen[field.id];
+    const fieldType = this.getFieldType(field);
+    const ft = this.getFieldTypeFromCache(field) || field.fieldType;
+    const isOptionsField = ['select', 'radio', 'checkbox'].includes(fieldType) || ft?.hasOptions === true;
+    return isOptionsField && !!field.id && !!this.searchableFieldDropdownOpen[field.id];
   }
 
   /**
@@ -1473,10 +1653,15 @@ export class FormViewComponent implements OnInit {
    * Load active field types from API
    * This will be used as fallback when field.fieldType is missing
    */
-  private loadFieldTypes(): void {
+  private loadFieldTypes(callback?: () => void): void {
+    if (this.fieldTypesLoaded) {
+      callback?.();
+      return;
+    }
+
     this.fieldsService.getActiveFieldTypes().subscribe({
       next: (types: FieldTypeDto[]) => {
-        this.fieldTypes = types.filter(type => type.isActive && type.id && type.typeName);
+        this.fieldTypes = types.filter(type => type.isActive !== false && type.id && type.typeName);
         // Create a map for quick lookup by ID
         this.fieldTypesMap = {};
         this.fieldTypes.forEach(type => {
@@ -1484,13 +1669,43 @@ export class FormViewComponent implements OnInit {
             this.fieldTypesMap[type.id] = type;
           }
         });
+        this.fieldTypesLoaded = true;
         console.log(`[FormView] Loaded ${this.fieldTypes.length} active field types from API`);
+        callback?.();
       },
       error: (error) => {
         console.warn('[FormView] Failed to load field types from API:', error);
-        this.fieldTypes = [];
-        this.fieldTypesMap = {};
+        this.seedBuiltinFieldTypes();
+        this.fieldTypesLoaded = true;
+        callback?.();
       }
+    });
+  }
+
+  private seedBuiltinFieldTypes(): void {
+    const builtinTypes: FieldTypeDto[] = [
+      { id: 1, typeName: 'Text', dataType: 'string', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 2, typeName: 'TextArea', dataType: 'string', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 3, typeName: 'Number', dataType: 'decimal', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 4, typeName: 'Integer', dataType: 'int', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 5, typeName: 'Email', dataType: 'string', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 6, typeName: 'Phone', dataType: 'string', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 7, typeName: 'Date', dataType: 'DateTime', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 8, typeName: 'DateTime', dataType: 'DateTime', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 9, typeName: 'Time', dataType: 'TimeSpan', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 10, typeName: 'Dropdown', dataType: 'string', hasOptions: true, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 11, typeName: 'Radio', dataType: 'string', hasOptions: true, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 12, typeName: 'Checkbox', dataType: 'string', hasOptions: true, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 13, typeName: 'File', dataType: 'string', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 14, typeName: 'Password', dataType: 'string', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 15, typeName: 'Boolean', dataType: 'bool', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false },
+      { id: 16, typeName: 'Calculated', dataType: 'decimal', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false }
+    ];
+
+    this.fieldTypes = builtinTypes;
+    this.fieldTypesMap = {};
+    builtinTypes.forEach(type => {
+      this.fieldTypesMap[type.id] = type;
     });
   }
 
@@ -1507,8 +1722,62 @@ export class FormViewComponent implements OnInit {
     if (field.fieldTypeId && this.fieldTypesMap[field.fieldTypeId]) {
       return this.fieldTypesMap[field.fieldTypeId];
     }
+
+    if (field.fieldTypeId === 7) {
+      return { id: 7, typeName: 'Date', dataType: 'DateTime', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false };
+    }
+
+    if (field.fieldTypeId === 8) {
+      return { id: 8, typeName: 'DateTime', dataType: 'DateTime', hasOptions: false, allowMultiple: false, isActive: true, isDeleted: false };
+    }
     
     return null;
+  }
+
+  private normalizeFieldTypeName(typeName: string, dataType: string): string {
+    const normalizedTypeName = (typeName || '').toLowerCase().replace(/[_-]+/g, ' ').trim();
+    const normalizedDataType = (dataType || '').toLowerCase().replace(/[_-]+/g, ' ').trim();
+    const combined = `${normalizedTypeName} ${normalizedDataType}`.trim();
+
+    if (
+      normalizedTypeName === 'date' ||
+      normalizedTypeName === 'datepicker' ||
+      normalizedTypeName === 'date picker' ||
+      (normalizedTypeName.includes('date') && !normalizedTypeName.includes('datetime') && !normalizedTypeName.includes('date time'))
+    ) {
+      return 'date';
+    }
+
+    if (
+      normalizedTypeName === 'datetime' ||
+      normalizedTypeName === 'date time' ||
+      normalizedTypeName === 'datetime local' ||
+      combined.includes('datetime') ||
+      combined.includes('date time') ||
+      (!normalizedTypeName && (
+        normalizedDataType === 'datetime' ||
+        normalizedDataType === 'datetime2' ||
+        normalizedDataType === 'timestamp'
+      ))
+    ) {
+      return 'datetime-local';
+    }
+
+    if (
+      normalizedTypeName === 'time' ||
+      normalizedTypeName === 'timepicker' ||
+      normalizedTypeName === 'time picker' ||
+      normalizedDataType === 'time' ||
+      normalizedDataType === 'timespan'
+    ) {
+      return 'time';
+    }
+
+    if (normalizedDataType === 'date') {
+      return 'date';
+    }
+
+    return '';
   }
 
   /**
@@ -1540,12 +1809,35 @@ export class FormViewComponent implements OnInit {
       ft = field.fieldType || null;
     }
     
-    const typeName = (field.fieldTypeName || ft?.typeName || '').toLowerCase().trim();
-    const dataType = (ft?.dataType || '').toLowerCase().trim();
+    const typeName = [
+      field.fieldTypeName,
+      (field as any).type,
+      (field as any).typeName,
+      (field as any).field_type_name,
+      (field as any).fieldType,
+      ft?.typeName,
+      field.fieldType?.typeName,
+      (ft as any)?.type_name_en,
+      (field.fieldType as any)?.type_name_en
+    ].filter(Boolean).join(' ').toLowerCase().trim();
+    const dataType = [
+      ft?.dataType,
+      field.fieldType?.dataType,
+      (field as any).dataType,
+      (field as any).data_type,
+      (field as any).fieldDataType,
+      (field as any).field_data_type
+    ].filter(Boolean).join(' ').toLowerCase().trim();
     
     // Declare fieldCodeLower and fieldNameLower once at the beginning
     const fieldCodeLower = (field.fieldCode || '').toLowerCase();
     const fieldNameLower = (field.fieldName || '').toLowerCase();
+    const dateLikeFieldName = /\b(deadline|due date|expiry|expiration|valid until|start date|end date)\b/i
+      .test(`${field.fieldName || ''} ${field.fieldCode || ''}`.replace(/[_-]+/g, ' '));
+
+    if (isLookupTableValueAutoFill(field.fieldDataSource)) {
+      return 'text';
+    }
     
     // Removed verbose logging for performance
 
@@ -1648,14 +1940,10 @@ export class FormViewComponent implements OnInit {
     // This ensures that even if field.fieldOptions is not loaded yet, we still detect it correctly
     // Note: hasOptionsFromFieldType already checked above, reuse it
     const hasOptionsFromField = field.fieldOptions && field.fieldOptions.length > 0;
-    const dataSourceType = (field.fieldDataSource?.sourceType || '').toLowerCase().trim();
-    const hasOptionsFromDataSource =
-      !!field.fieldDataSource?.isActive &&
-      ['static', 'api', 'lookuptable', 'datasourcesqlquery', 'sqlquery', 'saphana', 'formsubmissions'].includes(dataSourceType);
     
     // IMPORTANT: If fieldType.hasOptions = true OR isExplicitOptionsType, we MUST treat it as a field with options
     // even if field.fieldOptions is empty (options might be loaded from DataSource later)
-    const hasOptions = hasOptionsFromFieldType || isExplicitOptionsType || hasOptionsFromField || hasOptionsFromDataSource;
+    const hasOptions = hasOptionsFromFieldType || isExplicitOptionsType || hasOptionsFromField;
     
     // If field has options (from fieldType.hasOptions OR field.fieldOptions), treat it as select/radio/checkbox
     if (hasOptions) {
@@ -1721,11 +2009,6 @@ export class FormViewComponent implements OnInit {
 
       // إذا كان allowMultiple = false و hasOptions = true وليس select/combobox صراحة
       // (Radio buttons تسمح باختيار واحد فقط، بينما Select قد يكون single أو multiple)
-      // Data-source backed option fields are rendered as dropdowns in Form Builder unless explicitly marked otherwise.
-      if (hasOptionsFromDataSource) {
-        return 'select';
-      }
-
       // Check allowMultiple - use ft?.allowMultiple if available, otherwise default to false (single selection = radio)
       const allowMultiple = ft?.allowMultiple ?? false;
       
@@ -1741,6 +2024,7 @@ export class FormViewComponent implements OnInit {
     }
 
     // 6) Non-options fields based on dataType / name (Email already checked above)
+    const normalizedFieldType = this.normalizeFieldTypeName(typeName, dataType);
 
     // Number
     if (combined.includes('number') || combined.includes('numeric') || dataType === 'int' || dataType === 'decimal' ||
@@ -1748,11 +2032,31 @@ export class FormViewComponent implements OnInit {
       return 'number';
     }
 
+    // DateTime must be checked before Date because "datetime" contains "date".
+    // Explicit Date type must still win over SQL/.NET DateTime dataType.
+    if (normalizedFieldType === 'date') {
+      return 'date';
+    }
+
+    if (normalizedFieldType === 'datetime-local' ||
+        typeName === 'datetime' || typeName === 'date time' ||
+        combined.includes('datetime') || combined.includes('date time')) {
+      return 'datetime-local';
+    }
+
+    // Time
+    if (normalizedFieldType === 'time' ||
+        typeName === 'time' || dataType === 'timespan' ||
+        (combined.includes('time') && !combined.includes('datetime'))) {
+      return 'time';
+    }
+
     // Date - Check typeName, dataType, fieldCode, and fieldName
-    const isDateByType = combined.includes('date') || dataType === 'date' || dataType === 'datetime' ||
+    const isDateByType = normalizedFieldType === 'date' ||
+        combined.includes('date') || dataType === 'date' || dataType === 'datetime' ||
         typeName === 'date' || typeName.includes('date');
     const isDateByCode = fieldCodeLower === 'date' || fieldCodeLower.includes('date');
-    const isDateByName = fieldNameLower === 'date' || fieldNameLower.includes('date');
+    const isDateByName = fieldNameLower === 'date' || fieldNameLower.includes('date') || dateLikeFieldName;
     
     if (isDateByType || isDateByCode || isDateByName) {
       return 'date';
@@ -2324,7 +2628,7 @@ export class FormViewComponent implements OnInit {
 
           // Validate field-specific formats (email, phone, password)
           // Only validate if field has a value (required validation is handled above)
-          if (this.isSearchableFormSubmissionsField(field)) {
+          if (this.isSearchableSelectField(field)) {
             const searchableSelectionError = this.validateSearchableFieldSelection(field);
             if (searchableSelectionError) {
               errors.push(searchableSelectionError);
@@ -2457,7 +2761,7 @@ export class FormViewComponent implements OnInit {
     this.fieldValues = newFieldValues;
 
     // Reload options for fields that depend on this field's value (context)
-    this.reloadDependentFieldOptions(fieldCode || idKey);
+    this.reloadDependentFieldOptions([fieldCode || idKey, idKey]);
 
     // Re-evaluate rules
     this.evaluateFormRules();
@@ -2478,21 +2782,46 @@ export class FormViewComponent implements OnInit {
   /**
    * Reload field options for fields that depend on the changed context field
    */
-  private reloadDependentFieldOptions(changedFieldCode: string): void {
+  private reloadDependentFieldOptions(changedFieldCodes: string | string[]): void {
+    const changedCodes = Array.isArray(changedFieldCodes)
+      ? changedFieldCodes.filter(code => !!code)
+      : [changedFieldCodes].filter(code => !!code);
+
     // Find all fields that depend on the changed field
     Object.keys(this.contextDependencies).forEach(fieldIdStr => {
       const fieldId = Number(fieldIdStr);
       const contextFields = this.contextDependencies[fieldId];
       
       // If the changed field is in the context dependencies, reload options
-      if (contextFields.includes(changedFieldCode)) {
+      if (changedCodes.some(code => contextFields.includes(code))) {
         const field = this.findFieldById(fieldId);
         if (field) {
-          console.log(`[FormView] Reloading options for field ${fieldId} because context field "${changedFieldCode}" changed`);
+          console.log(`[FormView] Reloading options for field ${fieldId} because context field changed`, changedCodes);
+          this.clearDependentFieldRuntimeState(field);
           this.loadFieldOptionsFromDataSource(field);
         }
       }
     });
+  }
+
+  private clearDependentFieldRuntimeState(field: FormFieldDto): void {
+    if (!field.id) {
+      return;
+    }
+
+    const nextFieldValues = { ...this.fieldValues };
+    nextFieldValues[String(field.id)] = '';
+    if (field.fieldCode) {
+      nextFieldValues[field.fieldCode] = '';
+    }
+    this.fieldValues = nextFieldValues;
+
+    delete this.fieldDataSourceOptions[field.id];
+    delete this.fieldOptionsLoadedKeys[field.id];
+    delete this.fieldOptionsRequestKeys[field.id];
+    delete this.searchableFieldQueries[field.id];
+    delete this.searchableFieldSelectedLabels[field.id];
+    delete this.searchableFieldDropdownOpen[field.id];
   }
 
   /**
@@ -2968,8 +3297,18 @@ export class FormViewComponent implements OnInit {
     if (!field) return '';
 
     // Check if field is a file field - these use defaultValueJson for configuration, not for values
-    if (this.getFieldType(field) === 'file') {
+    const fieldType = this.getFieldType(field);
+    if (fieldType === 'file') {
       return '';
+    }
+
+    const configuredDefault = (field.defaultValueJson || '').trim().toLowerCase();
+    if (configuredDefault === '__today__' || configuredDefault === 'today') {
+      return this.getTodayDateInputValue();
+    }
+
+    if (configuredDefault === '__now__' || configuredDefault === 'now') {
+      return fieldType === 'date' ? this.getTodayDateInputValue() : this.getCurrentDateTimeInputValue();
     }
 
     // Check if defaultValueJson exists and is not empty
@@ -2982,7 +3321,7 @@ export class FormViewComponent implements OnInit {
       const parsed = JSON.parse(field.defaultValueJson);
 
       // Handle different types
-      if (parsed === null || parsed === undefined) {
+      if (parsed === null || parsed === undefined || String(parsed).trim().toLowerCase() === 'null') {
         return '';
       }
 
@@ -2997,11 +3336,98 @@ export class FormViewComponent implements OnInit {
       }
 
       // Otherwise, return as string
-      return String(parsed).trim();
+      const parsedValue = String(parsed).trim();
+      if (!parsedValue || parsedValue.toLowerCase() === 'null') {
+        return '';
+      }
+
+      return parsedValue;
     } catch {
       // If not valid JSON, return as is (but trim it)
-      return field.defaultValueJson.trim();
+      const rawDefault = field.defaultValueJson.trim();
+      if (!rawDefault || rawDefault.toLowerCase() === 'null') {
+        return '';
+      }
+
+      return rawDefault;
     }
+  }
+
+  private getTodayDateInputValue(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private getCurrentDateTimeInputValue(): string {
+    const now = new Date();
+    const date = this.getTodayDateInputValue();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${date}T${hours}:${minutes}`;
+  }
+
+  private toDateOrNull(value: any): Date | null {
+    if (value instanceof Date) {
+      return isNaN(value.getTime()) ? null : value;
+    }
+
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private formatDateInputValue(value: any): string {
+    const parsed = this.toDateOrNull(value);
+    if (!parsed) return '';
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private formatDateTimeInputValue(value: any): string {
+    const parsed = this.toDateOrNull(value);
+    if (!parsed) return '';
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    const hours = String(parsed.getHours()).padStart(2, '0');
+    const minutes = String(parsed.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  private formatTimeInputValue(value: any): string {
+    if (value === null || value === undefined || value === '') return '';
+
+    const raw = String(value).trim();
+    const timeMatch = raw.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/);
+    if (timeMatch) {
+      return `${timeMatch[1]}:${timeMatch[2]}`;
+    }
+
+    const parsed = this.toDateOrNull(value);
+    if (!parsed) return '';
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+  }
+
+  getDateInputValue(field: FormFieldDto): string {
+    return this.formatDateInputValue(this.getFieldValue(field) || this.getDefaultValue(field));
+  }
+
+  getDateTimeInputValue(field: FormFieldDto): string {
+    return this.formatDateTimeInputValue(this.getFieldValue(field) || this.getDefaultValue(field));
+  }
+
+  getTimeInputValue(field: FormFieldDto): string {
+    return this.formatTimeInputValue(this.getFieldValue(field) || this.getDefaultValue(field));
   }
 
   getFieldValue(field: FormFieldDto): any {
@@ -3338,13 +3764,21 @@ export class FormViewComponent implements OnInit {
     // Check if submission exists - if yes, upload immediately; if no, save files for later
     if (this.submissionId > 0) {
       // Submission exists - upload files immediately
-    if (allowMultiple && filesToUpload.length > 1) {
+      if (!allowMultiple) {
+        await this.replaceExistingSingleFile(field.id);
+      }
+
+      if (allowMultiple && filesToUpload.length > 1) {
         await this.uploadMultipleFiles(filesToUpload, field);
-    } else {
+      } else {
         await this.uploadFile(filesToUpload[0], field);
       }
     } else {
       // No submission yet - save files locally and upload when form is submitted
+      if (!allowMultiple) {
+        this.clearPendingSingleFile(field.id);
+      }
+
       if (!this.pendingFiles[field.id!]) {
         this.pendingFiles[field.id!] = [];
       }
@@ -3370,19 +3804,14 @@ export class FormViewComponent implements OnInit {
             uploadedDate: new Date().toISOString()
           };
           this.uploadedFiles[field.id].push(tempAttachment);
+          this.pendingFileAttachmentIds[tempAttachment.id!] = {
+            fieldId: field.id,
+            fileName: file.name,
+            fileSize: file.size,
+            lastModified: file.lastModified
+          };
           
-          // Don't create preview URLs for images in public forms (guest access)
-          // Images should not be previewed or displayed
-          // if (file.type.startsWith('image/')) {
-          //   const reader = new FileReader();
-          //   reader.onload = (e: any) => {
-          //     if (tempAttachment.id) {
-          //       this.filePreviewUrls[tempAttachment.id] = e.target.result;
-          //       this.cdr.detectChanges();
-          //     }
-          //   };
-          //   reader.readAsDataURL(file);
-          // }
+          this.generatePendingPreviewUrl(tempAttachment, file);
         }
       }
       
@@ -3765,7 +4194,57 @@ export class FormViewComponent implements OnInit {
   /**
    * Remove uploaded file
    */
+  private clearPendingSingleFile(fieldId: number): void {
+    const currentAttachments = this.uploadedFiles[fieldId] || [];
+    currentAttachments.forEach(attachment => {
+      if (attachment.id) {
+        delete this.pendingFileAttachmentIds[attachment.id];
+        delete this.filePreviewUrls[attachment.id];
+      }
+    });
+
+    this.pendingFiles[fieldId] = [];
+    this.uploadedFiles[fieldId] = [];
+  }
+
+  private async replaceExistingSingleFile(fieldId: number): Promise<void> {
+    const existingAttachments = (this.uploadedFiles[fieldId] || []).filter(attachment => !!attachment.id);
+    this.clearPendingSingleFile(fieldId);
+
+    for (const attachment of existingAttachments) {
+      await new Promise<void>((resolve) => {
+        this.fileUploadService.deleteAttachment(attachment.id!).subscribe({
+          next: () => resolve(),
+          error: (error) => {
+            console.error('Error deleting previous single-file attachment:', error);
+            resolve();
+          }
+        });
+      });
+    }
+  }
+
   removeFile(fieldId: number, attachmentId: number): void {
+    const pendingFile = this.pendingFileAttachmentIds[attachmentId];
+    if (pendingFile) {
+      if (this.pendingFiles[fieldId]) {
+        this.pendingFiles[fieldId] = this.pendingFiles[fieldId].filter(file =>
+          !(file.name === pendingFile.fileName &&
+            file.size === pendingFile.fileSize &&
+            file.lastModified === pendingFile.lastModified)
+        );
+      }
+
+      if (this.uploadedFiles[fieldId]) {
+        this.uploadedFiles[fieldId] = this.uploadedFiles[fieldId].filter(file => file.id !== attachmentId);
+      }
+
+      delete this.pendingFileAttachmentIds[attachmentId];
+      delete this.filePreviewUrls[attachmentId];
+      this.cdr.detectChanges();
+      return;
+    }
+
     this.fileUploadService.deleteAttachment(attachmentId).subscribe({
       next: () => {
         // Remove from uploaded files list
@@ -3779,6 +4258,10 @@ export class FormViewComponent implements OnInit {
         console.error('Error deleting file:', error);
       }
     });
+  }
+
+  isPendingFileAttachment(attachment: FormSubmissionAttachmentDto): boolean {
+    return !!attachment.id && !!this.pendingFileAttachmentIds[attachment.id];
   }
 
   /**
@@ -3952,41 +4435,43 @@ export class FormViewComponent implements OnInit {
    * Check if file can be previewed
    */
   canPreviewFile(attachment: FormSubmissionAttachmentDto): boolean {
-    // Images are excluded from preview - only PDFs can be previewed
-    return this.isPdfFile(attachment);
+    return this.isImageFile(attachment) || this.isPdfFile(attachment);
   }
 
   /**
    * Generate preview URL for file
-   * Note: Images are excluded from preview in public forms (guest access)
    */
   generatePreviewUrl(attachment: FormSubmissionAttachmentDto): void {
     if (!attachment.id || !this.canPreviewFile(attachment)) {
       return;
     }
 
-    // Don't generate preview URLs for images in public forms
-    if (this.isImageFile(attachment)) {
+    this.filePreviewUrls[attachment.id] = this.sanitizer.bypassSecurityTrustResourceUrl(
+      this.fileUploadService.getDownloadUrl(attachment.id)
+    );
+  }
+
+  generatePendingPreviewUrl(attachment: FormSubmissionAttachmentDto, file: File): void {
+    if (!attachment.id || !this.canPreviewFile(attachment)) {
       return;
     }
 
-    // Use download URL as preview URL (only for non-image files like PDFs)
-    this.filePreviewUrls[attachment.id] = this.fileUploadService.getDownloadUrl(attachment.id);
+    this.filePreviewUrls[attachment.id] = this.sanitizer.bypassSecurityTrustResourceUrl(
+      URL.createObjectURL(file)
+    );
   }
 
   /**
    * Get preview URL for attachment
-   * Note: Images return null in public forms (guest access) - no preview allowed
    */
-  getPreviewUrl(attachment: FormSubmissionAttachmentDto): string | null {
+  getPreviewUrl(attachment: FormSubmissionAttachmentDto): SafeResourceUrl | null {
     if (!attachment.id) return null;
-    
-    // Don't return preview URLs for images in public forms
-    if (this.isImageFile(attachment)) {
-      return null;
+
+    if (!this.filePreviewUrls[attachment.id] && this.canPreviewFile(attachment) && !this.isPendingFileAttachment(attachment)) {
+      this.generatePreviewUrl(attachment);
     }
-    
-    return this.filePreviewUrls[attachment.id] || this.fileUploadService.getDownloadUrl(attachment.id);
+
+    return this.filePreviewUrls[attachment.id] || null;
   }
 
   /**
@@ -4012,15 +4497,15 @@ export class FormViewComponent implements OnInit {
    */
   getFileIcon(attachment: FormSubmissionAttachmentDto): string {
     if (this.isImageFile(attachment)) {
-      return 'pi-image';
+      return 'pi pi-image';
     } else if (this.isPdfFile(attachment)) {
-      return 'pi-file-pdf';
+      return 'pi pi-file-pdf';
     } else if (attachment.contentType?.includes('word') || /\.(doc|docx)$/i.test(attachment.fileName || '')) {
-      return 'pi-file-word';
+      return 'pi pi-file-word';
     } else if (attachment.contentType?.includes('excel') || attachment.contentType?.includes('spreadsheet') || /\.(xls|xlsx)$/i.test(attachment.fileName || '')) {
-      return 'pi-file-excel';
+      return 'pi pi-file-excel';
     } else {
-      return 'pi-file';
+      return 'pi pi-file';
     }
   }
 
@@ -5578,6 +6063,22 @@ export class FormViewComponent implements OnInit {
                       valueDto.valueJson = "";
                     }
                     break;
+                  case 'datetime-local':
+                    const dateTimeValue = fieldValue instanceof Date ? fieldValue : new Date(fieldValue);
+                    if (!isNaN(dateTimeValue.getTime())) {
+                      valueDto.valueDate = dateTimeValue;
+                      valueDto.valueString = "";
+                      valueDto.valueJson = "";
+                    } else {
+                      console.warn(`[FormView] Invalid datetime value for field "${field.fieldName}": ${fieldValue}`);
+                      valueDto.valueString = String(fieldValue);
+                      valueDto.valueJson = "";
+                    }
+                    break;
+                  case 'time':
+                    valueDto.valueString = this.formatTimeInputValue(fieldValue) || String(fieldValue);
+                    valueDto.valueJson = "";
+                    break;
                   case 'boolean':
                   case 'switch':
                     const boolValue = Boolean(fieldValue);
@@ -5778,7 +6279,7 @@ export class FormViewComponent implements OnInit {
             });
           });
 
-          if (currentSubmission && (currentSubmission.status === 'Approved' || currentSubmission.status === 'Submitted')) {
+          if (currentSubmission && (currentSubmission.status === 'Approved' || currentSubmission.status === 'Submitted' || currentSubmission.status === 'Pending')) {
             console.log(`[FormView] Submission status is "${currentSubmission.status}", updating to Draft to allow resubmission...`);
             await new Promise<void>((resolve) => {
               this.formSubmissionsService.updateSubmission(currentSubmissionId, { status: 'Draft' }).subscribe({
@@ -5851,8 +6352,9 @@ export class FormViewComponent implements OnInit {
           }
         }
 
-        // Public submissions should not perform an extra authenticated update call here.
-        if (this.canRunAuthenticatedApprovalActions()) {
+        // Keep the backend-owned transition result:
+        // Draft -> Pending -> Approved, or Draft -> Approved when no workflow exists.
+        if (false && this.canRunAuthenticatedApprovalActions()) {
           console.log('[FormView] Updating status to Submitted (allowing resubmission)...');
           this.formSubmissionsService.updateSubmission(currentSubmissionId, { status: 'Submitted' }).subscribe({
             next: () => {
@@ -5868,11 +6370,6 @@ export class FormViewComponent implements OnInit {
               }
             }
           });
-        } else {
-          submittedSubmission.status = 'Submitted';
-          if (this.currentSubmission) {
-            this.currentSubmission.status = 'Submitted';
-          }
         }
 
         const currentLang = this.translationService.getCurrentLanguage();
@@ -5885,7 +6382,7 @@ export class FormViewComponent implements OnInit {
 
         // Approval/stage runtime actions require an authenticated admin/user context.
         // For guest/public submissions we skip them to avoid noisy post-submit errors.
-        if (submittedSubmission.status === 'Submitted' && false) {
+        if ((submittedSubmission.status === 'Submitted' || submittedSubmission.status === 'Pending') && false) {
           console.log('[FormView] ✅ Status is Submitted, calling activate-stage then re-fetching submission...');
           this.approvalWorkflowRuntimeService.activateStage(currentSubmissionId).subscribe({
             next: () => {
@@ -5920,7 +6417,7 @@ export class FormViewComponent implements OnInit {
           });
 
           console.log('[FormView] Stage resolution fallback skipped in public form flow.');
-        } else if (submittedSubmission.status === 'Submitted') {
+        } else if (submittedSubmission.status === 'Submitted' || submittedSubmission.status === 'Pending') {
           console.log('[FormView] Guest/public submission detected. Skipping approval runtime side effects.');
         }
 

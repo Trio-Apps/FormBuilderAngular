@@ -369,7 +369,7 @@ export class FormSubmissionsService {
                 documentNumber: '',
                 submittedByUserId: '',
                 submittedDate: new Date(),
-                status: 'Submitted',
+                status: 'Draft',
                 sapIntegrationEnabled: false,
                 createdDate: new Date(),
                 lastUpdatedDate: new Date(),
@@ -575,6 +575,48 @@ export class FormSubmissionsService {
           errorMessage = 'Unauthorized. Please log in again.';
         } else if (error?.status === 403) {
           errorMessage = 'You do not have permission to post this submission.';
+        } else if (errorResponse) {
+          if (typeof errorResponse === 'string') {
+            errorMessage = errorResponse;
+          } else if (errorResponse.message) {
+            errorMessage = errorResponse.message;
+          } else if (errorResponse.errorMessage) {
+            errorMessage = errorResponse.errorMessage;
+          } else if (errorResponse.title) {
+            errorMessage = errorResponse.title;
+          } else if (errorResponse.detail) {
+            errorMessage = errorResponse.detail;
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+
+        throw new Error(errorMessage);
+      })
+    );
+  }
+
+  cancelSubmission(id: number): Observable<FormSubmissionDto> {
+    return this.http.post<any>(`${this.baseUrl}/${id}/cancel`, {}).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object') {
+          return this.normalizeSubmissionDto(response.data || response.result || response);
+        }
+
+        return this.normalizeSubmissionDto(response);
+      }),
+      catchError((error) => {
+        console.error(`[FormSubmissionsService] Error cancelling form submission ${id}:`, error);
+
+        const errorResponse = error?.error;
+        let errorMessage = 'Failed to cancel form submission';
+
+        if (error?.status === 404) {
+          errorMessage = 'Submission or cancel endpoint was not found.';
+        } else if (error?.status === 401) {
+          errorMessage = 'Unauthorized. Please log in again.';
+        } else if (error?.status === 403) {
+          errorMessage = 'You do not have permission to cancel this submission.';
         } else if (errorResponse) {
           if (typeof errorResponse === 'string') {
             errorMessage = errorResponse;

@@ -67,7 +67,7 @@
 
         <!-- Field Display -->
         <div class="form-field" *ngFor="let field of tab.fields"
-          [ngClass]="[getFieldLayoutClass(field), isSearchableFormSubmissionsField(field) ? 'field-allows-overflow' : '']"
+          [ngClass]="[getFieldLayoutClass(field), isSearchableSelectField(field) ? 'field-allows-overflow' : '']"
           [style.display]="isFieldVisible(field) ? 'block' : 'none'"
           [attr.data-field-type]="getFieldType(field)"
           [attr.data-grid-id]="field.gridId">
@@ -97,7 +97,7 @@
                   [name]="'field_' + field.id"
                   [class.has-error]="hasFieldError(field)"
                   [placeholder]="getFieldPlaceholder(field)"
-                  [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
+                  [value]="getFieldValue(field) || ''" [disabled]="!isFieldEditable(field)"
                   (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
                 <input *ngIf="isPasswordField(field)" type="password" class="form-input" 
                   [id]="'field_' + field.id"
@@ -115,7 +115,7 @@
                 [name]="'field_' + field.id"
                 [class.has-error]="hasFieldError(field)"
                 [placeholder]="getFieldPlaceholder(field)"
-                [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
+                [value]="getFieldValue(field) || ''" [disabled]="!isFieldEditable(field)"
                 (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- Number Input -->
@@ -124,7 +124,7 @@
                 [name]="'field_' + field.id"
                 [class.has-error]="hasFieldError(field)"
                 [placeholder]="getFieldPlaceholder(field)" [min]="field.minValue" [max]="field.maxValue"
-                [value]="getDefaultValue(field)" [disabled]="!isFieldEditable(field)"
+                [value]="getFieldValue(field) || ''" [disabled]="!isFieldEditable(field)"
                 (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
               <!-- Calculated Field -->
@@ -140,13 +140,14 @@
                 [name]="'field_' + field.id"
                 [class.has-error]="hasFieldError(field)"
                 [placeholder]="getFieldPlaceholder(field)" [disabled]="!isFieldEditable(field)"
-                (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)">{{ getDefaultValue(field) }}</textarea>
+                [value]="getFieldValue(field) || ''"
+                (input)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)"></textarea>
 
               <!-- Select / Dropdown (Single or Multiple) -->
               <div *ngSwitchCase="'select'" class="select-wrapper" 
                 [class.multiple-select]="field.fieldType?.allowMultiple"
                 [class.has-error]="hasFieldError(field)">
-                <ng-container *ngIf="isSearchableFormSubmissionsField(field); else regularSelectTemplate">
+                <ng-container *ngIf="isSearchableSelectField(field); else regularSelectTemplate">
                   <div class="searchable-select">
                     <input type="text"
                       class="form-input searchable-select-input"
@@ -256,7 +257,25 @@
                 [id]="'field_' + field.id"
                 [name]="'field_' + field.id"
                 [class.has-error]="hasFieldError(field)"
-                [value]="getDefaultValue(field)"
+                [value]="getDateInputValue(field)"
+                [disabled]="!isFieldEditable(field)"
+                (change)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+
+              <!-- DateTime Picker -->
+              <input *ngSwitchCase="'datetime-local'" type="datetime-local" class="form-input"
+                [id]="'field_' + field.id"
+                [name]="'field_' + field.id"
+                [class.has-error]="hasFieldError(field)"
+                [value]="getDateTimeInputValue(field)"
+                [disabled]="!isFieldEditable(field)"
+                (change)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
+
+              <!-- Time Picker -->
+              <input *ngSwitchCase="'time'" type="time" class="form-input"
+                [id]="'field_' + field.id"
+                [name]="'field_' + field.id"
+                [class.has-error]="hasFieldError(field)"
+                [value]="getTimeInputValue(field)"
                 [disabled]="!isFieldEditable(field)"
                 (change)="clearFieldError(field); onFieldValueChange(field.id, $any($event.target).value, field.fieldCode)" />
 
@@ -317,18 +336,16 @@
                 <!-- Uploaded Files List -->
                 <div class="uploaded-files-list"
                   *ngIf="uploadedFiles[field.id!] && uploadedFiles[field.id!].length > 0">
-                  <!-- Hide image files completely - no display for images in public forms -->
                   <ng-container *ngFor="let attachment of uploadedFiles[field.id!]">
-                    <div class="uploaded-file-item" *ngIf="!isImageFile(attachment)">
-                    <!-- File Preview Thumbnail (for images) - HIDDEN -->
-                    <!-- <div class="file-preview-thumbnail" *ngIf="isImageFile(attachment) && getPreviewUrl(attachment)">
+                    <div class="uploaded-file-item">
+                    <div class="file-preview-thumbnail" *ngIf="isImageFile(attachment) && getPreviewUrl(attachment)">
                       <img [src]="getPreviewUrl(attachment)" [alt]="attachment.fileName"
                         (click)="openPreview(attachment)" />
-                    </div> -->
+                    </div>
 
                     <!-- File Icon -->
-                    <div class="file-icon" [class.has-preview]="canPreviewFile(attachment) && !isImageFile(attachment)"
-                      (click)="canPreviewFile(attachment) && !isImageFile(attachment) && openPreview(attachment)">
+                    <div class="file-icon" [class.has-preview]="canPreviewFile(attachment)"
+                      (click)="canPreviewFile(attachment) && openPreview(attachment)">
                       <i [class]="getFileIcon(attachment)"></i>
                     </div>
 
@@ -340,13 +357,13 @@
 
                     <!-- File Actions -->
                     <div class="file-actions">
-                      <button type="button" class="preview-btn" *ngIf="canPreviewFile(attachment) && !isImageFile(attachment)"
+                      <button type="button" class="preview-btn" *ngIf="canPreviewFile(attachment)"
                         (click)="openPreview(attachment)"
                         [title]="translationService.getCurrentLanguage() === 'ar' ? 'معاينة' : 'Preview'">
                         <i class="pi pi-eye"></i>
                       </button>
                       <a [href]="fileUploadService.getDownloadUrl(attachment.id!)" target="_blank" class="download-link"
-                        *ngIf="!isImageFile(attachment)"
+                        *ngIf="!isPendingFileAttachment(attachment)"
                         [title]="translationService.getCurrentLanguage() === 'ar' ? 'تحميل' : 'Download'">
                         <i class="pi pi-download"></i>
                       </a>
@@ -366,19 +383,18 @@
                       <i class="pi pi-times"></i>
                     </button>
                     <div class="preview-container">
-                      <!-- Images are hidden - no preview for images -->
-                      <!-- <img *ngIf="isImageFile(previewFile)" [src]="getPreviewUrl(previewFile!)"
-                        [alt]="previewFile!.fileName" /> -->
+                      <img *ngIf="isImageFile(previewFile)" [src]="getPreviewUrl(previewFile!)"
+                        [alt]="previewFile!.fileName" />
                       <iframe *ngIf="isPdfFile(previewFile)" [src]="getPreviewUrl(previewFile!)"
                         frameborder="0"></iframe>
-                      <div *ngIf="isImageFile(previewFile)" class="image-preview-disabled">
-                        <i class="pi pi-image" style="font-size: 48px; color: #9ca3af;"></i>
+                      <div *ngIf="false">
                         <p>{{ translationService.getCurrentLanguage() === 'ar' ? 'معاينة الصور غير متاحة' : 'Image preview not available' }}</p>
                       </div>
                     </div>
                     <div class="preview-footer">
                       <span class="preview-file-name">{{ previewFile!.fileName }}</span>
-                      <a [href]="fileUploadService.getDownloadUrl(previewFile!.id!)" target="_blank"
+                      <a *ngIf="!isPendingFileAttachment(previewFile!)"
+                        [href]="fileUploadService.getDownloadUrl(previewFile!.id!)" target="_blank"
                         class="download-link">
                         <i class="pi pi-download"></i>
                         {{ translationService.getCurrentLanguage() === 'ar' ? 'تحميل' : 'Download' }}

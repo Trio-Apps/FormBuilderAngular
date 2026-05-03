@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChildren, QueryLis
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { FormSubmissionsService, CreateFormSubmissionDto, FormSubmissionDto, FormSubmissionDetailDto, FormSubmissionGridDto, SaveFormSubmissionDataDto, SaveFormSubmissionValueDto, SaveFormSubmissionAttachmentDto, SaveFormSubmissionGridDto, SubmitFormResponseDto } from '../services/form-submissions.service';
 // Approve/Reject imports removed - only available in admin dashboard
 import { FormSubmissionValuesService, BulkFormSubmissionValuesDto, CreateFormSubmissionValueDto, UpdateFormSubmissionValueDto } from '../services/form-submission-values.service';
@@ -16,7 +17,7 @@ import { FieldsService } from '../../FormBuilder/services/fields.service';
 import { FieldDataSourceService } from '../../FormBuilder/services/field-data-source.service';
 import { RuleEvaluationService, FieldState } from '../../FormBuilder/services/rule-evaluation.service';
 import { FormRulesService } from '../../FormBuilder/services/form-rules.service';
-import { buildContext, getContextFieldCodes, requiresContext } from '../../FormBuilder/utils/field-data-source-helpers';
+import { buildContext, getContextFieldCodes, isContextValueAutoFill, isLookupTableValueAutoFill, requiresContext } from '../../FormBuilder/utils/field-data-source-helpers';
 import { CalculationEngineService } from '../../FormBuilder/services/calculation-engine.service';
 import { FormBuilderDto, FormTabDto, FormFieldDto, FieldOptionResponse, FieldTypeDto } from '../../FormBuilder/form-builder/models/form-builder-dto.model';
 import { MessageService } from 'primeng/api';
@@ -96,6 +97,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   fieldFiles: { [fieldId: number]: File[] } = {};
   existingAttachments: { [fieldId: number]: FormSubmissionAttachmentDto[] } = {}; // Store existing attachments for edit mode
   deletedAttachments: number[] = []; // Track deleted attachment IDs to delete from server
+  attachmentPreviewOpen = false;
+  attachmentPreviewName = '';
+  attachmentPreviewUrl: SafeResourceUrl | null = null;
+  attachmentPreviewType: 'image' | 'pdf' | null = null;
+  private attachmentObjectUrls: string[] = [];
 
   // Field DataSource state
   fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
@@ -156,6 +162,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   private routeSubscription?: Subscription;
   private fieldsFormValueChangesSubscription?: Subscription;
+  private lastChangedFieldIdentifiers: string[] = [];
   private isEvaluatingRules = false; // Flag to prevent infinite loops
 
   constructor(
@@ -184,7 +191,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     private approvalWorkflowRuntimeService: ApprovalWorkflowRuntimeService,
     private approvalStageService: ApprovalStageService,
     private approvalWorkflowService: ApprovalWorkflowService,
-    private gridService: GridService
+    private gridService: GridService,
+    private sanitizer: DomSanitizer
   ) {
     // Submission form
     this.submissionForm = this.fb.group({
@@ -236,6 +244,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     if (this.fieldsFormValueChangesSubscription) {
       this.fieldsFormValueChangesSubscription.unsubscribe();
     }
+    this.attachmentObjectUrls.forEach(url => URL.revokeObjectURL(url));
+    this.attachmentObjectUrls = [];
   }
 
   loadDocumentType(): void {
@@ -1109,7 +1119,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Also check if fieldType has hasOptions = true (even if getFieldType didn't detect it as options field)
         const ft = this.getFieldTypeFromCache(field) || field.fieldType;
         const hasOptionsFromFieldType = ft?.hasOptions === true;
-        const isOptionsField = ['select', 'radio', 'checkbox'].includes(fieldType) || hasOptionsFromFieldType;
+ const isOptionsField = !isLookupTableValueAutoFill(field.fieldDataSource) &&
+   (['select', 'radio', 'checkbox'].includes(fieldType) || hasOptionsFromFieldType);
         
         // Log field DataSource info
         if (field.fieldDataSource) {
@@ -1136,7 +1147,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         
         // Only load DataSource options for fields that need options
         // Also check if field has static options (field.fieldOptions) - these should be displayed even without DataSource
-        if (isOptionsField || (field.fieldOptions && field.fieldOptions.length > 0)) {
+        const sourceType = (field.fieldDataSource?.sourceType || '').trim().toLowerCase();
+        const shouldAutoPopulateFromDataSource =
+          !!field.fieldDataSource &&
+          requiresContext(field.fieldDataSource) &&
+          (sourceType === 'formsubmissions' || sourceType === 'formsubmission' || sourceType === 'lookuptable');
+
+        if (isOptionsField || shouldAutoPopulateFromDataSource || (field.fieldOptions && field.fieldOptions.length > 0)) {
           this.loadFieldOptionsFromDataSource(field);
         }
       }
@@ -1248,6 +1265,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           
           if (changedFieldCode) {
             console.log(`[FormSubmissionCreate] Field value changed: ${changedFieldCode}`);
+            this.reloadDependentFieldOptions(this.lastChangedFieldIdentifiers.length > 0
+              ? this.lastChangedFieldIdentifiers
+              : changedFieldCode);
             // Calculate dependent calculated fields (like FormViewComponent)
             this.calculateFields(changedFieldCode).catch(error => {
               console.error('[FormSubmissionCreate] Error calculating fields:', error);
@@ -1408,8 +1428,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     const dataType = (ft?.dataType || '').toLowerCase().trim();
     
     // Declare fieldCodeLower and fieldNameLower once at the beginning
-    const fieldCodeLower = (field.fieldCode || '').toLowerCase();
-    const fieldNameLower = (field.fieldName || '').toLowerCase();
+  const fieldCodeLower = (field.fieldCode || '').toLowerCase();
+  const fieldNameLower = (field.fieldName || '').toLowerCase();
+
+  if (isLookupTableValueAutoFill(field.fieldDataSource)) {
+    return 'text';
+  }
     
     // Removed verbose logging for performance
 
@@ -1593,6 +1617,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     if (combined.includes('number') || combined.includes('numeric') || dataType === 'int' || dataType === 'decimal' ||
         typeName.includes('number') || fieldCodeLower.includes('number') || fieldNameLower.includes('number')) {
       return 'number';
+    }
+
+    // DateTime must be checked before Date because "datetime" contains "date".
+    if (typeName === 'datetime' || typeName === 'date time' || dataType === 'datetime' ||
+        combined.includes('datetime') || combined.includes('date time')) {
+      return 'datetime-local';
+    }
+
+    // Time
+    if (typeName === 'time' || dataType === 'timespan' ||
+        (combined.includes('time') && !combined.includes('datetime'))) {
+      return 'time';
     }
 
     // Date - Check typeName, dataType, fieldCode, and fieldName
@@ -1989,8 +2025,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return resultType === 'Decimal' || resultType === 'Integer' || resultType === 'Text';
     }
     
-    // Date Input: getFieldType(field) === 'date'
-    if (fieldType === 'date') {
+    // Date-like Inputs: getFieldType(field) === 'date' | 'datetime-local' | 'time'
+    if (fieldType === 'date' || fieldType === 'datetime-local' || fieldType === 'time') {
       return true;
     }
     
@@ -2332,15 +2368,32 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
     const files = Array.from(event.target.files) as File[];
+    const allowMultiple = field.fieldType?.allowMultiple || false;
+    const filesToStore = allowMultiple ? files : files.slice(0, 1);
     console.log(`[FormSubmissionCreate] 📁 onFileSelected - Field ${field.id} (${field.fieldCode || field.fieldName}), files selected:`, files.map(f => ({ name: f.name, size: f.size, type: f.type })));
     
-    if (files.length > 0) {
-      this.fieldFiles[field.id] = files;
+    if (filesToStore.length > 0) {
+      if (allowMultiple) {
+        this.fieldFiles[field.id] = [...(this.fieldFiles[field.id] || []), ...filesToStore];
+      } else {
+        this.markExistingSingleFileForReplacement(field.id);
+        this.fieldFiles[field.id] = filesToStore;
+      }
       console.log(`[FormSubmissionCreate] ✅ Files stored in fieldFiles[${field.id}]:`, this.fieldFiles[field.id].map(f => f.name));
       this.cdr.detectChanges();
     } else {
       console.warn('[FormSubmissionCreate] ⚠️ onFileSelected - No files selected');
     }
+  }
+
+  private markExistingSingleFileForReplacement(fieldId: number): void {
+    const existing = this.existingAttachments[fieldId] || [];
+    existing.forEach(attachment => {
+      if (attachment.id && !this.deletedAttachments.includes(attachment.id)) {
+        this.deletedAttachments.push(attachment.id);
+      }
+    });
+    this.existingAttachments[fieldId] = [];
   }
 
   removeFile(fieldId: number, index: number): void {
@@ -2355,6 +2408,49 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   getFieldFiles(fieldId: number): File[] {
     return this.fieldFiles[fieldId] || [];
+  }
+
+  isPreviewableFile(file: File): boolean {
+    const type = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+    return type.startsWith('image/') || type === 'application/pdf' || /\.(jpg|jpeg|png|gif|webp|pdf)$/i.test(name);
+  }
+
+  isPdfAttachment(attachment: FormSubmissionAttachmentDto): boolean {
+    const contentType = (attachment.contentType || '').toLowerCase();
+    const fileName = (attachment.fileName || '').toLowerCase();
+    return contentType === 'application/pdf' || fileName.endsWith('.pdf');
+  }
+
+  canPreviewAttachment(attachment: FormSubmissionAttachmentDto): boolean {
+    return this.isImageAttachment(attachment) || this.isPdfAttachment(attachment);
+  }
+
+  openNewFilePreview(file: File): void {
+    if (!this.isPreviewableFile(file)) return;
+
+    const objectUrl = URL.createObjectURL(file);
+    this.attachmentObjectUrls.push(objectUrl);
+    this.attachmentPreviewName = file.name;
+    this.attachmentPreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(objectUrl);
+    this.attachmentPreviewType = (file.type || '').toLowerCase() === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
+    this.attachmentPreviewOpen = true;
+  }
+
+  openExistingAttachmentPreview(attachment: FormSubmissionAttachmentDto): void {
+    if (!attachment.id || !this.canPreviewAttachment(attachment)) return;
+
+    this.attachmentPreviewName = attachment.fileName;
+    this.attachmentPreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.getAttachmentDownloadUrl(attachment.id));
+    this.attachmentPreviewType = this.isPdfAttachment(attachment) ? 'pdf' : 'image';
+    this.attachmentPreviewOpen = true;
+  }
+
+  closeAttachmentPreview(): void {
+    this.attachmentPreviewOpen = false;
+    this.attachmentPreviewName = '';
+    this.attachmentPreviewUrl = null;
+    this.attachmentPreviewType = null;
   }
 
   /**
@@ -2498,11 +2594,22 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Check if field has options type (select, radio, checkbox)
+    // Check if field has options type (select, radio, checkbox), or if this is a text field
+    // configured as an auto-fill lookup from Form Submissions.
     const fieldType = this.getFieldType(field);
+    const ft = this.getFieldTypeFromCache(field) || field.fieldType;
+    const hasOptionsFromFieldType = ft?.hasOptions === true;
+    const isOptionsField = ['select', 'radio', 'checkbox'].includes(fieldType) || hasOptionsFromFieldType;
+    const sourceType = (field.fieldDataSource?.sourceType || '').trim().toLowerCase();
+    const isAutoFillLookupField =
+      !!field.fieldDataSource &&
+      requiresContext(field.fieldDataSource) &&
+      (sourceType === 'formsubmissions' || sourceType === 'formsubmission' || sourceType === 'lookuptable') &&
+      !isOptionsField;
+
     console.log(`[FormSubmissionCreate] Checking DataSource for field ${field.id} (${field.fieldCode || 'no-code'}), type: ${fieldType}`);
     
-    if (!['select', 'radio', 'checkbox'].includes(fieldType)) {
+    if (!isOptionsField && !isAutoFillLookupField) {
       console.log(`[FormSubmissionCreate] Field ${field.id} is not an options field, skipping DataSource`);
       return;
     }
@@ -2541,10 +2648,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     // For Api, LookupTable, SqlQuery, or SapHana, load options dynamically
     // Note: Backend stores SqlQuery as "DataSourceSqlQuery", so check for both
-      const isSqlQuery = dataSource.sourceType === 'SqlQuery' || dataSource.sourceType === 'DataSourceSqlQuery';
-      const isSapHana = dataSource.sourceType === 'SapHana';
-      const isFormSubmissions = dataSource.sourceType === 'FormSubmissions';
-      if (dataSource.sourceType === 'Api' || dataSource.sourceType === 'LookupTable' || isSqlQuery || isSapHana || isFormSubmissions) {
+      const normalizedSourceType = (dataSource.sourceType || '').trim().toLowerCase();
+      const isSqlQuery = normalizedSourceType === 'sqlquery' || normalizedSourceType === 'datasourcesqlquery';
+      const isSapHana = normalizedSourceType === 'saphana' || normalizedSourceType === 'sap';
+      const isFormSubmissions = normalizedSourceType === 'formsubmissions' || normalizedSourceType === 'formsubmission';
+      if (normalizedSourceType === 'api' || normalizedSourceType === 'lookuptable' || isSqlQuery || isSapHana || isFormSubmissions) {
         console.log(`[FormSubmissionCreate] Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`);
         this.loadingFieldOptions[field.id] = true;
       
@@ -2565,6 +2673,23 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         console.log(`[FormSubmissionCreate] Field ${field.id} depends on context fields:`, contextFields);
       }
 
+      if (isContextValueAutoFill(dataSource)) {
+        const contextValue = finalContext ? Object.values(finalContext)[0] : '';
+        this.fieldDataSourceOptions[field.id] = [];
+        this.loadingFieldOptions[field.id] = false;
+        this.setAutoFilledFieldValue(field, contextValue ?? '');
+        this.updateFieldDisabledState(field);
+        return;
+      }
+
+      if (isLookupTableValueAutoFill(dataSource) && (!finalContext || Object.keys(finalContext).length === 0)) {
+        this.fieldDataSourceOptions[field.id] = [];
+        this.loadingFieldOptions[field.id] = false;
+        this.setAutoFilledFieldValue(field, '');
+        this.updateFieldDisabledState(field);
+        return;
+      }
+
       this.fieldDataSourceService.getFieldOptions(field.id, finalContext).subscribe({
         next: (options: FieldOptionResponse[]) => {
           console.log(`[FormSubmissionCreate] Received options for field ${field.id}:`, {
@@ -2574,7 +2699,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           });
           
           if (options && options.length > 0) {
-            this.fieldDataSourceOptions[field.id] = options;
+            this.applyContextDrivenValue(field, options);
+            const fieldType = this.getFieldType(field);
+            const ft = this.getFieldTypeFromCache(field) || field.fieldType;
+            const isOptionsField = !isLookupTableValueAutoFill(field.fieldDataSource) &&
+              (['select', 'radio', 'checkbox'].includes(fieldType) || ft?.hasOptions === true);
+            this.fieldDataSourceOptions[field.id] = isOptionsField ? options : [];
             // Clear cache when DataSource options are updated
             delete this._cachedMappedOptions[field.id];
             delete this._cachedStaticOptions[field.id];
@@ -2778,6 +2908,55 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
   }
 
+  private toDateOrNull(value: any): Date | null {
+    if (value instanceof Date) {
+      return isNaN(value.getTime()) ? null : value;
+    }
+
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private formatDateInputValue(value: any): string {
+    const parsed = this.toDateOrNull(value);
+    if (!parsed) return '';
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private formatDateTimeInputValue(value: any): string {
+    const parsed = this.toDateOrNull(value);
+    if (!parsed) return '';
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    const hours = String(parsed.getHours()).padStart(2, '0');
+    const minutes = String(parsed.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  private formatTimeInputValue(value: any): string {
+    if (value === null || value === undefined || value === '') return '';
+
+    const raw = String(value).trim();
+    const timeMatch = raw.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/);
+    if (timeMatch) {
+      return `${timeMatch[1]}:${timeMatch[2]}`;
+    }
+
+    const parsed = this.toDateOrNull(value);
+    if (!parsed) return '';
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+  }
+
   /**
    * Find which field code changed by comparing form values
    */
@@ -2789,6 +2968,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     
     const previousValues = (this as any)._previousFormValues;
     let changedFieldCode: string | null = null;
+    this.lastChangedFieldIdentifiers = [];
     
     // Compare values to find what changed
     Object.keys(newFormValues).forEach(key => {
@@ -2805,6 +2985,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             // Skip calculated fields (they shouldn't trigger recalculation)
             if (!this.calculationEngine.isCalculatedField(field)) {
               changedFieldCode = field.fieldCode;
+              this.lastChangedFieldIdentifiers = [field.fieldCode, String(field.id)].filter(Boolean);
             }
           }
         }
@@ -3006,6 +3187,113 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         }
       }
     });
+  }
+
+  private reloadDependentFieldOptions(changedFieldCodes: string | string[]): void {
+    const changedCodes = Array.isArray(changedFieldCodes)
+      ? changedFieldCodes.filter(code => !!code)
+      : [changedFieldCodes].filter(code => !!code);
+
+    Object.keys(this.contextDependencies).forEach(fieldIdStr => {
+      const fieldId = Number(fieldIdStr);
+      const contextFields = this.contextDependencies[fieldId] || [];
+
+      if (!changedCodes.some(code => contextFields.includes(code))) {
+        return;
+      }
+
+      const field = this.fields.find(f => f.id === fieldId);
+      if (!field) {
+        return;
+      }
+
+      this.clearDependentFieldRuntimeState(field);
+      this.loadFieldOptionsFromDataSource(field);
+    });
+  }
+
+  private clearDependentFieldRuntimeState(field: FormFieldDto): void {
+    if (!field.id) {
+      return;
+    }
+
+    const fieldKey = `field_${field.id}`;
+    this.fieldsForm.get(fieldKey)?.patchValue('', { emitEvent: false });
+    this.fieldValues[String(field.id)] = '';
+    if (field.fieldCode) {
+      this.fieldValues[field.fieldCode] = '';
+    }
+
+    delete this.fieldDataSourceOptions[field.id];
+    delete this._cachedMappedOptions[field.id];
+    delete this._cachedStaticOptions[field.id];
+    delete this._loggedFieldOptions[field.id];
+  }
+
+  private applyContextDrivenValue(field: FormFieldDto, options: FieldOptionResponse[]): void {
+    if (!field.id || !field.fieldDataSource || !requiresContext(field.fieldDataSource) || options.length === 0) {
+      return;
+    }
+
+    const sourceType = (field.fieldDataSource.sourceType || '').trim().toLowerCase();
+    if (sourceType !== 'formsubmissions' && sourceType !== 'formsubmission' && sourceType !== 'lookuptable') {
+      return;
+    }
+
+    const fieldType = this.getFieldType(field);
+    const ft = this.getFieldTypeFromCache(field) || field.fieldType;
+    const isOptionsField = !isLookupTableValueAutoFill(field.fieldDataSource) &&
+      (['select', 'radio', 'checkbox'].includes(fieldType) || ft?.hasOptions === true);
+    if (isOptionsField && options.length !== 1) {
+      return;
+    }
+
+    const option = options[0] as any;
+    const optionValue = option?.optionValue ?? option?.value ?? option?.Value ?? '';
+    if (optionValue === undefined || optionValue === null || String(optionValue).trim() === '') {
+      return;
+    }
+
+    const currentValue = this.fieldValues[String(field.id)] ?? (field.fieldCode ? this.fieldValues[field.fieldCode] : undefined);
+    if (String(currentValue ?? '') === String(optionValue)) {
+      return;
+    }
+
+    if (isOptionsField) {
+      this.onFieldValueChange(field.id, optionValue, field.fieldCode);
+    } else {
+      this.setAutoFilledFieldValue(field, optionValue);
+      this.fieldDataSourceOptions[field.id] = [];
+    }
+  }
+
+  private setAutoFilledFieldValue(field: FormFieldDto, value: any): void {
+    if (!field.id) {
+      return;
+    }
+
+    const fieldKey = `field_${field.id}`;
+    const currentValue = this.fieldValues[String(field.id)] ?? (field.fieldCode ? this.fieldValues[field.fieldCode] : undefined);
+    if (String(currentValue ?? '') === String(value ?? '')) {
+      return;
+    }
+
+    this.fieldValues[String(field.id)] = value;
+    if (field.fieldCode) {
+      this.fieldValues[field.fieldCode] = value;
+    }
+
+    const control = this.fieldsForm?.get(fieldKey);
+    if (control && String(control.value ?? '') !== String(value ?? '')) {
+      control.setValue(value, { emitEvent: false });
+    }
+
+    this.evaluateFormRules();
+    this.calculateFields(field.fieldCode || String(field.id))
+      .then(() => this.cdr.markForCheck())
+      .catch(error => console.error(`[FormSubmissionCreate] Error calculating auto-filled field ${field.fieldCode || field.id}:`, error));
+
+    this.cdr.markForCheck();
   }
 
   /**
@@ -3872,12 +4160,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       } else if (fv.valueNumber !== null && fv.valueNumber !== undefined) {
         value = fv.valueNumber;
       } else if (fv.valueDate) {
-        const dateValue = new Date(fv.valueDate);
-        // Format for date input (yyyy-MM-dd)
-        const year = dateValue.getFullYear();
-        const month = String(dateValue.getMonth() + 1).padStart(2, '0');
-        const day = String(dateValue.getDate()).padStart(2, '0');
-        value = `${year}-${month}-${day}`;
+        value = fv.valueDate;
       } else if (fv.valueBool !== null && fv.valueBool !== undefined) {
         value = fv.valueBool;
       } else if (fv.valueJson) {
@@ -3889,15 +4172,17 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         }
       }
 
-      // Date fields often come as valueString from API/DB; normalize to yyyy-MM-dd.
+      // Date-like fields often come as valueString from API/DB; normalize for native inputs.
       if (currentFieldType === 'date' && value) {
-        const parsedDate = new Date(value);
-        if (!isNaN(parsedDate.getTime())) {
-          const year = parsedDate.getFullYear();
-          const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
-          const day = String(parsedDate.getDate()).padStart(2, '0');
-          value = `${year}-${month}-${day}`;
-        }
+        value = this.formatDateInputValue(value);
+      }
+
+      if (currentFieldType === 'datetime-local' && value) {
+        value = this.formatDateTimeInputValue(value);
+      }
+
+      if (currentFieldType === 'time' && value) {
+        value = this.formatTimeInputValue(value);
       }
 
       if ((currentFieldType === 'select' || currentFieldType === 'radio') && value !== null && value !== undefined && value !== '') {
@@ -3922,7 +4207,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
     
     // Patch form values
-    this.fieldsForm.patchValue(formValues);
+    this.fieldsForm.patchValue(formValues, { emitEvent: false });
+    Object.keys(formValues).forEach(fieldKey => {
+      this.fieldsForm.get(fieldKey)?.updateValueAndValidity({ emitEvent: false });
+    });
+    this.updateFieldValues();
     this.cdr.detectChanges();
   }
 
@@ -4365,14 +4654,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Some backend paths create submissions directly in Submitted status.
         // In this case, calling /submit again causes 400 "already submitted".
         const createdStatus = (newSubmission.status || '').toLowerCase();
-        if (createdStatus === 'submitted' || createdStatus === 'approved') {
+        if (createdStatus === 'submitted' || createdStatus === 'pending' || createdStatus === 'approved') {
           console.warn('[FormSubmissionCreate] Submission is already in final status after create. Skipping extra submit call.', {
             submissionId: this.submissionId,
             status: newSubmission.status
           });
 
           this.isDraftMode = false;
-          this.currentSubmission = { ...newSubmission, status: 'Submitted' };
+          this.currentSubmission = { ...newSubmission, status: newSubmission.status };
 
           const currentLang = this.translationService.getCurrentLanguage();
           const statusMessage = currentLang === 'ar'
@@ -4426,7 +4715,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
             this.isDraftMode = false;
             if (this.currentSubmission) {
-              this.currentSubmission.status = 'Submitted';
+              this.currentSubmission.status = (submitResult as any)?.status || this.currentSubmission.status;
             }
 
             const currentLang = this.translationService.getCurrentLanguage();
@@ -4871,7 +5160,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    * Handle submission workflow (set stageId and activate stage)
    */
   private handleSubmissionWorkflow(submission: FormSubmissionDto): void {
-    if (submission.status === 'Submitted' || submission.status === 'Approved') {
+    if (submission.status === 'Submitted' || submission.status === 'Pending' || submission.status === 'Approved') {
       console.log('[FormSubmissionCreate] Handling workflow for submission:', submission.id);
       const docTypeId = submission.documentTypeId || this.documentTypeId;
       
@@ -5204,6 +5493,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               valueDto.valueString = String(fieldValue);
             }
             break;
+          case 'datetime-local':
+            const dateTimeValue = fieldValue instanceof Date ? fieldValue : new Date(fieldValue);
+            if (!isNaN(dateTimeValue.getTime())) {
+              valueDto.valueDate = dateTimeValue;
+              valueDto.valueString = dateTimeValue.toISOString();
+            } else {
+              console.warn(`[FormSubmissionCreate] Invalid datetime value for field "${field.fieldName}": ${fieldValue}`);
+              valueDto.valueString = String(fieldValue);
+            }
+            break;
+          case 'time':
+            valueDto.valueString = this.formatTimeInputValue(fieldValue) || String(fieldValue);
+            break;
           case 'boolean':
           case 'switch':
             valueDto.valueBool = Boolean(fieldValue);
@@ -5366,7 +5668,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               valueDto.valueJson = JSON.stringify(dateValue.toISOString());
               valueDto.valueString = dateValue.toISOString();
               break;
+            case 'datetime-local':
+              const dateTimeValue = fieldValue instanceof Date ? fieldValue : new Date(fieldValue);
+              valueDto.valueDate = dateTimeValue;
+              valueDto.valueJson = JSON.stringify(dateTimeValue.toISOString());
+              valueDto.valueString = dateTimeValue.toISOString();
+              break;
+            case 'time':
+              const timeValue = this.formatTimeInputValue(fieldValue) || String(fieldValue);
+              valueDto.valueString = timeValue;
+              valueDto.valueJson = JSON.stringify(timeValue);
+              break;
             case 'boolean':
+            case 'switch':
               const boolValue = Boolean(fieldValue);
               valueDto.valueBool = boolValue;
               valueDto.valueJson = JSON.stringify(boolValue);
@@ -5637,7 +5951,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             valueDto.valueJson = JSON.stringify(dateValue.toISOString());
             valueDto.valueString = dateValue.toISOString();
             break;
+          case 'datetime-local':
+            const dateTimeValue = fieldValue instanceof Date ? fieldValue : new Date(fieldValue);
+            valueDto.valueDate = dateTimeValue;
+            valueDto.valueJson = JSON.stringify(dateTimeValue.toISOString());
+            valueDto.valueString = dateTimeValue.toISOString();
+            break;
+          case 'time':
+            const timeValue = this.formatTimeInputValue(fieldValue) || String(fieldValue);
+            valueDto.valueString = timeValue;
+            valueDto.valueJson = JSON.stringify(timeValue);
+            break;
           case 'boolean':
+          case 'switch':
             const boolValue = Boolean(fieldValue);
             valueDto.valueBool = boolValue;
             valueDto.valueJson = JSON.stringify(boolValue);
@@ -6300,6 +6626,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     if (fieldCode) {
       this.fieldValues[fieldCode] = value;
     }
+
+    this.reloadDependentFieldOptions([fieldCode || String(fieldId), String(fieldId)]);
 
     // Trigger change detection
     this.cdr.detectChanges();

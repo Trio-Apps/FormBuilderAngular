@@ -266,6 +266,10 @@ export class ApprovalsHistoryListComponent implements OnInit {
         }
         
         attachmentsArray.forEach((att: FormSubmissionAttachmentDto) => {
+          if (!att.fieldId) {
+            return;
+          }
+
           if (!this.fieldAttachments[att.fieldId]) {
             this.fieldAttachments[att.fieldId] = [];
           }

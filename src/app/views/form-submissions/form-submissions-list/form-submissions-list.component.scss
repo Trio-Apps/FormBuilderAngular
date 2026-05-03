@@ -6,6 +6,20 @@
   background: #f5f7fa;
 }
 
+.badge-cancelled {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.action-btn-warning {
+  color: #d97706;
+
+  &:hover {
+    background: #fff7ed;
+    color: #b45309;
+  }
+}
+
 // Google Forms Style Form Display
 .form-display-section {
   background: #f0ebf8;

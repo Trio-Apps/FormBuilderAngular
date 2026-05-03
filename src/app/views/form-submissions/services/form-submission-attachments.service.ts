@@ -8,9 +8,12 @@ export interface FormSubmissionAttachmentDto {
   id: number;
   submissionId: number;
   submissionDocumentNumber?: string;
-  fieldId: number;
+  fieldId?: number | null;
   fieldCode?: string;
   fieldName?: string;
+  gridId?: number | null;
+  gridColumnId?: number | null;
+  gridRowIndex?: number | null;
   fileName: string;
   filePath: string;
   fileSize: number;
@@ -22,8 +25,11 @@ export interface FormSubmissionAttachmentDto {
 
 export interface CreateFormSubmissionAttachmentDto {
   submissionId: number;
-  fieldId: number;
-  fieldCode: string;
+  fieldId?: number | null;
+  fieldCode?: string | null;
+  gridId?: number | null;
+  gridColumnId?: number | null;
+  gridRowIndex?: number | null;
   fileName: string;
   filePath: string;
   fileSize: number;
@@ -211,6 +217,10 @@ export class FormSubmissionAttachmentsService {
     );
   }
 
+  getDownloadUrl(id: number): string {
+    return `${this.baseUrl}/${id}/download`;
+  }
+
   create(dto: CreateFormSubmissionAttachmentDto): Observable<FormSubmissionAttachmentDto> {
     return this.http.post<any>(this.baseUrl, dto).pipe(
       map(response => response.data || response),
@@ -271,6 +281,20 @@ export class FormSubmissionAttachmentsService {
         }
         return this.handleError(error);
       })
+    );
+  }
+
+  uploadGridFile(file: File, submissionId: number, gridId: number, gridColumnId: number, gridRowIndex: number): Observable<FormSubmissionAttachmentDto> {
+    const formData = new FormData();
+    formData.append('File', file);
+    formData.append('SubmissionId', submissionId.toString());
+    formData.append('GridId', gridId.toString());
+    formData.append('GridColumnId', gridColumnId.toString());
+    formData.append('GridRowIndex', gridRowIndex.toString());
+
+    return this.http.post<any>(`${this.baseUrl}/upload-grid`, formData).pipe(
+      map(response => response?.data || response),
+      catchError(this.handleError)
     );
   }
 

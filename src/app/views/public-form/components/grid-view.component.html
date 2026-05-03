@@ -126,6 +126,23 @@
                 <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
                   {{ getError(row.rowIndex, column.id) }}
                 </div>
+
+                <!-- Textarea -->
+                <textarea
+                  *ngSwitchCase="'textarea'"
+                  class="grid-input"
+                  rows="2"
+                  [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  (input)="setCellValue(row.rowIndex, column.id, $any($event.target).value)"
+                  [placeholder]="column.defaultValue || ''"
+                  [required]="isColumnRequired(column)"
+                  [readonly]="isColumnReadOnly(column) || isReadOnly"
+                  [disabled]="isColumnReadOnly(column) || isReadOnly"
+                ></textarea>
+                <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                  {{ getError(row.rowIndex, column.id) }}
+                </div>
                 <input
                   *ngSwitchCase="'email'"
                   type="email"
@@ -292,10 +309,122 @@
                   <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
                     {{ getError(row.rowIndex, column.id) }}
                   </div>
-                  <div class="error-message" *ngIf="hasColumnOptionsError(column) && !hasError(row.rowIndex, column.id)">
+                <div class="error-message" *ngIf="hasColumnOptionsError(column) && !hasError(row.rowIndex, column.id)">
                     {{ getColumnOptionsError(column) }}
                   </div>
                 </ng-container>
+
+                <!-- Radio -->
+                <ng-container *ngSwitchCase="'radio'">
+                  <div class="grid-options-list">
+                    <label *ngFor="let option of getColumnOptions(column)" class="grid-option-item">
+                      <input
+                        type="radio"
+                        [name]="'grid_' + grid.id + '_row_' + row.rowIndex + '_col_' + column.id"
+                        [value]="option.optionValue"
+                        [checked]="getCellValue(row.rowIndex, column.id) === option.optionValue"
+                        (change)="setCellValue(row.rowIndex, column.id, option.optionValue)"
+                        [required]="isColumnRequired(column)"
+                        [disabled]="isColumnReadOnly(column) || isReadOnly"
+                      />
+                      <span>{{ getOptionText(option) }}</span>
+                    </label>
+                  </div>
+                  <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                    {{ getError(row.rowIndex, column.id) }}
+                  </div>
+                </ng-container>
+
+                <!-- Checkbox / Multi-select -->
+                <ng-container *ngSwitchCase="'checkbox'">
+                  <div class="grid-options-list" *ngIf="getColumnOptions(column).length > 0">
+                    <label *ngFor="let option of getColumnOptions(column)" class="grid-option-item">
+                      <input
+                        type="checkbox"
+                        [checked]="isCheckboxOptionSelected(row.rowIndex, column.id, option.optionValue)"
+                        (change)="toggleCheckboxOption(row.rowIndex, column.id, option.optionValue, $any($event.target).checked)"
+                        [disabled]="isColumnReadOnly(column) || isReadOnly"
+                      />
+                      <span>{{ getOptionText(option) }}</span>
+                    </label>
+                  </div>
+                  <label class="grid-option-item" *ngIf="getColumnOptions(column).length === 0">
+                    <input
+                      type="checkbox"
+                      [checked]="isTruthyValue(getCellValue(row.rowIndex, column.id))"
+                      (change)="setCellValue(row.rowIndex, column.id, $any($event.target).checked ? 'true' : 'false')"
+                      [disabled]="isColumnReadOnly(column) || isReadOnly"
+                    />
+                    <span>{{ getColumnLabel(column) }}</span>
+                  </label>
+                  <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                    {{ getError(row.rowIndex, column.id) }}
+                  </div>
+                </ng-container>
+
+                <!-- Boolean -->
+                <label *ngSwitchCase="'boolean'" class="grid-option-item">
+                  <input
+                    type="checkbox"
+                    [checked]="isTruthyValue(getCellValue(row.rowIndex, column.id))"
+                    (change)="setCellValue(row.rowIndex, column.id, $any($event.target).checked ? 'true' : 'false')"
+                    [disabled]="isColumnReadOnly(column) || isReadOnly"
+                  />
+                  <span>{{ isTruthyValue(getCellValue(row.rowIndex, column.id)) ? (translationService.translate('common.yes') || 'Yes') : (translationService.translate('common.no') || 'No') }}</span>
+                </label>
+
+                <!-- File -->
+                <ng-container *ngSwitchCase="'file'">
+                  <input
+                    type="file"
+                    class="grid-input"
+                    [class.is-invalid]="hasError(row.rowIndex, column.id)"
+                    (change)="setFileCellValue(row.rowIndex, column.id, $any($event.target).files?.[0])"
+                    [required]="isColumnRequired(column)"
+                    [disabled]="isColumnReadOnly(column) || isReadOnly"
+                  />
+                  <small *ngIf="getGridFileName(row.rowIndex, column.id)" class="grid-file-name">
+                    <span>{{ getGridFileName(row.rowIndex, column.id) }}</span>
+                    <a
+                      *ngIf="getGridFileDownloadUrl(row.rowIndex, column.id)"
+                      [href]="getGridFileDownloadUrl(row.rowIndex, column.id)"
+                      target="_blank"
+                      rel="noopener"
+                      class="grid-file-download">
+                      {{ translationService.translate('formView.download') || 'Download' }}
+                    </a>
+                    <button
+                      type="button"
+                      *ngIf="canPreviewGridFile(row.rowIndex, column.id)"
+                      class="grid-file-preview"
+                      (click)="openGridFilePreview(row.rowIndex, column.id)"
+                      [title]="translationService.translate('formView.preview') || 'Preview'">
+                      <i class="pi pi-eye"></i>
+                    </button>
+                    <button
+                      type="button"
+                      class="grid-file-clear"
+                      (click)="clearFileCellValue(row.rowIndex, column.id)"
+                      [disabled]="isColumnReadOnly(column) || isReadOnly"
+                      [title]="translationService.translate('common.remove') || 'Remove'">
+                      <i class="pi pi-times"></i>
+                    </button>
+                  </small>
+                  <div class="error-message" *ngIf="hasError(row.rowIndex, column.id)">
+                    {{ getError(row.rowIndex, column.id) }}
+                  </div>
+                </ng-container>
+
+                <!-- Calculated values are displayed read-only in grid rows -->
+                <input
+                  *ngSwitchCase="'calculated'"
+                  type="text"
+                  class="grid-input"
+                  [value]="getCellValue(row.rowIndex, column.id)"
+                  [placeholder]="column.defaultValue || ''"
+                  readonly
+                  disabled
+                />
               </ng-container>
             </td>
 
@@ -347,6 +476,21 @@
     <div style="margin-top: 1rem; font-size: 0.875rem; color: #6b7280;">
       <p>Total columns: {{ columns.length }}</p>
       <p>Visible columns: {{ visibleColumns.length }}</p>
+    </div>
+  </div>
+</div>
+
+<div class="grid-file-preview-overlay" *ngIf="gridPreviewOpen && gridPreviewUrl" (click)="closeGridFilePreview()">
+  <div class="grid-file-preview-dialog" (click)="$event.stopPropagation()">
+    <button type="button" class="grid-file-preview-close" (click)="closeGridFilePreview()">
+      <i class="pi pi-times"></i>
+    </button>
+    <div class="grid-file-preview-body">
+      <img *ngIf="gridPreviewType === 'image'" [src]="gridPreviewUrl" [alt]="gridPreviewName">
+      <iframe *ngIf="gridPreviewType === 'pdf'" [src]="gridPreviewUrl" frameborder="0"></iframe>
+    </div>
+    <div class="grid-file-preview-footer">
+      <span>{{ gridPreviewName }}</span>
     </div>
   </div>
 </div>

@@ -1,6 +1,7 @@
 import { Component, Input, OnInit, OnChanges, SimpleChanges, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { GridService } from '../../FormBuilder/services/grid.service';
 import { GridColumnDataSourcesService } from '../../FormBuilder/services/grid-column-data-sources.service';
 import { GridColumnOptionsService } from '../../FormBuilder/services/grid-column-options.service';
@@ -27,6 +28,16 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { catchError, of, Observable, forkJoin } from 'rxjs';
 import { switchMap, map } from 'rxjs/operators';
 import { FormSubmissionGridDto, FormSubmissionGridCellDto as SubmissionGridCellDto } from '../../form-submissions/services/form-submissions.service';
+import { FormSubmissionAttachmentsService, FormSubmissionAttachmentDto } from '../../form-submissions/services/form-submission-attachments.service';
+
+interface GridFileCellValue {
+  attachmentId?: number;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  downloadUrl?: string;
+  lastModified?: number;
+}
 
 /**
  * Grid View Component
@@ -52,6 +63,12 @@ export class GridViewComponent implements OnInit, OnChanges {
   visibleColumns: FormGridColumnDto[] = []; // Filtered columns based on visibility
   rows: FormSubmissionGridRowDto[] = [];
   gridData: { [rowIndex: number]: { [columnId: number]: string } } = {};
+  pendingGridFiles: { [cellKey: string]: File } = {};
+  gridPreviewOpen = false;
+  gridPreviewName = '';
+  gridPreviewUrl: SafeResourceUrl | null = null;
+  gridPreviewType: 'image' | 'pdf' | null = null;
+  private gridObjectUrls: string[] = [];
   fieldTypes: FieldTypeDto[] = []; // Field types for determining input type
 
   loading = false;
@@ -66,8 +83,10 @@ export class GridViewComponent implements OnInit, OnChanges {
     private dataSourcesService: GridColumnDataSourcesService,
     private gridColumnOptionsService: GridColumnOptionsService,
     private fieldsService: FieldsService,
+    private formSubmissionAttachmentsService: FormSubmissionAttachmentsService,
     public translationService: TranslationService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private sanitizer: DomSanitizer
   ) {}
 
   ngOnInit(): void {
@@ -601,7 +620,7 @@ export class GridViewComponent implements OnInit, OnChanges {
     // Filter columns that have options (either from fieldType.hasOptions, dataType === 'select', has dataSourceId, or already has columnOptions)
     const columnsWithOptions = this.columns.filter(col => {
       const hasOptionsFromFieldType = col.fieldType?.hasOptions === true;
-      const hasSelectDataType = col.dataType === 'select';
+      const hasSelectDataType = ['select', 'radio', 'checkbox'].includes(this.getInputType(col));
       const hasDataSourceId = !!(col.dataSourceId);
       const alreadyHasOptions = !!(col.columnOptions && col.columnOptions.length > 0);
       
@@ -690,7 +709,7 @@ export class GridViewComponent implements OnInit, OnChanges {
     const columnsNeedingOptions = allColumnsToCheck.filter(col => {
       // Load options for columns that need them (hasOptions fieldType or select dataType)
       const hasOptionsFromFieldType = col.fieldType?.hasOptions === true;
-      const hasSelectDataType = col.dataType === 'select';
+      const hasSelectDataType = ['select', 'radio', 'checkbox'].includes(this.getInputType(col));
       return hasOptionsFromFieldType || hasSelectDataType;
     });
 
@@ -768,8 +787,8 @@ export class GridViewComponent implements OnInit, OnChanges {
               });
               return { columnId: col.id, options: options, source: 'DataSource', error: null };
             } else {
-              console.log(`[GridView] DataSource endpoint returned empty for column ${col.id}, trying GridColumnOptionsService...`);
-              throw new Error('Empty result from DataSource endpoint');
+              console.log(`[GridView] DataSource endpoint returned no options for column ${col.id}`);
+              return { columnId: col.id, options: [], source: 'DataSource', error: null };
             }
           }),
           catchError((dsError) => {
@@ -1010,10 +1029,13 @@ export class GridViewComponent implements OnInit, OnChanges {
       // Convert cells from submission format to grid component format
       const convertedCells: FormSubmissionGridCellDto[] = (gridRow.cells || []).map((submissionCell: SubmissionGridCellDto) => {
         // Extract value from submission cell format (valueString, valueNumber, etc.)
-        const cellValue = submissionCell.valueString 
+        const column = this.columns.find(col => col.id === submissionCell.columnId);
+        const rawCellValue = column && this.getInputType(column) === 'file' && submissionCell.valueJson
+          ? submissionCell.valueJson
+          : submissionCell.valueString 
           || (submissionCell.valueNumber !== null && submissionCell.valueNumber !== undefined ? submissionCell.valueNumber.toString() : '')
           || (submissionCell.valueBool !== null && submissionCell.valueBool !== undefined ? submissionCell.valueBool.toString() : '')
-          || (submissionCell.valueDate ? new Date(submissionCell.valueDate).toISOString().split('T')[0] : '')
+          || (submissionCell.valueDate ? submissionCell.valueDate : '')
           || (submissionCell.valueJson ? (() => {
               try {
                 const parsed = JSON.parse(submissionCell.valueJson);
@@ -1023,6 +1045,7 @@ export class GridViewComponent implements OnInit, OnChanges {
               }
             })() : '')
           || '';
+        const cellValue = this.normalizeLoadedCellValue(column, rawCellValue);
 
         // Convert to FormSubmissionGridCellDto format (with cellValue)
         return {
@@ -1228,12 +1251,17 @@ export class GridViewComponent implements OnInit, OnChanges {
               if (cell.columnId) {
                 // Handle different value formats from backend
                 // Backend may send cellValue, valueString, valueNumber, etc.
-                const cellValue = (cell as any).cellValue 
+                const column = this.columns.find(col => col.id === cell.columnId);
+                const rawCellValue = column && this.getInputType(column) === 'file' && (cell as any).valueJson
+                  ? (cell as any).valueJson
+                  : (cell as any).cellValue 
                   || (cell as any).valueString 
                   || (cell as any).valueNumber?.toString()
                   || (cell as any).valueBool?.toString()
                   || (cell as any).valueDate
+                  || (cell as any).valueJson
                   || '';
+                const cellValue = this.normalizeLoadedCellValue(column, rawCellValue);
                 
                 this.gridData[row.rowIndex][cell.columnId] = cellValue;
                 console.log('[GridView] Cell value:', { 
@@ -1294,10 +1322,51 @@ export class GridViewComponent implements OnInit, OnChanges {
       // Use visibleColumns instead of all columns to ensure we only initialize visible ones
       this.visibleColumns.forEach((col) => {
         if (col.id && !this.gridData[row.rowIndex][col.id]) {
-          this.gridData[row.rowIndex][col.id] = col.defaultValue || '';
+          this.gridData[row.rowIndex][col.id] = this.getColumnDefaultValue(col);
         }
       });
     });
+  }
+
+  ngOnDestroy(): void {
+    this.gridObjectUrls.forEach(url => URL.revokeObjectURL(url));
+    this.gridObjectUrls = [];
+  }
+
+  private getColumnDefaultValue(column: FormGridColumnDto): string {
+    const configuredDefault = column.defaultValue;
+    const inputType = this.getInputType(column);
+    if (configuredDefault !== undefined && configuredDefault !== null) {
+      const normalizedDefault = String(configuredDefault).trim();
+      if (normalizedDefault && normalizedDefault.toLowerCase() !== 'null') {
+        const token = normalizedDefault.toLowerCase();
+        if (token === '__today__' || token === 'today') {
+          return this.getTodayDateInputValue();
+        }
+        if (token === '__now__' || token === 'now') {
+          return inputType === 'date' ? this.getTodayDateInputValue() : this.getCurrentDateTimeInputValue();
+        }
+        return normalizedDefault;
+      }
+    }
+
+    return '';
+  }
+
+  private getTodayDateInputValue(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private getCurrentDateTimeInputValue(): string {
+    const now = new Date();
+    const date = this.getTodayDateInputValue();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${date}T${hours}:${minutes}`;
   }
 
   /**
@@ -1310,6 +1379,188 @@ export class GridViewComponent implements OnInit, OnChanges {
       console.log(`[GridView] getCellValue: rowIndex=${rowIndex}, columnId=${columnId}, value=${value}`);
     }
     return value;
+  }
+
+  private normalizeLoadedCellValue(column: FormGridColumnDto | undefined, value: any): string {
+    if (value === null || value === undefined) return '';
+    const raw = String(value);
+    if (!column) return raw;
+
+    const inputType = this.getInputType(column);
+    if (inputType === 'date') {
+      return this.formatDateInputValue(raw);
+    }
+
+    if (inputType === 'datetime-local') {
+      return this.formatDateTimeInputValue(raw);
+    }
+
+    if (inputType === 'time') {
+      return this.formatTimeInputValue(raw);
+    }
+
+    if (inputType === 'boolean') {
+      return this.isTruthyValue(raw) ? 'true' : 'false';
+    }
+
+    if (inputType === 'file') {
+      return this.normalizeGridFileCellValue(raw);
+    }
+
+    return raw;
+  }
+
+  private normalizeGridFileCellValue(value: string): string {
+    const metadata = this.parseGridFileCellValue(value);
+    return metadata ? JSON.stringify(metadata) : value;
+  }
+
+  private parseGridFileCellValue(value: string | undefined | null): GridFileCellValue | null {
+    if (!value) return null;
+
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object' && typeof parsed.fileName === 'string') {
+        return {
+          attachmentId: parsed.attachmentId ? Number(parsed.attachmentId) : undefined,
+          fileName: parsed.fileName,
+          fileSize: Number(parsed.fileSize || 0),
+          contentType: parsed.contentType || 'application/octet-stream',
+          downloadUrl: parsed.downloadUrl || (parsed.attachmentId ? this.getAttachmentDownloadUrl(Number(parsed.attachmentId)) : undefined),
+          lastModified: parsed.lastModified ? Number(parsed.lastModified) : undefined
+        };
+      }
+    } catch {
+      // Plain file names from older saved grid cells are still valid display values.
+    }
+
+    const trimmed = String(value).trim();
+    return trimmed ? {
+      fileName: trimmed,
+      fileSize: 0,
+      contentType: 'application/octet-stream'
+    } : null;
+  }
+
+  getGridFileName(rowIndex: number, columnId: number): string {
+    const metadata = this.parseGridFileCellValue(this.getCellValue(rowIndex, columnId));
+    return metadata?.fileName || '';
+  }
+
+  getGridFileDownloadUrl(rowIndex: number, columnId: number): string | null {
+    const metadata = this.parseGridFileCellValue(this.getCellValue(rowIndex, columnId));
+    if (!metadata?.attachmentId) return null;
+    return metadata.downloadUrl || this.getAttachmentDownloadUrl(metadata.attachmentId);
+  }
+
+  canPreviewGridFile(rowIndex: number, columnId: number): boolean {
+    const file = this.pendingGridFiles[this.getCellKey(rowIndex, columnId)];
+    if (file) {
+      return this.isPreviewableGridFile(file.type, file.name);
+    }
+
+    const metadata = this.parseGridFileCellValue(this.getCellValue(rowIndex, columnId));
+    return !!metadata && this.isPreviewableGridFile(metadata.contentType, metadata.fileName) && (!!metadata.attachmentId || !!metadata.downloadUrl);
+  }
+
+  openGridFilePreview(rowIndex: number, columnId: number): void {
+    const cellKey = this.getCellKey(rowIndex, columnId);
+    const pendingFile = this.pendingGridFiles[cellKey];
+
+    if (pendingFile && this.isPreviewableGridFile(pendingFile.type, pendingFile.name)) {
+      const objectUrl = URL.createObjectURL(pendingFile);
+      this.gridObjectUrls.push(objectUrl);
+      this.gridPreviewName = pendingFile.name;
+      this.gridPreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(objectUrl);
+      this.gridPreviewType = this.getGridPreviewType(pendingFile.type, pendingFile.name);
+      this.gridPreviewOpen = true;
+      return;
+    }
+
+    const metadata = this.parseGridFileCellValue(this.getCellValue(rowIndex, columnId));
+    const downloadUrl = this.getGridFileDownloadUrl(rowIndex, columnId);
+    if (!metadata || !downloadUrl || !this.isPreviewableGridFile(metadata.contentType, metadata.fileName)) return;
+
+    this.gridPreviewName = metadata.fileName;
+    this.gridPreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(downloadUrl);
+    this.gridPreviewType = this.getGridPreviewType(metadata.contentType, metadata.fileName);
+    this.gridPreviewOpen = true;
+  }
+
+  closeGridFilePreview(): void {
+    this.gridPreviewOpen = false;
+    this.gridPreviewName = '';
+    this.gridPreviewUrl = null;
+    this.gridPreviewType = null;
+  }
+
+  private isPreviewableGridFile(contentType?: string, fileName?: string): boolean {
+    const type = (contentType || '').toLowerCase();
+    const name = (fileName || '').toLowerCase();
+    return type.startsWith('image/') || type === 'application/pdf' || /\.(jpg|jpeg|png|gif|webp|pdf)$/i.test(name);
+  }
+
+  private getGridPreviewType(contentType?: string, fileName?: string): 'image' | 'pdf' {
+    const type = (contentType || '').toLowerCase();
+    const name = (fileName || '').toLowerCase();
+    return type === 'application/pdf' || name.endsWith('.pdf') ? 'pdf' : 'image';
+  }
+
+  private getAttachmentDownloadUrl(attachmentId: number): string {
+    return this.formSubmissionAttachmentsService.getDownloadUrl(attachmentId);
+  }
+
+  private getCellKey(rowIndex: number, columnId: number): string {
+    return `${rowIndex}_${columnId}`;
+  }
+
+  private toDateOrNull(value: any): Date | null {
+    if (value instanceof Date) {
+      return isNaN(value.getTime()) ? null : value;
+    }
+
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private formatDateInputValue(value: any): string {
+    const parsed = this.toDateOrNull(value);
+    if (!parsed) return '';
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private formatDateTimeInputValue(value: any): string {
+    const parsed = this.toDateOrNull(value);
+    if (!parsed) return '';
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    const hours = String(parsed.getHours()).padStart(2, '0');
+    const minutes = String(parsed.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  private formatTimeInputValue(value: any): string {
+    if (value === null || value === undefined || value === '') return '';
+
+    const raw = String(value).trim();
+    const timeMatch = raw.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/);
+    if (timeMatch) {
+      return `${timeMatch[1]}:${timeMatch[2]}`;
+    }
+
+    const parsed = this.toDateOrNull(value);
+    if (!parsed) return '';
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
   }
 
   /**
@@ -1331,6 +1582,68 @@ export class GridViewComponent implements OnInit, OnChanges {
       this.gridData[rowIndex] = {};
     }
     this.gridData[rowIndex][columnId] = value;
+  }
+
+  setFileCellValue(rowIndex: number, columnId: number, file: File | null | undefined): void {
+    if (!file) {
+      this.clearFileCellValue(rowIndex, columnId);
+      return;
+    }
+
+    const fileValue: GridFileCellValue = {
+      fileName: file.name,
+      fileSize: file.size,
+      contentType: file.type || 'application/octet-stream',
+      lastModified: file.lastModified
+    };
+
+    this.pendingGridFiles[this.getCellKey(rowIndex, columnId)] = file;
+    this.setCellValue(rowIndex, columnId, JSON.stringify(fileValue));
+  }
+
+  clearFileCellValue(rowIndex: number, columnId: number): void {
+    const column = this.columns.find(c => c.id === columnId);
+    if (column && this.isColumnReadOnly(column)) {
+      return;
+    }
+
+    delete this.pendingGridFiles[this.getCellKey(rowIndex, columnId)];
+    this.setCellValue(rowIndex, columnId, '');
+    if (this.validationErrors[rowIndex]) {
+      delete this.validationErrors[rowIndex][columnId];
+    }
+    this.cdr.detectChanges();
+  }
+
+  private uploadPendingGridFiles(): Observable<void> {
+    const pendingEntries = Object.entries(this.pendingGridFiles);
+    if (pendingEntries.length === 0 || !this.grid?.id || !this.submissionId || this.submissionId <= 0) {
+      return of(void 0);
+    }
+
+    const uploads = pendingEntries.map(([cellKey, file]) => {
+      const [rowIndexText, columnIdText] = cellKey.split('_');
+      const rowIndex = Number(rowIndexText);
+      const columnId = Number(columnIdText);
+
+      return this.formSubmissionAttachmentsService
+        .uploadGridFile(file, this.submissionId, this.grid!.id!, columnId, rowIndex)
+        .pipe(
+          map((attachment: FormSubmissionAttachmentDto) => {
+            const fileValue: GridFileCellValue = {
+              attachmentId: attachment.id,
+              fileName: attachment.fileName,
+              fileSize: attachment.fileSize,
+              contentType: attachment.contentType,
+              downloadUrl: this.getAttachmentDownloadUrl(attachment.id)
+            };
+            this.setCellValue(rowIndex, columnId, JSON.stringify(fileValue));
+            delete this.pendingGridFiles[cellKey];
+          })
+        );
+    });
+
+    return forkJoin(uploads).pipe(map(() => void 0));
   }
 
   /**
@@ -1399,7 +1712,7 @@ export class GridViewComponent implements OnInit, OnChanges {
 
     // Initialize with default values
     this.columns.forEach((col) => {
-      this.gridData[newIndex][col.id] = col.defaultValue || '';
+      this.gridData[newIndex][col.id] = this.getColumnDefaultValue(col);
     });
 
     // Clear error if successful
@@ -1515,6 +1828,19 @@ export class GridViewComponent implements OnInit, OnChanges {
             });
           }
         }
+
+        const cellValue = this.getCellValue(row.rowIndex, col.id);
+        if (col.isVisible !== false && cellValue && cellValue.trim() !== '') {
+          const typeError = this.validateCellValueType(col, cellValue);
+          if (typeError) {
+            errors.push({
+              field: col.columnCode,
+              message: typeError,
+              rowIndex: row.rowIndex,
+              columnId: col.id
+            });
+          }
+        }
       });
     });
 
@@ -1544,6 +1870,32 @@ export class GridViewComponent implements OnInit, OnChanges {
     return this.gridService.validateGridData(this.submissionId, this.grid.id, bulkData).pipe(
       map((response) => response.data || { isValid: true, errors: [], warnings: [] })
     );
+  }
+
+  private validateCellValueType(column: FormGridColumnDto, value: string): string | null {
+    const inputType = this.getInputType(column);
+    const label = this.getColumnLabel(column);
+
+    switch (inputType) {
+      case 'number':
+        return this.parseNumberValue(value) === undefined ? `${label} must be a valid number` : null;
+      case 'email':
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : `${label} must be a valid email`;
+      case 'date':
+        return /^\d{4}-\d{2}-\d{2}$/.test(value) && !!this.toDateOrNull(value) ? null : `${label} must be a valid date`;
+      case 'datetime-local':
+        return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) && !!this.toDateOrNull(value) ? null : `${label} must be a valid date and time`;
+      case 'time':
+        return /^\d{2}:\d{2}$/.test(value) ? null : `${label} must be a valid time`;
+      case 'tel':
+        return /^[0-9+\-()\s]{6,}$/.test(value) ? null : `${label} must be a valid phone number`;
+      case 'url':
+        return /^(https?:\/\/)?([\w-]+\.)+[\w-]{2,}(\/\S*)?$/.test(value) ? null : `${label} must be a valid URL`;
+      case 'boolean':
+        return ['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'].includes(value.toLowerCase()) ? null : `${label} must be true or false`;
+      default:
+        return null;
+    }
   }
 
   /**
@@ -1605,7 +1957,8 @@ export class GridViewComponent implements OnInit, OnChanges {
     // First validate, then save
     console.log('[GridView] Starting validation before save...');
     console.log('[GridView] About to validate', bulkData.rows.length, 'rows');
-    return this.validateGridData().pipe(
+    return this.uploadPendingGridFiles().pipe(
+      switchMap(() => this.validateGridData()),
       switchMap((validationResult) => {
         console.log('[GridView] Validation result:', {
           isValid: validationResult.isValid,
@@ -1746,6 +2099,11 @@ export class GridViewComponent implements OnInit, OnChanges {
    * Get input type for column
    */
   getInputType(column: FormGridColumnDto): string {
+    const normalizedType = this.getNormalizedColumnInputType(column);
+    if (normalizedType) {
+      return normalizedType;
+    }
+
     // 1) Check dataType for primary type
     const dataType = (column.dataType || '').toLowerCase();
     
@@ -1766,14 +2124,14 @@ export class GridViewComponent implements OnInit, OnChanges {
       return 'number';
     }
     
+    // DateTime type
+    if (dataType.includes('datetime')) return 'datetime-local';
+
     // Date types
     if (dataType.includes('date')) return 'date';
     
     // Time type
     if (dataType.includes('time') && !dataType.includes('datetime')) return 'time';
-    
-    // DateTime type
-    if (dataType.includes('datetime')) return 'datetime-local';
     
     // URL type
     if (dataType.includes('url') || dataType.includes('link')) return 'url';
@@ -1791,6 +2149,82 @@ export class GridViewComponent implements OnInit, OnChanges {
     }
     
     return 'text';
+  }
+
+  private getNormalizedColumnInputType(column: FormGridColumnDto): string {
+    const dataType = [
+      column.dataType,
+      (column as any).data_type,
+      (column as any).columnDataType,
+      (column as any).column_data_type
+    ].filter(Boolean).join(' ').toLowerCase().trim();
+    const typeName = [
+      column.fieldType?.typeName,
+      (column as any).fieldTypeName,
+      (column as any).type,
+      (column as any).typeName,
+      (column as any).field_type_name
+    ].filter(Boolean).join(' ').toLowerCase().trim();
+    const fieldTypeDataType = [
+      column.fieldType?.dataType,
+      (column.fieldType as any)?.data_type,
+      (column as any).fieldTypeDataType,
+      (column as any).field_type_data_type
+    ].filter(Boolean).join(' ').toLowerCase().trim();
+    const combined = `${typeName} ${fieldTypeDataType} ${dataType}`;
+    const dateLikeColumnName = /\b(deadline|due date|expiry|expiration|valid until|start date|end date)\b/i
+      .test(`${column.columnName || ''} ${column.columnCode || ''}`.replace(/[_-]+/g, ' '));
+
+    if (combined.includes('textarea') || combined.includes('text area')) return 'textarea';
+    if (column.fieldTypeId === 7) return 'date';
+    if (column.fieldTypeId === 8) return 'datetime-local';
+    if ((typeName === 'date' || typeName === 'datepicker' || typeName === 'date picker' ||
+        (typeName.includes('date') && !typeName.includes('datetime') && !typeName.includes('date time')))) return 'date';
+    if (typeName.includes('datetime') || typeName.includes('date time') ||
+        (!typeName && (dataType.includes('datetime') || fieldTypeDataType.includes('datetime')))) return 'datetime-local';
+    if (typeName === 'time' || fieldTypeDataType === 'timespan' || (combined.includes('time') && !combined.includes('datetime'))) return 'time';
+    if (dateLikeColumnName) return 'date';
+    if (combined.includes('date')) return 'date';
+    if (combined.includes('integer') || combined.includes('int') || combined.includes('number') ||
+        combined.includes('num') || combined.includes('float') || combined.includes('decimal') || combined.includes('double')) return 'number';
+    if (combined.includes('email')) return 'email';
+    if (combined.includes('password') || combined.includes('pass')) return 'password';
+    if (combined.includes('phone') || combined.includes('tel') || combined.includes('mobile')) return 'tel';
+    if (combined.includes('url') || combined.includes('link')) return 'url';
+    if (combined.includes('boolean') || combined.includes('bool') || combined.includes('switch') || combined.includes('toggle')) return 'boolean';
+    if (combined.includes('checkbox') || combined.includes('multi')) return 'checkbox';
+    if (combined.includes('radio')) return 'radio';
+    if (combined.includes('dropdown') || combined.includes('select') || combined.includes('combo') || column.fieldType?.hasOptions === true) return 'select';
+    if (combined.includes('file') || combined.includes('attachment') || combined.includes('image')) return 'file';
+    if (combined.includes('calculated')) return 'calculated';
+    if (combined.includes('color')) return 'color';
+
+    return '';
+  }
+
+  isTruthyValue(value: string | undefined | null): boolean {
+    const normalized = String(value ?? '').toLowerCase().trim();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+  }
+
+  isCheckboxOptionSelected(rowIndex: number, columnId: number, optionValue: string): boolean {
+    return this.getCellValue(rowIndex, columnId)
+      .split(',')
+      .map(value => value.trim())
+      .filter(value => value !== '')
+      .includes(optionValue);
+  }
+
+  toggleCheckboxOption(rowIndex: number, columnId: number, optionValue: string, checked: boolean): void {
+    const values = this.getCellValue(rowIndex, columnId)
+      .split(',')
+      .map(value => value.trim())
+      .filter(value => value !== '');
+    const nextValues = checked
+      ? Array.from(new Set([...values, optionValue]))
+      : values.filter(value => value !== optionValue);
+
+    this.setCellValue(rowIndex, columnId, nextValues.join(','));
   }
 
   /**
@@ -1911,15 +2345,17 @@ export class GridViewComponent implements OnInit, OnChanges {
    */
   private buildCellData(col: FormGridColumnDto, value: string): BulkGridCellDto {
     const dataType = (col.dataType || '').toLowerCase();
+    const inputType = this.getInputType(col);
+    const fileValue = inputType === 'file' ? this.parseGridFileCellValue(value) : null;
     const cellData: BulkGridCellDto = {
       columnId: col.id,
       columnCode: col.columnCode || `col_${col.id}`,
-      cellValue: value,
-      valueString: value || ''
+      cellValue: fileValue ? fileValue.fileName : value,
+      valueString: fileValue ? fileValue.fileName : (value || '')
     };
 
     // Set numeric value if applicable (num, number, numeric, int, float, decimal, double)
-    if (dataType.includes('num') || dataType.includes('int') || dataType.includes('float') || 
+    if (inputType === 'number' || dataType.includes('num') || dataType.includes('int') || dataType.includes('float') || 
         dataType.includes('decimal') || dataType.includes('double')) {
       const numValue = this.parseNumberValue(value);
       if (numValue !== undefined) {
@@ -1928,19 +2364,21 @@ export class GridViewComponent implements OnInit, OnChanges {
     }
 
     // Set boolean value if applicable
-    if (dataType.includes('bool') || dataType.includes('checkbox')) {
-      cellData.valueBool = value === 'true' || value === '1' || value === 'yes';
+    if (inputType === 'boolean' || (inputType === 'checkbox' && !value.includes(','))) {
+      cellData.valueBool = this.isTruthyValue(value);
     }
 
     // Set date value if applicable
-    if (dataType.includes('date')) {
+    if (inputType === 'date' || inputType === 'datetime-local') {
       if (value) {
         cellData.valueDate = value;
       }
     }
 
     // Set JSON value
-    if (value) {
+    if (fileValue) {
+      cellData.valueJson = JSON.stringify(fileValue);
+    } else if (value) {
       try {
         cellData.valueJson = JSON.stringify(value);
       } catch {
@@ -1977,6 +2415,11 @@ export class GridViewComponent implements OnInit, OnChanges {
           if (!cellValue || cellValue.trim() === '') {
             return false;
           }
+        }
+
+        const cellValue = this.getCellValue(row.rowIndex, col.id);
+        if (cellValue && cellValue.trim() !== '' && this.validateCellValueType(col, cellValue)) {
+          return false;
         }
       }
     }

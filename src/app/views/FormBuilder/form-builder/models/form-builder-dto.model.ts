@@ -391,7 +391,7 @@ export interface CopyToDocumentConfig {
   targetDocumentId?: number | null; // Required when createNewDocument is false
   
   // الحقل الجديد
-  initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
+  initialStatus?: 'Draft';  // Copy targets always start as Draft
   
   // Trigger Event - متى يتم تنفيذ الـ CopyToDocument
   triggerEvent?: 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentApproved' | 'OnRuleMatched'; // جديد - القيمة الافتراضية: 'OnRuleMatched'
@@ -427,7 +427,7 @@ export interface CopyToDocumentRequestDto {
     targetDocumentId?: number | null; // Required when createNewDocument is false
     
     // الحقل الجديد
-    initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
+    initialStatus?: 'Draft';  // Copy targets always start as Draft
     
     // Trigger Event - متى يتم تنفيذ الـ CopyToDocument
     triggerEvent?: 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentApproved' | 'OnRuleMatched'; // جديد - القيمة الافتراضية: 'OnRuleMatched'
@@ -482,7 +482,7 @@ export interface CopyToDocumentActionDto {
  targetDocumentId?: number;
  
  // الحقل الجديد
- initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
+ initialStatus?: 'Draft';  // Copy targets always start as Draft
  triggerEvent?: 'OnFormSubmitted' | 'OnApprovalCompleted' | 'OnDocumentApproved' | 'OnRuleMatched';
  executeAutomatically?: boolean;
 
@@ -523,7 +523,7 @@ export interface CopyToDocumentActionByCodesDto {
   targetFormCode: string;
   createNewDocument: boolean;
   targetDocumentId?: number;
-  initialStatus?: 'Draft' | 'Submitted';  // جديد
+  initialStatus?: 'Draft';  // Copy targets always start as Draft
   executeAutomatically?: boolean;
   fieldMapping?: { [key: string]: string };
   gridMapping?: { [key: string]: string };

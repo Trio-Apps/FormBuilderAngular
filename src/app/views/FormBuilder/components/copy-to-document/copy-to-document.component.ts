@@ -632,7 +632,7 @@ export class CopyToDocumentComponent implements OnInit {
         targetFormId: Number(configRaw?.targetFormId ?? configRaw?.TargetFormId ?? 0),
         createNewDocument: this.toBoolean(configRaw?.createNewDocument ?? configRaw?.CreateNewDocument, true),
         targetDocumentId: this.toNullableNumber(configRaw?.targetDocumentId ?? configRaw?.TargetDocumentId) ?? undefined,
-        initialStatus: (configRaw?.initialStatus ?? configRaw?.InitialStatus ?? 'Draft') as 'Draft' | 'Submitted',
+        initialStatus: 'Draft',
         triggerEvent: normalizedTrigger,
         executeAutomatically: this.toBoolean(configRaw?.executeAutomatically ?? configRaw?.ExecuteAutomatically, true),
         fieldMapping: this.normalizeMap(configRaw?.fieldMapping ?? configRaw?.FieldMapping),

@@ -23,6 +23,7 @@ import { TranslationService } from '../../../core/services/translation.service';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import { DuplicateValidationHelper } from '../../../core/utils/duplicate-validation.helper';
 import { environment } from '../../../environments/environment';
+import { AUTO_FILL_CONTEXT_VALUE } from '../../FormBuilder/utils/field-data-source-helpers';
 import { AttachmentTypesService } from '../../FormBuilder/services/attachment-types.service';
 import { CreateAttachmentTypeDto } from '../../FormBuilder/form-builder/models/attachment-types.model';
 import { CALCULATION_OPERATIONS, CalculationOperation, getRecommendedCalculationOperation } from '../../FormBuilder/constants/calculation-operations';
@@ -234,11 +235,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     };
   formSubmissionDependencyConfig: {
     contextFieldCode: string;
+    contextFieldId: number | null;
     sourceFieldCode: string;
+    sourceFieldId: number | null;
   } = {
       contextFieldCode: '',
-      sourceFieldCode: ''
+      contextFieldId: null,
+      sourceFieldCode: '',
+      sourceFieldId: null
     };
+  readonly AUTO_FILL_CONTEXT_VALUE = AUTO_FILL_CONTEXT_VALUE;
+  autoFillUsesContextValue = false;
+  useFieldDependencySource = false;
   availableSourceForms: FormBuilderDto[] = [];
   loadingSourceForms = false;
   availableSourceFormFields: FormFieldDto[] = [];
@@ -371,6 +379,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.loadFileExtensionsFromForm();
       } else {
         this.selectedFileExtensions = [];
+      }
+      if (this.isSelectedDateLikeFieldType()) {
+        this.syncDateDefaultValueJson();
       }
       // Handle calculated field type - disable editable and mandatory
       if (this.isCalculatedFieldType(fieldTypeId)) {
@@ -936,9 +947,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.selectedFileExtensions = [];
     }
 
-    // Load DataSource if field has options type
-    const selectedFieldType = this.getSelectedFieldType();
-    if (selectedFieldType?.hasOptions && field.id) {
+    // Load DataSource for option fields and for text fields that auto-fill from another source.
+    if (this.supportsDataSourceForSelectedField() && field.id) {
       // Initialize DataSource config with Static as default while loading
       this.dataSourceType = 'Static';
       this.loadDataSourceForField(field.id, () => {
@@ -1199,6 +1209,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       console.log('[saveField] File field type detected, calling saveFileExtensionsToForm()');
       this.saveFileExtensionsToForm();
       console.log('[saveField] defaultValueJson after saveFileExtensionsToForm:', this.fieldForm.get('defaultValueJson')?.value);
+    } else if (this.isSelectedDateLikeFieldType()) {
+      this.syncDateDefaultValueJson();
     }
 
     this.loading.save = true;
@@ -1250,25 +1262,38 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
       this.fieldsService.updateField(this.editingField.id, updateDto).subscribe({
         next: (updatedField) => {
-          // Save field options if field type has options
           const selectedFieldType = this.fieldTypes.find(t => t.id === Number(fieldData.fieldTypeId));
-          if (selectedFieldType?.hasOptions) {
-            // Save DataSource if not Static, otherwise save static options
-            if (this.dataSourceType !== 'Static') {
-              this.saveDataSource(this.editingField!.id).then(() => {
-                this.completeFieldModalSave(this.editingField!.id, 'Field updated successfully');
-              }).catch(() => {
-                this.loading.save = false;
-              });
-            } else {
+          const supportsOptions = selectedFieldType?.hasOptions === true || this.isOptionsFieldType();
+          const shouldSaveDataSource = this.shouldPersistDataSourceForSelectedField();
+
+          if (shouldSaveDataSource) {
+            this.saveDataSource(this.editingField!.id).then(() => {
+              this.completeFieldModalSave(this.editingField!.id, 'Field updated successfully');
+            }).catch(() => {
+              this.loading.save = false;
+            });
+          } else if (supportsOptions) {
+            const saveStaticOptions = () => {
               this.saveFieldOptions(this.editingField!.id, () => {
                 this.completeFieldModalSave(this.editingField!.id, 'Field updated successfully');
               });
+            };
+
+            if (this.existingDataSource && !this.useFieldDependencySource) {
+              this.saveDataSource(this.editingField!.id).then(saveStaticOptions).catch(() => {
+                this.loading.save = false;
+              });
+            } else {
+              saveStaticOptions();
             }
           } else {
-            // Delete all options if field type doesn't support options
-            this.deleteAllFieldOptions(this.editingField!.id).then(() => {
-              this.completeFieldModalSave(this.editingField!.id, 'Field updated successfully');
+            // Static/non-option fields should not keep old option rows or old DataSource config.
+            this.saveDataSource(this.editingField!.id).then(() => {
+              this.deleteAllFieldOptions(this.editingField!.id).then(() => {
+                this.completeFieldModalSave(this.editingField!.id, 'Field updated successfully');
+              });
+            }).catch(() => {
+              this.loading.save = false;
             });
           }
         },
@@ -1319,23 +1344,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
       this.fieldsService.createField(createDto).subscribe({
         next: (newField) => {
-          // Save field options if field type has options
           const selectedFieldType = this.fieldTypes.find(t => t.id === Number(fieldData.fieldTypeId));
-          if (selectedFieldType?.hasOptions) {
-            // Save DataSource if not Static, otherwise save static options
-            if (this.dataSourceType !== 'Static') {
-              this.saveDataSource(newField.id).then(() => {
-                this.completeFieldModalSave(newField.id, 'Field created successfully');
-              }).catch(() => {
-                this.loading.save = false;
-              });
-            } else if (this.fieldOptionsFormArray.length > 0) {
-              this.saveFieldOptions(newField.id, () => {
-                this.completeFieldModalSave(newField.id, 'Field created successfully');
-              });
-            } else {
+          const supportsOptions = selectedFieldType?.hasOptions === true || this.isOptionsFieldType();
+          const shouldSaveDataSource = this.shouldPersistDataSourceForSelectedField();
+
+          if (shouldSaveDataSource) {
+            this.saveDataSource(newField.id).then(() => {
               this.completeFieldModalSave(newField.id, 'Field created successfully');
-            }
+            }).catch(() => {
+              this.loading.save = false;
+            });
+          } else if (supportsOptions && this.fieldOptionsFormArray.length > 0) {
+            this.saveFieldOptions(newField.id, () => {
+              this.completeFieldModalSave(newField.id, 'Field created successfully');
+            });
           } else {
             this.completeFieldModalSave(newField.id, 'Field created successfully');
           }
@@ -1906,6 +1928,43 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     return this.fieldTypes.find(t => t.id === fieldTypeId);
   }
 
+  isSelectedDateFieldType(): boolean {
+    const selectedType = this.getSelectedFieldType();
+    const typeName = (selectedType?.typeName || '').toLowerCase().trim();
+    return typeName === 'date' || typeName === 'date picker' || typeName === 'datepicker';
+  }
+
+  isSelectedDateTimeFieldType(): boolean {
+    const selectedType = this.getSelectedFieldType();
+    const typeName = (selectedType?.typeName || '').toLowerCase().trim();
+    if (this.isSelectedDateFieldType()) {
+      return false;
+    }
+    return typeName === 'datetime' || typeName === 'date time' ||
+      typeName.includes('datetime') || typeName.includes('date time');
+  }
+
+  isSelectedDateLikeFieldType(): boolean {
+    return this.isSelectedDateFieldType() || this.isSelectedDateTimeFieldType();
+  }
+
+  getSelectedDateDefaultToken(): string {
+    return this.isSelectedDateTimeFieldType() ? '__now__' : '__today__';
+  }
+
+  onDateDefaultValueChange(): void {
+    this.syncDateDefaultValueJson();
+  }
+
+  private syncDateDefaultValueJson(): void {
+    const defaultValue = this.fieldForm.get('defaultValue')?.value;
+    if (defaultValue === '__today__' || defaultValue === '__now__') {
+      this.fieldForm.patchValue({ defaultValueJson: defaultValue }, { emitEvent: false });
+    } else if (!defaultValue && !this.isFileFieldType()) {
+      this.fieldForm.patchValue({ defaultValueJson: '' }, { emitEvent: false });
+    }
+  }
+
   /**
    * Check if selected field type is an options field type (checkbox, radio, select, etc.)
    * This is a helper method to ensure options section appears even if hasOptions is not set correctly
@@ -1921,6 +1980,40 @@ export class FieldsListComponent implements OnInit, OnDestroy {
            typeName.includes('select') ||
            typeName.includes('combobox') ||
            typeName.includes('multiselect');
+  }
+
+  supportsDataSourceForSelectedField(): boolean {
+    const selectedType = this.getSelectedFieldType();
+    if (!selectedType) return false;
+
+    if (this.isOptionsFieldType()) {
+      return true;
+    }
+
+    const typeName = (selectedType.typeName || '').toLowerCase().trim();
+    const dataType = (selectedType.dataType || '').toLowerCase().trim();
+    const blockedTypes = ['grid', 'file', 'attachment', 'image', 'calculated', 'formula'];
+
+    return !blockedTypes.some(type => typeName.includes(type) || dataType.includes(type));
+  }
+
+  shouldPersistDataSourceForSelectedField(): boolean {
+    return this.useFieldDependencySource && this.supportsDataSourceForSelectedField() && this.dataSourceType !== 'Static';
+  }
+
+  onUseFieldDependencySourceChange(): void {
+    if (!this.useFieldDependencySource) {
+      this.dataSourceType = 'Static';
+      this.autoFillUsesContextValue = false;
+      this.previewOptions = [];
+      return;
+    }
+
+    if (!this.isOptionsFieldType()) {
+      this.dataSourceType = 'LookupTable';
+    }
+
+    this.onDataSourceTypeChange();
   }
 
   /**
@@ -3795,6 +3888,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     }
 
     this.loading.save = true;
+    if (this.isSelectedDateLikeFieldType()) {
+      this.syncDateDefaultValueJson();
+    }
     const fieldData = this.fieldForm.value;
 
     const updateDto: UpdateFormFieldDto = {
@@ -3896,12 +3992,56 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           // Use the first active DataSource
           const dataSource = dataSources[0];
           this.existingDataSource = dataSource;
-          this.dataSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana';
+          const loadedSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana';
+          this.dataSourceType = loadedSourceType;
+          this.useFieldDependencySource = dataSource.sourceType !== 'Static';
           this.selectedDataSourceSapConnectionId = null;
+
+          if (!this.isOptionsFieldType() && loadedSourceType !== 'LookupTable') {
+            this.dataSourceType = 'LookupTable';
+            this.autoFillUsesContextValue = false;
+            this.previewOptions = [];
+            this.availableSourceFormFields = [];
+            this.formSubmissionConfig = {
+              formId: null,
+              formCode: '',
+              valueFieldId: null,
+              textFieldId: null,
+              valueFieldCode: '',
+              textFieldCode: ''
+            };
+            this.formSubmissionDependencyConfig = {
+              contextFieldCode: '',
+              contextFieldId: null,
+              sourceFieldCode: '',
+              sourceFieldId: null
+            };
+            this.lookupTableConfig = {
+              table: '',
+              valueColumn: 'Id',
+              textColumn: 'Id',
+              database: this.lookupTableConfig.database || 'FormBuilder'
+            };
+            this.dataSourceConfig = {
+              sourceType: 'LookupTable',
+              apiUrl: null,
+              httpMethod: null,
+              requestBodyJson: null,
+              valuePath: 'Id',
+              textPath: 'Id',
+              isActive: dataSource.isActive
+            };
+            this.loadLookupTables();
+            return;
+          }
 
           // Parse LookupTable configuration
           if (dataSource.sourceType === 'LookupTable' && dataSource.apiUrl) {
             let lookupDatabase: 'FormBuilder' | 'AkhmanageIt' = 'FormBuilder';
+            let contextFieldCode = '';
+            let contextFieldId: number | null = null;
+            let sourceFieldCode = '';
+            let sourceFieldId: number | null = null;
             if (dataSource.requestBodyJson) {
               try {
                 const requestBodyParsed = JSON.parse(dataSource.requestBodyJson);
@@ -3916,6 +4056,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             try {
               // Try to parse as JSON first (for backwards compatibility with old data)
               const configJson = JSON.parse(dataSource.apiUrl);
+              const firstBinding = Array.isArray(configJson.contextBindings) ? configJson.contextBindings[0] : null;
+              contextFieldCode = firstBinding?.contextFieldCode || contextFieldCode;
+              contextFieldId = firstBinding?.contextFieldId ? Number(firstBinding.contextFieldId) : contextFieldId;
+              sourceFieldCode = firstBinding?.sourceFieldCode || sourceFieldCode;
+              sourceFieldId = firstBinding?.sourceFieldId ? Number(firstBinding.sourceFieldId) : sourceFieldId;
               if (configJson.table && configJson.valueColumn && configJson.textColumn) {
                 // Old format: JSON object in apiUrl
                 this.lookupTableConfig = {
@@ -3953,6 +4098,18 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               }
             } catch (e) {
               // Not JSON, treat as table name (new format or backwards compatibility)
+              if ((dataSource as any).configurationJson) {
+                try {
+                  const parsedConfig = JSON.parse((dataSource as any).configurationJson);
+                  const firstBinding = Array.isArray(parsedConfig.contextBindings) ? parsedConfig.contextBindings[0] : null;
+                  contextFieldCode = firstBinding?.contextFieldCode || contextFieldCode;
+                  contextFieldId = firstBinding?.contextFieldId ? Number(firstBinding.contextFieldId) : contextFieldId;
+                  sourceFieldCode = firstBinding?.sourceFieldCode || sourceFieldCode;
+                  sourceFieldId = firstBinding?.sourceFieldId ? Number(firstBinding.sourceFieldId) : sourceFieldId;
+                } catch {
+                  // ignore invalid historical config
+                }
+              }
               this.lookupTableConfig = {
                 table: dataSource.apiUrl,
                 valueColumn: dataSource.valuePath || 'Id',
@@ -3970,6 +4127,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               };
             }
             this.loadLookupTables();
+            this.formSubmissionDependencyConfig = {
+              contextFieldCode,
+              contextFieldId,
+              sourceFieldCode,
+              sourceFieldId
+            };
 
             // Load columns for the selected table so "Available Columns" section appears
             if (this.lookupTableConfig.table) {
@@ -3981,7 +4144,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             let valueFieldCode = dataSource.valuePath || '';
             let textFieldCode = dataSource.textPath || '';
             let contextFieldCode = '';
+            let contextFieldId: number | null = null;
             let sourceFieldCode = '';
+            let sourceFieldId: number | null = null;
+            this.autoFillUsesContextValue = false;
 
             if ((dataSource as any).configurationJson) {
               try {
@@ -3990,9 +4156,13 @@ export class FieldsListComponent implements OnInit, OnDestroy {
                 formCode = parsed.formCode || '';
                 valueFieldCode = parsed.valueFieldCode || valueFieldCode;
                 textFieldCode = parsed.textFieldCode || textFieldCode;
+                this.autoFillUsesContextValue = parsed.autoFillMode === 'contextValue' ||
+                  valueFieldCode === AUTO_FILL_CONTEXT_VALUE;
                 const firstBinding = Array.isArray(parsed.contextBindings) ? parsed.contextBindings[0] : null;
                 contextFieldCode = firstBinding?.contextFieldCode || '';
+                contextFieldId = firstBinding?.contextFieldId ? Number(firstBinding.contextFieldId) : null;
                 sourceFieldCode = firstBinding?.sourceFieldCode || '';
+                sourceFieldId = firstBinding?.sourceFieldId ? Number(firstBinding.sourceFieldId) : null;
               } catch {
                 // ignore invalid historical config
               }
@@ -4008,7 +4178,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
             };
             this.formSubmissionDependencyConfig = {
               contextFieldCode,
-              sourceFieldCode
+              contextFieldId,
+              sourceFieldCode,
+              sourceFieldId
             };
 
             this.dataSourceConfig = {
@@ -4286,6 +4458,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.dataSourceType = 'Static';
     this.existingDataSource = null;
     this.selectedDataSourceSapConnectionId = null;
+    this.useFieldDependencySource = false;
     this.dataSourceConfig = {
       sourceType: 'Static',
       apiUrl: null,
@@ -4317,8 +4490,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     };
     this.formSubmissionDependencyConfig = {
       contextFieldCode: '',
-      sourceFieldCode: ''
+      contextFieldId: null,
+      sourceFieldCode: '',
+      sourceFieldId: null
     };
+    this.autoFillUsesContextValue = false;
     this.previewOptions = [];
     this.selectedPreviewOption = null;
     this.availableSourceFormFields = [];
@@ -4377,6 +4553,14 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           textColumn: 'Name',
           database: this.lookupTableConfig.database || 'FormBuilder'
         };
+      }
+      if (!this.isOptionsFieldType()) {
+        this.lookupTableConfig.textColumn = this.lookupTableConfig.valueColumn || 'Id';
+        this.formSubmissionConfig.formId = null;
+        this.formSubmissionConfig.formCode = '';
+        this.formSubmissionConfig.valueFieldId = null;
+        this.formSubmissionConfig.textFieldId = null;
+        this.autoFillUsesContextValue = false;
       }
       this.dataSourceConfig.valuePath = this.lookupTableConfig.valueColumn;
       this.dataSourceConfig.textPath = this.lookupTableConfig.textColumn;
@@ -4591,6 +4775,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.formSubmissionConfig.valueFieldCode = '';
     this.formSubmissionConfig.textFieldCode = '';
     this.formSubmissionDependencyConfig.sourceFieldCode = '';
+    this.formSubmissionDependencyConfig.sourceFieldId = null;
+    this.autoFillUsesContextValue = false;
 
     const selectedForm = this.availableSourceForms.find(form => form.id === this.formSubmissionConfig.formId);
     this.formSubmissionConfig.formCode = selectedForm?.formCode || '';
@@ -4620,6 +4806,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         this.formSubmissionConfig.textFieldId = textField?.id || null;
         this.formSubmissionConfig.valueFieldCode = valueField?.fieldCode || this.formSubmissionConfig.valueFieldCode;
         this.formSubmissionConfig.textFieldCode = textField?.fieldCode || this.formSubmissionConfig.textFieldCode;
+        const sourceField = this.availableSourceFormFields.find(field =>
+          field.id === this.formSubmissionDependencyConfig.sourceFieldId ||
+          field.fieldCode === this.formSubmissionDependencyConfig.sourceFieldCode);
+        this.formSubmissionDependencyConfig.sourceFieldId = sourceField?.id || this.formSubmissionDependencyConfig.sourceFieldId;
+        this.formSubmissionDependencyConfig.sourceFieldCode = sourceField?.fieldCode || this.formSubmissionDependencyConfig.sourceFieldCode;
         this.loadingSourceFormFields = false;
 
         if (autoPreview && this.formSubmissionConfig.valueFieldCode && this.formSubmissionConfig.textFieldCode) {
@@ -4640,9 +4831,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   }
 
   onSubmissionValueFieldChange(): void {
+    if (this.autoFillUsesContextValue) {
+      this.formSubmissionConfig.valueFieldId = null;
+      this.formSubmissionConfig.valueFieldCode = AUTO_FILL_CONTEXT_VALUE;
+      this.formSubmissionConfig.textFieldId = null;
+      this.formSubmissionConfig.textFieldCode = AUTO_FILL_CONTEXT_VALUE;
+      this.dataSourceConfig.valuePath = AUTO_FILL_CONTEXT_VALUE;
+      this.dataSourceConfig.textPath = AUTO_FILL_CONTEXT_VALUE;
+      this.previewOptions = [];
+      return;
+    }
+
     const selectedField = this.availableSourceFormFields.find(field => field.id === this.formSubmissionConfig.valueFieldId);
     this.formSubmissionConfig.valueFieldCode = selectedField?.fieldCode || '';
     this.dataSourceConfig.valuePath = this.formSubmissionConfig.valueFieldCode || null;
+    if (!this.isOptionsFieldType()) {
+      this.formSubmissionConfig.textFieldId = this.formSubmissionConfig.valueFieldId;
+      this.formSubmissionConfig.textFieldCode = this.formSubmissionConfig.valueFieldCode;
+      this.dataSourceConfig.textPath = this.formSubmissionConfig.textFieldCode || null;
+    }
     this.previewOptions = [];
   }
 
@@ -4655,10 +4862,36 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
   onSubmissionDependencyFieldChange(): void {
     this.formSubmissionDependencyConfig.sourceFieldCode = '';
+    this.formSubmissionDependencyConfig.sourceFieldId = null;
+    const selectedField = this.getAvailableFormSubmissionDependencyFields()
+      .find(field => field.fieldCode === this.formSubmissionDependencyConfig.contextFieldCode);
+    this.formSubmissionDependencyConfig.contextFieldId = selectedField?.id ?? null;
     this.previewOptions = [];
   }
 
   onSubmissionDependencySourceFieldChange(): void {
+    const selectedField = this.availableSourceFormFields
+      .find(field => field.fieldCode === this.formSubmissionDependencyConfig.sourceFieldCode);
+    this.formSubmissionDependencyConfig.sourceFieldId = selectedField?.id ?? null;
+    this.previewOptions = [];
+  }
+
+  onAutoFillUsesContextValueChange(): void {
+    if (!this.autoFillUsesContextValue) {
+      this.formSubmissionConfig.valueFieldCode = '';
+      this.formSubmissionConfig.textFieldCode = '';
+      this.dataSourceConfig.valuePath = null;
+      this.dataSourceConfig.textPath = null;
+      this.previewOptions = [];
+      return;
+    }
+
+    this.formSubmissionConfig.valueFieldId = null;
+    this.formSubmissionConfig.textFieldId = null;
+    this.formSubmissionConfig.valueFieldCode = AUTO_FILL_CONTEXT_VALUE;
+    this.formSubmissionConfig.textFieldCode = AUTO_FILL_CONTEXT_VALUE;
+    this.dataSourceConfig.valuePath = AUTO_FILL_CONTEXT_VALUE;
+    this.dataSourceConfig.textPath = AUTO_FILL_CONTEXT_VALUE;
     this.previewOptions = [];
   }
 
@@ -4905,14 +5138,19 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    * Handle valuePath blur - set default if empty
    */
   onValuePathBlur(): void {
-    if (!this.dataSourceConfig.valuePath || !this.dataSourceConfig.valuePath.trim()) {
-      this.dataSourceConfig.valuePath = this.dataSourceType === 'LookupTable' ? 'Id' : 'id';
-      if (this.dataSourceType === 'LookupTable') {
-        this.lookupTableConfig.valueColumn = 'Id';
+    if (this.dataSourceType === 'LookupTable') {
+      const selectedValueColumn = (this.lookupTableConfig.valueColumn || '').trim();
+      this.lookupTableConfig.valueColumn = selectedValueColumn || 'Id';
+      if (!this.isOptionsFieldType()) {
+        this.lookupTableConfig.textColumn = this.lookupTableConfig.valueColumn;
       }
-    } else if (this.dataSourceType === 'LookupTable') {
-      // Sync with lookupTableConfig
-      this.lookupTableConfig.valueColumn = this.dataSourceConfig.valuePath.trim();
+      this.dataSourceConfig.valuePath = this.lookupTableConfig.valueColumn;
+      this.dataSourceConfig.textPath = this.lookupTableConfig.textColumn;
+      return;
+    }
+
+    if (!this.dataSourceConfig.valuePath || !this.dataSourceConfig.valuePath.trim()) {
+      this.dataSourceConfig.valuePath = 'id';
     }
   }
 
@@ -4920,14 +5158,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
    * Handle textPath blur - set default if empty
    */
   onTextPathBlur(): void {
+    if (this.dataSourceType === 'LookupTable') {
+      const selectedTextColumn = (this.lookupTableConfig.textColumn || '').trim();
+      this.lookupTableConfig.textColumn = selectedTextColumn || 'Name';
+      this.dataSourceConfig.textPath = this.lookupTableConfig.textColumn;
+      return;
+    }
+
     if (!this.dataSourceConfig.textPath || !this.dataSourceConfig.textPath.trim()) {
-      this.dataSourceConfig.textPath = this.dataSourceType === 'LookupTable' ? 'Name' : 'name';
-      if (this.dataSourceType === 'LookupTable') {
-        this.lookupTableConfig.textColumn = 'Name';
-      }
-    } else if (this.dataSourceType === 'LookupTable') {
-      // Sync with lookupTableConfig
-      this.lookupTableConfig.textColumn = this.dataSourceConfig.textPath.trim();
+      this.dataSourceConfig.textPath = 'name';
     }
   }
 
@@ -5959,24 +6198,41 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         });
         return;
       }
-      const hasValueField = !!(this.formSubmissionConfig.valueFieldId || this.formSubmissionConfig.valueFieldCode);
+      const hasValueField = this.autoFillUsesContextValue ||
+        !!(this.formSubmissionConfig.valueFieldId || this.formSubmissionConfig.valueFieldCode);
+      if (!this.isOptionsFieldType()) {
+        if (this.autoFillUsesContextValue) {
+          this.formSubmissionConfig.valueFieldId = null;
+          this.formSubmissionConfig.textFieldId = null;
+          this.formSubmissionConfig.valueFieldCode = AUTO_FILL_CONTEXT_VALUE;
+          this.formSubmissionConfig.textFieldCode = AUTO_FILL_CONTEXT_VALUE;
+        } else {
+          this.formSubmissionConfig.textFieldId = this.formSubmissionConfig.valueFieldId;
+          this.formSubmissionConfig.textFieldCode = this.formSubmissionConfig.valueFieldCode;
+        }
+      }
+
       const hasTextField = !!(this.formSubmissionConfig.textFieldId || this.formSubmissionConfig.textFieldCode);
       if (!hasValueField || !hasTextField) {
         this.messageService.add({
           severity: 'warn',
           summary: 'Validation',
-          detail: 'Please select both value and text fields'
+          detail: this.isOptionsFieldType() ? 'Please select both value and text fields' : 'Please select the value to fill'
         });
         return;
       }
 
-      if (this.formSubmissionConfig.valueFieldId) {
+      if (this.autoFillUsesContextValue) {
+        this.dataSourceConfig.valuePath = AUTO_FILL_CONTEXT_VALUE;
+      } else if (this.formSubmissionConfig.valueFieldId) {
         this.onSubmissionValueFieldChange();
       } else {
         this.dataSourceConfig.valuePath = this.formSubmissionConfig.valueFieldCode || null;
       }
 
-      if (this.formSubmissionConfig.textFieldId) {
+      if (this.autoFillUsesContextValue) {
+        this.dataSourceConfig.textPath = AUTO_FILL_CONTEXT_VALUE;
+      } else if (this.formSubmissionConfig.textFieldId) {
         this.onSubmissionTextFieldChange();
       } else {
         this.dataSourceConfig.textPath = this.formSubmissionConfig.textFieldCode || null;
@@ -6132,7 +6388,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         formId: this.formSubmissionConfig.formId,
         formCode: this.formSubmissionConfig.formCode,
         valueFieldCode: this.formSubmissionConfig.valueFieldCode,
-        textFieldCode: this.formSubmissionConfig.textFieldCode
+        textFieldCode: this.formSubmissionConfig.textFieldCode,
+        autoFillMode: this.autoFillUsesContextValue ? 'contextValue' : undefined
       });
     } else {
       requestBodyJsonForPreview = this.dataSourceConfig.requestBodyJson || undefined;
@@ -6853,11 +7110,26 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       let textPathValue: string | null = null;
 
       if (this.dataSourceType === 'LookupTable') {
+        if (!this.isOptionsFieldType()) {
+          this.lookupTableConfig.textColumn = this.lookupTableConfig.valueColumn || this.lookupTableConfig.textColumn || 'Id';
+        }
         // Backend expects only the table name in apiUrl, not JSON object
         apiUrlValue = this.lookupTableConfig.table || null;
         valuePathValue = this.lookupTableConfig.valueColumn || null;
         textPathValue = this.lookupTableConfig.textColumn || null;
       } else if (this.dataSourceType === 'FormSubmissions') {
+        if (!this.isOptionsFieldType()) {
+          if (this.autoFillUsesContextValue) {
+            this.formSubmissionConfig.valueFieldId = null;
+            this.formSubmissionConfig.textFieldId = null;
+            this.formSubmissionConfig.valueFieldCode = AUTO_FILL_CONTEXT_VALUE;
+            this.formSubmissionConfig.textFieldCode = AUTO_FILL_CONTEXT_VALUE;
+          } else {
+            this.formSubmissionConfig.textFieldId = this.formSubmissionConfig.valueFieldId;
+            this.formSubmissionConfig.textFieldCode = this.formSubmissionConfig.valueFieldCode;
+          }
+        }
+
         apiUrlValue = this.formSubmissionConfig.formId ? String(this.formSubmissionConfig.formId) : null;
         valuePathValue = this.formSubmissionConfig.valueFieldCode || null;
         textPathValue = this.formSubmissionConfig.textFieldCode || null;
@@ -6906,12 +7178,37 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         requestBodyJsonValue = JSON.stringify({
           database: normalizedDatabase
         });
+        const contextField = this.getAvailableFormSubmissionDependencyFields()
+          .find(field => field.fieldCode === this.formSubmissionDependencyConfig.contextFieldCode);
+        const contextBindings = !this.isOptionsFieldType() &&
+          this.formSubmissionDependencyConfig.contextFieldCode &&
+          this.formSubmissionDependencyConfig.sourceFieldCode
+          ? [{
+              contextFieldCode: this.formSubmissionDependencyConfig.contextFieldCode,
+              contextFieldId: contextField?.id ?? this.formSubmissionDependencyConfig.contextFieldId,
+              sourceFieldCode: this.formSubmissionDependencyConfig.sourceFieldCode
+            }]
+          : [];
+        configurationJsonValue = JSON.stringify({
+          table: apiUrlValue,
+          valueColumn: valuePathValue || 'Id',
+          textColumn: textPathValue || valuePathValue || 'Id',
+          database: normalizedDatabase,
+          autoFillMode: contextBindings.length > 0 ? 'lookupValue' : undefined,
+          contextBindings
+        });
       } else if (this.dataSourceType === 'FormSubmissions') {
         requestBodyJsonValue = this.formSubmissionConfig.formCode || null;
+        const contextField = this.getAvailableFormSubmissionDependencyFields()
+          .find(field => field.fieldCode === this.formSubmissionDependencyConfig.contextFieldCode);
+        const sourceField = this.availableSourceFormFields
+          .find(field => field.fieldCode === this.formSubmissionDependencyConfig.sourceFieldCode);
         const contextBindings = this.formSubmissionDependencyConfig.contextFieldCode && this.formSubmissionDependencyConfig.sourceFieldCode
           ? [{
               contextFieldCode: this.formSubmissionDependencyConfig.contextFieldCode,
-              sourceFieldCode: this.formSubmissionDependencyConfig.sourceFieldCode
+              contextFieldId: contextField?.id ?? this.formSubmissionDependencyConfig.contextFieldId,
+              sourceFieldCode: this.formSubmissionDependencyConfig.sourceFieldCode,
+              sourceFieldId: sourceField?.id ?? this.formSubmissionDependencyConfig.sourceFieldId
             }]
           : [];
         configurationJsonValue = JSON.stringify({
@@ -6921,6 +7218,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           textFieldId: this.formSubmissionConfig.textFieldId,
           valueFieldCode: this.formSubmissionConfig.valueFieldCode,
           textFieldCode: this.formSubmissionConfig.textFieldCode,
+          autoFillMode: this.autoFillUsesContextValue ? 'contextValue' : undefined,
           contextBindings
         });
       } else {

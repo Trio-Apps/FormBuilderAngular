@@ -265,7 +265,7 @@ export interface GridColumnDataSourceDto {
   columnCode?: string; // Navigation property - Column code
   gridName?: string; // Navigation property - Grid name
   formBuilderName?: string; // Navigation property - Form Builder name
-  sourceType: 'Static' | 'LookupTable' | 'API'; // Type of data source
+  sourceType: string; // 'Static' | 'LookupTable' | 'API' | 'FormSubmissions' | 'SqlQuery' | 'SapHana'
   apiUrl?: string; // For API sources
   apiPath?: string; // JSON path to extract data
   httpMethod?: string; // HTTP method for API calls (GET, POST, PUT, DELETE, PATCH)
@@ -283,7 +283,7 @@ export interface GridColumnDataSourceDto {
 
 export interface CreateGridColumnDataSourceDto {
   columnId: number;
-  sourceType: 'Static' | 'LookupTable' | 'API';
+  sourceType: string;
   apiUrl?: string;
   apiPath?: string;
   httpMethod?: string; // GET, POST, PUT, DELETE, PATCH
@@ -298,7 +298,7 @@ export interface CreateGridColumnDataSourceDto {
 }
 
 export interface UpdateGridColumnDataSourceDto {
-  sourceType?: 'Static' | 'LookupTable' | 'API';
+  sourceType?: string;
   apiUrl?: string;
   apiPath?: string;
   httpMethod?: string; // GET, POST, PUT, DELETE, PATCH

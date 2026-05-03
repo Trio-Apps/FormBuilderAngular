@@ -66,6 +66,14 @@ function shouldIgnoreErrorToast(url: string, status: number): boolean {
     return true;
   }
 
+  if (currentPath.includes('/forms/view/')
+    && (normalizedUrl.includes('/api/gridcolumndatasources/column-options')
+      || normalizedUrl.includes('/api/gridcolumndatasources/column/')
+      || normalizedUrl.includes('/api/gridcolumnoptions/column/')
+      || normalizedUrl.includes('/api/fielddatasources/field-options'))) {
+    return true;
+  }
+
   if (status === 404 && currentPath.includes('/forms/view/')) {
     return normalizedUrl.includes('/api/formsubmissions/latest-document-number/form/')
       || normalizedUrl.includes('/api/documentseries/document-type/')

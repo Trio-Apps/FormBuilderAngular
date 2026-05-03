@@ -17,7 +17,7 @@ export interface CopyToDocumentActionDto {
   targetDocumentId?: number;
   
   // الحقل الجديد
-  initialStatus?: 'Draft' | 'Submitted';  // جديد - القيمة الافتراضية: 'Draft'
+  initialStatus?: 'Draft';  // Copy targets always start as Draft
   executeAutomatically?: boolean;
   
   // Field Mapping
@@ -71,7 +71,7 @@ export interface CopyToDocumentActionByCodesDto {
   targetFormCode: string;
   createNewDocument: boolean;
   targetDocumentId?: number;
-  initialStatus?: 'Draft' | 'Submitted';  // جديد
+  initialStatus?: 'Draft';  // Copy targets always start as Draft
   executeAutomatically?: boolean;
   fieldMapping?: { [key: string]: string };
   gridMapping?: { [key: string]: string };

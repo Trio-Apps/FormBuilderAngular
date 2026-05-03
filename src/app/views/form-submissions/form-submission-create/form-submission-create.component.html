@@ -179,6 +179,26 @@
                       [class.has-error]="hasFieldError(field)"
                       (change)="clearFieldError(field)">
 
+                    <!-- DateTime Input -->
+                    <input
+                      *ngSwitchCase="'datetime-local'"
+                      type="datetime-local"
+                      [id]="getFieldId(field)!"
+                      [formControlName]="getFieldId(field)!"
+                      class="form-input"
+                      [class.has-error]="hasFieldError(field)"
+                      (change)="clearFieldError(field)">
+
+                    <!-- Time Input -->
+                    <input
+                      *ngSwitchCase="'time'"
+                      type="time"
+                      [id]="getFieldId(field)!"
+                      [formControlName]="getFieldId(field)!"
+                      class="form-input"
+                      [class.has-error]="hasFieldError(field)"
+                      (change)="clearFieldError(field)">
+
                     <!-- Textarea -->
                     <textarea
                       *ngSwitchCase="'textarea'"
@@ -202,7 +222,7 @@
                         class="form-select"
                         [class.has-error]="hasFieldError(field)"
                         (change)="clearFieldError(field)">
-                        <option [ngValue]="''" [disabled]="isRequired(field) && !(field.fieldType?.allowMultiple)"
+                        <option [ngValue]="''"
                           *ngIf="!(field.fieldType?.allowMultiple)">
                           {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') : getFieldPlaceholder(field) }}
                         </option>
@@ -352,6 +372,14 @@
                         </a>
                         <button
                           type="button"
+                          class="preview-file-btn"
+                          *ngIf="canPreviewAttachment(attachment)"
+                          (click)="openExistingAttachmentPreview(attachment)"
+                          title="Preview">
+                          <i class="pi pi-eye"></i>
+                        </button>
+                        <button
+                          type="button"
                           class="remove-file-btn"
                           (click)="removeExistingAttachment(field.id!, attachment.id!)"
                           title="Remove file">
@@ -368,6 +396,14 @@
                           <div class="file-name">{{ file.name }}</div>
                           <div class="file-size">{{ (file.size / 1024).toFixed(2) }} KB</div>
                         </div>
+                        <button
+                          type="button"
+                          class="preview-file-btn"
+                          *ngIf="isPreviewableFile(file)"
+                          (click)="openNewFilePreview(file)"
+                          title="Preview">
+                          <i class="pi pi-eye"></i>
+                        </button>
                         <button
                           type="button"
                           class="remove-file-btn"
@@ -505,6 +541,21 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<div class="attachment-preview-overlay" *ngIf="attachmentPreviewOpen && attachmentPreviewUrl" (click)="closeAttachmentPreview()">
+  <div class="attachment-preview-dialog" (click)="$event.stopPropagation()">
+    <button type="button" class="attachment-preview-close" (click)="closeAttachmentPreview()">
+      <i class="pi pi-times"></i>
+    </button>
+    <div class="attachment-preview-body">
+      <img *ngIf="attachmentPreviewType === 'image'" [src]="attachmentPreviewUrl" [alt]="attachmentPreviewName">
+      <iframe *ngIf="attachmentPreviewType === 'pdf'" [src]="attachmentPreviewUrl" frameborder="0"></iframe>
+    </div>
+    <div class="attachment-preview-footer">
+      <span>{{ attachmentPreviewName }}</span>
     </div>
   </div>
 </div>

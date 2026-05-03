@@ -253,6 +253,7 @@
     "linkCopied": "Link copied to clipboard"
   },
   "formView": {
+    "loading": "Loading...",
     "loadingForm": "Loading form...",
     "formNotFound": "Form not found",
     "formNotFoundMessage": "The form you are trying to access does not exist or is not available.",
@@ -267,6 +268,10 @@
     "fileUploadDisabled": "File upload disabled (view only)",
     "addRow": "Add Row",
     "selectOption": "Select...",
+    "noRows": "No rows added yet. Click \"Add Row\" to start.",
+    "gridNotConfigured": "Grid is not configured yet.",
+    "noVisibleColumns": "No visible columns found. Please check column visibility settings.",
+    "download": "Download",
     "save": "Save",
     "saving": "Saving..."
   },

@@ -551,7 +551,7 @@
             </div>
 
             <!-- Available Fields for Expression Builder -->
-            <div class="form-group" style="grid-column: 1 / -1;">
+            <div class="form-group" style="grid-column: 1 / -1;" *ngIf="isOptionsFieldType()">
               <label class="form-label">
                 Available Fields:
                 <i class="pi pi-info-circle" style="margin-left: 6px; color: #667eea; cursor: help;" 
@@ -593,7 +593,7 @@
             </div>
 
             <!-- Calculation Operations (Math Operations) -->
-            <div class="form-group" style="grid-column: 1 / -1;">
+            <div class="form-group" style="grid-column: 1 / -1;" *ngIf="isOptionsFieldType()">
               <label class="form-label">
                 Calculation Operations
                 <i class="pi pi-info-circle" style="margin-left: 6px; color: #667eea; cursor: help;" 
@@ -667,13 +667,23 @@
         </div>
 
         <!-- Field DataSource Section -->
-        <div class="form-section" *ngIf="getSelectedFieldType()?.hasOptions || isOptionsFieldType()">
+        <div class="form-section" *ngIf="supportsDataSourceForSelectedField()">
           <h4 class="section-title">
             <i class="pi pi-database"></i>
-            {{ translateLabel('fields.dataSource') }}
+            {{ isOptionsFieldType() ? 'Optional Data Source' : 'Optional Dependency / Auto-fill' }}
           </h4>
 
-          <div class="form-grid">
+          <label
+            style="display: flex; align-items: center; gap: 10px; padding: 14px 16px; border: 1px solid #d1fae5; border-radius: 12px; background: #ecfdf5; color: #064e3b; font-weight: 600; cursor: pointer;">
+            <input type="checkbox"
+              [(ngModel)]="useFieldDependencySource"
+              [ngModelOptions]="{standalone: true}"
+              (change)="onUseFieldDependencySourceChange()"
+              style="width: 18px; height: 18px;" />
+            {{ isOptionsFieldType() ? 'Use external/source options instead of manual options' : 'Fill this field based on another field' }}
+          </label>
+
+          <div class="form-grid" *ngIf="useFieldDependencySource" style="margin-top: 16px;">
             <div class="form-group" style="grid-column: 1 / -1;">
               <div class="data-source-guide">
                 <div class="guide-header">
@@ -681,7 +691,9 @@
                     <i class="pi pi-question-circle"></i>
                     <span>How this source works</span>
                   </div>
-                  <div class="guide-subtitle">Choose the source based on where the dropdown values actually live.</div>
+                  <div class="guide-subtitle">
+                    Choose the source based on where the values live. Dropdown fields use it as an option list; text fields can use it to auto-fill from another selected field.
+                  </div>
                 </div>
 
                 <div class="guide-grid">
@@ -709,8 +721,20 @@
               </div>
             </div>
 
+            <div class="form-group" style="grid-column: 1 / -1;" *ngIf="!isOptionsFieldType()">
+              <div class="source-detail-panel">
+                <div class="source-detail-title">
+                  <i class="pi pi-sitemap"></i>
+                  <span>Auto-fill setup</span>
+                </div>
+                <div class="source-detail-copy">
+                  Keep this simple: choose whether this field should fill from a system database table or from another form submission, then pick the field this value depends on.
+                </div>
+              </div>
+            </div>
+
             <!-- Data Source Type Selection (3 Options) -->
-            <div class="form-group" style="grid-column: 1 / -1;">
+            <div class="form-group" style="grid-column: 1 / -1;" *ngIf="isOptionsFieldType()">
               <label class="form-label">{{ translateLabel('fields.dataSourceType') }} <span
                   class="required">*</span></label>
 
@@ -760,7 +784,7 @@
                   <i class="pi pi-file-edit" style="font-size: 20px; color: #667eea;"></i>
                   <div style="flex: 1;">
                     <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Form Submissions</div>
-                    <div style="font-size: 12px; color: #6b7280;">Read dropdown options directly from another Form Builder form without writing SQL.</div>
+                    <div style="font-size: 12px; color: #6b7280;">Read values from another Form Builder form. Use it for dropdown options or to auto-fill a normal text field by matching another field.</div>
                   </div>
                 </label>
 
@@ -904,7 +928,7 @@
                 <div class="form-group">
                   <label class="form-label">
                     <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
-                    Value Path
+                    {{ isOptionsFieldType() ? 'Value Path' : 'Value To Fill' }}
                   </label>
                   <select class="form-control" [(ngModel)]="lookupTableConfig.valueColumn"
                     [ngModelOptions]="{standalone: true}" (change)="onValuePathBlur()"
@@ -920,7 +944,7 @@
                   </select>
                   <small class="form-text text-muted" style="margin-top: 4px; display: block; font-size: 11px;"
                     *ngIf="availableColumns.length > 0">
-                    Select value column from available columns
+                    {{ isOptionsFieldType() ? 'Select value column from available columns' : 'Select the table column that should be written into this field.' }}
                   </small>
                   <small class="form-text text-warning"
                     style="margin-top: 4px; display: block; font-size: 11px; color: #f59e0b;"
@@ -928,7 +952,7 @@
                     <i class="pi pi-info-circle"></i> Select a table above to load available columns automatically
                   </small>
                 </div>
-                <div class="form-group">
+                <div class="form-group" *ngIf="isOptionsFieldType()">
                   <label class="form-label">
                     <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
                     Text Path
@@ -956,26 +980,79 @@
                   </small>
                 </div>
               </div>
+
+              <div *ngIf="!isOptionsFieldType()" style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-sitemap" style="margin-right: 6px; color: #667eea;"></i>
+                    Depends On Field
+                  </label>
+                  <select class="form-control"
+                    [(ngModel)]="formSubmissionDependencyConfig.contextFieldCode"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onSubmissionDependencyFieldChange()">
+                    <option value="">-- Select Field --</option>
+                    <option *ngFor="let field of getAvailableFormSubmissionDependencyFields()" [value]="field.fieldCode">
+                      {{ field.fieldName }} ({{ field.fieldCode }})
+                    </option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                    The current form field the user chooses first. Example: BP Number.
+                  </small>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">
+                    <i class="pi pi-link" style="margin-right: 6px; color: #667eea;"></i>
+                    Match Table Column
+                  </label>
+                  <select class="form-control"
+                    [(ngModel)]="formSubmissionDependencyConfig.sourceFieldCode"
+                    [ngModelOptions]="{standalone: true}"
+                    (change)="onSubmissionDependencySourceFieldChange()"
+                    [disabled]="!formSubmissionDependencyConfig.contextFieldCode || availableColumns.length === 0"
+                    style="font-family: 'Courier New', monospace; font-size: 13px;">
+                    <option value="">-- Select Table Column --</option>
+                    <option *ngFor="let col of availableColumns" [value]="col">{{ col }}</option>
+                  </select>
+                  <small class="form-text text-muted" style="margin-top: 6px; display: block;">
+                    The table column that matches the selected value. Example: Id, Code, or UserNumber.
+                  </small>
+                </div>
+              </div>
             </div>
 
             <!-- Form Submissions Selection -->
-            <div class="form-group" *ngIf="dataSourceType === 'FormSubmissions'" style="grid-column: 1 / -1;">
+            <div class="form-group" *ngIf="dataSourceType === 'FormSubmissions' && isOptionsFieldType()" style="grid-column: 1 / -1;">
               <div class="source-detail-panel">
                 <div class="source-detail-title">
                   <i class="pi pi-file-edit"></i>
                   <span>Form Submissions Guide</span>
                 </div>
                 <div class="source-detail-copy">
-                  Use this when the dropdown should read values from another form built inside this solution, such as Business Partner Master Data or any reusable setup form.
+                  Use this when a field should read values from another form built inside this solution, such as Business Partner Master Data or any reusable setup form.
                 </div>
-                <ul class="source-detail-list">
+                <ul class="source-detail-list" *ngIf="isOptionsFieldType(); else autoFillSourceGuide">
                   <li>Select the source form that stores the records.</li>
-                  <li>Select the field that should be saved as the dropdown value.</li>
-                  <li>Select the field that should be shown to the user as the dropdown label.</li>
+                  <li>Use the code/id as <strong>Stored Value Field</strong> and the readable label as <strong>Display Name Field</strong>.</li>
+                  <li>Use <strong>Depends On</strong> only when this dropdown should be filtered by another field.</li>
                 </ul>
-                <div class="source-detail-example">
-                  Example: source form = <code>Business Partner Master Data</code>, value field = <code>BP Code</code>, text field = <code>BP Name</code>.
+                <ng-template #autoFillSourceGuide>
+                  <ul class="source-detail-list">
+                    <li>Select the source form that stores the master data records.</li>
+                    <li>Choose the source field value that should be filled into this text field.</li>
+                    <li>Choose which current field this value depends on, then match it to the equivalent source field.</li>
+                  </ul>
+                </ng-template>
+                <div class="source-detail-example" *ngIf="isOptionsFieldType(); else autoFillSourceExample">
+                  Dropdown setup: source form = <code>Business Partner Master Data</code>, stored value = <code>BP Code</code>, display name = <code>BP Code</code> or <code>BP Name</code>.<br />
+                  Auto-fill setup: target text field = <code>BP Name</code>, stored/display value = <code>BP Name</code>, depends on = <code>BP Code</code>, match source = <code>BP Code</code>.
                 </div>
+                <ng-template #autoFillSourceExample>
+                  <div class="source-detail-example">
+                    Example: this field is <code>BP Name</code>. Fill value from source field <code>BP Name</code>, depends on current field <code>BP Code</code>, match source field <code>BP Code</code>.
+                  </div>
+                </ng-template>
               </div>
 
               <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -999,69 +1076,78 @@
                   </small>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" *ngIf="isOptionsFieldType()">
                   <label class="form-label">
                     <i class="pi pi-key" style="margin-right: 6px; color: #667eea;"></i>
-                    Value Field <span class="required">*</span>
+                    {{ isOptionsFieldType() ? 'Stored Value Field' : 'Value To Fill' }} <span class="required">*</span>
+                  </label>
+                  <label *ngIf="!isOptionsFieldType()"
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; color: #374151;">
+                    <input type="checkbox"
+                      [(ngModel)]="autoFillUsesContextValue"
+                      [ngModelOptions]="{standalone: true}"
+                      (change)="onAutoFillUsesContextValueChange()"
+                      style="width: 16px; height: 16px;" />
+                    Use depended field value directly
                   </label>
                   <select class="form-control"
                     [(ngModel)]="formSubmissionConfig.valueFieldId"
                     [ngModelOptions]="{standalone: true}"
                     (change)="onSubmissionValueFieldChange()"
-                    [disabled]="!formSubmissionConfig.formId">
-                    <option [ngValue]="null">-- Select Value Field --</option>
+                    [disabled]="!formSubmissionConfig.formId || autoFillUsesContextValue">
+                    <option [ngValue]="null">{{ isOptionsFieldType() ? '-- Select Stored Value Field --' : '-- Select Value To Fill --' }}</option>
                     <option *ngFor="let field of availableSourceFormFields" [ngValue]="field.id">
                       {{ field.fieldName }} ({{ field.fieldCode }})
                     </option>
                   </select>
                   <small class="form-text text-muted" style="margin-top: 6px; display: block;">
-                    The stored value sent with the form submission.
+                    {{ isOptionsFieldType() ? 'The value saved when the user selects from the dropdown.' : (autoFillUsesContextValue ? 'This field will copy the selected value from Depends On Field directly.' : 'The source value that will be written into this field automatically.') }}
                   </small>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" *ngIf="isOptionsFieldType()">
                   <label class="form-label">
                     <i class="pi pi-tag" style="margin-right: 6px; color: #667eea;"></i>
-                    Text Field <span class="required">*</span>
+                    Display Name Field <span class="required">*</span>
                   </label>
                   <select class="form-control"
                     [(ngModel)]="formSubmissionConfig.textFieldId"
                     [ngModelOptions]="{standalone: true}"
                     (change)="onSubmissionTextFieldChange()"
                     [disabled]="!formSubmissionConfig.formId">
-                    <option [ngValue]="null">-- Select Text Field --</option>
+                    <option [ngValue]="null">-- Select Display Name Field --</option>
                     <option *ngFor="let field of availableSourceFormFields" [ngValue]="field.id">
                       {{ field.fieldName }} ({{ field.fieldCode }})
                     </option>
                   </select>
                   <small class="form-text text-muted" style="margin-top: 6px; display: block;">
-                    The human-readable label shown inside the dropdown.
+                    The readable label shown in the dropdown/input. Usually this is the name field.
                   </small>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" *ngIf="isOptionsFieldType()">
                   <label class="form-label">
                     <i class="pi pi-sitemap" style="margin-right: 6px; color: #667eea;"></i>
-                    Depends On Field
+                    {{ isOptionsFieldType() ? 'Depends On Current Field' : 'Depends On Field' }}
                   </label>
                   <select class="form-control"
                     [(ngModel)]="formSubmissionDependencyConfig.contextFieldCode"
                     [ngModelOptions]="{standalone: true}"
                     (change)="onSubmissionDependencyFieldChange()">
-                    <option value="">-- No Dependency --</option>
+                    <option value="">{{ isOptionsFieldType() ? '-- No Dependency --' : '-- Select Field --' }}</option>
                     <option *ngFor="let field of getAvailableFormSubmissionDependencyFields()" [value]="field.fieldCode">
                       {{ field.fieldName }} ({{ field.fieldCode }})
                     </option>
                   </select>
                   <small class="form-text text-muted" style="margin-top: 6px; display: block;">
-                    Optional. Filter this dropdown using another field from the current form.
+                    {{ isOptionsFieldType() ? 'Optional. Choose the current form field that filters this dropdown.' : 'Choose the current field whose selected value should drive this auto-fill.' }}
                   </small>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" *ngIf="isOptionsFieldType()">
                   <label class="form-label">
                     <i class="pi pi-link" style="margin-right: 6px; color: #667eea;"></i>
-                    Match Source Field
+                    {{ isOptionsFieldType() ? 'Match Source Form Field' : 'Match Source Field' }}
                   </label>
                   <select class="form-control"
                     [(ngModel)]="formSubmissionDependencyConfig.sourceFieldCode"
@@ -1074,19 +1160,25 @@
                     </option>
                   </select>
                   <small class="form-text text-muted" style="margin-top: 6px; display: block;">
-                    Choose the field in the source form that should match the selected value from the current form.
+                    {{ isOptionsFieldType() ? 'Choose the source-form field that should equal the current field above.' : 'Choose the source field that matches the selected value above. Example: BP_CODE.' }}
                   </small>
                 </div>
 
-                <div class="form-group" style="display: flex; align-items: flex-end;">
+                <div class="form-group" style="display: flex; align-items: flex-end;" *ngIf="!autoFillUsesContextValue">
                   <button type="button" class="btn btn-primary" (click)="previewDataSource()"
-                    [disabled]="!formSubmissionConfig.formId || !formSubmissionConfig.valueFieldId || !formSubmissionConfig.textFieldId || loadingPreview"
+                    [disabled]="!formSubmissionConfig.formId || (!autoFillUsesContextValue && !formSubmissionConfig.valueFieldId) || (isOptionsFieldType() && !formSubmissionConfig.textFieldId) || loadingPreview"
                     style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px;">
                     <i class="pi pi-play" style="font-size: 14px;"></i>
                     Preview Options
                   </button>
                 </div>
+                <div class="form-group" style="display: flex; align-items: flex-end;" *ngIf="autoFillUsesContextValue">
+                  <small class="form-text text-muted" style="display: block;">
+                    No preview needed. This field will copy the selected depended field value directly.
+                  </small>
+                </div>
               </div>
+
             </div>
 
             <!-- SQL Query Configuration (SQL Server) -->
@@ -1754,10 +1846,22 @@
             <!-- Note: isDeleted is managed via delete/restore actions, not via form checkbox -->
           </div>
           <!-- Default Value (hidden for file fields - they use defaultValueJson for file configuration) -->
-          <div class="form-group mt-3" *ngIf="!isFileFieldType()">
+          <div class="form-group mt-3" *ngIf="!isFileFieldType() && !isSelectedDateLikeFieldType()">
             <label class="form-label">{{ translateLabel('fields.defaultValue') }}</label>
             <input type="text" class="form-control" formControlName="defaultValue"
               [placeholder]="translateLabel('fields.enterDefaultValue')">
+          </div>
+          <div class="form-group mt-3" *ngIf="!isFileFieldType() && isSelectedDateLikeFieldType()">
+            <label class="form-label">{{ translateLabel('fields.defaultValue') }}</label>
+            <select class="form-control" formControlName="defaultValue" (change)="onDateDefaultValueChange()">
+              <option value="">No default value</option>
+              <option [value]="getSelectedDateDefaultToken()">
+                {{ isSelectedDateTimeFieldType() ? 'Now (current date and time)' : 'Today (current date)' }}
+              </option>
+            </select>
+            <small class="form-text text-muted">
+              The value is calculated when the form is opened, not saved as a fixed date.
+            </small>
           </div>
         </div>
 

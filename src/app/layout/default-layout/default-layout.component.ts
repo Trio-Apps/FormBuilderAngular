@@ -436,7 +436,9 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
 
     // If role is "Administration" (from UserGroups table), نطبق فلتر الـ permissions فقط
     if (isAdmin) {
-      this.navItems = applyPermissionFilter(navItems);
+      const adminNavItems = applyPermissionFilter(navItems);
+      this.addTableMenusAfterDocumentsSetup(adminNavItems);
+      this.navItems = adminNavItems;
       // Freeze navItems to prevent any future modifications
       Object.freeze(this.navItems);
       // Mark sidebar as initialized to prevent future updates
@@ -531,6 +533,19 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     console.log('[DefaultLayout] Sidebar initialized (User path), will not update again');
   }
 
+  private addTableMenusAfterDocumentsSetup(items: INavData[]): void {
+    const documentsSetupIndex = items.findIndex(item => item.title === true && item.name === 'Documents Setup');
+    if (documentsSetupIndex === -1) {
+      this.addTableMenusToSidebar(items);
+      return;
+    }
+
+    const before = items.slice(0, documentsSetupIndex + 1);
+    const after = items.slice(documentsSetupIndex + 1);
+    this.addTableMenusToSidebar(before);
+    items.splice(0, items.length, ...before, ...after);
+  }
+
   /**
    * Add table menus to sidebar navigation
    */
@@ -538,7 +553,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     const userRole = this.authService.role();
     const userRoleLower = userRole?.toLowerCase() || '';
     const isAdmin = this.isUserAdmin();
-    const bypassPermissionChecksForUser = !isAdmin;
+    const bypassPermissionChecksForUser = true;
 
     console.log('[DefaultLayout] Adding table menus to sidebar:', this.tableMenus.length, 'menus');
 

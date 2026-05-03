@@ -112,6 +112,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   loadingSignatureStages = false;
   loadingReportSubmissionId: number | null = null;
   loadingCopyToDocumentSubmissionId: number | null = null;
+  cancellingBySubmission: Record<number, boolean> = {};
 
   // Loading States
   loading = {
@@ -431,11 +432,10 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     let filtered = [...this.submissions];
 
     // ✅ Always hide deleted submissions and only show Draft/Submitted
-    // Users should only see Draft and Submitted submissions
+    // Users should only see active document lifecycle submissions
     filtered = filtered.filter(sub => {
       const status = (sub.status || '').toLowerCase();
-      // Only show Draft and Submitted submissions
-      return status === 'draft' || status === 'submitted' || status === 'approved';
+      return status === 'draft' || status === 'pending' || status === 'approved' || status === 'posted open' || status === 'posted closed' || status === 'posted' || status === 'cancelled';
     });
 
     // ✅ Non-admin users ALWAYS see only their own submissions
@@ -1610,7 +1610,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     this.editSubmissionValuesForm = this.fb.group({}); // Reset form
     this.submissionForm.reset({
       documentNumber: '',
-      status: 'Submitted' // Default status is Submitted
+      status: 'Draft'
     });
   }
 
@@ -1825,14 +1825,13 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     const formData = this.submissionForm.value;
     const updateDto: UpdateFormSubmissionDto = {
       documentNumber: formData.documentNumber || undefined,
-      status: 'Submitted' // Always set status to Submitted after edit and save
+      status: formData.status || this.selectedSubmission.status || 'Draft'
     };
 
     // Update submission basic info
     this.formSubmissionsService.updateSubmission(this.selectedSubmission.id, updateDto).subscribe({
       next: () => {
-        // Update the form status to Submitted
-        this.submissionForm.patchValue({ status: 'Submitted' });
+        this.submissionForm.patchValue({ status: updateDto.status });
         // Now update field values
         this.updateSubmissionFieldValues();
       },
@@ -2110,14 +2109,19 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     switch (status?.toLowerCase()) {
       case 'draft':
         return 'badge-secondary';
-      case 'submitted':
-        return 'badge-info';
+      case 'pending':
+      case 'pending approval':
+        return 'badge-warning';
       case 'approved':
         return 'badge-success';
       case 'rejected':
         return 'badge-danger';
-      case 'pending approval':
-        return 'badge-warning';
+      case 'posted':
+      case 'posted open':
+      case 'posted closed':
+        return 'badge-info';
+      case 'cancelled':
+        return 'badge-cancelled';
       default:
         return 'badge-secondary';
     }
@@ -2542,7 +2546,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       this.addSubmissionForm.patchValue({
         formBuilderId: this.documentType.formBuilderId,
           tabId: null,
-        status: 'Submitted' // Default status is Submitted
+        status: 'Draft'
       });
       this.onFormSelected(this.documentType.formBuilderId);
     } else {
@@ -2555,7 +2559,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         formBuilderId: null,
           tabId: null,
           seriesId: null,
-          status: 'Submitted' // Default status is Submitted
+          status: 'Draft'
         });
         this.messageService.add({
           severity: 'warn',
@@ -2573,7 +2577,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
         formBuilderId: null,
         tabId: null,
         seriesId: null,
-        status: 'Submitted' // Default status is Submitted
+        status: 'Draft'
       });
     }
 
@@ -2627,7 +2631,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       formBuilderId: this.documentType?.formBuilderId || null,
       tabId: null,
       seriesId: null,
-      status: 'Submitted' // Default status is Submitted
+      status: 'Draft'
     });
     
     this.updateFormControlDisabledStates();
@@ -3659,7 +3663,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   }
 
   canRequestSignature(submission: FormSubmissionDto): boolean {
-    if (!submission || !submission.id || submission.status !== 'Submitted') {
+    const normalizedStatus = (submission?.status || '').trim().toLowerCase();
+    if (!submission || !submission.id || (normalizedStatus !== 'submitted' && normalizedStatus !== 'pending')) {
       return false;
     }
 
@@ -3847,13 +3852,65 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
   canExecuteManualCopyToDocument(submission: FormSubmissionDto): boolean {
     if (!submission?.id) return false;
     if (this.loadingCopyToDocumentSubmissionId === submission.id) return false;
+    if (Number(submission.parentDocumentId || 0) > 0) return false;
     const normalizedStatus = (submission.status || '').trim().toLowerCase();
-    return normalizedStatus === 'posted';
+    return normalizedStatus === 'approved' || normalizedStatus === 'posted open';
+  }
+
+  canCancelSubmission(submission: FormSubmissionDto): boolean {
+    if (!submission?.id) return false;
+    if (this.cancellingBySubmission[submission.id]) return false;
+    const normalizedStatus = (submission.status || '').trim().toLowerCase();
+    return normalizedStatus !== 'cancelled' && normalizedStatus !== 'rejected';
+  }
+
+  getCancelButtonTitle(submission: FormSubmissionDto): string {
+    if (!this.canCancelSubmission(submission)) {
+      return 'This submission cannot be cancelled.';
+    }
+
+    return 'Cancel this document. If it has an active copied document, cancel the copied document first.';
+  }
+
+  cancelSubmission(submission: FormSubmissionDto): void {
+    if (!this.canCancelSubmission(submission)) {
+      return;
+    }
+
+    const submissionId = Number(submission.id);
+    this.cancellingBySubmission[submissionId] = true;
+
+    this.formSubmissionsService.cancelSubmission(submissionId).pipe(
+      finalize(() => {
+        this.cancellingBySubmission[submissionId] = false;
+        this.cdr.detectChanges();
+      })
+    ).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Cancelled',
+          detail: 'Document cancelled successfully.'
+        });
+        this.loadSubmissions();
+      },
+      error: (error) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Cancel Document',
+          detail: error?.message || 'Failed to cancel this document.'
+        });
+      }
+    });
   }
 
   getManualCopyButtonTitle(submission: FormSubmissionDto): string {
+    if (Number(submission?.parentDocumentId || 0) > 0) {
+      return 'This submission was created from another document and cannot be copied again from here.';
+    }
+
     if (!this.canExecuteManualCopyToDocument(submission)) {
-      return 'Copy is available only for posted records.';
+      return 'Copy is available only for approved or posted open records.';
     }
     return 'Run manual Copy To Document setups for this submission.';
   }
@@ -4037,7 +4094,8 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     
     // Try to get current stage from approval inbox
     const currentUserId = this.storageService.getUserId()?.toString() || this.authService.userName();
-    if (currentUserId && submission.status === 'Submitted') {
+    const normalizedStatus = (submission.status || '').trim().toLowerCase();
+    if (currentUserId && (normalizedStatus === 'submitted' || normalizedStatus === 'pending')) {
       this.loadingApproveReject = true;
       this.approvalWorkflowRuntimeService.getApprovalInboxForUser(currentUserId).subscribe({
         next: (inboxItems: ApprovalInboxItemDto[]) => {
@@ -4252,10 +4310,13 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
       return this.canApproveRejectCache.get(submission.id)!;
     }
 
-    // Allow approve/reject for Submitted and Pending Approval statuses
-    if (submission.status !== 'Submitted' && 
-        submission.status !== 'Pending Approval' && 
-        submission.status !== 'Approved') {
+    const normalizedStatus = (submission.status || '').trim().toLowerCase();
+
+    // Allow approve/reject for active approval statuses.
+    if (normalizedStatus !== 'submitted' &&
+        normalizedStatus !== 'pending' &&
+        normalizedStatus !== 'pending approval' &&
+        normalizedStatus !== 'approved') {
       this.canApproveRejectCache.set(submission.id, false);
       return false;
     }

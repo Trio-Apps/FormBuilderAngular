@@ -51,6 +51,7 @@ export class SubmissionsListComponent implements OnInit {
   readonly pageSizeOptions = [10, 20, 50];
   executingBySubmission: Record<number, boolean> = {};
   postingBySubmission: Record<number, boolean> = {};
+  cancellingBySubmission: Record<number, boolean> = {};
   executionResultsBySubmission: Record<number, SapIntegrationExecuteResultDto> = {};
   loadingCopyToDocumentSubmissionId: number | null = null;
   copySetupEligibilityBySubmission: Record<number, boolean> = {};
@@ -282,10 +283,14 @@ export class SubmissionsListComponent implements OnInit {
     return 'SAP integration is not enabled for this submission.';
   }
 
+  private getNormalizedStatus(submission: FormSubmissionDto | null | undefined): string {
+    return (submission?.status || '').trim().toLowerCase();
+  }
+
   getStatusClass(status: string | null | undefined): string {
     const normalized = (status || '').trim().toLowerCase();
 
-    if (normalized === 'posted') {
+    if (normalized === 'posted' || normalized === 'posted open' || normalized === 'posted closed') {
       return 'status-chip--posted';
     }
 
@@ -297,8 +302,16 @@ export class SubmissionsListComponent implements OnInit {
       return 'status-chip--rejected';
     }
 
+    if (normalized === 'cancelled') {
+      return 'status-chip--cancelled';
+    }
+
     if (normalized === 'draft') {
       return 'status-chip--draft';
+    }
+
+    if (normalized === 'pending') {
+      return 'status-chip--submitted';
     }
 
     return 'status-chip--submitted';
@@ -543,7 +556,10 @@ export class SubmissionsListComponent implements OnInit {
     const currentFormBuilderId = Number(currentDetail?.formBuilderId || currentSummary?.formBuilderId || 0);
 
     return this.submissions
-      .filter((submission) => (submission.status || '').trim().toLowerCase() === 'posted')
+      .filter((submission) => {
+        const status = (submission.status || '').trim().toLowerCase();
+        return status === 'posted' || status === 'posted open' || status === 'posted closed';
+      })
       .filter((submission) => {
         if (currentDocumentTypeId > 0 && Number(submission?.documentTypeId || 0) !== currentDocumentTypeId) {
           return false;
@@ -609,13 +625,29 @@ export class SubmissionsListComponent implements OnInit {
   }
 
   canPost(submission: FormSubmissionDto): boolean {
-    const normalized = (submission?.status || '').trim().toLowerCase();
-    if (normalized === 'approved') {
-      return true;
+    if (!submission?.id) {
+      return false;
     }
 
-    const isCopiedSubmission = Number(submission?.parentDocumentId || 0) > 0;
-    return normalized === 'submitted' && (!Number(submission?.stageId || 0) || isCopiedSubmission);
+    if (this.postingBySubmission[submission.id]) {
+      return false;
+    }
+
+    const normalizedStatus = this.getNormalizedStatus(submission);
+    return normalizedStatus === 'approved';
+  }
+
+  canCancel(submission: FormSubmissionDto): boolean {
+    if (!submission?.id) {
+      return false;
+    }
+
+    if (this.cancellingBySubmission[submission.id]) {
+      return false;
+    }
+
+    const normalizedStatus = this.getNormalizedStatus(submission);
+    return normalizedStatus !== 'cancelled' && normalizedStatus !== 'rejected';
   }
 
   private loadPendingNumberPreviews(): void {
@@ -912,8 +944,9 @@ export class SubmissionsListComponent implements OnInit {
     if (!submission?.id) return false;
     if (this.loadingCopyToDocumentSubmissionId === submission.id) return false;
     if (Number(submission.parentDocumentId || 0) > 0) return false;
-    const normalizedStatus = (submission.status || '').trim().toLowerCase();
-    if (normalizedStatus !== 'posted') {
+
+    const normalizedStatus = this.getNormalizedStatus(submission);
+    if (normalizedStatus !== 'approved' && normalizedStatus !== 'posted open') {
       return false;
     }
 
@@ -938,7 +971,7 @@ export class SubmissionsListComponent implements OnInit {
     }
 
     if (!this.canExecuteManualCopyToDocument(submission)) {
-      return 'Copy is available only for posted records.';
+      return 'Copy is available for approved or posted open records.';
     }
 
     return 'Run manual Copy To Document setups for this submission.';
@@ -1037,6 +1070,11 @@ export class SubmissionsListComponent implements OnInit {
     return this.postingBySubmission[submissionId] ? 'Posting...' : 'Post';
   }
 
+  getCancelButtonText(submission: FormSubmissionDto): string {
+    const submissionId = Number(submission?.id || 0);
+    return this.cancellingBySubmission[submissionId] ? 'Cancelling...' : 'Cancel';
+  }
+
   postSubmission(submission: FormSubmissionDto): void {
     const submissionId = Number(submission?.id || 0);
     if (!submissionId || this.postingBySubmission[submissionId] || !this.canPost(submission)) {
@@ -1054,6 +1092,27 @@ export class SubmissionsListComponent implements OnInit {
       error: (error: Error) => {
         this.pageError = error?.message || 'Failed to post the approved submission.';
         this.postingBySubmission[submissionId] = false;
+      }
+    });
+  }
+
+  cancelSubmission(submission: FormSubmissionDto): void {
+    const submissionId = Number(submission?.id || 0);
+    if (!submissionId || this.cancellingBySubmission[submissionId] || !this.canCancel(submission)) {
+      return;
+    }
+
+    this.cancellingBySubmission[submissionId] = true;
+    this.pageError = '';
+
+    this.formSubmissionsService.cancelSubmission(submissionId).subscribe({
+      next: () => {
+        this.loadSubmissions();
+        this.cancellingBySubmission[submissionId] = false;
+      },
+      error: (error: Error) => {
+        this.pageError = error?.message || 'Failed to cancel the submission.';
+        this.cancellingBySubmission[submissionId] = false;
       }
     });
   }

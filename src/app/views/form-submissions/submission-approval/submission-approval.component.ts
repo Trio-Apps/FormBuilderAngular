@@ -165,11 +165,13 @@ export class SubmissionApprovalComponent implements OnInit {
   }
 
   canApprove(): boolean {
-    return (this.submission as any)?.status === 'Submitted' && !!this.stageId;
+    const status = ((this.submission as any)?.status || '').trim().toLowerCase();
+    return (status === 'submitted' || status === 'pending') && !!this.stageId;
   }
 
   canReject(): boolean {
-    return (this.submission as any)?.status === 'Submitted' && !!this.stageId;
+    const status = ((this.submission as any)?.status || '').trim().toLowerCase();
+    return (status === 'submitted' || status === 'pending') && !!this.stageId;
   }
 }
 

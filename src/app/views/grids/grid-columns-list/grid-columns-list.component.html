@@ -132,7 +132,6 @@
               <th class="col-name">{{ translateLabel('grids.columns.columnName') || 'Column Name' }}</th>
               <th class="col-code">{{ translateLabel('grids.columns.columnCode') || 'Column Code' }}</th>
               <th class="col-type">{{ translateLabel('grids.columns.fieldType') || 'Field Type' }}</th>
-              <th class="col-type">{{ translateLabel('grids.columns.dataType') || 'Data Type' }}</th>
               <th class="col-required">{{ translateLabel('common.required') || 'Required' }}</th>
               <th class="col-status">{{ translateLabel('common.status') || 'Status' }}</th>
               <th class="col-actions">{{ translateLabel('common.actions') || 'Actions' }}</th>
@@ -159,11 +158,6 @@
               <td class="col-type">
                 <span class="type-badge">
                   {{ getFieldTypeName(column.fieldTypeId, column) }}
-                </span>
-              </td>
-              <td class="col-type">
-                <span class="type-badge">
-                  {{ getDataTypeLabel(column.dataType || 'text') }}
                 </span>
               </td>
               <td class="col-required">
@@ -292,14 +286,6 @@
       </div>
 
       <div class="mb-3">
-        <label class="form-label">{{ translateLabel('grids.columns.dataType') || 'Data Type' }} <span class="text-danger">*</span></label>
-        <select class="form-control" formControlName="dataType">
-          <option *ngFor="let type of dataTypes" [value]="type.value">
-            {{ currentInputLanguage === 'ar' ? type.labelAr : type.label }}
-          </select>
-      </div>
-
-      <div class="mb-3">
         <label class="form-label">{{ translateLabel('grids.columns.columnOrder') || 'Column Order' }}</label>
         <input
           type="number"
@@ -314,7 +300,7 @@
         </div>
       </div>
 
-      <div class="mb-3">
+      <div class="mb-3" *ngIf="!isSelectedDateLikeFieldType()">
         <label class="form-label">{{ translateLabel('grids.columns.defaultValue') || 'Default Value' }}</label>
         <input
           type="text"
@@ -323,6 +309,25 @@
           [class.is-invalid]="isFieldInvalid('defaultValue')"
           [placeholder]="translateLabel('grids.columns.enterDefaultValue') || 'Enter default value'"
         />
+        <div class="invalid-feedback" *ngIf="isFieldInvalid('defaultValue')">
+          {{ getFieldErrorMessage('defaultValue') }}
+        </div>
+      </div>
+
+      <div class="mb-3" *ngIf="isSelectedDateLikeFieldType()">
+        <label class="form-label">{{ translateLabel('grids.columns.defaultValue') || 'Default Value' }}</label>
+        <select
+          class="form-control"
+          formControlName="defaultValue"
+          [class.is-invalid]="isFieldInvalid('defaultValue')">
+          <option value="">No default value</option>
+          <option [value]="getSelectedDateDefaultToken()">
+            {{ isSelectedDateTimeFieldType() ? 'Now (current date and time)' : 'Today (current date)' }}
+          </option>
+        </select>
+        <small class="form-text text-muted">
+          The value is calculated when the form is opened, not saved as a fixed date.
+        </small>
         <div class="invalid-feedback" *ngIf="isFieldInvalid('defaultValue')">
           {{ getFieldErrorMessage('defaultValue') }}
         </div>
@@ -455,6 +460,48 @@
                   <div style="font-size: 12px; color: #6b7280;">{{ translateLabel('fields.dataSourceApiDesc') || 'Load options from API endpoint (id, name).' }}</div>
                 </div>
               </label>
+
+              <label class="data-source-option" [class.selected]="dataSourceType === 'FormSubmissions'"
+                style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                [style.border-color]="dataSourceType === 'FormSubmissions' ? '#667eea' : '#e5e7eb'"
+                [style.background]="dataSourceType === 'FormSubmissions' ? '#f0ebf8' : '#f9fafb'">
+                <input type="radio" name="dataSourceType" value="FormSubmissions" [(ngModel)]="dataSourceType"
+                  [ngModelOptions]="{standalone: true}" (change)="onColumnDataSourceTypeChange()"
+                  style="width: 20px; height: 20px; cursor: pointer;" />
+                <i class="pi pi-file-edit" style="font-size: 20px; color: #667eea;"></i>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Form Submissions</div>
+                  <div style="font-size: 12px; color: #6b7280;">Read options from another Form Builder form.</div>
+                </div>
+              </label>
+
+              <label class="data-source-option" [class.selected]="dataSourceType === 'SqlQuery'"
+                style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                [style.border-color]="dataSourceType === 'SqlQuery' ? '#667eea' : '#e5e7eb'"
+                [style.background]="dataSourceType === 'SqlQuery' ? '#f0ebf8' : '#f9fafb'">
+                <input type="radio" name="dataSourceType" value="SqlQuery" [(ngModel)]="dataSourceType"
+                  [ngModelOptions]="{standalone: true}" (change)="onColumnDataSourceTypeChange()"
+                  style="width: 20px; height: 20px; cursor: pointer;" />
+                <i class="pi pi-code" style="font-size: 20px; color: #667eea;"></i>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">SQL Query</div>
+                  <div style="font-size: 12px; color: #6b7280;">Load options from a SQL Server query with ID and NAME columns.</div>
+                </div>
+              </label>
+
+              <label class="data-source-option" [class.selected]="dataSourceType === 'SapHana'"
+                style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+                [style.border-color]="dataSourceType === 'SapHana' ? '#059669' : '#e5e7eb'"
+                [style.background]="dataSourceType === 'SapHana' ? '#ecfdf3' : '#f9fafb'">
+                <input type="radio" name="dataSourceType" value="SapHana" [(ngModel)]="dataSourceType"
+                  [ngModelOptions]="{standalone: true}" (change)="onColumnDataSourceTypeChange()"
+                  style="width: 20px; height: 20px; cursor: pointer;" />
+                <i class="pi pi-database" style="font-size: 20px; color: #059669;"></i>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">SAP HANA Query</div>
+                  <div style="font-size: 12px; color: #6b7280;">Load options from SAP HANA SQL using ID and NAME columns.</div>
+                </div>
+              </label>
             </div>
           </div>
 
@@ -569,6 +616,50 @@
             <div *ngIf="previewOptions.length === 0 && !loadingPreview && dataSourceType === 'LookupTable' && columnLookupTableConfig.valueColumn && columnLookupTableConfig.textColumn"
               style="padding: 16px; text-align: center; color: #6b7280; font-style: italic; margin-top: 16px;">
               {{ translateLabel('grids.columns.noPreviewOptions') || 'No preview options found. Select Value Path and Text Path to load options.' }}
+            </div>
+          </div>
+
+          <div class="form-group" *ngIf="dataSourceType === 'FormSubmissions'" style="grid-column: 1 / -1; margin-top: 16px;">
+            <label class="form-label">
+              <i class="pi pi-file-edit" style="margin-right: 6px; color: #667eea;"></i>
+              Form Code <span class="required">*</span>
+            </label>
+            <input type="text" class="form-control" [(ngModel)]="columnDataSourceConfig.apiUrl"
+              [ngModelOptions]="{standalone: true}" placeholder="FORM_CODE">
+            <div style="margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="form-group">
+                <label class="form-label">Value Field Code</label>
+                <input type="text" class="form-control" [(ngModel)]="columnDataSourceConfig.valuePath"
+                  [ngModelOptions]="{standalone: true}" placeholder="ID_FIELD_CODE">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Text Field Code</label>
+                <input type="text" class="form-control" [(ngModel)]="columnDataSourceConfig.textPath"
+                  [ngModelOptions]="{standalone: true}" placeholder="NAME_FIELD_CODE">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" *ngIf="dataSourceType === 'SqlQuery' || dataSourceType === 'SapHana'" style="grid-column: 1 / -1; margin-top: 16px;">
+            <label class="form-label">
+              <i class="pi pi-code" style="margin-right: 6px; color: #667eea;"></i>
+              {{ dataSourceType === 'SapHana' ? 'SAP HANA SQL Query' : 'SQL Query' }} <span class="required">*</span>
+            </label>
+            <textarea class="form-control" rows="6" [(ngModel)]="columnDataSourceConfig.requestBodyJson"
+              [ngModelOptions]="{standalone: true}"
+              placeholder="SELECT Id AS ID, Name AS NAME FROM ..."
+              style="font-family: 'Courier New', monospace; font-size: 13px;"></textarea>
+            <div style="margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="form-group">
+                <label class="form-label">Value Column</label>
+                <input type="text" class="form-control" [(ngModel)]="columnDataSourceConfig.valuePath"
+                  [ngModelOptions]="{standalone: true}" placeholder="ID">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Text Column</label>
+                <input type="text" class="form-control" [(ngModel)]="columnDataSourceConfig.textPath"
+                  [ngModelOptions]="{standalone: true}" placeholder="NAME">
+              </div>
             </div>
           </div>
 

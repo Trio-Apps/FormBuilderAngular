@@ -1,0 +1,110 @@
+.legacy-table-search-hidden {
+  display: none !important;
+}
+
+.unified-enhanced-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  width: 100%;
+}
+
+table.unified-enhanced-table > thead > tr.unified-table-header-row > th,
+.p-datatable table.unified-enhanced-table > thead > tr.unified-table-header-row > th,
+.unified-enhanced-table .unified-table-header-row th {
+  background: #f8fafc !important;
+  border-top: 1px solid #e5e7eb !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  color: #64748b !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  line-height: 1.25 !important;
+  padding: 14px 12px !important;
+  text-transform: uppercase !important;
+  vertical-align: middle !important;
+}
+
+table.unified-enhanced-table > thead > tr.unified-table-header-row > th:first-child,
+.unified-enhanced-table .unified-table-header-row th:first-child {
+  border-left: 1px solid #e5e7eb !important;
+}
+
+table.unified-enhanced-table > thead > tr.unified-table-header-row > th:last-child,
+.unified-enhanced-table .unified-table-header-row th:last-child {
+  border-right: 1px solid #e5e7eb !important;
+}
+
+.unified-enhanced-table .p-sortable-column-icon,
+.unified-enhanced-table .p-sorticon,
+.unified-enhanced-table p-sorticon,
+.unified-enhanced-table p-sortIcon {
+  display: none !important;
+}
+
+.unified-column-filter-row th,
+.unified-column-filter-cell {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  border-top: 0 !important;
+  height: 58px !important;
+  padding: 8px 12px !important;
+  vertical-align: middle !important;
+}
+
+.unified-column-filter-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.unified-column-filter-control input {
+  width: 100%;
+  min-width: 86px;
+  height: 30px;
+  border: 1px solid #d7dde7;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 8px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.unified-column-filter-control input:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.12);
+}
+
+.unified-filter-hidden-row {
+  display: none !important;
+}
+
+.unified-sortable-header {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  white-space: nowrap;
+}
+
+.unified-sortable-header:hover {
+  background: #eefcf8 !important;
+}
+
+.unified-sort-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  margin-left: 6px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.unified-sort-active .unified-sort-indicator {
+  color: #0f766e;
+}

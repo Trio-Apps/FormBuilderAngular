@@ -1181,7 +1181,7 @@ export class ApprovalInboxComponent implements OnInit {
     } else if (this.actionType === 'Rejected') {
       newStatus = 'Rejected';
     } else if (this.actionType === 'Returned') {
-      newStatus = 'Submitted';
+      newStatus = 'Pending';
     }
 
     // Use approve/reject endpoints directly (they handle stageId internally)
@@ -1872,30 +1872,15 @@ export class ApprovalInboxComponent implements OnInit {
   }
 
   canPostSubmissionListItem(submission: FormSubmissionDto | null | undefined): boolean {
-    const normalizedStatus = (submission?.status || '').trim().toLowerCase();
-    if (normalizedStatus === 'approved') {
-      return true;
-    }
-
-    return normalizedStatus === 'submitted' && !Number(submission?.stageId || 0);
+    return false;
   }
 
   canPostApprovalInboxItem(item: ApprovalInboxItemDto | null | undefined): boolean {
-    const normalizedStatus = (item?.status || '').trim().toLowerCase();
-    return normalizedStatus === 'approved';
+    return false;
   }
 
   canPostSubmissionDetail(detail: FormSubmissionDetailDto | null): boolean {
-    if (!detail) {
-      return false;
-    }
-
-    const normalizedStatus = (detail.status || '').trim().toLowerCase();
-    if (normalizedStatus === 'approved') {
-      return true;
-    }
-
-    return normalizedStatus === 'submitted' && !Number(detail.stageId || 0);
+    return false;
   }
 
   postSelectedSubmission(): void {
