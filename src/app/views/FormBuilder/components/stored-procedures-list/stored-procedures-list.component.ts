@@ -56,7 +56,16 @@ export class StoredProceduresListComponent implements OnInit {
   canEditStoredProcedures = false;
   canDeleteStoredProcedures = false;
   canManageStoredProcedures = false;
-  
+  canExecuteStoredProcedures = false;
+
+  // Execute (test) dialog
+  showExecuteModal = false;
+  executingSp: StoredProcedure | null = null;
+  executeParamsJson = '{}';
+  executeRunning = false;
+  executeResult: any = null;
+  executeError = '';
+
   // Filters
   selectedDatabase = '';
   selectedUsageType = '';
@@ -105,11 +114,15 @@ export class StoredProceduresListComponent implements OnInit {
    * Load user permissions for stored procedure operations
    */
   private loadPermissions(): void {
-    this.canViewStoredProcedures = this.permissionService.canViewStoredProcedures();
-    this.canCreateStoredProcedures = this.permissionService.canCreateStoredProcedures();
-    this.canEditStoredProcedures = this.permissionService.canEditStoredProcedures();
-    this.canDeleteStoredProcedures = this.permissionService.canDeleteStoredProcedures();
-    this.canManageStoredProcedures = this.permissionService.canManageStoredProcedures();
+    // Align with the backend-enforced FormStoredProcedure_* permission family (the
+    // StoredProcedure_* family is legacy/unused on the server and not granted to users,
+    // which previously hid this page from admins).
+    this.canViewStoredProcedures = this.permissionService.canViewFormStoredProcedures();
+    this.canCreateStoredProcedures = this.permissionService.canCreateFormStoredProcedures();
+    this.canEditStoredProcedures = this.permissionService.canEditFormStoredProcedures();
+    this.canDeleteStoredProcedures = this.permissionService.canDeleteFormStoredProcedures();
+    this.canManageStoredProcedures = this.permissionService.canManageFormStoredProcedures();
+    this.canExecuteStoredProcedures = this.permissionService.canExecuteFormStoredProcedures();
     console.log('[StoredProceduresList] Permission flags:', {
       canViewStoredProcedures: this.canViewStoredProcedures,
       canCreateStoredProcedures: this.canCreateStoredProcedures,
@@ -209,6 +222,48 @@ export class StoredProceduresListComponent implements OnInit {
   onModalClose(): void {
     this.closeModal();
     this.loadStoredProcedures();
+  }
+
+  // ===== Execute (test) =====
+  openExecuteModal(sp: StoredProcedure): void {
+    this.executingSp = sp;
+    this.executeParamsJson = '{}';
+    this.executeResult = null;
+    this.executeError = '';
+    this.showExecuteModal = true;
+  }
+
+  closeExecuteModal(): void {
+    this.showExecuteModal = false;
+    this.executingSp = null;
+    this.executeResult = null;
+    this.executeError = '';
+  }
+
+  runExecute(): void {
+    if (!this.executingSp || this.executeRunning) { return; }
+    let params: any = {};
+    if (this.executeParamsJson && this.executeParamsJson.trim()) {
+      try {
+        params = JSON.parse(this.executeParamsJson);
+      } catch {
+        this.executeError = 'Parameters must be valid JSON, e.g. { "userId": 1 }';
+        return;
+      }
+    }
+    this.executeRunning = true;
+    this.executeError = '';
+    this.executeResult = null;
+    this.spService.execute(this.executingSp.id!, params).subscribe({
+      next: (res) => {
+        this.executeRunning = false;
+        this.executeResult = res;
+      },
+      error: (err) => {
+        this.executeRunning = false;
+        this.executeError = err?.error?.message || 'Execution failed.';
+      }
+    });
   }
 
   deleteSp(id: number): void {

@@ -1,0 +1,61 @@
+<div class="audit-page-container">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <h1 class="page-title">Audit Trail</h1>
+        <p class="page-subtitle">A unified log of critical actions across the system — approvals, letters, clauses and more.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <app-table-shell title="Audit Trail" icon="pi pi-history">
+      <div table-actions class="header-actions">
+        <input type="text" class="flt" [(ngModel)]="entityTypeFilter" placeholder="Entity type (e.g. Submission)" />
+        <input type="number" class="flt" [(ngModel)]="entityIdFilter" placeholder="Entity ID" />
+        <input type="text" class="flt" [(ngModel)]="actionFilter" placeholder="Action (e.g. Approval:Approved)" />
+        <button class="btn-apply" (click)="applyFilter()"><i class="pi pi-search"></i> Filter</button>
+        <button class="btn-clear" (click)="clearFilter()"><i class="pi pi-times"></i> Clear</button>
+      </div>
+
+      <div *ngIf="loading" class="loading-container"><i class="pi pi-spin pi-spinner"></i><p>Loading…</p></div>
+
+      <div *ngIf="!loading && logs.length === 0" class="empty-state">
+        <div class="empty-icon"><i class="pi pi-history"></i></div>
+        <h4>No audit entries</h4>
+        <p>Critical actions (approve, letter, clause, …) will appear here as they happen.</p>
+      </div>
+
+      <p-table *ngIf="!loading && logs.length > 0" [value]="logs" [paginator]="false" styleClass="p-datatable-sm audit-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th style="width:170px;">When</th>
+            <th>Action</th>
+            <th>Entity</th>
+            <th>Description</th>
+            <th style="width:120px;">By</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-row>
+          <tr>
+            <td class="when">{{ formatDate(row.performedAt) }}</td>
+            <td><span class="act-badge" [ngClass]="actionClass(row.action)">{{ row.action }}</span></td>
+            <td class="entity">{{ row.entityType }} #{{ row.entityId }}</td>
+            <td class="desc">
+              {{ row.description }}
+              <span class="details" *ngIf="row.details">— {{ row.details }}</span>
+            </td>
+            <td class="by">{{ row.performedByUserId || '—' }}</td>
+          </tr>
+        </ng-template>
+      </p-table>
+
+      <p-paginator *ngIf="!loading && totalRecords > rows"
+        [first]="first" [rows]="rows" [totalRecords]="totalRecords"
+        [rowsPerPageOptions]="[20, 50, 100]" (onPageChange)="onPageChange($event)">
+      </p-paginator>
+    </app-table-shell>
+  </div>
+</div>
+
+<p-toast></p-toast>

@@ -6,3 +6,29 @@
   color: white;
 }
 
+
+/* #4: Approval channel/type badge */
+.approval-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+
+  i { font-size: 0.8em; }
+}
+.approval-type-system {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+.approval-type-outlook {
+  background-color: #ccfbf1;
+  color: #115e59;
+}
+.approval-type-docusign {
+  background-color: #ffedd5;
+  color: #9a3412;
+}

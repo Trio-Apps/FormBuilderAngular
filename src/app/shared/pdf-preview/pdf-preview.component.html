@@ -1,0 +1,26 @@
+<div class="pdf-preview-overlay" (click)="close()">
+  <div class="pdf-preview-modal" (click)="$event.stopPropagation()">
+    <div class="pdf-preview-header">
+      <h3><i class="pi pi-file-pdf"></i> {{ title }}</h3>
+      <div class="header-actions">
+        <button class="btn-download" [disabled]="!safeUrl" (click)="download()">
+          <i class="pi pi-download"></i> Download
+        </button>
+        <button class="close-btn" (click)="close()"><i class="pi pi-times"></i></button>
+      </div>
+    </div>
+
+    <div class="pdf-preview-body">
+      <div *ngIf="loading" class="pdf-state">
+        <i class="pi pi-spin pi-spinner"></i><p>Rendering preview…</p>
+      </div>
+
+      <div *ngIf="!loading && error" class="pdf-state error">
+        <i class="pi pi-exclamation-triangle"></i>
+        <p>{{ error }}</p>
+      </div>
+
+      <iframe *ngIf="!loading && !error && safeUrl" [src]="safeUrl" title="PDF preview"></iframe>
+    </div>
+  </div>
+</div>

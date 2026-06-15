@@ -150,12 +150,15 @@ export class ProjectsListComponent implements OnInit, OnDestroy {
 
   loadProjects(): void {
     this.loading = true;
-    this.projectsService.getProjects(this.currentPage, this.itemsPerPage).subscribe({
+    // Pagination and search are handled CLIENT-side (updatePaginatedProjects / onSearch slice
+    // filteredProjects). Previously this requested only one server page, so navigating to page 2+
+    // sliced past the loaded data and showed an empty table. Load the full set once instead.
+    this.projectsService.getProjects(1, 10000).subscribe({
       next: (result) => {
         this.projects = result.items || [];
-        this.totalItems = result.totalCount || 0;
-        this.totalPages = result.totalPages || 0;
+        this.totalItems = result.totalCount || this.projects.length;
         this.filteredProjects = [...this.projects];
+        this.currentPage = 1;
         this.updatePaginatedProjects();
         this.loading = false;
         this.cdr.detectChanges();

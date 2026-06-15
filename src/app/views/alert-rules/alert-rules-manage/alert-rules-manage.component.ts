@@ -35,7 +35,7 @@ import {
 import { EmailTemplatesService, EmailTemplateDto } from '../../FormBuilder/services/email-templates.service';
 import { UsersService, UserDto, UserGroupDto } from '../../FormBuilder/services/users.service';
 
-type TriggerOption = { label: string; value: AlertTriggerType };
+type TriggerOption = { label: string; value: AlertTriggerType | 'Scheduled' };
 type NotificationOption = { label: string; value: AlertNotificationType };
 
 @Component({
@@ -72,7 +72,8 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
     { label: 'ApprovalRequired', value: 'ApprovalRequired' },
     { label: 'ApprovalApproved', value: 'ApprovalApproved' },
     { label: 'ApprovalRejected', value: 'ApprovalRejected' },
-    { label: 'ApprovalReturned', value: 'ApprovalReturned' }
+    { label: 'ApprovalReturned', value: 'ApprovalReturned' },
+    { label: 'Scheduled (recurring)', value: 'Scheduled' }
   ];
   notificationOptions: NotificationOption[] = [
     { label: 'Email', value: 'Email' },
@@ -106,6 +107,72 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
 
   showCreateModal = false;
   createForm!: FormGroup;
+
+  // ----- Condition builder (serialized to ConditionJson) -----
+  conditionMatch: 'all' | 'any' = 'all';
+  conditions: { field: string; op: string; value: string }[] = [];
+  readonly conditionOps: { value: string; label: string }[] = [
+    { value: 'eq', label: 'Equals' },
+    { value: 'ne', label: 'Not equals' },
+    { value: 'gt', label: 'Greater than' },
+    { value: 'lt', label: 'Less than' },
+    { value: 'gte', label: 'Greater or equal' },
+    { value: 'lte', label: 'Less or equal' },
+    { value: 'contains', label: 'Contains' },
+    { value: 'startsWith', label: 'Starts with' },
+    { value: 'endsWith', label: 'Ends with' },
+    { value: 'empty', label: 'Is empty' },
+    { value: 'notEmpty', label: 'Is not empty' }
+  ];
+
+  addCondition(): void {
+    this.conditions.push({ field: '', op: 'eq', value: '' });
+  }
+
+  removeCondition(index: number): void {
+    this.conditions.splice(index, 1);
+  }
+
+  /** True for ops that don't need a value input. */
+  opHasNoValue(op: string): boolean {
+    return op === 'empty' || op === 'notEmpty';
+  }
+
+  private buildConditionJson(): string {
+    const valid = (this.conditions || []).filter(c => c && c.field && c.field.trim());
+    if (valid.length === 0) {
+      return '{}';
+    }
+    return JSON.stringify({
+      match: this.conditionMatch,
+      conditions: valid.map(c => ({
+        field: c.field.trim(),
+        op: c.op || 'eq',
+        ...(this.opHasNoValue(c.op) ? {} : { value: c.value ?? '' })
+      }))
+    });
+  }
+
+  private parseConditionJson(json: string | null | undefined): void {
+    this.conditionMatch = 'all';
+    this.conditions = [];
+    if (!json) { return; }
+    try {
+      const obj = JSON.parse(json);
+      if (obj && typeof obj === 'object') {
+        if (obj.match === 'any') { this.conditionMatch = 'any'; }
+        if (Array.isArray(obj.conditions)) {
+          this.conditions = obj.conditions.map((c: any) => ({
+            field: String(c.field ?? ''),
+            op: String(c.op ?? 'eq'),
+            value: c.value !== undefined && c.value !== null ? String(c.value) : ''
+          }));
+        }
+      }
+    } catch {
+      // ignore malformed JSON
+    }
+  }
 
   private editingRule: AlertRuleDto | null = null;
   private subs: Subscription[] = [];
@@ -152,7 +219,9 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
       targetRoleId: [[]],
       isActive: [true],
       notificationType: ['Email', Validators.required],
-      emailTemplateId: [null]
+      emailTemplateId: [null],
+      scheduleIntervalMinutes: [60],
+      sqlCondition: ['']
     });
 
     this.loadInitialData();
@@ -248,8 +317,11 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
         targetRoleId: this.splitCsv(rule.targetRoleId),
         isActive: rule.isActive,
         notificationType: (rule.notificationType as AlertNotificationType) || 'Email',
-        emailTemplateId: rule.emailTemplateId ?? null
+        emailTemplateId: rule.emailTemplateId ?? null,
+        scheduleIntervalMinutes: rule.scheduleIntervalMinutes ?? 60,
+        sqlCondition: rule.sqlCondition ?? ''
       });
+      this.parseConditionJson(rule.conditionJson);
     } else {
       // Creating new rule
       if (!this.canCreateAlertRules && !this.canManageAlertRules) {
@@ -266,8 +338,12 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
         targetRoleId: [],
         isActive: true,
         notificationType: 'Email',
-        emailTemplateId: null
+        emailTemplateId: null,
+        scheduleIntervalMinutes: 60,
+        sqlCondition: ''
       });
+      this.conditionMatch = 'all';
+      this.conditions = [];
     }
     this.showCreateModal = true;
   }
@@ -313,12 +389,14 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
         documentTypeId: Number(v.documentTypeId),
         triggerType: String(v.triggerType),
         ruleName: String(v.ruleName).trim(),
-        conditionJson: '{}',
+        conditionJson: this.buildConditionJson(),
         emailTemplateId,
         notificationType: v.notificationType as string,
         targetRoleId,
         targetUserId,
-        isActive: !!v.isActive
+        isActive: !!v.isActive,
+        scheduleIntervalMinutes: v.triggerType === 'Scheduled' ? Number(v.scheduleIntervalMinutes) || 60 : null,
+        sqlCondition: v.triggerType === 'Scheduled' ? ((v.sqlCondition || '').trim() || null) : null
       };
 
       const sub = this.alertRulesService.updateRule(updated).subscribe({
@@ -346,12 +424,14 @@ export class AlertRulesManageComponent implements OnInit, OnDestroy {
         documentTypeId: Number(v.documentTypeId),
         triggerType: v.triggerType,
         ruleName: String(v.ruleName).trim(),
-        conditionJson: '{}',
+        conditionJson: this.buildConditionJson(),
         emailTemplateId,
         notificationType: v.notificationType as AlertNotificationType,
         targetRoleId,
         targetUserId,
-        isActive: !!v.isActive
+        isActive: !!v.isActive,
+        scheduleIntervalMinutes: v.triggerType === 'Scheduled' ? Number(v.scheduleIntervalMinutes) || 60 : null,
+        sqlCondition: v.triggerType === 'Scheduled' ? ((v.sqlCondition || '').trim() || null) : null
       };
 
       const sub = this.alertRulesService.createRule(dto).subscribe({

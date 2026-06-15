@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef } from '@angular/core';
 import { RouterLink, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { NgScrollbar } from 'ngx-scrollbar';
 import { CommonModule } from '@angular/common';
@@ -78,8 +78,13 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     private documentTypesService: DocumentTypesService,
     private usersService: UsersService,
     private tableMenusService: TableMenusService,
-    private permissionService: PermissionService
+    private permissionService: PermissionService,
+    private elementRef: ElementRef
   ) {}
+
+  // Set while programmatically toggling groups during route-driven sync so the
+  // manual-accordion click handler ignores those synthetic clicks.
+  private suppressAccordionSync = false;
 
   ngOnInit(): void {
     console.log('[DefaultLayout] ngOnInit started');
@@ -130,7 +135,81 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         if (isAdmin && currentPath === '/') {
           this.router.navigate(['/dashboard']);
         }
+
+        // Expand only the sidebar group that owns the current page (accordion).
+        setTimeout(() => this.syncActiveSidebarGroup(), 150);
       });
+
+    // Initial sync for direct page loads / refreshes: the NavigationEnd above may fire
+    // before this subscription (or before the nav is built), so trigger one explicitly.
+    setTimeout(() => this.syncActiveSidebarGroup(), 300);
+  }
+
+  /**
+   * Route-driven sidebar accordion: keep exactly the top-level group that contains
+   * the active route expanded, and collapse all the others. Runs on every navigation.
+   * CoreUI's own routerLinkActive auto-open is unreliable for these groups, so we drive
+   * it explicitly via each group's toggle (kept consistent with the manual accordion).
+   */
+  private syncActiveSidebarGroup(attempt = 0): void {
+    const host: HTMLElement = this.elementRef.nativeElement;
+    const navRoot = host.querySelector('c-sidebar-nav');
+    const topGroups = navRoot
+      ? Array.from(navRoot.children).filter((el): el is HTMLElement => el.classList.contains('nav-group'))
+      : [];
+
+    // Nav not rendered yet (async build) — retry for a short window.
+    if (topGroups.length === 0) {
+      if (attempt < 20) {
+        setTimeout(() => this.syncActiveSidebarGroup(attempt + 1), 300);
+      }
+      return;
+    }
+
+    // The group that owns the active route. We must NOT rely on the `.active` class alone:
+    // routerLinkActive marks a link active by PREFIX, so "Manage Document Types" (/document-types)
+    // is "active" on a sub-route by prefix. (Submission pages now live under /document-submissions/*
+    // so they no longer collide with /document-types, but exact matching keeps this robust.)
+    // Prefer the group that has a link whose path EXACTLY matches the current route; only fall
+    // back to the prefix-based `.active` when nothing matches exactly.
+    const currentPath = window.location.pathname;
+    const matchesExactly = (a: Element): boolean => {
+      const href = a.getAttribute('href');
+      if (!href) { return false; }
+      try { return new URL(href, window.location.origin).pathname === currentPath; }
+      catch { return false; }
+    };
+    const activeGroup =
+      topGroups.find(g => Array.from(g.querySelectorAll('a.nav-link[href]')).some(matchesExactly))
+      || topGroups.find(g => g.querySelector('.nav-link.active'))
+      || null;
+
+    // Bring the DOM to the desired state: only the active group expanded.
+    this.suppressAccordionSync = true;
+    topGroups.forEach(group => {
+      const shouldBeOpen = group === activeGroup;
+      const isOpen = group.classList.contains('show');
+      if (shouldBeOpen !== isOpen) {
+        const toggle = group.querySelector(':scope > .nav-group-toggle') as HTMLElement | null;
+        toggle?.click(); // open the active group / close the rest
+      }
+    });
+    // Release the guard after the synthetic clicks have been processed.
+    setTimeout(() => { this.suppressAccordionSync = false; }, 0);
+
+    // Self-correct: CoreUI applies the `show` class on a later change-detection pass and
+    // routerLinkActive may mark the active link slightly late, so the DOM read above can
+    // be stale (or our toggle can race CoreUI's own open). Re-check shortly and fix any
+    // remaining mismatch until the sidebar is settled.
+    if (attempt < 8) {
+      setTimeout(() => {
+        const settled = topGroups.every(g => (g === activeGroup) === g.classList.contains('show'))
+          && (activeGroup !== null || !topGroups.some(g => g.querySelector('.nav-link.active')));
+        if (!settled) {
+          this.syncActiveSidebarGroup(attempt + 1);
+        }
+      }, 250);
+    }
   }
 
   private updateWideContentRoute(url: string): void {
@@ -148,6 +227,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         || currentPath === '/email-templates'
         || currentPath === '/smtp-configs'
         || currentPath === '/sap-integration'
+        || currentPath === '/master-data'
         || currentPath === '/users'
         || currentPath === '/groups'
         || currentPath === '/permissions'
@@ -157,7 +237,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
         || currentPath === '/copy-to-document'
         || currentPath === '/form-builder/forms'
         || currentPath === '/form-builder/copy-to-document'
-        || /\/document-types\/[^/]+\/submissions(\/|$)/.test(currentPath);
+        || /\/document-submissions\/[^/]+(\/|$)/.test(currentPath);
   }
 
   loadUserGroups(): void {
@@ -444,6 +524,10 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
       // Mark sidebar as initialized to prevent future updates
       this.sidebarInitialized = true;
       console.log('[DefaultLayout] Sidebar initialized (Admin path), will not update again');
+      // Nav is now complete (incl. dynamic table-menu groups). Re-run the accordion
+      // sync so the group that owns the current route is the one expanded — an earlier
+      // sync may have run before the dynamic groups were added and picked a prefix-match.
+      setTimeout(() => this.syncActiveSidebarGroup(), 400);
       return;
     }
 
@@ -531,6 +615,8 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
     // Mark sidebar as initialized to prevent future updates
     this.sidebarInitialized = true;
     console.log('[DefaultLayout] Sidebar initialized (User path), will not update again');
+    // See Admin path: re-sync the accordion once the full nav (incl. dynamic groups) exists.
+    setTimeout(() => this.syncActiveSidebarGroup(), 400);
   }
 
   private addTableMenusAfterDocumentsSetup(items: INavData[]): void {
@@ -603,7 +689,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
                       if (docHasPermission && doc.documentTypeId) {
                         subMenuChildren.push({
                           name: doc.documentTypeName || doc.documentTypeCode || `Document ${doc.documentTypeId}`,
-                          url: `/document-types/${doc.documentTypeId}/submissions`,
+                          url: `/document-submissions/${doc.documentTypeId}`,
                           iconComponent: { name: 'cil-description' }
                         });
                       }
@@ -649,7 +735,7 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
               if (docHasPermission && doc.documentTypeId) {
                 menuChildren.push({
                   name: doc.documentTypeName || `Document ${doc.documentTypeId}`,
-                  url: `/document-types/${doc.documentTypeId}/submissions`,
+                  url: `/document-submissions/${doc.documentTypeId}`,
                   iconComponent: { name: 'cil-description' }
                 });
               }
@@ -678,5 +764,52 @@ export class DefaultLayoutComponent implements OnInit, OnDestroy {
 
     const normalizedIconName = iconName.trim();
     return this.sidebarIconNames.has(normalizedIconName) ? normalizedIconName : 'cil-layers';
+  }
+
+  /**
+   * Top-level sidebar accordion: when a top-level nav group is opened, collapse the
+   * other open top-level groups so only one stays expanded at a time.
+   *
+   * Why this is needed: CoreUI provides SidebarNavGroupService at the *group* level,
+   * so its built-in dropdownMode="close" only coordinates groups that share a parent
+   * group (nested groups) — sibling TOP-LEVEL groups each get their own service
+   * instance and never collapse each other. This DOM-level handler closes them by
+   * invoking each open sibling's own toggle, which keeps CoreUI's internal state
+   * consistent and works in production builds (no Angular debug APIs).
+   */
+  onSidebarNavClick(event: MouseEvent): void {
+    // Ignore synthetic toggle clicks dispatched by route-driven sync.
+    if (this.suppressAccordionSync) {
+      return;
+    }
+    const navRoot = event.currentTarget as HTMLElement | null;
+    const toggle = (event.target as HTMLElement | null)?.closest('.nav-group-toggle');
+    if (!toggle || !navRoot) {
+      return;
+    }
+
+    const clickedGroup = toggle.closest('.nav-group') as HTMLElement | null;
+    // Only coordinate TOP-LEVEL groups (direct children of the root nav). Nested
+    // groups are already handled by CoreUI's own dropdownMode="close".
+    if (!clickedGroup || clickedGroup.parentElement !== navRoot) {
+      return;
+    }
+
+    // Defer until CoreUI has applied the open/close state to the clicked group.
+    setTimeout(() => {
+      // Only collapse siblings when the clicked group was just OPENED.
+      if (!clickedGroup.classList.contains('show')) {
+        return;
+      }
+      Array.from(navRoot.children)
+        .filter((el): el is HTMLElement =>
+          el !== clickedGroup &&
+          el.classList.contains('nav-group') &&
+          el.classList.contains('show'))
+        .forEach(sibling => {
+          const sibToggle = sibling.querySelector(':scope > .nav-group-toggle') as HTMLElement | null;
+          sibToggle?.click(); // toggles the open sibling closed via CoreUI's own handler
+        });
+    });
   }
 }

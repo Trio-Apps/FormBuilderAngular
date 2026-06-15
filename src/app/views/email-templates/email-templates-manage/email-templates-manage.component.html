@@ -156,8 +156,8 @@
                   [icon]="row.isActive ? 'pi pi-ban' : 'pi pi-check'"
                   class="p-button-text p-button-sm action-btn"
                   (click)="toggleActive(row)"
-                  [disabled]="loading.toggle"
-                  [pTooltip]="row.isActive ? 'Deactivate' : 'Activate'"
+                  [disabled]="loading.toggle || !permissionService.canManageEmailTemplates()"
+                  [pTooltip]="permissionService.canManageEmailTemplates() ? (row.isActive ? 'Deactivate' : 'Activate') : 'You do not have permission to change template status'"
                   tooltipPosition="top"
                 ></button>
                 <button

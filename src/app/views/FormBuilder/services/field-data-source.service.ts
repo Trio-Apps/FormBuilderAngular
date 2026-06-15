@@ -262,6 +262,8 @@ export class FieldDataSourceService {
       params = params.set('take', options.take.toString());
     }
 
+    params = params.set('suppressGlobalErrorToast', 'true');
+
     const url = `${this.baseUrl}/field-options`;
     console.log(`[FieldDataSourceService] Requesting options for field ${fieldId}`, {
       url: url,

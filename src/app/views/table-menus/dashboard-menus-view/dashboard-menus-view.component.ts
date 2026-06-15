@@ -105,7 +105,7 @@ export class DashboardMenusViewComponent implements OnInit, OnDestroy {
   openDocument(document: DashboardDocumentDto): void {
     // Navigate to document submissions list or create page
     // Adjust the route based on your routing structure
-    this.router.navigate(['/document-types', document.documentTypeId, 'submissions']);
+    this.router.navigate(['/document-submissions', document.documentTypeId]);
   }
 
   /**

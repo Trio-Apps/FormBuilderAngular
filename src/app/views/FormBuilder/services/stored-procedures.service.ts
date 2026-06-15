@@ -264,5 +264,12 @@ export class StoredProceduresService {
       })
     );
   }
+
+  /** Test-run a whitelisted stored procedure by id. Returns the execution result/debug payload. */
+  execute(id: number, parameters: { [k: string]: any } = {}, resultMapping?: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/${id}/execute`, { parameters, resultMapping }).pipe(
+      map((response: any) => (response && 'data' in response ? response.data : response))
+    );
+  }
 }
 

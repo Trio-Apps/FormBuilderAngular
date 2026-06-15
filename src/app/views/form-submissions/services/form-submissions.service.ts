@@ -215,8 +215,10 @@ export class FormSubmissionsService {
         return (items || []).map((item: any) => this.normalizeSubmissionDto(item));
       }),
       catchError((error) => {
+        // Surface the failure instead of returning an empty array: an empty list and a 500/timeout
+        // are very different states. The component's error handler shows an error message.
         console.error('Error fetching form submissions:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
@@ -596,6 +598,18 @@ export class FormSubmissionsService {
     );
   }
 
+  /** Mark a submission as manually signed (sets status Approved-Signed + locks fields). */
+  manualSign(id: number): Observable<FormSubmissionDto> {
+    return this.http.post<any>(`${this.baseUrl}/${id}/sign`, {}).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object') {
+          return this.normalizeSubmissionDto(response.data || response.result || response);
+        }
+        return this.normalizeSubmissionDto(response);
+      })
+    );
+  }
+
   cancelSubmission(id: number): Observable<FormSubmissionDto> {
     return this.http.post<any>(`${this.baseUrl}/${id}/cancel`, {}).pipe(
       map((response: any) => {
@@ -617,6 +631,48 @@ export class FormSubmissionsService {
           errorMessage = 'Unauthorized. Please log in again.';
         } else if (error?.status === 403) {
           errorMessage = 'You do not have permission to cancel this submission.';
+        } else if (errorResponse) {
+          if (typeof errorResponse === 'string') {
+            errorMessage = errorResponse;
+          } else if (errorResponse.message) {
+            errorMessage = errorResponse.message;
+          } else if (errorResponse.errorMessage) {
+            errorMessage = errorResponse.errorMessage;
+          } else if (errorResponse.title) {
+            errorMessage = errorResponse.title;
+          } else if (errorResponse.detail) {
+            errorMessage = errorResponse.detail;
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+
+        throw new Error(errorMessage);
+      })
+    );
+  }
+
+  duplicateSubmission(id: number): Observable<FormSubmissionDto> {
+    return this.http.post<any>(`${this.baseUrl}/${id}/duplicate`, {}).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object') {
+          return this.normalizeSubmissionDto(response.data || response.result || response);
+        }
+
+        return this.normalizeSubmissionDto(response);
+      }),
+      catchError((error) => {
+        console.error(`[FormSubmissionsService] Error duplicating form submission ${id}:`, error);
+
+        const errorResponse = error?.error;
+        let errorMessage = 'Failed to duplicate form submission';
+
+        if (error?.status === 404) {
+          errorMessage = 'Submission or duplicate endpoint was not found.';
+        } else if (error?.status === 401) {
+          errorMessage = 'Unauthorized. Please log in again.';
+        } else if (error?.status === 403) {
+          errorMessage = 'You do not have permission to duplicate this submission.';
         } else if (errorResponse) {
           if (typeof errorResponse === 'string') {
             errorMessage = errorResponse;

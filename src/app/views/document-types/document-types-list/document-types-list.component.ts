@@ -171,7 +171,10 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       parentMenuId: [null],
       defaultSeriesId: [null],
       seriesDateFieldId: [null],
-      isActive: [true]
+      isActive: [true],
+      // #3: edit-while-under-approval settings
+      allowEditWhilePending: [true],
+      allowEditWhenApproved: [true]
     });
     
     // Initialize series form
@@ -754,7 +757,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       parentMenuId: null,
       defaultSeriesId: null,
       seriesDateFieldId: null,
-      isActive: true
+      isActive: true,
+      allowEditWhilePending: true,
+      allowEditWhenApproved: true
     });
     this.availableSeriesDateFields = [];
     this.loadedSeriesDateFieldsFormId = null;
@@ -788,7 +793,9 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       parentMenuId: documentType.parentMenuId || null,
       defaultSeriesId: documentType.defaultSeriesId ?? null,
       seriesDateFieldId: documentType.seriesDateFieldId ?? null,
-      isActive: documentType.isActive !== false
+      isActive: documentType.isActive !== false,
+      allowEditWhilePending: (documentType as any).allowEditWhilePending !== false,
+      allowEditWhenApproved: (documentType as any).allowEditWhenApproved !== false
     });
     this.handleSeriesDateFieldDependencies();
     
@@ -957,9 +964,11 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
         menuCaption: formData.menuCaption.trim(),
         menuOrder: formData.menuOrder !== null && formData.menuOrder !== undefined ? Number(formData.menuOrder) : 0,
         defaultSeriesId: formData.defaultSeriesId ? Number(formData.defaultSeriesId) : null,
-        seriesDateFieldId: formData.seriesDateFieldId ? Number(formData.seriesDateFieldId) : null
-      };
-      
+        seriesDateFieldId: formData.seriesDateFieldId ? Number(formData.seriesDateFieldId) : null,
+        allowEditWhilePending: formData.allowEditWhilePending !== false,
+        allowEditWhenApproved: formData.allowEditWhenApproved !== false
+      } as any;
+
       console.log('[DocumentTypesList] Creating document type with DTO:', createDto);
 
       // Only add parentMenuId if it has a valid value
@@ -1032,8 +1041,10 @@ export class DocumentTypesListComponent implements OnInit, OnDestroy {
       parentMenuId: updateParentMenuId,
       defaultSeriesId: formData.defaultSeriesId ? Number(formData.defaultSeriesId) : null,
       seriesDateFieldId: formData.seriesDateFieldId ? Number(formData.seriesDateFieldId) : null,
-      isActive: formData.isActive !== false
-    };
+      isActive: formData.isActive !== false,
+      allowEditWhilePending: formData.allowEditWhilePending !== false,
+      allowEditWhenApproved: formData.allowEditWhenApproved !== false
+    } as any;
 
     this.documentTypesService.updateDocumentType(this.editingDocumentType.id, updateDto).subscribe({
       next: () => {

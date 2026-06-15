@@ -42,7 +42,7 @@
 
       &:hover {
         background: #e2e8f0;
-        color: #3b82f6;
+        color: #14b8a6;
         transform: translateX(-2px);
       }
 
@@ -64,7 +64,7 @@
         margin: 0 0 4px 0;
 
         i {
-          color: #3b82f6;
+          color: #14b8a6;
           font-size: 28px;
         }
 
@@ -116,7 +116,7 @@
 
       &:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #14b8a6;
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
       }
     }
@@ -188,7 +188,7 @@
     width: 60px;
     height: 60px;
     border: 5px solid #e2e8f0;
-    border-top: 5px solid #3b82f6;
+    border-top: 5px solid #14b8a6;
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin-bottom: 24px;
@@ -244,12 +244,12 @@
       &:hover {
         background: #f8fafc;
         transform: translateX(4px);
-        box-shadow: -4px 0 0 0 #3b82f6;
+        box-shadow: -4px 0 0 0 #14b8a6;
       }
 
       &.selected {
-        background: #eff6ff;
-        box-shadow: -4px 0 0 0 #2563eb;
+        background: #f0fdfa;
+        box-shadow: -4px 0 0 0 #0d9488;
       }
 
       &.no-data {
@@ -667,7 +667,7 @@
 
     &:focus {
       outline: none;
-      border-color: #3b82f6;
+      border-color: #14b8a6;
       box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
       transform: translateY(-1px);
     }
@@ -766,12 +766,12 @@
   }
 
   &.btn-primary {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
     color: white;
-    border: 1px solid #2563eb;
+    border: 1px solid #0d9488;
 
     &:hover:not(:disabled) {
-      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
       transform: translateY(-2px);
       box-shadow: 0 6px 12px rgba(59, 130, 246, 0.4);
     }
@@ -870,7 +870,7 @@
   transition: all 0.2s ease;
 
   &:hover {
-    border-color: #3b82f6;
+    border-color: #14b8a6;
     box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
   }
 }
@@ -907,7 +907,7 @@
 
     &:focus {
       outline: none;
-      border-color: #3b82f6;
+      border-color: #14b8a6;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
 

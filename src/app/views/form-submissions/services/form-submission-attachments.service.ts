@@ -19,6 +19,8 @@ export interface FormSubmissionAttachmentDto {
   fileSize: number;
   contentType: string;
   uploadedDate: Date;
+  uploadedByUserId?: string;
+  uploadedByName?: string;
   fileSizeFormatted?: string;
   downloadUrl?: string;
 }

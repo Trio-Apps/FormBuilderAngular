@@ -151,8 +151,8 @@
                   [icon]="row.isActive ? 'pi pi-ban' : 'pi pi-check'"
                   class="p-button-text p-button-sm action-btn"
                   (click)="toggleActive(row)"
-                  [disabled]="loading.toggle"
-                  [pTooltip]="row.isActive ? 'Deactivate' : 'Activate'"
+                  [disabled]="loading.toggle || !permissionService.canManageSmtpConfigs()"
+                  [pTooltip]="permissionService.canManageSmtpConfigs() ? (row.isActive ? 'Deactivate' : 'Activate') : 'You do not have permission to change SMTP config status'"
                   tooltipPosition="top"
                 ></button>
                 <button

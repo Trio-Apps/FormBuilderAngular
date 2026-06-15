@@ -33,6 +33,9 @@ export interface ApprovalStageDto {
   minimumRequiredRejections?: number | null;
   amountFieldCode?: string | null;
   requiresAdobeSign?: boolean;
+  approvalMode?: string; // 'Sequential' | 'Parallel'
+  enablePortalApproval?: boolean;
+  enableEmailApproval?: boolean;
   workflowName?: string;
 }
 
@@ -49,6 +52,9 @@ export interface CreateApprovalStageDto {
   minimumRequiredRejections?: number | null;
   amountFieldCode?: string | null;
   requiresAdobeSign?: boolean;
+  approvalMode?: string; // 'Sequential' | 'Parallel'
+  enablePortalApproval?: boolean;
+  enableEmailApproval?: boolean;
 }
 
 export interface UpdateApprovalStageDto {
@@ -64,6 +70,9 @@ export interface UpdateApprovalStageDto {
   minimumRequiredRejections?: number | null;
   amountFieldCode?: string | null;
   requiresAdobeSign?: boolean;
+  approvalMode?: string; // 'Sequential' | 'Parallel'
+  enablePortalApproval?: boolean;
+  enableEmailApproval?: boolean;
 }
 
 @Injectable({
@@ -184,7 +193,10 @@ export class ApprovalStageService {
       minimumRequiredAssignees: dto.minimumRequiredAssignees !== undefined ? dto.minimumRequiredAssignees : null,
       minimumRequiredRejections: dto.minimumRequiredRejections !== undefined ? dto.minimumRequiredRejections : null,
       amountFieldCode: dto.amountFieldCode || null,
-      requiresAdobeSign: dto.requiresAdobeSign === true
+      requiresAdobeSign: dto.requiresAdobeSign === true,
+      approvalMode: dto.approvalMode || 'Sequential',
+      enablePortalApproval: dto.enablePortalApproval !== false,
+      enableEmailApproval: dto.enableEmailApproval === true
     };
 
     console.log('[ApprovalStageService] Creating approval stage:', createDto);

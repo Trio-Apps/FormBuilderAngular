@@ -315,9 +315,9 @@
         <div class="ctd-mapping-empty" *ngIf="fieldMappingsArray.length === 0">No field mappings added yet.</div>
         <div *ngFor="let mapping of fieldMappingsArray.controls; let i = index" [formGroupName]="i" class="ctd-mapping-card">
           <div class="ctd-mapping-row">
-            <div class="ctd-mapping-field"><label>Source Field</label><select formControlName="sourceFieldCode" class="ctd-control"><option [ngValue]="null">Select source field</option><option *ngFor="let field of sourceFields" [ngValue]="field.fieldCode">{{ field.fieldName }} ({{ field.fieldCode }})</option></select></div>
+            <div class="ctd-mapping-field"><label>Source Field</label><select formControlName="sourceFieldCode" class="ctd-control"><option [ngValue]="null">Select source field</option><option *ngFor="let field of getAvailableSourceFields(i)" [ngValue]="field.fieldCode">{{ field.fieldName }} ({{ field.fieldCode }})</option></select></div>
             <div class="ctd-mapping-arrow"><i class="pi pi-arrow-right"></i></div>
-            <div class="ctd-mapping-field"><label>Target Field</label><select formControlName="targetFieldCode" class="ctd-control"><option [ngValue]="null">Select target field</option><option *ngFor="let field of targetFields" [ngValue]="field.fieldCode">{{ field.fieldName }} ({{ field.fieldCode }})</option></select></div>
+            <div class="ctd-mapping-field"><label>Target Field</label><select formControlName="targetFieldCode" class="ctd-control"><option [ngValue]="null">Select target field</option><option *ngFor="let field of getAvailableTargetFields(i)" [ngValue]="field.fieldCode">{{ field.fieldName }} ({{ field.fieldCode }})</option></select></div>
             <button type="button" class="ctd-icon-btn ctd-icon-btn-delete" (click)="removeFieldMapping(i)"><i class="pi pi-trash"></i></button>
           </div>
         </div>

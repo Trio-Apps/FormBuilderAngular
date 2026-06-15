@@ -17,7 +17,7 @@
         </button>
         <button class="btn-primary" 
                 *appHasPermission="['Submission_Allow_Create', 'Document_Allow_Create']"
-                [routerLink]="['/document-types', documentTypeId, 'submissions', 'new']" 
+                [routerLink]="['/document-submissions', documentTypeId, 'new']" 
                 [disabled]="loading.submissions || !documentType"
                 [title]="canCreateSubmissions ? '' : 'You do not have permission to create submissions'">
           <i class="pi pi-plus"></i>
@@ -90,7 +90,7 @@
           label="Create New Submission" 
           icon="pi pi-plus" 
           class="p-button-primary btn-primary" 
-          [routerLink]="['/document-types', documentTypeId, 'submissions', 'new']"
+          [routerLink]="['/document-submissions', documentTypeId, 'new']"
           [disabled]="loading.submissions || !documentType"
           [title]="canCreateSubmissions ? '' : 'You do not have permission to create submissions'">
         </button>

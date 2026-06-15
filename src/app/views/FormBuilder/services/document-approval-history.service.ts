@@ -18,6 +18,7 @@ export interface DocumentApprovalHistoryDto {
   stageId: number;
   stageName?: string;
   actionType: ApprovalActionType;
+  approvalType?: string; // System | Outlook | DocuSign
   actionByUserId: string;
   actionByUserName?: string | null;
   actionDate: string | Date;

@@ -139,6 +139,9 @@
               <div class="document-name-cell">
                 <i class="pi pi-list"></i>
                 <span>{{ stage.stageName }}</span>
+                <span *ngIf="stage.approvalMode === 'Parallel'" class="badge badge-info" style="margin-inline-start:8px;">
+                  <i class="pi pi-users"></i> Parallel
+                </span>
               </div>
 </td>
             <td>
@@ -362,8 +365,23 @@
         </div>
       </div>
 
-      <!-- Minimum Required Assignees -->
+      <!-- Approval Mode -->
       <div class="form-field-wrapper">
+        <label class="field-label" for="approvalMode">Approval Mode</label>
+        <div class="field-input-wrapper">
+          <select id="approvalMode" name="approvalMode" formControlName="approvalMode" class="form-control">
+            <option value="Sequential">Sequential — quorum (Minimum Required Assignees)</option>
+            <option value="Parallel">Parallel — every approver at this level must approve</option>
+          </select>
+        </div>
+        <div class="field-hint">
+          <i class="pi pi-info-circle"></i>
+          In <strong>Parallel</strong> mode all active approvers of this stage must approve before it advances (a single rejection still rejects). <strong>Sequential</strong> uses the quorum below.
+        </div>
+      </div>
+
+      <!-- Minimum Required Assignees -->
+      <div class="form-field-wrapper" *ngIf="stageForm.get('approvalMode')?.value !== 'Parallel'">
         <label class="field-label" for="minimumRequiredAssignees">Minimum Required Assignees</label>
         <div class="field-input-wrapper">
           <p-inputNumber
@@ -404,22 +422,26 @@
         </div>
       </div>
 
-      <!-- Signature Required -->
+      <!-- Approval channels -->
       <div class="form-field-wrapper">
+        <label class="field-label">Approval Channels</label>
         <div class="checkbox-group">
           <div class="checkbox-option">
-            <p-checkbox
-              formControlName="requiresAdobeSign"
-              [binary]="true"
-              inputId="requiresAdobeSign"
-              name="requiresAdobeSign">
-            </p-checkbox>
-            <label class="checkbox-label" for="requiresAdobeSign">Requires Signature After Submit</label>
+            <p-checkbox formControlName="enablePortalApproval" [binary]="true" inputId="enablePortalApproval" name="enablePortalApproval"></p-checkbox>
+            <label class="checkbox-label" for="enablePortalApproval">Portal (in-app approval inbox)</label>
+          </div>
+          <div class="checkbox-option">
+            <p-checkbox formControlName="enableEmailApproval" [binary]="true" inputId="enableEmailApproval" name="enableEmailApproval"></p-checkbox>
+            <label class="checkbox-label" for="enableEmailApproval">Email (Approve/Reject link sent to approvers)</label>
+          </div>
+          <div class="checkbox-option">
+            <p-checkbox formControlName="requiresAdobeSign" [binary]="true" inputId="requiresAdobeSign" name="requiresAdobeSign"></p-checkbox>
+            <label class="checkbox-label" for="requiresAdobeSign">DocuSign (e-signature acts as approval)</label>
           </div>
         </div>
         <div class="field-hint">
           <i class="pi pi-info-circle"></i>
-          If enabled, submitted user must sign this stage using DocuSign.
+          Enable one or more channels. The <strong>first approval from any channel wins</strong> — the others are then voided automatically.
         </div>
       </div>
 

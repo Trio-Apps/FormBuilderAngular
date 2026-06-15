@@ -15,6 +15,8 @@
         icon="pi pi-plus"
         class="p-button-outlined"
         (click)="openSubMenuModal()"
+        [disabled]="!permissionService.canCreateTableSubMenus() && !permissionService.canManageTableSubMenus()"
+        [pTooltip]="(permissionService.canCreateTableSubMenus() || permissionService.canManageTableSubMenus()) ? '' : 'You do not have permission to create sub menus'"
         *ngIf="activeTab === 'submenus'">
       </button>
       <button
@@ -24,6 +26,8 @@
         icon="pi pi-plus"
         class="p-button-success"
         (click)="openMenuDocumentModal(selectedSubMenuForDocuments || undefined)"
+        [disabled]="!permissionService.canCreateTableSubMenus() && !permissionService.canManageTableSubMenus()"
+        [pTooltip]="(permissionService.canCreateTableSubMenus() || permissionService.canManageTableSubMenus()) ? '' : 'You do not have permission to assign documents'"
         *ngIf="activeTab === 'documents'">
       </button>
     </div>
@@ -91,14 +95,16 @@
                 type="button"
                 icon="pi pi-pencil"
                 class="p-button-text p-button-sm"
-                (click)="openSubMenuModal(subMenu)">
+                (click)="openSubMenuModal(subMenu)"
+                [disabled]="!permissionService.canEditTableSubMenus() && !permissionService.canManageTableSubMenus()">
               </button>
               <button
                 pButton
                 type="button"
                 icon="pi pi-trash"
                 class="p-button-text p-button-sm"
-                (click)="deleteSubMenu(subMenu)">
+                (click)="deleteSubMenu(subMenu)"
+                [disabled]="!permissionService.canDeleteTableSubMenus() && !permissionService.canManageTableSubMenus()">
               </button>
             </app-table-actions>
           </td>
@@ -153,14 +159,16 @@
                 type="button"
                 icon="pi pi-pencil"
                 class="p-button-text p-button-sm"
-                (click)="openMenuDocumentModal(selectedSubMenuForDocuments || undefined, document)">
+                (click)="openMenuDocumentModal(selectedSubMenuForDocuments || undefined, document)"
+                [disabled]="!permissionService.canEditTableSubMenus() && !permissionService.canManageTableSubMenus()">
               </button>
               <button
                 pButton
                 type="button"
                 icon="pi pi-trash"
                 class="p-button-text p-button-sm"
-                (click)="deleteMenuDocument(document)">
+                (click)="deleteMenuDocument(document)"
+                [disabled]="!permissionService.canDeleteTableSubMenus() && !permissionService.canManageTableSubMenus()">
               </button>
             </app-table-actions>
           </td>

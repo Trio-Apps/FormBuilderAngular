@@ -3,7 +3,8 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { finalize } from 'rxjs/operators';
-import { MessageService } from 'primeng/api';
+import { ConfirmationService, MessageService } from 'primeng/api';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { CrystalLayoutByDocumentTypeDto, CrystalReportsService } from '../../FormBuilder/services/crystal-reports.service';
 import { CopyToDocumentService } from '../../FormBuilder/services/copy-to-document.service';
 import { DocumentSeriesService } from '../../FormBuilder/services/document-series.service';
@@ -34,9 +35,10 @@ interface SubmissionDetailTabViewModel {
 @Component({
   selector: 'app-submissions-list',
   standalone: true,
-  imports: [CommonModule, DatePipe, TableShellComponent, DialogShellComponent],
+  imports: [CommonModule, DatePipe, ConfirmDialogModule, TableShellComponent, DialogShellComponent],
   templateUrl: './submissions-list.component.html',
-  styleUrl: './submissions-list.component.scss'
+  styleUrl: './submissions-list.component.scss',
+  providers: [ConfirmationService]
 })
 export class SubmissionsListComponent implements OnInit {
   private readonly unavailableLayoutsStorageKey = 'submissions_unavailable_crystal_layout_doc_types';
@@ -52,11 +54,19 @@ export class SubmissionsListComponent implements OnInit {
   executingBySubmission: Record<number, boolean> = {};
   postingBySubmission: Record<number, boolean> = {};
   cancellingBySubmission: Record<number, boolean> = {};
+  duplicatingBySubmission: Record<number, boolean> = {};
   executionResultsBySubmission: Record<number, SapIntegrationExecuteResultDto> = {};
   loadingCopyToDocumentSubmissionId: number | null = null;
   copySetupEligibilityBySubmission: Record<number, boolean> = {};
   successfulCopyBySubmission: Record<number, boolean> = {};
   applicableManualSetupKeysBySubmission: Record<number, string> = {};
+  // #7: the actual matching manual setups per submission, so the user can pick a target
+  // when more than one Copy To setup applies (instead of running all and creating many drafts).
+  applicableManualSetupsBySubmission: Record<number, CopyToDocumentSetupDto[]> = {};
+  copyToSelectVisible = false;
+  copyToSelectSubmission: FormSubmissionDto | null = null;
+  copyToSelectSetups: CopyToDocumentSetupDto[] = [];
+  selectedCopyToSetupId: number | null = null;
   pendingNumberPreviewBySeries: Record<number, string> = {};
   pendingNumberPreviewBySubmission: Record<number, string> = {};
   downloadingPdfBySubmission: Record<number, boolean> = {};
@@ -79,6 +89,7 @@ export class SubmissionsListComponent implements OnInit {
     private copyToDocumentService: CopyToDocumentService,
     private documentSeriesService: DocumentSeriesService,
     private messageService: MessageService,
+    private confirmationService: ConfirmationService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
     private permissionService: PermissionService,
@@ -177,6 +188,7 @@ export class SubmissionsListComponent implements OnInit {
         this.submissions = [];
         this.copySetupEligibilityBySubmission = {};
         this.applicableManualSetupKeysBySubmission = {};
+      this.applicableManualSetupsBySubmission = {};
         this.pendingNumberPreviewBySeries = {};
         this.pendingNumberPreviewBySubmission = {};
         this.pageError = 'Unable to load submissions right now.';
@@ -212,6 +224,18 @@ export class SubmissionsListComponent implements OnInit {
     }
 
     return 'Pending Number';
+  }
+
+  // #11: the displayed number is only TENTATIVE until the document is posted (the real,
+  // stable number is assigned at post time from the series counter). Until then it is a
+  // preview that can shift when another document in the same series gets posted. The UI
+  // marks it as a preview so users don't treat it as final.
+  isSubmissionNumberPreview(submission: FormSubmissionDto): boolean {
+    const finalNumber = (submission?.documentNumber || '').trim();
+    if (finalNumber) {
+      return false;
+    }
+    return this.getSubmissionDisplayNumber(submission) !== 'Pending Number';
   }
 
   getSubmissionDetailsDisplayNumber(detail: FormSubmissionDetailDto | null, summary?: FormSubmissionDto | null): string {
@@ -294,7 +318,7 @@ export class SubmissionsListComponent implements OnInit {
       return 'status-chip--posted';
     }
 
-    if (normalized === 'approved') {
+    if (normalized === 'approved' || normalized === 'approved-signed') {
       return 'status-chip--approved';
     }
 
@@ -310,10 +334,7 @@ export class SubmissionsListComponent implements OnInit {
       return 'status-chip--draft';
     }
 
-    if (normalized === 'pending') {
-      return 'status-chip--submitted';
-    }
-
+    // 'submitted' (and any other in-progress status) falls through to the submitted chip.
     return 'status-chip--submitted';
   }
 
@@ -353,9 +374,8 @@ export class SubmissionsListComponent implements OnInit {
     }
 
     this.router.navigate([
-      '/document-types',
+      '/document-submissions',
       Number(submission.documentTypeId),
-      'submissions',
       Number(submission.id),
       'edit'
     ]);
@@ -648,6 +668,17 @@ export class SubmissionsListComponent implements OnInit {
 
     const normalizedStatus = this.getNormalizedStatus(submission);
     return normalizedStatus !== 'cancelled' && normalizedStatus !== 'rejected';
+  }
+
+  canDuplicate(submission: FormSubmissionDto): boolean {
+    const submissionId = Number(submission?.id || 0);
+    const documentTypeId = Number(submission?.documentTypeId || 0);
+    return submissionId > 0 && documentTypeId > 0;
+  }
+
+  getDuplicateButtonText(submission: FormSubmissionDto): string {
+    const submissionId = Number(submission?.id || 0);
+    return this.duplicatingBySubmission[submissionId] ? 'Duplicating...' : 'Duplicate';
   }
 
   private loadPendingNumberPreviews(): void {
@@ -946,7 +977,7 @@ export class SubmissionsListComponent implements OnInit {
     if (Number(submission.parentDocumentId || 0) > 0) return false;
 
     const normalizedStatus = this.getNormalizedStatus(submission);
-    if (normalizedStatus !== 'approved' && normalizedStatus !== 'posted open') {
+    if (normalizedStatus !== 'posted open') {
       return false;
     }
 
@@ -971,7 +1002,7 @@ export class SubmissionsListComponent implements OnInit {
     }
 
     if (!this.canExecuteManualCopyToDocument(submission)) {
-      return 'Copy is available for approved or posted open records.';
+      return 'Copy is available after posting the document.';
     }
 
     return 'Run manual Copy To Document setups for this submission.';
@@ -986,9 +1017,58 @@ export class SubmissionsListComponent implements OnInit {
       return;
     }
 
+    // #7: if more than one Copy To setup applies, let the user choose the target instead of
+    // running them all (which would create several drafts at once).
+    const applicable = this.applicableManualSetupsBySubmission[Number(submission?.id || 0)] || [];
+    if (applicable.length > 1) {
+      this.copyToSelectSubmission = submission;
+      this.copyToSelectSetups = applicable;
+      this.selectedCopyToSetupId = Number(applicable[0]?.id || null) || null;
+      this.copyToSelectVisible = true;
+      return;
+    }
+
+    // #18: single setup — confirm before running (it creates/updates target documents).
+    const documentLabel = submission.documentNumber || `#${Number(submission?.id || 0)}`;
+    this.confirmationService.confirm({
+      header: 'Copy To Document',
+      message: `Run Copy To Document for submission ${documentLabel}? This will create or update the configured target document(s).`,
+      icon: 'pi pi-copy',
+      acceptLabel: 'Yes, run',
+      rejectLabel: 'Cancel',
+      acceptButtonStyleClass: 'p-button-primary',
+      rejectButtonStyleClass: 'p-button-text',
+      accept: () => this.runManualCopyToDocument(submission)
+    });
+  }
+
+  // #7: confirm the chosen target setup from the selection dialog and run only that one.
+  confirmCopyToSelection(): void {
+    const submission = this.copyToSelectSubmission;
+    const setupId = Number(this.selectedCopyToSetupId || 0);
+    if (!submission || !setupId) {
+      return;
+    }
+    this.copyToSelectVisible = false;
+    this.runManualCopyToDocument(submission, setupId);
+  }
+
+  cancelCopyToSelection(): void {
+    this.copyToSelectVisible = false;
+    this.copyToSelectSubmission = null;
+    this.copyToSelectSetups = [];
+    this.selectedCopyToSetupId = null;
+  }
+
+  getCopyToSetupTargetLabel(setup: CopyToDocumentSetupDto): string {
+    const target = setup?.targetDocumentTypeName || setup?.config?.targetDocumentTypeId || '';
+    return target ? `→ ${target}` : '';
+  }
+
+  private runManualCopyToDocument(submission: FormSubmissionDto, setupId?: number): void {
     this.loadingCopyToDocumentSubmissionId = submission.id;
 
-    this.copyToDocumentService.executeManualSetupsForSubmission(submission.id).pipe(
+    this.copyToDocumentService.executeManualSetupsForSubmission(submission.id, setupId ? { setupId } : undefined).pipe(
       finalize(() => {
         this.loadingCopyToDocumentSubmissionId = null;
       })
@@ -1024,9 +1104,8 @@ export class SubmissionsListComponent implements OnInit {
             if (successfulTargets.length === 1) {
               const target = successfulTargets[0];
               this.router.navigate([
-                '/document-types',
+                '/document-submissions',
                 Number(target.targetDocumentTypeId),
-                'submissions',
                 Number(target.targetDocumentId),
                 'edit'
               ]);
@@ -1075,6 +1154,54 @@ export class SubmissionsListComponent implements OnInit {
     return this.cancellingBySubmission[submissionId] ? 'Cancelling...' : 'Cancel';
   }
 
+  duplicateSubmission(submission: FormSubmissionDto): void {
+    const submissionId = Number(submission?.id || 0);
+    if (!submissionId || !this.canDuplicate(submission) || this.duplicatingBySubmission[submissionId]) {
+      return;
+    }
+
+    this.duplicatingBySubmission[submissionId] = true;
+    this.pageError = '';
+
+    this.formSubmissionsService.duplicateSubmission(submissionId).pipe(
+      finalize(() => {
+        this.duplicatingBySubmission[submissionId] = false;
+      })
+    ).subscribe({
+      next: (duplicatedSubmission) => {
+        const targetDocumentTypeId = Number(duplicatedSubmission?.documentTypeId || submission.documentTypeId || 0);
+        const targetSubmissionId = Number(duplicatedSubmission?.id || 0);
+
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Duplicate Submission',
+          detail: 'Draft copy created successfully.'
+        });
+
+        if (targetDocumentTypeId > 0 && targetSubmissionId > 0) {
+          this.router.navigate([
+            '/document-submissions',
+            targetDocumentTypeId,
+            targetSubmissionId,
+            'edit'
+          ]);
+          return;
+        }
+
+        this.loadSubmissions();
+      },
+      error: (error: Error) => {
+        const message = error?.message || 'Failed to duplicate the submission.';
+        this.pageError = message;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Duplicate Submission',
+          detail: message
+        });
+      }
+    });
+  }
+
   postSubmission(submission: FormSubmissionDto): void {
     const submissionId = Number(submission?.id || 0);
     if (!submissionId || this.postingBySubmission[submissionId] || !this.canPost(submission)) {
@@ -1102,6 +1229,20 @@ export class SubmissionsListComponent implements OnInit {
       return;
     }
 
+    const documentLabel = submission.documentNumber || `#${submissionId}`;
+    this.confirmationService.confirm({
+      header: 'Cancel Submission',
+      message: `Are you sure you want to cancel submission ${documentLabel}? This action will mark the document as cancelled.`,
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Yes, cancel',
+      rejectLabel: 'No',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-text',
+      accept: () => this.executeCancelSubmission(submissionId)
+    });
+  }
+
+  private executeCancelSubmission(submissionId: number): void {
     this.cancellingBySubmission[submissionId] = true;
     this.pageError = '';
 
@@ -1210,8 +1351,14 @@ export class SubmissionsListComponent implements OnInit {
       ? response.items.filter((item: any) => !item?.success)
       : [];
 
+    // Prefix each error with the setup that failed so the user knows WHICH setup/record
+    // failed (issue #19), not just a generic message.
     const messages = failedItems
-      .map((item: any) => String(item?.errorMessage || '').trim())
+      .map((item: any) => {
+        const setup = String(item?.setupName || '').trim();
+        const err = String(item?.errorMessage || '').trim() || 'Unknown error';
+        return setup ? `${setup}: ${err}` : err;
+      })
       .filter((message: string) => !!message);
 
     if (messages.length === 0) {
@@ -1219,7 +1366,7 @@ export class SubmissionsListComponent implements OnInit {
     }
 
     const uniqueMessages = Array.from(new Set(messages));
-    return uniqueMessages.slice(0, 2).join(' | ');
+    return uniqueMessages.slice(0, 3).join(' | ');
   }
 
   private loadCopyToDocumentAvailability(): void {
@@ -1227,6 +1374,7 @@ export class SubmissionsListComponent implements OnInit {
       this.copySetupEligibilityBySubmission = {};
       this.successfulCopyBySubmission = {};
       this.applicableManualSetupKeysBySubmission = {};
+      this.applicableManualSetupsBySubmission = {};
       return;
     }
 
@@ -1242,6 +1390,7 @@ export class SubmissionsListComponent implements OnInit {
         const activeManualSetups = (setups || []).filter((setup) => this.isManualActiveSetup(setup));
         const eligibilityMap: Record<number, boolean> = {};
         const setupKeysMap: Record<number, string> = {};
+        const setupsMap: Record<number, CopyToDocumentSetupDto[]> = {};
 
         for (const submission of submissions) {
           const submissionId = Number(submission?.id || 0);
@@ -1255,16 +1404,19 @@ export class SubmissionsListComponent implements OnInit {
 
           eligibilityMap[submissionId] = matchingSetups.length > 0;
           setupKeysMap[submissionId] = this.buildSetupKey(matchingSetups);
+          setupsMap[submissionId] = matchingSetups;
         }
 
         this.copySetupEligibilityBySubmission = eligibilityMap;
         this.applicableManualSetupKeysBySubmission = setupKeysMap;
+        this.applicableManualSetupsBySubmission = setupsMap;
         this.reconcileManualCopyCompletionState();
       },
       error: () => {
         this.copySetupEligibilityBySubmission = {};
         this.successfulCopyBySubmission = {};
         this.applicableManualSetupKeysBySubmission = {};
+      this.applicableManualSetupsBySubmission = {};
       }
     });
   }

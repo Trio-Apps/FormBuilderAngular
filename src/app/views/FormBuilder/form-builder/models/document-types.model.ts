@@ -16,6 +16,8 @@ export interface DocumentType {
   seriesDateFieldName?: string | null;
   approvalWorkflowId?: number | null;
   approvalWorkflowName?: string;
+  allowEditWhilePending?: boolean;
+  allowEditWhenApproved?: boolean;
 }
 
 export interface CreateDocumentTypeDto {
@@ -30,6 +32,8 @@ export interface CreateDocumentTypeDto {
   isActive?: boolean;
   isDeleted?: boolean;
   approvalWorkflowId?: number | null; // Optional - null means no workflow (auto-approve)
+  allowEditWhilePending?: boolean;
+  allowEditWhenApproved?: boolean;
 }
 
 export interface UpdateDocumentTypeDto {
@@ -43,6 +47,8 @@ export interface UpdateDocumentTypeDto {
   seriesDateFieldId?: number | null;
   isActive?: boolean;
   approvalWorkflowId?: number | null; // Optional - null means no workflow (auto-approve)
+  allowEditWhilePending?: boolean;
+  allowEditWhenApproved?: boolean;
 }
 
 // ==================== DOCUMENT SERIES ====================

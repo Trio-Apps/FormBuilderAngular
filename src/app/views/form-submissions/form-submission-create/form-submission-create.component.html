@@ -3,7 +3,7 @@
   <div class="top-navbar">
     <div class="nav-content">
       <div class="nav-left">
-        <button class="nav-back-btn" [routerLink]="['/document-types', documentTypeId, 'submissions']" title="Back to Submissions">
+        <button class="nav-back-btn" [routerLink]="['/document-submissions', documentTypeId]" title="Back to Submissions">
           <i class="pi pi-arrow-left"></i>
         </button>
         <div class="nav-title-section">
@@ -11,9 +11,12 @@
           <p class="page-subtitle">{{ documentType?.name || 'Form Submission' }}</p>
         </div>
       </div>
-      <div class="nav-right">
+      <div class="nav-right" [formGroup]="submissionForm">
         <div class="series-selector" *ngIf="documentSeries.length > 0">
-          <label for="seriesId" class="series-selector-label">Series</label>
+          <label for="seriesId" class="series-selector-label">
+            Series
+            <span class="series-selector-hint" *ngIf="documentSeries.length > 1" title="This document type has more than one numbering series. Pick which one to use for this document's number.">({{ documentSeries.length }} available)</span>
+          </label>
           <select
             id="seriesId"
             formControlName="seriesId"
@@ -21,7 +24,7 @@
           >
             <option value="">Select series</option>
             <option *ngFor="let series of documentSeries" [value]="series.id">
-              {{ series.seriesCode || ('Series ' + series.id) }}
+              {{ series.seriesCode || ('Series ' + series.id) }}{{ series.isDefault ? ' — Default' : '' }}
             </option>
           </select>
         </div>
@@ -41,7 +44,7 @@
         <span>Document Types</span>
       </a>
       <i class="pi pi-angle-right breadcrumb-separator"></i>
-      <a [routerLink]="['/document-types', documentTypeId, 'submissions']" class="breadcrumb-link">
+      <a [routerLink]="['/document-submissions', documentTypeId]" class="breadcrumb-link">
         <i class="pi pi-list"></i>
         <span>{{ documentType?.name || 'Submissions' }}</span>
       </a>
@@ -96,7 +99,7 @@
           </div>
 
           <!-- Fields Section -->
-          <div *ngIf="!loading.fields && fields.length > 0" class="google-form-fields">
+          <div *ngIf="!loading.fields && fields.length > 0" class="google-form-fields" [class.signed-locked-area]="isSubmissionSigned">
             <div [formGroup]="fieldsForm" class="fields-grid">
               <ng-container *ngFor="let field of fields">
                 <div *ngIf="isFieldVisible(field)" class="form-field-wrapper" [class.full-width-field]="isWideLayoutField(field)">
@@ -177,7 +180,7 @@
                       [formControlName]="getFieldId(field)!"
                       class="form-input"
                       [class.has-error]="hasFieldError(field)"
-                      (change)="clearFieldError(field)">
+                      (change)="onSelectChange(field, $event); clearFieldError(field)">
 
                     <!-- DateTime Input -->
                     <input
@@ -212,25 +215,60 @@
                     </textarea>
 
                     <!-- Select / Dropdown (Single or Multiple) -->
-                    <div *ngSwitchCase="'select'" class="select-wrapper" 
+                    <div *ngSwitchCase="'select'" class="select-wrapper"
                       [class.multiple-select]="field.fieldType?.allowMultiple"
                       [class.has-error]="hasFieldError(field)">
-                      <select
-                        [id]="getFieldId(field)!"
-                        [formControlName]="getFieldId(field)!"
-                        [multiple]="field.fieldType?.allowMultiple || false"
-                        class="form-select"
-                        [class.has-error]="hasFieldError(field)"
-                        (change)="clearFieldError(field)">
-                        <option [ngValue]="''"
-                          *ngIf="!(field.fieldType?.allowMultiple)">
-                          {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') : getFieldPlaceholder(field) }}
-                        </option>
-                        <option *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue" 
-                          [ngValue]="opt.optionValue">
+                      <ng-container *ngIf="isSearchableSelectField(field); else regularSelectTemplate">
+                        <div class="searchable-select">
+                          <input
+                            type="text"
+                            class="form-input searchable-select-input"
+                            [id]="getFieldId(field)!"
+                            [class.has-error]="hasFieldError(field)"
+                            [placeholder]="isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') : getFieldPlaceholder(field)"
+                            [value]="getSearchableFieldQuery(field)"
+                            [disabled]="!isFieldEditable(field)"
+                            autocomplete="off"
+                            (focus)="clearFieldError(field); openSearchableFieldDropdown(field)"
+                            (input)="clearFieldError(field); onSearchableFieldInput(field, $event)"
+                            (blur)="onSearchableFieldBlur(field)">
+
+                          <div class="searchable-select-panel" *ngIf="shouldShowSearchableFieldDropdown(field)">
+                            <div class="searchable-select-state" *ngIf="isLoadingFieldOptions(field)">
+                              {{ translationService.translate('formView.loading') || 'Loading...' }}
+                            </div>
+                            <button
+                              type="button"
+                              class="searchable-select-option"
+                              *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue"
+                              (mousedown)="$event.preventDefault(); selectSearchableFieldOption(field, opt)">
+                              {{ getOptionText(opt) }}
+                            </button>
+                            <div class="searchable-select-state" *ngIf="!isLoadingFieldOptions(field) && getFieldOptions(field).length === 0">
+                              No results found.
+                            </div>
+                          </div>
+                        </div>
+                      </ng-container>
+
+                      <ng-template #regularSelectTemplate>
+                        <select
+                          [id]="getFieldId(field)!"
+                          [formControlName]="getFieldId(field)!"
+                          [multiple]="field.fieldType?.allowMultiple || false"
+                          class="form-select"
+                          [class.has-error]="hasFieldError(field)"
+                          (change)="onSelectChange(field, $event); clearFieldError(field)">
+                          <option [ngValue]="''"
+                            *ngIf="!(field.fieldType?.allowMultiple)">
+                            {{ isLoadingFieldOptions(field) ? (translationService.translate('formView.loading') || 'Loading...') : getFieldPlaceholder(field) }}
+                          </option>
+                        <option *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue"
+                          [ngValue]="getOptionValue(opt)">
                           {{ getOptionText(opt) }}
                         </option>
-                      </select>
+                        </select>
+                      </ng-template>
                       <div class="multiple-select-hint" *ngIf="field.fieldType?.allowMultiple">
                         <small>
                           <i class="pi pi-info-circle"></i>
@@ -249,13 +287,13 @@
                       <div class="radio-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
                         <input
                           type="radio"
-                          [id]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)"
+                          [id]="'radio-' + field.id + '-' + (opt.id || getOptionValue(opt))"
                           [name]="getFieldId(field)!"
-                          [value]="opt.optionValue"
+                          [value]="getOptionValue(opt)"
                           [formControlName]="getFieldId(field)!"
-                          [checked]="isOptionSelected(field, opt.optionValue)"
-                          (change)="onRadioChange(field, opt.optionValue, $event); clearFieldError(field)">
-                        <label [for]="'radio-' + field.id + '-' + (opt.id || opt.optionValue)" class="radio-label">
+                          [checked]="isOptionSelected(field, getOptionValue(opt))"
+                          (change)="onRadioChange(field, getOptionValue(opt), $event); clearFieldError(field)">
+                        <label [for]="'radio-' + field.id + '-' + (opt.id || getOptionValue(opt))" class="radio-label">
                           {{ getOptionText(opt) }}
                         </label>
                       </div>
@@ -272,12 +310,12 @@
                       <div class="checkbox-option" *ngFor="let opt of getFieldOptions(field); trackBy: trackByOptionValue">
                         <input
                           type="checkbox"
-                          [id]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
-                          [name]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)"
-                          [value]="opt.optionValue"
-                          [checked]="isCheckboxSelected(field, opt.optionValue)"
-                          (change)="onCheckboxChange(field, opt.optionValue, $event); clearFieldError(field)">
-                        <label [for]="'chk-' + field.id + '-' + (opt.id || opt.optionValue)" class="checkbox-label">
+                          [id]="'chk-' + field.id + '-' + (opt.id || getOptionValue(opt))"
+                          [name]="'chk-' + field.id + '-' + (opt.id || getOptionValue(opt))"
+                          [value]="getOptionValue(opt)"
+                          [checked]="isCheckboxSelected(field, getOptionValue(opt))"
+                          (change)="onCheckboxChange(field, getOptionValue(opt), $event); clearFieldError(field)">
+                        <label [for]="'chk-' + field.id + '-' + (opt.id || getOptionValue(opt))" class="checkbox-label">
                           {{ getOptionText(opt) }}
                         </label>
                       </div>
@@ -363,7 +401,19 @@
                         <div class="file-info">
                           <div class="file-name">{{ attachment.fileName }}</div>
                           <div class="file-size">{{ formatFileSize(attachment.fileSize) }}</div>
+                          <div class="file-meta" *ngIf="attachment.uploadedByName || attachment.uploadedDate">
+                            <i class="pi pi-user"></i>
+                            <span class="file-meta-user">{{ attachment.uploadedByName || '—' }}</span>
+                            <span class="file-meta-date" *ngIf="attachment.uploadedDate"> · {{ attachment.uploadedDate | date:'yyyy-MM-dd HH:mm' }}</span>
+                          </div>
                         </div>
+                        <button
+                          type="button"
+                          class="preview-file-btn"
+                          (click)="viewExistingAttachment(attachment)"
+                          title="View">
+                          <i class="pi pi-eye"></i>
+                        </button>
                         <a [href]="getAttachmentDownloadUrl(attachment.id!)" 
                            target="_blank"
                            class="download-link"
@@ -372,18 +422,10 @@
                         </a>
                         <button
                           type="button"
-                          class="preview-file-btn"
-                          *ngIf="canPreviewAttachment(attachment)"
-                          (click)="openExistingAttachmentPreview(attachment)"
-                          title="Preview">
-                          <i class="pi pi-eye"></i>
-                        </button>
-                        <button
-                          type="button"
                           class="remove-file-btn"
                           (click)="removeExistingAttachment(field.id!, attachment.id!)"
-                          title="Remove file">
-                          <i class="pi pi-times"></i>
+                          title="Delete file">
+                          <i class="pi pi-trash"></i>
                         </button>
                       </div>
                     </div>
@@ -520,6 +562,7 @@
 
           <!-- Final Submit button - enabled when submissionForm is valid (tabId is set) -->
           <button
+            *ngIf="!isSubmissionSigned"
             type="button"
             class="btn-submit"
             (click)="saveSubmission()"
@@ -539,6 +582,69 @@
             (click)="openSigningUrl()">
             <i class="pi pi-file-edit"></i> Sign now
           </button>
+
+          <!-- Generate Letter (Crystal layout PDF) for the current submission -->
+          <button
+            *ngIf="canGenerateLetter"
+            type="button"
+            class="btn-letter"
+            (click)="generateLetter()"
+            [disabled]="generatingLetter"
+            title="Generate the letter (PDF) for this document using its configured layout">
+            <span *ngIf="!generatingLetter">
+              <i class="pi pi-file-pdf"></i> Generate Letter
+            </span>
+            <span *ngIf="generatingLetter">
+              <i class="pi pi-spin pi-spinner"></i> Generating...
+            </span>
+          </button>
+
+          <!-- Letters (generation / escalation) -->
+          <button
+            *ngIf="canManageLetters"
+            type="button"
+            class="btn-letters"
+            (click)="openLettersDialog()"
+            title="Generate and manage letters (escalation, deadlines, signature)">
+            <i class="pi pi-inbox"></i> Letters
+          </button>
+
+          <!-- Contract clauses attached to this document -->
+          <button
+            *ngIf="canManageLetters"
+            type="button"
+            class="btn-letters"
+            (click)="openClausesDialog()"
+            title="Attach and manage contract clauses for this document">
+            <i class="pi pi-book"></i> Clauses
+          </button>
+
+          <!-- Send Email / Letters & follow-ups -->
+          <button
+            *ngIf="canSendEmail"
+            type="button"
+            class="btn-email"
+            (click)="openSendEmailDialog()"
+            title="Send an email for this document and view the Letters & follow-ups log">
+            <i class="pi pi-envelope"></i> Send Email
+          </button>
+
+          <!-- Mark as Signed (manual signature) -->
+          <button
+            *ngIf="canSignManually"
+            type="button"
+            class="btn-sign"
+            (click)="signManually()"
+            [disabled]="signingManual"
+            title="Mark this approved document as manually signed (locks all fields)">
+            <span *ngIf="!signingManual"><i class="pi pi-pencil"></i> Mark as Signed</span>
+            <span *ngIf="signingManual"><i class="pi pi-spin pi-spinner"></i> Signing...</span>
+          </button>
+
+          <!-- Signed indicator -->
+          <span *ngIf="isSubmissionSigned" class="signed-indicator" title="This document is signed and locked for editing">
+            <i class="pi pi-check-circle"></i> Signed &amp; Locked
+          </span>
         </div>
       </form>
     </div>
@@ -556,6 +662,186 @@
     </div>
     <div class="attachment-preview-footer">
       <span>{{ attachmentPreviewName }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Letters dialog -->
+<div class="email-overlay" *ngIf="showLettersDialog" (click)="closeLettersDialog()">
+  <div class="email-dialog letters-dialog" (click)="$event.stopPropagation()">
+    <div class="email-dialog-header letters-header">
+      <h3><i class="pi pi-inbox"></i> Letters</h3>
+      <button type="button" class="email-close" (click)="closeLettersDialog()"><i class="pi pi-times"></i></button>
+    </div>
+
+    <div class="email-dialog-body">
+      <div class="letters-generate">
+        <label>Generate a letter</label>
+        <div class="letters-generate-row">
+          <select [(ngModel)]="selectedLetterTypeId" [ngModelOptions]="{standalone:true}">
+            <option [ngValue]="null">Select letter type…</option>
+            <option *ngFor="let t of availableLetterTypes" [ngValue]="t.id">
+              {{ t.escalationOrder }}. {{ t.name }} ({{ t.deadlineDays }} wd{{ t.requiresSignature ? ', sign' : '' }})
+            </option>
+          </select>
+          <button type="button" class="btn-email" (click)="generateLetterInstance()" [disabled]="!selectedLetterTypeId || letterActionBusy">
+            <i class="pi pi-plus"></i> Generate
+          </button>
+        </div>
+        <small class="text-muted" *ngIf="availableLetterTypes.length === 0 && !loadingLetters">
+          No letter types available — configure them under Letter Types for this document type, or all are already generated.
+        </small>
+      </div>
+
+      <div class="email-log letters-list">
+        <h4>Generated letters ({{ submissionLetters.length }})</h4>
+        <div *ngIf="loadingLetters" class="email-log-empty"><i class="pi pi-spin pi-spinner"></i> Loading…</div>
+        <div *ngIf="!loadingLetters && submissionLetters.length === 0" class="email-log-empty">No letters generated yet.</div>
+
+        <div class="letter-item" *ngFor="let l of submissionLetters">
+          <div class="letter-row">
+            <span class="letter-order">{{ l.escalationOrder }}</span>
+            <span class="letter-name">{{ l.letterName }}</span>
+            <span class="letter-status" [class.st-issued]="l.status === 'Issued'" [class.st-draft]="l.status === 'Draft'">{{ l.status }}</span>
+            <span class="letter-deadline" *ngIf="l.deadlineAt" [class.expired]="l.deadlineExpired">
+              <i class="pi pi-clock"></i> {{ l.deadlineAt | date:'mediumDate' }}{{ l.deadlineExpired ? ' (expired)' : '' }}
+            </span>
+            <span class="letter-flag" *ngIf="l.deadlineExtensionCount" title="Deadline manually extended">
+              <i class="pi pi-history"></i> extended {{ l.deadlineExtensionCount }}×
+            </span>
+          </div>
+          <div class="letter-actions">
+            <span class="letter-flag" *ngIf="l.requiresSignature && l.signedAt"><i class="pi pi-check-circle"></i> Signed</span>
+            <button type="button" class="lbtn lbtn-sign" *ngIf="l.requiresSignature && !l.signedAt" (click)="signLetter(l)" [disabled]="letterActionBusy">
+              <i class="pi pi-pencil"></i> Sign
+            </button>
+            <button type="button" class="lbtn lbtn-issue" *ngIf="l.status === 'Draft'" (click)="issueLetter(l)" [disabled]="letterActionBusy">
+              <i class="pi pi-send"></i> Issue
+            </button>
+            <button type="button" class="lbtn lbtn-email" *ngIf="l.status === 'Issued'" (click)="toggleSendLetter(l)" [disabled]="letterActionBusy">
+              <i class="pi pi-envelope"></i> Send
+            </button>
+            <button type="button" class="lbtn lbtn-extend" *ngIf="l.status === 'Issued' && l.deadlineAt" (click)="toggleExtendDeadline(l)" [disabled]="letterActionBusy">
+              <i class="pi pi-clock"></i> Extend
+            </button>
+          </div>
+          <div class="letter-send-row" *ngIf="sendingLetterId === l.id">
+            <input type="text" [(ngModel)]="sendLetterTo" [ngModelOptions]="{standalone:true}" placeholder="recipient@example.com" />
+            <button type="button" class="lbtn lbtn-issue" (click)="confirmSendLetter(l)" [disabled]="letterActionBusy"><i class="pi pi-send"></i> Send email</button>
+            <button type="button" class="lbtn" (click)="toggleSendLetter(l)">Cancel</button>
+          </div>
+          <div class="letter-send-row" *ngIf="extendingLetterId === l.id">
+            <input type="number" min="1" [(ngModel)]="extendDays" [ngModelOptions]="{standalone:true}" placeholder="working days" style="max-width:120px;" />
+            <input type="text" [(ngModel)]="extendReason" [ngModelOptions]="{standalone:true}" placeholder="reason (optional)" />
+            <button type="button" class="lbtn lbtn-issue" (click)="confirmExtendDeadline(l)" [disabled]="letterActionBusy"><i class="pi pi-clock"></i> Extend deadline</button>
+            <button type="button" class="lbtn" (click)="toggleExtendDeadline(l)">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Contract clauses dialog -->
+<div class="email-overlay" *ngIf="showClausesDialog" (click)="closeClausesDialog()">
+  <div class="email-dialog letters-dialog" (click)="$event.stopPropagation()">
+    <div class="email-dialog-header letters-header">
+      <h3><i class="pi pi-book"></i> Contract Clauses</h3>
+      <button type="button" class="email-close" (click)="closeClausesDialog()"><i class="pi pi-times"></i></button>
+    </div>
+
+    <div class="email-dialog-body">
+      <div class="letters-generate">
+        <label>Attach a clause</label>
+        <div class="letters-generate-row">
+          <select [(ngModel)]="selectedClauseId" [ngModelOptions]="{standalone:true}">
+            <option [ngValue]="null">Select clause…</option>
+            <option *ngFor="let c of availableClauses" [ngValue]="c.id">
+              {{ c.clauseCode }} — {{ c.title }} (v{{ c.version }})
+            </option>
+          </select>
+          <button type="button" class="btn-email" (click)="attachClause()" [disabled]="!selectedClauseId || clauseActionBusy">
+            <i class="pi pi-plus"></i> Attach
+          </button>
+        </div>
+        <small class="text-muted" *ngIf="availableClauses.length === 0 && !loadingClauses">
+          No more clauses available for this document type/project — configure them under Contract Clauses, or all are attached.
+        </small>
+      </div>
+
+      <div class="email-log letters-list">
+        <h4>Attached clauses ({{ documentClauses.length }})</h4>
+        <div *ngIf="loadingClauses" class="email-log-empty"><i class="pi pi-spin pi-spinner"></i> Loading…</div>
+        <div *ngIf="!loadingClauses && documentClauses.length === 0" class="email-log-empty">No clauses attached yet.</div>
+
+        <div class="letter-item" *ngFor="let cl of documentClauses">
+          <div class="letter-row">
+            <span class="letter-name">{{ cl.clauseCode }} — {{ cl.title }}</span>
+            <span class="letter-status st-issued">v{{ cl.clauseVersion }}</span>
+            <span class="letter-flag" *ngIf="cl.hasUpdate" title="A newer central version is available">
+              <i class="pi pi-exclamation-circle"></i> update available (v{{ cl.currentVersion }})
+            </span>
+          </div>
+          <div class="clause-body">{{ cl.bodySnapshot }}</div>
+          <div class="letter-actions">
+            <button type="button" class="lbtn lbtn-issue" *ngIf="cl.hasUpdate" (click)="syncClause(cl)" [disabled]="clauseActionBusy">
+              <i class="pi pi-refresh"></i> Update to latest
+            </button>
+            <button type="button" class="lbtn lbtn-extend" (click)="detachClause(cl)" [disabled]="clauseActionBusy">
+              <i class="pi pi-trash"></i> Remove
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Send Email + Letters & follow-ups dialog -->
+<div class="email-overlay" *ngIf="showEmailDialog" (click)="closeSendEmailDialog()">
+  <div class="email-dialog" (click)="$event.stopPropagation()">
+    <div class="email-dialog-header">
+      <h3><i class="pi pi-envelope"></i> Send Email — Letters &amp; follow-ups</h3>
+      <button type="button" class="email-close" (click)="closeSendEmailDialog()"><i class="pi pi-times"></i></button>
+    </div>
+
+    <div class="email-dialog-body">
+      <div class="email-compose">
+        <label>To <span class="req">*</span></label>
+        <input type="text" [(ngModel)]="emailTo" [ngModelOptions]="{standalone:true}" placeholder="name@example.com; another@example.com" />
+
+        <label>Cc</label>
+        <input type="text" [(ngModel)]="emailCc" [ngModelOptions]="{standalone:true}" placeholder="optional" />
+
+        <label>Subject <span class="req">*</span></label>
+        <input type="text" [(ngModel)]="emailSubject" [ngModelOptions]="{standalone:true}" placeholder="Subject ({{ '{{DocumentNumber}}' }} supported)" />
+
+        <label>Message</label>
+        <textarea rows="5" [(ngModel)]="emailBody" [ngModelOptions]="{standalone:true}" placeholder="Email body (HTML allowed). Tokens: {{ '{{DocumentNumber}}' }}, {{ '{{SubmissionId}}' }}, {{ '{{Status}}' }}"></textarea>
+
+        <div class="email-compose-actions">
+          <button type="button" class="btn-cancel" (click)="closeSendEmailDialog()">Close</button>
+          <button type="button" class="btn-email" (click)="sendSubmissionEmail()" [disabled]="sendingEmail">
+            <span *ngIf="!sendingEmail"><i class="pi pi-send"></i> Send</span>
+            <span *ngIf="sendingEmail"><i class="pi pi-spin pi-spinner"></i> Sending...</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="email-log">
+        <h4>Sent emails ({{ submissionEmails.length }})</h4>
+        <div *ngIf="loadingEmails" class="email-log-empty"><i class="pi pi-spin pi-spinner"></i> Loading...</div>
+        <div *ngIf="!loadingEmails && submissionEmails.length === 0" class="email-log-empty">No emails sent yet for this document.</div>
+        <div class="email-log-item" *ngFor="let e of submissionEmails">
+          <div class="email-log-row">
+            <span class="email-log-status" [class.ok]="e.status === 'Sent'" [class.fail]="e.status !== 'Sent'">{{ e.status }}</span>
+            <span class="email-log-to">{{ e.toRecipients }}</span>
+            <span class="email-log-date">{{ e.sentAt | date:'short' }}</span>
+          </div>
+          <div class="email-log-subject">{{ e.subject }}</div>
+          <div class="email-log-error" *ngIf="e.errorMessage">{{ e.errorMessage }}</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

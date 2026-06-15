@@ -159,5 +159,31 @@ export class ApprovalHistoryComponent implements OnInit {
         return 'pi pi-circle';
     }
   }
+
+  getApprovalTypeClass(approvalType?: string): string {
+    switch ((approvalType || 'System').toLowerCase()) {
+      case 'outlook':
+        return 'approval-type-outlook';
+      case 'docusign':
+      case 'adobe':
+        return 'approval-type-docusign';
+      case 'system':
+      default:
+        return 'approval-type-system';
+    }
+  }
+
+  getApprovalTypeIcon(approvalType?: string): string {
+    switch ((approvalType || 'System').toLowerCase()) {
+      case 'outlook':
+        return 'pi pi-envelope';
+      case 'docusign':
+      case 'adobe':
+        return 'pi pi-pencil';
+      case 'system':
+      default:
+        return 'pi pi-cog';
+    }
+  }
 }
 

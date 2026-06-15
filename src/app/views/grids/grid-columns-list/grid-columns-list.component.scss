@@ -228,7 +228,7 @@
     }
 
     &.stat-icon-info {
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
     }
   }
 
@@ -434,13 +434,13 @@
 
 .col-type {
   .type-badge {
-    background: #dbeafe;
-    color: #1e40af;
+    background: #ccfbf1;
+    color: #115e59;
     padding: 4px 10px;
     border-radius: 6px;
     font-size: 12px;
     font-weight: 500;
-    border: 1px solid #bfdbfe;
+    border: 1px solid #99f6e4;
   }
 }
 
@@ -527,11 +527,11 @@
     }
 
     &.action-edit {
-      color: #3b82f6;
-      border-color: #3b82f6;
+      color: #14b8a6;
+      border-color: #14b8a6;
 
       &:hover {
-        background: #3b82f6;
+        background: #14b8a6;
         color: white;
       }
     }

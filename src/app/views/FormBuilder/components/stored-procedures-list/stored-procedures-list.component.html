@@ -214,8 +214,14 @@
           </td>
           <td>
             <app-table-actions>
-              <button class="action-btn action-edit" 
-                      (click)="editSp(sp.id)" 
+              <button class="action-btn action-run"
+                      *ngIf="canExecuteStoredProcedures"
+                      (click)="openExecuteModal(sp)"
+                      title="Test-run this stored procedure">
+                <i class="pi pi-play"></i>
+              </button>
+              <button class="action-btn action-edit"
+                      (click)="editSp(sp.id)"
                       [title]="permissionService.canEditStoredProcedures() || permissionService.canManageStoredProcedures() ? 'Edit' : 'You do not have permission to edit stored procedures'"
                       [disabled]="!permissionService.canEditStoredProcedures() && !permissionService.canManageStoredProcedures()">
                 <i class="pi pi-pencil"></i>
@@ -242,6 +248,63 @@
   [storedProcedure]="editingSp"
   (close)="onModalClose()">
 </app-stored-procedure-form>
+
+<!-- Execute (Test) dialog -->
+<div class="sp-exec-overlay" *ngIf="showExecuteModal" (click)="closeExecuteModal()">
+  <div class="sp-exec-modal" (click)="$event.stopPropagation()">
+    <div class="sp-exec-header">
+      <h3><i class="pi pi-play"></i> Test Run — {{ executingSp?.title }}</h3>
+      <button class="sp-exec-close" (click)="closeExecuteModal()"><i class="pi pi-times"></i></button>
+    </div>
+    <div class="sp-exec-body">
+      <div class="sp-exec-meta">
+        <span>{{ executingSp?.databaseName }}.{{ executingSp?.schemaName || 'dbo' }}.{{ executingSp?.procedureName || '(from code)' }}</span>
+        <span class="sp-exec-usage">{{ executingSp?.usageType }}</span>
+      </div>
+
+      <label>Parameters (JSON)</label>
+      <textarea rows="4" [(ngModel)]="executeParamsJson" placeholder='{ "paramName": value }'></textarea>
+      <small class="sp-exec-hint">Leave as <code>&#123;&#125;</code> for a parameterless procedure. Read-only test execution.</small>
+
+      <div class="sp-exec-actions">
+        <button class="btn-cancel-sp" (click)="closeExecuteModal()">Close</button>
+        <button class="btn-run-sp" (click)="runExecute()" [disabled]="executeRunning">
+          <span *ngIf="!executeRunning"><i class="pi pi-play"></i> Run</span>
+          <span *ngIf="executeRunning"><i class="pi pi-spin pi-spinner"></i> Running…</span>
+        </button>
+      </div>
+
+      <div class="sp-exec-error" *ngIf="executeError"><i class="pi pi-exclamation-triangle"></i> {{ executeError }}</div>
+
+      <div class="sp-exec-result" *ngIf="executeResult">
+        <h4>Result</h4>
+        <div class="sp-exec-result-line">
+          <span class="lbl">Rows returned:</span>
+          <span class="val ok">{{ executeResult.rowCount }}</span>
+          <span class="lbl" style="margin-left:14px;" *ngIf="executeResult.returnValue !== null && executeResult.returnValue !== undefined">Return value:</span>
+          <span class="val" *ngIf="executeResult.returnValue !== null && executeResult.returnValue !== undefined">{{ executeResult.returnValue }}</span>
+        </div>
+
+        <table class="sp-exec-table" *ngIf="executeResult.columns?.length">
+          <thead><tr><th *ngFor="let c of executeResult.columns">{{ c }}</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let r of executeResult.rows">
+              <td *ngFor="let c of executeResult.columns">{{ r[c] }}</td>
+            </tr>
+            <tr *ngIf="executeResult.rows?.length === 0"><td [attr.colspan]="executeResult.columns.length" class="sp-exec-norows">No rows.</td></tr>
+          </tbody>
+        </table>
+
+        <div class="sp-exec-outputs" *ngIf="executeResult.outputValues && (executeResult.outputValues | keyvalue)?.length">
+          <h4>Output parameters</h4>
+          <div class="sp-exec-result-line" *ngFor="let o of executeResult.outputValues | keyvalue">
+            <span class="lbl">{{ o.key }}:</span> <span class="val">{{ o.value }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <p-toast></p-toast>
 <p-confirmDialog></p-confirmDialog>

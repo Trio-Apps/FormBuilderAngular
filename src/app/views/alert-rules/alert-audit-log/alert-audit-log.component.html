@@ -1,0 +1,86 @@
+<div class="fields-page-container">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <div class="nav-title-section">
+          <h1 class="page-title">Alert Log</h1>
+          <p class="page-subtitle">Audit trail of every triggered alert (in-app &amp; email)</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-icon" (click)="load()" [disabled]="loading" title="Refresh">
+          <i class="pi pi-refresh"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="document-types-section">
+      <app-table-shell title="Alert Log" icon="pi pi-bell">
+        <div table-actions class="header-actions">
+          <div class="filter-box">
+            <input type="number" class="filter-input" placeholder="Filter by Submission #"
+              [(ngModel)]="submissionFilter" (keyup.enter)="applyFilter()" />
+            <button class="btn-apply" (click)="applyFilter()"><i class="pi pi-filter"></i> Apply</button>
+            <button class="btn-clear" *ngIf="submissionFilter" (click)="clearFilter()"><i class="pi pi-times"></i></button>
+          </div>
+        </div>
+
+        <div *ngIf="loading" class="loading-container">
+          <i class="pi pi-spin pi-spinner"></i>
+          <p>Loading alert log...</p>
+        </div>
+
+        <div *ngIf="!loading && logs.length === 0" class="empty-state">
+          <div class="empty-icon"><i class="pi pi-bell"></i></div>
+          <h4>No Alerts Logged</h4>
+          <p>No alerts have been triggered yet for the current filter.</p>
+        </div>
+
+        <p-table *ngIf="!loading && logs.length > 0" [value]="logs" [paginator]="false"
+          styleClass="p-datatable-sm document-types-table">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Trigger</th>
+              <th>Channel</th>
+              <th>Status</th>
+              <th>Doc #</th>
+              <th>Recipients</th>
+              <th>Rules</th>
+              <th>Fired At</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-row>
+            <tr>
+              <td><span class="trigger-chip">{{ row.triggerType }}</span></td>
+              <td>
+                <span class="chan-badge" [ngClass]="channelClass(row.channel)">
+                  <i [ngClass]="channelIcon(row.channel)"></i> {{ row.channel }}
+                </span>
+              </td>
+              <td>
+                <span class="status-badge" [ngClass]="statusClass(row.status)">{{ row.status }}</span>
+                <div class="status-error" *ngIf="row.errorMessage" [title]="row.errorMessage">{{ row.errorMessage }}</div>
+              </td>
+              <td>{{ row.submissionId }}</td>
+              <td>
+                <span class="recips" [title]="row.recipients">{{ row.recipients || '-' }}</span>
+                <span class="recip-count" *ngIf="row.recipientCount">({{ row.recipientCount }})</span>
+              </td>
+              <td>{{ row.ruleIds || '—' }}</td>
+              <td>{{ formatDate(row.firedAt) }}</td>
+            </tr>
+          </ng-template>
+        </p-table>
+
+        <p-paginator *ngIf="!loading && totalRecords > 0"
+          [first]="first" [rows]="rows" [totalRecords]="totalRecords"
+          [rowsPerPageOptions]="[20, 50, 100]" (onPageChange)="onPageChange($event)">
+        </p-paginator>
+      </app-table-shell>
+    </div>
+  </div>
+</div>
+
+<p-toast></p-toast>

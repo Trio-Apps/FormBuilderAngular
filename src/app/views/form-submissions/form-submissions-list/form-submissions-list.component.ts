@@ -790,7 +790,7 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     }
 
     // Navigate to edit page instead of opening modal
-    this.router.navigate(['/document-types', submission.documentTypeId, 'submissions', submission.id, 'edit']);
+    this.router.navigate(['/document-submissions', submission.documentTypeId, submission.id, 'edit']);
   }
 
   openEditModalOld(submission: FormSubmissionDto): void {
@@ -3878,6 +3878,21 @@ export class FormSubmissionsListComponent implements OnInit, OnDestroy {
     }
 
     const submissionId = Number(submission.id);
+    const documentLabel = submission.documentNumber || `#${submissionId}`;
+
+    this.confirmationService.confirm({
+      header: 'Cancel Submission',
+      message: `Are you sure you want to cancel submission ${documentLabel}? This action will mark the document as cancelled.`,
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Yes, cancel',
+      rejectLabel: 'No',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-text',
+      accept: () => this.executeCancelSubmission(submissionId)
+    });
+  }
+
+  private executeCancelSubmission(submissionId: number): void {
     this.cancellingBySubmission[submissionId] = true;
 
     this.formSubmissionsService.cancelSubmission(submissionId).pipe(

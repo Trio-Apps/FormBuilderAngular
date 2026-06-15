@@ -15,7 +15,14 @@
         <button class="btn-icon" (click)="loadApprovalWorkflows()" [disabled]="loading.workflows" title="Refresh">
           <i class="pi pi-refresh"></i>
         </button>
-        <button class="btn-primary" 
+        <button class="btn-icon"
+                (click)="toggleShowDeleted()"
+                [disabled]="loading.workflows"
+                [class.active]="showDeleted"
+                [title]="showDeleted ? 'Show active workflows' : 'Show deleted workflows (recycle bin)'">
+          <i class="pi" [class.pi-trash]="!showDeleted" [class.pi-list]="showDeleted"></i>
+        </button>
+        <button class="btn-primary"
                 (click)="openAddModal()" 
                 [disabled]="loading.workflows || (!permissionService.canCreateApprovalWorkflows() && !permissionService.canManageApprovalWorkflows())"
                 [title]="permissionService.canCreateApprovalWorkflows() || permissionService.canManageApprovalWorkflows() ? 'New Approval Workflow' : 'You do not have permission to create approval workflows'">

@@ -18,7 +18,9 @@ export const navItems: INavData[] = [
   },
   {
     name: 'Form Builder',
-    url: '/form-builder',
+    // No `url` on collapsible groups: it makes CoreUI's samePath() prefix-match sub-routes
+    // and force the group open, which conflicts with our route-driven accordion. The group
+    // is a pure toggle; its children carry the real urls.
     iconComponent: { name: 'cil-puzzle' },
     attributes: { permissionCode: 'FormBuilder_Allow_View' },
     children: [
@@ -32,7 +34,7 @@ export const navItems: INavData[] = [
         name: 'Stored Procedures',
         url: '/form-builder/stored-procedures',
         iconComponent: { name: 'cil-code' },
-        attributes: { permissionCode: 'StoredProcedure_Allow_View' }
+        attributes: { permissionCode: 'FormStoredProcedure_Allow_View' }
       },
       {
         name: 'Copy To Document',
@@ -50,7 +52,6 @@ export const navItems: INavData[] = [
   },
   {
     name: 'Document Types',
-    url: '/document-types',
     iconComponent: { name: 'cil-notes' },
     attributes: { permissionCode: 'Document_Allow_View' }, // Changed from DocumentType_Allow_View to Document_Allow_View
     children: [
@@ -76,7 +77,6 @@ export const navItems: INavData[] = [
   },
   {
     name: 'Approval Workflows',
-    url: '/approval-workflows',
     iconComponent: { name: 'cil-task' },
     attributes: { permissionCode: 'ApprovalWorkflow_Allow_View' },
     children: [
@@ -115,32 +115,63 @@ export const navItems: INavData[] = [
     name: 'Administration'
   },
   {
-    name: 'Alert Rules',
-    url: '/alert-rules',
+    name: 'Alerts & Email',
     iconComponent: { name: 'cil-bell' },
-    attributes: { roles: ['Administration'], permissionCode: 'AlertRule_Allow_View' } // Admin + permission
+    attributes: { roles: ['Administration'] },
+    children: [
+      {
+        name: 'Alert Rules',
+        url: '/alert-rules',
+        iconComponent: { name: 'cil-bell' },
+        attributes: { roles: ['Administration'], permissionCode: 'AlertRule_Allow_View' }
+      },
+      {
+        name: 'Alert Log',
+        url: '/alert-log',
+        iconComponent: { name: 'cil-list' },
+        attributes: { roles: ['Administration'] }
+      },
+      {
+        name: 'Email Templates',
+        url: '/email-templates',
+        iconComponent: { name: 'cil-envelope-open' },
+        attributes: { roles: ['Administration'], permissionCode: 'EmailTemplate_Allow_View' }
+      },
+      {
+        name: 'SMTP Configs',
+        url: '/smtp-configs',
+        iconComponent: { name: 'cil-envelope-closed' },
+        attributes: { roles: ['Administration'], permissionCode: 'SmtpConfig_Allow_View' }
+      }
+    ]
   },
   {
-    name: 'Email Templates',
-    url: '/email-templates',
-    iconComponent: { name: 'cil-envelope-open' },
-    attributes: { roles: ['Administration'], permissionCode: 'EmailTemplate_Allow_View' } // Admin + permission
-  },
-  {
-    name: 'SMTP Configs',
-    url: '/smtp-configs',
-    iconComponent: { name: 'cil-envelope-closed' },
-    attributes: { roles: ['Administration'], permissionCode: 'SmtpConfig_Allow_View' } // Admin + permission
-  },
-  {
-    name: 'SAP Integration',
-    url: '/sap-integration',
-    iconComponent: { name: 'cil-applications-settings' },
-    attributes: { roles: ['Administration'], permissionCode: 'SapHanaConfig_Allow_View' }
+    name: 'Letters & Layouts',
+    iconComponent: { name: 'cil-envelope-letter' },
+    attributes: { roles: ['Administration'] },
+    children: [
+      {
+        name: 'Letter Types',
+        url: '/letter-types',
+        iconComponent: { name: 'cil-envelope-letter' },
+        attributes: { roles: ['Administration'] }
+      },
+      {
+        name: 'Contract Clauses',
+        url: '/contract-clauses',
+        iconComponent: { name: 'cil-book' },
+        attributes: { roles: ['Administration'] }
+      },
+      {
+        name: 'Report Layouts',
+        url: '/layouts',
+        iconComponent: { name: 'cil-layers' },
+        attributes: { roles: ['Administration'] }
+      }
+    ]
   },
   {
     name: 'Security',
-    url: '/permissions',
     iconComponent: { name: 'cil-lock-locked' },
     attributes: { roles: ['Administration'] },
     children: [
@@ -165,10 +196,41 @@ export const navItems: INavData[] = [
     ]
   },
   {
-    name: 'Manage Table Menus',
-    url: '/table-menus',
-    iconComponent: { name: 'cil-layers' },
-    attributes: { roles: ['Administration'], permissionCode: 'TableMenu_Allow_View' } // Admin + permission
+    name: 'System & Data',
+    iconComponent: { name: 'cil-settings' },
+    attributes: { roles: ['Administration'] },
+    children: [
+      {
+        name: 'SAP Integration',
+        url: '/sap-integration',
+        iconComponent: { name: 'cil-applications-settings' },
+        attributes: { roles: ['Administration'], permissionCode: 'SapHanaConfig_Allow_View' }
+      },
+      {
+        name: 'DocuSign Settings',
+        url: '/docusign-settings',
+        iconComponent: { name: 'cil-pencil' },
+        attributes: { roles: ['Administration'] }
+      },
+      {
+        name: 'Master Data',
+        url: '/master-data',
+        iconComponent: { name: 'cil-spreadsheet' },
+        attributes: { roles: ['Administration'] }
+      },
+      {
+        name: 'Audit Trail',
+        url: '/audit-trail',
+        iconComponent: { name: 'cil-clock' },
+        attributes: { roles: ['Administration'] }
+      },
+      {
+        name: 'Manage Table Menus',
+        url: '/table-menus',
+        iconComponent: { name: 'cil-grid' },
+        attributes: { roles: ['Administration'], permissionCode: 'TableMenu_Allow_View' }
+      }
+    ]
   },
   {
     title: true,

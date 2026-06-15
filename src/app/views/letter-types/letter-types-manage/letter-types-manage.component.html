@@ -1,0 +1,125 @@
+<div class="fields-page-container">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <div class="nav-title-section">
+          <h1 class="page-title">Letter Types</h1>
+          <p class="page-subtitle">Configure letter types, escalation order, and working-day deadlines</p>
+        </div>
+      </div>
+      <div class="nav-right">
+        <button class="btn-primary-sm" (click)="openCreate()"><i class="pi pi-plus"></i> New Letter Type</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="document-types-section">
+      <app-table-shell title="Letter Types" icon="pi pi-inbox">
+        <div table-actions class="header-actions">
+          <label class="dt-label">Document Type</label>
+          <select class="dt-select" [(ngModel)]="selectedDocumentTypeId" (change)="onDocTypeChange()">
+            <option [ngValue]="null">Select…</option>
+            <option *ngFor="let d of documentTypes" [ngValue]="d.id">{{ d.name }}</option>
+          </select>
+        </div>
+
+        <div *ngIf="loading" class="loading-container"><i class="pi pi-spin pi-spinner"></i><p>Loading…</p></div>
+
+        <div *ngIf="!loading && letterTypes.length === 0" class="empty-state">
+          <div class="empty-icon"><i class="pi pi-inbox"></i></div>
+          <h4>No Letter Types</h4>
+          <p>Add a letter type for this document type to enable letter generation &amp; escalation.</p>
+        </div>
+
+        <p-table *ngIf="!loading && letterTypes.length > 0" [value]="letterTypes" [paginator]="false"
+          styleClass="p-datatable-sm document-types-table">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Order</th><th>Name</th><th>Code</th><th>Deadline (wd)</th><th>Signature</th><th>Active</th><th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-row>
+            <tr>
+              <td><span class="order-chip">{{ row.escalationOrder }}</span></td>
+              <td class="lt-name">{{ row.name }}</td>
+              <td>{{ row.code || '—' }}</td>
+              <td>{{ row.deadlineDays }}</td>
+              <td><span class="yn" [class.yes]="row.requiresSignature">{{ row.requiresSignature ? 'Required' : 'No' }}</span></td>
+              <td><span class="yn" [class.yes]="row.isActive">{{ row.isActive ? 'Active' : 'Inactive' }}</span></td>
+              <td>
+                <button class="icon-btn edit" (click)="openEdit(row)" title="Edit"><i class="pi pi-pencil"></i></button>
+                <button class="icon-btn del" (click)="remove(row)" title="Delete"><i class="pi pi-trash"></i></button>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </app-table-shell>
+
+      <!-- Holidays -->
+      <app-table-shell title="Public Holidays" icon="pi pi-calendar" class="holidays-shell">
+        <div table-actions class="header-actions holiday-add">
+          <input type="date" class="dt-select" [(ngModel)]="newHolidayDate" />
+          <input type="text" class="dt-select" placeholder="Holiday name" [(ngModel)]="newHolidayName" />
+          <button class="btn-primary-sm" (click)="addHoliday()"><i class="pi pi-plus"></i> Add</button>
+        </div>
+        <div *ngIf="!loadingHolidays && holidays.length === 0" class="empty-state small">
+          <p>No holidays configured. Weekends (Fri/Sat) are always excluded from deadlines.</p>
+        </div>
+        <p-table *ngIf="holidays.length > 0" [value]="holidays" [paginator]="false" styleClass="p-datatable-sm document-types-table">
+          <ng-template pTemplate="header"><tr><th>Date</th><th>Name</th><th>Actions</th></tr></ng-template>
+          <ng-template pTemplate="body" let-h>
+            <tr>
+              <td>{{ h.holidayDate | date:'mediumDate' }}</td>
+              <td>{{ h.name }}</td>
+              <td><button class="icon-btn del" (click)="removeHoliday(h)" title="Delete"><i class="pi pi-trash"></i></button></td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </app-table-shell>
+    </div>
+  </div>
+</div>
+
+<!-- Create/Edit modal -->
+<div class="lt-overlay" *ngIf="showModal" (click)="closeModal()">
+  <div class="lt-modal" (click)="$event.stopPropagation()">
+    <div class="lt-modal-header">
+      <h3>{{ editing ? 'Edit' : 'New' }} Letter Type</h3>
+      <button class="lt-close" (click)="closeModal()"><i class="pi pi-times"></i></button>
+    </div>
+    <div class="lt-modal-body">
+      <label>Name <span class="req">*</span></label>
+      <input type="text" [(ngModel)]="form.name" placeholder="e.g. Follow-up" />
+
+      <div class="lt-row">
+        <div>
+          <label>Code</label>
+          <input type="text" [(ngModel)]="form.code" placeholder="optional" />
+        </div>
+        <div>
+          <label>Escalation order</label>
+          <input type="number" [(ngModel)]="form.escalationOrder" min="0" />
+        </div>
+      </div>
+
+      <div class="lt-row">
+        <div>
+          <label>Deadline (working days)</label>
+          <input type="number" [(ngModel)]="form.deadlineDays" min="0" />
+        </div>
+        <div class="lt-checks">
+          <label class="chk"><input type="checkbox" [(ngModel)]="form.requiresSignature" /> Requires signature</label>
+          <label class="chk"><input type="checkbox" [(ngModel)]="form.isActive" /> Active</label>
+        </div>
+      </div>
+
+      <div class="lt-actions">
+        <button class="btn-cancel-sm" (click)="closeModal()">Cancel</button>
+        <button class="btn-primary-sm" (click)="save()"><i class="pi pi-save"></i> {{ editing ? 'Update' : 'Create' }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p-toast></p-toast>

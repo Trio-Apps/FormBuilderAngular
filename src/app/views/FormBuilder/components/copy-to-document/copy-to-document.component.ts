@@ -391,6 +391,28 @@ export class CopyToDocumentComponent implements OnInit {
     this.fieldMappingsArray.removeAt(index);
   }
 
+  // #14: hide fields already chosen in OTHER mapping rows so the same field can't be
+  // mapped twice (avoids confusion / wrong mapping). The current row keeps its own value.
+  private collectMappedCodes(controlName: 'sourceFieldCode' | 'targetFieldCode', excludeRowIndex: number): Set<string> {
+    const used = new Set<string>();
+    this.fieldMappingsArray.controls.forEach((ctrl, idx) => {
+      if (idx === excludeRowIndex) { return; }
+      const code = (ctrl.get(controlName)?.value || '').toString().trim().toLowerCase();
+      if (code) { used.add(code); }
+    });
+    return used;
+  }
+
+  getAvailableSourceFields(rowIndex: number): any[] {
+    const used = this.collectMappedCodes('sourceFieldCode', rowIndex);
+    return (this.sourceFields || []).filter(f => !used.has((f.fieldCode || '').toString().trim().toLowerCase()));
+  }
+
+  getAvailableTargetFields(rowIndex: number): any[] {
+    const used = this.collectMappedCodes('targetFieldCode', rowIndex);
+    return (this.targetFields || []).filter(f => !used.has((f.fieldCode || '').toString().trim().toLowerCase()));
+  }
+
   addGridMapping(sourceGridCode: string | null = null, targetGridCode: string | null = null): void {
     this.gridMappingsArray.push(
       this.fb.group({

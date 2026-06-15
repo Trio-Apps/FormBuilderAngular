@@ -1,4 +1,6 @@
 <div class="submissions-page">
+  <p-confirmDialog></p-confirmDialog>
+
   <section class="hero-card">
     <div>
       <p class="eyebrow">Submission Center</p>
@@ -64,10 +66,11 @@
         <select [value]="statusFilter" (change)="onStatusFilterChange(($any($event.target).value || 'all').toString())">
           <option value="all">All statuses</option>
           <option value="draft">Draft</option>
-          <option value="pending">Pending</option>
+          <option value="submitted">Submitted</option>
           <option value="approved">Approved</option>
+          <option value="approved-signed">Approved-Signed</option>
+          <option value="posted">Posted</option>
           <option value="posted open">Posted Open</option>
-          <option value="posted closed">Posted Closed</option>
           <option value="cancelled">Cancelled</option>
           <option value="rejected">Rejected</option>
         </select>
@@ -97,9 +100,15 @@
                 (click)="openSubmissionDetails(submission)"
                 [title]="'Open submission ' + (getSubmissionDisplayNumber(submission) || ('#' + submission.id))">
                 {{ getSubmissionDisplayNumber(submission) }}
+                <span class="doc-number-preview-tag" *ngIf="isSubmissionNumberPreview(submission)"
+                      title="Tentative number. The final document number is assigned when the document is posted, so it may still change.">preview</span>
               </button>
               <ng-template #submissionNumberText>
-                <div class="cell-primary">{{ getSubmissionDisplayNumber(submission) }}</div>
+                <div class="cell-primary">
+                  {{ getSubmissionDisplayNumber(submission) }}
+                  <span class="doc-number-preview-tag" *ngIf="isSubmissionNumberPreview(submission)"
+                        title="Tentative number. The final document number is assigned when the document is posted, so it may still change.">preview</span>
+                </div>
               </ng-template>
               <div class="cell-muted">#{{ submission.id }}</div>
             </td>
@@ -165,7 +174,17 @@
             <td>
               <div
                 class="action-stack"
-                *ngIf="canEditDraft(submission) || canPost(submission) || canCancel(submission) || canExecuteManualCopyToDocument(submission); else noPostAction">
+                *ngIf="canDuplicate(submission) || canEditDraft(submission) || canPost(submission) || canCancel(submission) || canExecuteManualCopyToDocument(submission); else noPostAction">
+                <button
+                  *ngIf="canDuplicate(submission)"
+                  class="btn-secondary btn-secondary--compact"
+                  type="button"
+                  (click)="duplicateSubmission(submission)"
+                  [disabled]="duplicatingBySubmission[submission.id]"
+                  title="Create a new editable draft copy from this submission.">
+                  {{ getDuplicateButtonText(submission) }}
+                </button>
+
                 <button
                   *ngIf="canEditDraft(submission)"
                   class="btn-secondary btn-secondary--compact"
@@ -359,6 +378,37 @@
 
     <div class="details-footer">
       <button class="btn-secondary" type="button" (click)="closeSubmissionDetails()">Close</button>
+    </div>
+  </div>
+</app-dialog-shell>
+
+<!-- #7: Copy To target selection (shown when more than one setup applies) -->
+<app-dialog-shell
+  [(visible)]="copyToSelectVisible"
+  [header]="'Select Copy To Target'"
+  [modal]="true"
+  [style]="{ width: '520px', maxWidth: '94vw' }"
+  [closable]="true"
+  (onHide)="cancelCopyToSelection()">
+  <div class="copyto-select">
+    <p class="copyto-select__hint">
+      More than one Copy To setup applies to this submission. Choose the target document to create:
+    </p>
+    <button
+      type="button"
+      class="copyto-option"
+      *ngFor="let setup of copyToSelectSetups"
+      [class.copyto-option--active]="selectedCopyToSetupId === setup.id"
+      (click)="selectedCopyToSetupId = setup.id || null">
+      <span class="copyto-option__radio" [class.checked]="selectedCopyToSetupId === setup.id"></span>
+      <span class="copyto-option__text">
+        <strong>{{ setup.setupName }}</strong>
+        <small *ngIf="getCopyToSetupTargetLabel(setup)">{{ getCopyToSetupTargetLabel(setup) }}</small>
+      </span>
+    </button>
+    <div class="copyto-select__actions">
+      <button type="button" class="btn-cancel" (click)="cancelCopyToSelection()">Cancel</button>
+      <button type="button" class="btn-primary" [disabled]="!selectedCopyToSetupId" (click)="confirmCopyToSelection()">Run</button>
     </div>
   </div>
 </app-dialog-shell>

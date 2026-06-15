@@ -1,0 +1,78 @@
+<div class="ds-page">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <h1 class="page-title">DocuSign Settings</h1>
+        <p class="page-subtitle">Integration credentials for the DocuSign e-signature approval channel.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <app-table-shell title="DocuSign Integration" icon="pi pi-pencil">
+      <div *ngIf="loading" class="loading"><i class="pi pi-spin pi-spinner"></i> Loading…</div>
+
+      <form *ngIf="!loading" class="ds-form" (ngSubmit)="save()">
+        <div class="grid2">
+          <div class="fld">
+            <label>Integrator Key (Client ID)</label>
+            <input type="text" [(ngModel)]="form.integratorKey" name="integratorKey" placeholder="GUID" />
+          </div>
+          <div class="fld">
+            <label>User ID (Impersonated user)</label>
+            <input type="text" [(ngModel)]="form.userId" name="userId" placeholder="GUID" />
+          </div>
+          <div class="fld">
+            <label>Account ID</label>
+            <input type="text" [(ngModel)]="form.accountId" name="accountId" placeholder="GUID" />
+          </div>
+          <div class="fld">
+            <label>OAuth Base URL</label>
+            <input type="text" [(ngModel)]="form.oAuthBaseUrl" name="oAuthBaseUrl" placeholder="account-d.docusign.com" />
+          </div>
+          <div class="fld">
+            <label>API Base Path</label>
+            <input type="text" [(ngModel)]="form.apiBasePath" name="apiBasePath" placeholder="https://demo.docusign.net/restapi" />
+          </div>
+          <div class="fld">
+            <label>Base URL</label>
+            <input type="text" [(ngModel)]="form.baseUrl" name="baseUrl" placeholder="https://demo.docusign.net/restapi" />
+          </div>
+          <div class="fld">
+            <label>Redirect URI</label>
+            <input type="text" [(ngModel)]="form.redirectUri" name="redirectUri" placeholder="http://localhost:5000/api/docusign/callback" />
+          </div>
+          <div class="fld">
+            <label>Recipient Return URL</label>
+            <input type="text" [(ngModel)]="form.recipientReturnUrl" name="recipientReturnUrl" placeholder="http://localhost:8080/signature/return" />
+          </div>
+        </div>
+
+        <div class="fld">
+          <label>
+            Private Key (PEM)
+            <span class="key-state" [class.set]="hasPrivateKey">{{ hasPrivateKey ? '● a key is stored' : '○ no key stored' }}</span>
+            <button *ngIf="hasPrivateKey" type="button" class="btn-reveal" (click)="reveal()" [disabled]="revealing">
+              <i class="pi" [class.pi-spin]="revealing" [class.pi-spinner]="revealing" [class.pi-eye]="!revealing"></i>
+              {{ revealing ? 'Loading…' : 'Show stored key' }}
+            </button>
+          </label>
+          <textarea [(ngModel)]="newPrivateKey" name="newPrivateKey" rows="6"
+            placeholder="Paste a new RSA private key here only to REPLACE the stored one. Leave blank to keep the current key."
+            style="font-family: monospace; font-size: 12px;"></textarea>
+          <small class="hint">The stored key is never shown. Leave blank to keep it; paste a new PEM to replace it.</small>
+        </div>
+
+        <div class="fld-row">
+          <label class="chk"><input type="checkbox" [(ngModel)]="form.isActive" name="isActive" /> Active</label>
+          <button type="submit" class="btn-save" [disabled]="saving">
+            <i class="pi" [class.pi-spin]="saving" [class.pi-spinner]="saving" [class.pi-save]="!saving"></i>
+            {{ saving ? 'Saving…' : 'Save Settings' }}
+          </button>
+        </div>
+      </form>
+    </app-table-shell>
+  </div>
+</div>
+
+<p-toast></p-toast>

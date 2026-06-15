@@ -1,0 +1,159 @@
+<div class="layouts-page-container">
+  <div class="top-navbar">
+    <div class="nav-content">
+      <div class="nav-left">
+        <h1 class="page-title">Report Layouts</h1>
+        <p class="page-subtitle">Map Crystal layouts to documents, projects and users — and preview before export.</p>
+      </div>
+      <div class="nav-right">
+        <button class="btn-primary-sm" (click)="openCreate()"><i class="pi pi-plus"></i> New Layout</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <app-table-shell title="Report Layouts" icon="pi pi-images">
+      <div table-actions class="header-actions">
+        <label class="dt-label">Document Type</label>
+        <select class="dt-select" [(ngModel)]="selectedDocumentTypeId" (change)="onDocTypeChange()">
+          <option [ngValue]="null">Select…</option>
+          <option *ngFor="let d of documentTypes" [ngValue]="d.id">{{ d.name }}</option>
+        </select>
+      </div>
+
+      <div *ngIf="loading" class="loading-container">
+        <i class="pi pi-spin pi-spinner"></i><p>Loading…</p>
+      </div>
+
+      <div *ngIf="!loading && layouts.length === 0" class="empty-state">
+        <div class="empty-icon"><i class="pi pi-images"></i></div>
+        <h4>No Layouts</h4>
+        <p>Add a layout and choose its scope: global (this document type), a specific project, or a specific user.</p>
+      </div>
+
+      <p-table *ngIf="!loading && layouts.length > 0" [value]="layouts" [paginator]="false"
+        styleClass="p-datatable-sm layouts-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Layout Name</th>
+            <th>Scope</th>
+            <th>Bound To</th>
+            <th>Path</th>
+            <th class="center">Default</th>
+            <th class="center">Active</th>
+            <th class="center">Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-row>
+          <tr>
+            <td class="strong">{{ row.layoutName }}</td>
+            <td>
+              <span class="scope-badge"
+                [class.scope-global]="row.scope === 'Global'"
+                [class.scope-project]="row.scope === 'Project'"
+                [class.scope-user]="row.scope === 'User'">{{ row.scope }}</span>
+            </td>
+            <td>
+              <span *ngIf="row.scope === 'Project'">{{ row.projectName || projectName(row.projectId) }}</span>
+              <span *ngIf="row.scope === 'User'">{{ userName(row.userId) }}</span>
+              <span *ngIf="row.scope === 'Global'" class="muted">All ({{ row.documentTypeName }})</span>
+            </td>
+            <td class="path">{{ row.layoutPath }}</td>
+            <td class="center">
+              <i class="pi" [class.pi-check-circle]="row.isDefault" [class.pi-minus]="!row.isDefault"
+                 [class.ok]="row.isDefault" [class.off]="!row.isDefault"></i>
+            </td>
+            <td class="center">
+              <span class="status-pill" [class.on]="row.isActive" [class.offp]="!row.isActive">
+                {{ row.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            <td class="center actions">
+              <button class="icon-btn preview" title="Preview" (click)="openPreview(row)"><i class="pi pi-eye"></i></button>
+              <button class="icon-btn edit" title="Edit" (click)="openEdit(row)"><i class="pi pi-pencil"></i></button>
+              <button class="icon-btn del" title="Delete" (click)="remove(row)"><i class="pi pi-trash"></i></button>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </app-table-shell>
+  </div>
+</div>
+
+<!-- Create / Edit modal -->
+<div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>{{ editing ? 'Edit Layout' : 'New Layout' }}</h3>
+      <button class="close-btn" (click)="closeModal()"><i class="pi pi-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <label>Layout Name <span class="req">*</span></label>
+      <input type="text" [(ngModel)]="form.layoutName" placeholder="e.g. Purchase Order – A4" />
+
+      <label>Layout Path / File <span class="req">*</span></label>
+      <input type="text" [(ngModel)]="form.layoutPath" placeholder="e.g. Reports/PurchaseOrder.rpt" />
+
+      <label>Scope</label>
+      <div class="scope-tabs">
+        <button type="button" [class.active]="scopeMode === 'global'" (click)="scopeMode='global'; onScopeModeChange()">Global</button>
+        <button type="button" [class.active]="scopeMode === 'project'" (click)="scopeMode='project'; onScopeModeChange()">Project</button>
+        <button type="button" [class.active]="scopeMode === 'user'" (click)="scopeMode='user'; onScopeModeChange()">User</button>
+      </div>
+
+      <div *ngIf="scopeMode === 'project'">
+        <label>Project <span class="req">*</span></label>
+        <select [(ngModel)]="form.projectId">
+          <option [ngValue]="null">Select project…</option>
+          <option *ngFor="let p of projects" [ngValue]="p.id">{{ p.name }}</option>
+        </select>
+      </div>
+
+      <div *ngIf="scopeMode === 'user'">
+        <label>User <span class="req">*</span></label>
+        <select [(ngModel)]="form.userId">
+          <option [ngValue]="null">Select user…</option>
+          <option *ngFor="let u of users" [ngValue]="(u.id + '')">{{ u.name || u.username }}</option>
+        </select>
+      </div>
+
+      <div class="form-checks">
+        <label class="chk"><input type="checkbox" [(ngModel)]="form.isDefault" /> Default for this scope</label>
+        <label class="chk"><input type="checkbox" [(ngModel)]="form.isActive" /> Active</label>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel-sm" (click)="closeModal()">Cancel</button>
+        <button class="btn-primary-sm" (click)="save()"><i class="pi pi-save"></i> {{ editing ? 'Update' : 'Create' }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preview modal -->
+<div class="modal-overlay" *ngIf="showPreview" (click)="closePreview()">
+  <div class="modal-content small" (click)="$event.stopPropagation()" *ngIf="previewObjectId <= 0">
+    <div class="modal-header">
+      <h3>Preview Layout</h3>
+      <button class="close-btn" (click)="closePreview()"><i class="pi pi-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <p class="hint">Enter a sample submission ID of this document type to render the layout.</p>
+      <label>Sample Submission ID <span class="req">*</span></label>
+      <input type="number" [(ngModel)]="previewSampleId" placeholder="e.g. 76" />
+      <div class="modal-actions">
+        <button class="btn-cancel-sm" (click)="closePreview()">Cancel</button>
+        <button class="btn-primary-sm" (click)="runPreview()"><i class="pi pi-eye"></i> Render</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<app-pdf-preview *ngIf="showPreview && previewObjectId > 0"
+  [layoutId]="previewLayoutId"
+  [objectId]="previewObjectId"
+  [fileName]="previewName"
+  [title]="previewName + ' — Preview'"
+  (closed)="closePreview()"></app-pdf-preview>
+
+<p-toast></p-toast>

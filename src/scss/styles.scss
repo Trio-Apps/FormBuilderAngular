@@ -1,8 +1,11 @@
 /* You can add global styles to this file, and also import other style files */
 
 // Import styles with default layout.
+// Brand alignment: re-brand CoreUI's primary to the BEON-IT teal so all CoreUI-based
+// UI (buttons, links, nav, focus rings, badges, switches) is on-brand app-wide.
 @use "@coreui/coreui/scss/coreui" as * with (
-  $enable-deprecation-messages: false
+  $enable-deprecation-messages: false,
+  $primary: #0d9488
 );
 
 // Import Chart.js custom tooltips styles

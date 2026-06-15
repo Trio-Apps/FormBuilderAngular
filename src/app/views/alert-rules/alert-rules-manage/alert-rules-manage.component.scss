@@ -66,7 +66,7 @@
 
 .btn-primary {
   border: none;
-  background: #3b82f6;
+  background: #14b8a6;
   color: #fff;
   padding: 0.6rem 0.9rem;
   border-radius: 10px;
@@ -133,7 +133,7 @@
   color: #fff;
 }
 
-.stat-icon-primary { background: #3b82f6; }
+.stat-icon-primary { background: #14b8a6; }
 .stat-icon-success { background: #10b981; }
 
 .stat-value {
@@ -521,3 +521,60 @@
 }
 
 
+
+/* Condition builder */
+.condition-builder {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+
+  .condition-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .condition-title { font-size: 13px; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: .4px; }
+  .condition-optional { color: #94a3b8; font-weight: 400; text-transform: none; }
+  .condition-match { font-size: 12px; color: #475569; display: flex; align-items: center; gap: 6px; }
+  .match-select { border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+  .condition-hint { font-size: 12px; color: #94a3b8; margin: 0 0 8px; }
+
+  .condition-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+
+    .cond-field { flex: 1 1 40%; }
+    .cond-op { flex: 0 0 160px; }
+    .cond-value { flex: 1 1 35%; }
+    .cond-novalue { flex: 1 1 35%; color: #94a3b8; }
+
+    .cond-field, .cond-op, .cond-value {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 13px;
+      &:focus { outline: none; border-color: #00EBB5; box-shadow: 0 0 0 3px rgba(0,235,181,.12); }
+    }
+
+    .cond-remove {
+      flex: 0 0 auto;
+      width: 32px; height: 32px;
+      border: none; border-radius: 8px;
+      background: #fee2e2; color: #b91c1c; cursor: pointer;
+      &:hover { background: #fecaca; }
+    }
+  }
+
+  .cond-add {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3;
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    &:hover { background: #e0e7ff; }
+  }
+}

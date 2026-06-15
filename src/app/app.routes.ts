@@ -114,6 +114,54 @@ export const routes: Routes = [
         canActivate: [authGuard, adminGuard]
       },
 
+      // ===== Alert Log ===== (Admin only)
+      {
+        path: 'alert-log',
+        loadComponent: () => import('./views/alert-rules/alert-audit-log/alert-audit-log.component')
+          .then(m => m.AlertAuditLogComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      // ===== Letter Types ===== (Admin only)
+      {
+        path: 'letter-types',
+        loadComponent: () => import('./views/letter-types/letter-types-manage/letter-types-manage.component')
+          .then(m => m.LetterTypesManageComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      // ===== Contract Clauses ===== (Admin only)
+      {
+        path: 'contract-clauses',
+        loadComponent: () => import('./views/contract-clauses/contract-clauses-manage/contract-clauses-manage.component')
+          .then(m => m.ContractClausesManageComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      // ===== DocuSign Settings ===== (Admin only)
+      {
+        path: 'docusign-settings',
+        loadComponent: () => import('./views/docusign-settings/docusign-settings.component')
+          .then(m => m.DocuSignSettingsComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      // ===== Audit Trail ===== (Admin only)
+      {
+        path: 'audit-trail',
+        loadComponent: () => import('./views/audit-trail/audit-trail.component')
+          .then(m => m.AuditTrailComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      // ===== Report Layouts ===== (Admin only)
+      {
+        path: 'layouts',
+        loadComponent: () => import('./views/crystal-layouts/crystal-layouts-manage/crystal-layouts-manage.component')
+          .then(m => m.CrystalLayoutsManageComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
       // ===== SMTP Configs ===== (Admin only)
       {
         path: 'smtp-configs',
@@ -127,6 +175,14 @@ export const routes: Routes = [
         path: 'sap-integration',
         loadComponent: () => import('./views/sap-integration/sap-integration-manage/sap-integration-manage.component')
           .then(m => m.SapIntegrationManageComponent),
+        canActivate: [authGuard, adminGuard]
+      },
+
+      // ===== Master Data ===== (Admin only)
+      {
+        path: 'master-data',
+        loadComponent: () => import('./views/master-data/master-data-manage/master-data-manage.component')
+          .then(m => m.MasterDataManageComponent),
         canActivate: [authGuard, adminGuard]
       },
 
@@ -242,7 +298,7 @@ export const routes: Routes = [
 
       // ===== Form Submissions by Document Type =====
       {
-        path: 'document-types/:documentTypeId/submissions',
+        path: 'document-submissions/:documentTypeId',
         loadComponent: () => import('./views/form-submissions/form-submissions-list/form-submissions-list.component')
           .then(m => m.FormSubmissionsListComponent),
         canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions
@@ -265,7 +321,7 @@ export const routes: Routes = [
 
       // ===== Create New Form Submission =====
       {
-        path: 'document-types/:documentTypeId/submissions/new',
+        path: 'document-submissions/:documentTypeId/new',
         loadComponent: () => import('./views/form-submissions/form-submission-create/form-submission-create.component')
           .then(m => m.FormSubmissionCreateComponent),
         canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions
@@ -273,7 +329,7 @@ export const routes: Routes = [
 
       // ===== Edit Form Submission =====
       {
-        path: 'document-types/:documentTypeId/submissions/:submissionId/edit',
+        path: 'document-submissions/:documentTypeId/:submissionId/edit',
         loadComponent: () => import('./views/form-submissions/form-submission-create/form-submission-create.component')
           .then(m => m.FormSubmissionCreateComponent),
         canActivate: [authGuard] // All authenticated users can access, buttons are disabled based on permissions

@@ -46,6 +46,7 @@
           <tr>
             <th>#</th>
             <th>Action</th>
+            <th>Type</th>
             <th>Stage</th>
             <th>Action By</th>
             <th>Action Date</th>
@@ -60,6 +61,12 @@
               <span [ngClass]="getActionTypeBadgeClass(record.actionType)">
                 <i [ngClass]="getActionTypeIcon(record.actionType)"></i>
                 {{ record.actionType }}
+              </span>
+            </td>
+            <td>
+              <span class="approval-type-badge" [ngClass]="getApprovalTypeClass(record.approvalType)">
+                <i [ngClass]="getApprovalTypeIcon(record.approvalType)"></i>
+                {{ record.approvalType || 'System' }}
               </span>
             </td>
             <td>{{ record.stageName || 'Stage #' + record.stageId }}</td>

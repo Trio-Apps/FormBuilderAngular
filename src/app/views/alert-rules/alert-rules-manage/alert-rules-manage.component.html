@@ -155,8 +155,8 @@
                   [icon]="rule.isActive ? 'pi pi-ban' : 'pi pi-check'"
                   class="p-button-text p-button-sm action-btn"
                   (click)="toggleActive(rule)"
-                  [disabled]="loading.toggle"
-                  [pTooltip]="rule.isActive ? 'Disable' : 'Enable'"
+                  [disabled]="loading.toggle || (!permissionService.canEditAlertRules() && !permissionService.canManageAlertRules())"
+                  [pTooltip]="(permissionService.canEditAlertRules() || permissionService.canManageAlertRules()) ? (rule.isActive ? 'Disable' : 'Enable') : 'You do not have permission to change alert rule status'"
                   tooltipPosition="top"
                 ></button>
                 <button
@@ -225,6 +225,23 @@
             {{ triggerOption.label }}
           </option>
         </select>
+      </div>
+
+      <div class="form-row" *ngIf="createForm.get('triggerType')?.value === 'Scheduled'">
+        <label>Check every (minutes)</label>
+        <input type="number" min="1" class="form-control" formControlName="scheduleIntervalMinutes" placeholder="60" />
+        <small class="text-muted">The background scan re-evaluates this rule on this interval, notifying matching in-flight documents (once per document).</small>
+      </div>
+
+      <div class="form-row" *ngIf="createForm.get('triggerType')?.value === 'Scheduled'">
+        <label>SQL condition (advanced, optional)</label>
+        <textarea class="form-control" formControlName="sqlCondition" rows="4"
+          placeholder="SELECT s.Id FROM FORM_SUBMISSIONS s WHERE s.Status='Pending' AND DATEDIFF(day, s.SubmittedDate, GETDATE()) > 7"
+          style="font-family: monospace; font-size: 12.5px;"></textarea>
+        <small class="text-muted">
+          Read-only <strong>SELECT</strong> returning a <code>SubmissionId</code> column. When set, it replaces the visual condition above.
+          Only a single SELECT is accepted (no INSERT/UPDATE/DELETE/EXEC).
+        </small>
       </div>
 
       <div class="form-row">
@@ -309,6 +326,39 @@
       <div class="form-row inline">
         <p-checkbox formControlName="isActive" [binary]="true"></p-checkbox>
         <label class="inline-label">Active</label>
+      </div>
+
+      <!-- Condition builder (optional) -->
+      <div class="condition-builder">
+        <div class="condition-header">
+          <label class="condition-title">Conditions <span class="condition-optional">(optional)</span></label>
+          <div class="condition-match" *ngIf="conditions.length > 1">
+            Match
+            <select class="match-select" [(ngModel)]="conditionMatch" [ngModelOptions]="{standalone:true}">
+              <option value="all">All</option>
+              <option value="any">Any</option>
+            </select>
+            of the following
+          </div>
+        </div>
+
+        <p class="condition-hint" *ngIf="conditions.length === 0">
+          No conditions — this alert always fires for the selected trigger. Add a condition to fire only when document field values match.
+        </p>
+
+        <div class="condition-row" *ngFor="let c of conditions; let i = index">
+          <input class="cond-field" type="text" placeholder="Field code (e.g. TTES)" [(ngModel)]="c.field" [ngModelOptions]="{standalone:true}" />
+          <select class="cond-op" [(ngModel)]="c.op" [ngModelOptions]="{standalone:true}">
+            <option *ngFor="let o of conditionOps" [value]="o.value">{{ o.label }}</option>
+          </select>
+          <input class="cond-value" type="text" placeholder="Value" [(ngModel)]="c.value" [ngModelOptions]="{standalone:true}" *ngIf="!opHasNoValue(c.op)" />
+          <span class="cond-novalue" *ngIf="opHasNoValue(c.op)">—</span>
+          <button type="button" class="cond-remove" (click)="removeCondition(i)" title="Remove condition"><i class="pi pi-times"></i></button>
+        </div>
+
+        <button type="button" class="cond-add" (click)="addCondition()">
+          <i class="pi pi-plus"></i> Add condition
+        </button>
       </div>
 
       <div class="actions-row">

@@ -33,6 +33,7 @@ import { ValidationErrorDisplayComponent } from '../../angular-validation/compon
 import { ValidationErrorCollection } from '../../angular-validation/models/validation-error.model';
 import { UserQueriesService } from '../../FormBuilder/services/user-queries.service';
 import { UserQueryDto, CreateUserQueryDto } from '../../FormBuilder/form-builder/models/user-query-dto.model';
+import { MasterDataService, MasterDataSet } from '../../FormBuilder/services/master-data.service';
 import { TableShellComponent } from '../../../shared/table-shell/table-shell.component';
 import { PermissionService } from '../../../services/permission.service';
 import { HasPermissionDirective } from '../../../directives/has-permission.directive';
@@ -184,7 +185,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
 
   // Field DataSource Options
-  dataSourceType: 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana' = 'Static';
+  dataSourceType: 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'MasterData' | 'SqlQuery' | 'SapHana' = 'Static';
   dataSourceConfig: Partial<CreateFieldDataSourceDto> = {
     sourceType: 'Static',
     apiUrl: null,
@@ -256,6 +257,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
   ];
   availableLookupTables: string[] = [];
   availableColumns: string[] = []; // Available columns from selected table
+  masterDataSets: MasterDataSet[] = [];
+  selectedMasterDataSetId: number | null = null;
+  loadingMasterDataSets: boolean = false;
   previewOptions: FieldOptionResponse[] = [];
   selectedPreviewOption: any = null; // Selected option in preview dropdown
   loadingPreview: boolean = false;
@@ -333,6 +337,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     private validationService: ValidationService,
     private formSubmissionService: FormSubmissionService,
     private userQueriesService: UserQueriesService,
+    private masterDataService: MasterDataService,
     public permissionService: PermissionService,
     private sapIntegrationService: SapIntegrationService,
     private formsService: FormsService,
@@ -731,6 +736,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.resetSapIntegrationSelection();
     this.loadSapConnections();
     this.loadSapDefaults();
+    this.loadMasterDataSets();
     
     // Load all form fields for expression builder (always load, not just for calculated fields)
     if (this.allFormFields.length === 0) {
@@ -795,6 +801,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.resetSapIntegrationSelection();
     this.loadSapConnections();
     this.loadSapDefaults();
+    this.loadMasterDataSets();
 
     // Debug: Log field data to check if expressionText is present
     console.log('[openEditFieldModal] Field data:', {
@@ -1236,7 +1243,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         isMandatory: fieldData.isMandatory ?? null,
         isEditable: fieldData.isEditable ?? null,
         isVisible: fieldData.isVisible ?? null,
-        defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || undefined,
+        // #12: send '' (not undefined) so clearing the default actually persists. With
+        // undefined the property is omitted from the JSON and the backend's "skip nulls"
+        // update mapping keeps the OLD default, so it kept re-appearing in submissions.
+        defaultValueJson: fieldData.defaultValueJson || fieldData.defaultValue || '',
         regexPattern: fieldData.regexPattern || undefined,
         validationMessage: fieldData.validationMessage || undefined,
         foreignValidationMessage: fieldData.foreignValidationMessage || undefined,
@@ -3932,22 +3942,20 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.fieldsService.updateField(this.editingField.id, updateDto).subscribe({
       next: (updatedField) => {
         const selectedFieldType = this.fieldTypes.find(t => t.id === Number(fieldData.fieldTypeId));
-        if (selectedFieldType?.hasOptions) {
-          // Use currently selected DataSource type from editor state.
-          // API update response may not include fieldDataSource, which could incorrectly fallback to "Static".
-          if (this.dataSourceType === 'Static') {
-          this.saveFieldOptions(this.editingField!.id);
-          } else {
-            // For Api/LookupTable, ensure no options are saved
-            this.deleteAllFieldOptions(this.editingField!.id).then(() => {
+          if (selectedFieldType?.hasOptions) {
+            // Use currently selected DataSource type from editor state.
+            // API update response may not include fieldDataSource, which could incorrectly fallback to "Static".
+            if (this.dataSourceType === 'Static') {
+              this.saveFieldOptions(this.editingField!.id);
+            } else {
+              // Dynamic sources should not overwrite or delete saved Static options.
               this.loading.save = false;
               this.loadFields();
               this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Field settings saved successfully' });
               this.closeFieldSettingsModal();
               this.cdr.detectChanges();
-            });
-          }
-        } else {
+            }
+          } else {
           this.deleteAllFieldOptions(this.editingField!.id).then(() => {
             this.loading.save = false;
             this.loadFields();
@@ -3992,12 +4000,25 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           // Use the first active DataSource
           const dataSource = dataSources[0];
           this.existingDataSource = dataSource;
-          const loadedSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'SqlQuery' | 'SapHana';
+          const validSourceTypes = ['Static', 'Api', 'LookupTable', 'FormSubmissions', 'MasterData', 'SqlQuery', 'SapHana'];
+          if (!validSourceTypes.includes(dataSource.sourceType)) {
+            console.warn('[FieldsList] Unknown DataSource type loaded. Falling back to Static options:', dataSource.sourceType);
+            this.dataSourceType = 'Static';
+            this.useFieldDependencySource = false;
+            this.resetDataSourceConfig();
+            if (callback) {
+              callback();
+            }
+            this.cdr.detectChanges();
+            return;
+          }
+
+          const loadedSourceType = dataSource.sourceType as 'Static' | 'Api' | 'LookupTable' | 'FormSubmissions' | 'MasterData' | 'SqlQuery' | 'SapHana';
           this.dataSourceType = loadedSourceType;
           this.useFieldDependencySource = dataSource.sourceType !== 'Static';
           this.selectedDataSourceSapConnectionId = null;
 
-          if (!this.isOptionsFieldType() && loadedSourceType !== 'LookupTable') {
+          if (!this.isOptionsFieldType() && loadedSourceType !== 'LookupTable' && loadedSourceType !== 'FormSubmissions' && loadedSourceType !== 'MasterData') {
             this.dataSourceType = 'LookupTable';
             this.autoFillUsesContextValue = false;
             this.previewOptions = [];
@@ -4204,6 +4225,30 @@ export class FieldsListComponent implements OnInit, OnDestroy {
               }
             });
             return;
+          } else if (dataSource.sourceType === 'MasterData') {
+            let setId: number | null = dataSource.apiUrl ? Number(dataSource.apiUrl) : null;
+            if ((dataSource as any).configurationJson) {
+              try {
+                const parsed = JSON.parse((dataSource as any).configurationJson);
+                setId = parsed.masterDataSetId ? Number(parsed.masterDataSetId) : setId;
+              } catch {
+                // keep apiUrl fallback
+              }
+            }
+
+            this.selectedMasterDataSetId = setId && !Number.isNaN(setId) ? setId : null;
+            this.dataSourceConfig = {
+              sourceType: 'MasterData',
+              apiUrl: this.selectedMasterDataSetId ? String(this.selectedMasterDataSetId) : null,
+              httpMethod: null,
+              requestBodyJson: null,
+              valuePath: dataSource.valuePath || 'value',
+              textPath: dataSource.textPath || 'text',
+              configurationJson: (dataSource as any).configurationJson || null,
+              isActive: dataSource.isActive
+            };
+            this.previewOptions = [];
+            this.loadMasterDataSets();
           } else if (dataSource.sourceType === 'SqlQuery') {
             // For SqlQuery type, load SQL query and database from requestBodyJson
             let sqlQuery = '';
@@ -4501,6 +4546,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
     this.loadingSourceFormFields = false;
     this.availableLookupTables = [];
     this.availableColumns = [];
+    this.selectedMasterDataSetId = null;
     this.availableProperties = []; // Reset available properties
     this.hasSuggestedPaths = false; // Reset suggested paths flag
     this.rawApiResponse = null;
@@ -4565,8 +4611,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.dataSourceConfig.valuePath = this.lookupTableConfig.valueColumn;
       this.dataSourceConfig.textPath = this.lookupTableConfig.textColumn;
       this.previewOptions = [];
-      // Clear static options when using DataSource
-      this.clearFieldOptions();
+      // Keep static options as fallback if the user switches back to Static later.
     } else if (this.dataSourceType === 'FormSubmissions') {
       this.dataSourceConfig.httpMethod = null;
       this.dataSourceConfig.apiUrl = null;
@@ -4574,7 +4619,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.dataSourceConfig.valuePath = this.formSubmissionConfig.valueFieldCode || null;
       this.dataSourceConfig.textPath = this.formSubmissionConfig.textFieldCode || null;
       this.previewOptions = [];
-      this.clearFieldOptions();
+      // Keep static options as fallback if the user switches back to Static later.
 
       if (!this.formSubmissionConfig.formId) {
         this.formSubmissionConfig = {
@@ -4588,6 +4633,15 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       }
 
       this.loadSubmissionSourceForms();
+    } else if (this.dataSourceType === 'MasterData') {
+      this.dataSourceConfig.httpMethod = null;
+      this.dataSourceConfig.apiUrl = this.selectedMasterDataSetId ? String(this.selectedMasterDataSetId) : null;
+      this.dataSourceConfig.requestBodyJson = null;
+      this.dataSourceConfig.valuePath = 'value';
+      this.dataSourceConfig.textPath = 'text';
+      this.previewOptions = [];
+      // Keep static options as fallback if the user switches back to Static later.
+      this.loadMasterDataSets();
     } else if (this.dataSourceType === 'Api') {
       // Set default HTTP method
       this.dataSourceConfig.httpMethod = 'GET';
@@ -4596,8 +4650,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.dataSourceConfig.valuePath = 'id';
       this.dataSourceConfig.textPath = 'name';
       this.previewOptions = [];
-      // Clear static options when using DataSource
-      this.clearFieldOptions();
+      // Keep static options as fallback if the user switches back to Static later.
       this.loadSapConnections();
       this.ensureDataSourceSapConnectionSelected();
     } else if (this.dataSourceType === 'SqlQuery') {
@@ -4625,8 +4678,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.dataSourceConfig.valuePath = this.sqlQueryConfig.valuePath;
       this.dataSourceConfig.textPath = this.sqlQueryConfig.textPath;
       this.previewOptions = [];
-      // Clear static options when using DataSource
-      this.clearFieldOptions();
+      // Keep static options as fallback if the user switches back to Static later.
       
       // Load saved queries for the current database (only for SQL Server)
       this.loadSavedQueries();
@@ -4652,13 +4704,43 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       this.dataSourceConfig.valuePath = this.sqlQueryConfig.valuePath;
       this.dataSourceConfig.textPath = this.sqlQueryConfig.textPath;
       this.previewOptions = [];
-      // Clear static options when using DataSource
-      this.clearFieldOptions();
+      // Keep static options as fallback if the user switches back to Static later.
       this.loadSapConnections();
       this.ensureDataSourceSapConnectionSelected();
     }
 
     this.cdr.detectChanges();
+  }
+
+  loadMasterDataSets(): void {
+    if (this.loadingMasterDataSets) {
+      return;
+    }
+
+    this.loadingMasterDataSets = true;
+    this.masterDataService.getActiveSets().subscribe({
+      next: (sets) => {
+        this.masterDataSets = sets;
+        this.loadingMasterDataSets = false;
+        if (!this.selectedMasterDataSetId && sets.length > 0 && this.dataSourceType === 'MasterData') {
+          this.selectedMasterDataSetId = sets[0].id;
+          this.dataSourceConfig.apiUrl = String(sets[0].id);
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.masterDataSets = [];
+        this.loadingMasterDataSets = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  onMasterDataSetChange(): void {
+    this.dataSourceConfig.apiUrl = this.selectedMasterDataSetId ? String(this.selectedMasterDataSetId) : null;
+    this.dataSourceConfig.valuePath = 'value';
+    this.dataSourceConfig.textPath = 'text';
+    this.previewOptions = [];
   }
 
   loadSubmissionSourceForms(callback?: () => void): void {
@@ -6253,7 +6335,7 @@ export class FieldsListComponent implements OnInit, OnDestroy {
 
     // Ensure valuePath and textPath are set with defaults if empty
     // Only set defaults if availableProperties is empty (no API tested yet)
-    if (this.dataSourceType !== 'SqlQuery' && this.availableProperties.length === 0) {
+    if (this.dataSourceType !== 'SqlQuery' && this.dataSourceType !== 'MasterData' && this.availableProperties.length === 0) {
       const defaultValuePath = this.dataSourceType === 'LookupTable' ? 'Id' : 'id';
       const defaultTextPath = this.dataSourceType === 'LookupTable' ? 'Name' : 'name';
 
@@ -6302,6 +6384,11 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       // Sync with dataSourceConfig for consistency
       this.dataSourceConfig.valuePath = valuePath;
       this.dataSourceConfig.textPath = textPath;
+    } else if (this.dataSourceType === 'MasterData') {
+      valuePath = 'value';
+      textPath = 'text';
+      this.dataSourceConfig.valuePath = valuePath;
+      this.dataSourceConfig.textPath = textPath;
     } else if (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') {
       if (this.dataSourceType === 'SqlQuery') {
         valuePath = (this.sqlQueryConfig.valuePath || this.dataSourceConfig.valuePath || '').trim();
@@ -6328,7 +6415,9 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       ? this.lookupTableConfig.table
       : (this.dataSourceType === 'FormSubmissions'
         ? (this.formSubmissionConfig.formId ? String(this.formSubmissionConfig.formId) : undefined)
-        : ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') ? undefined : (this.dataSourceConfig.apiUrl || undefined)));
+        : (this.dataSourceType === 'MasterData'
+          ? (this.selectedMasterDataSetId ? String(this.selectedMasterDataSetId) : undefined)
+          : ((this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') ? undefined : (this.dataSourceConfig.apiUrl || undefined))));
 
     // For SqlQuery, use SQL query and database in requestBodyJson as JSON object
     // For LookupTable, include database in requestBodyJson as JSON object
@@ -6391,6 +6480,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         textFieldCode: this.formSubmissionConfig.textFieldCode,
         autoFillMode: this.autoFillUsesContextValue ? 'contextValue' : undefined
       });
+    } else if (this.dataSourceType === 'MasterData') {
+      configurationJsonForPreview = JSON.stringify({
+        masterDataSetId: this.selectedMasterDataSetId,
+        valueField: 'value',
+        textField: 'text'
+      });
     } else {
       requestBodyJsonForPreview = this.dataSourceConfig.requestBodyJson || undefined;
       if (this.dataSourceType === 'Api') {
@@ -6452,6 +6547,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
       if (this.dataSourceType === 'Api') {
         requestPayload.ConfigurationJson = configurationJsonForPreview;
         requestPayload.SapConfigId = this.selectedDataSourceSapConnectionId ?? undefined;
+      } else if (this.dataSourceType === 'MasterData') {
+        requestPayload.ConfigurationJson = configurationJsonForPreview;
       }
     }
 
@@ -7101,9 +7198,8 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // For Api or LookupTable: Delete all existing options first (if switching from Static)
-      // Options should NOT be saved for Api/LookupTable DataSources
-      this.deleteAllFieldOptions(fieldId).then(() => {
+      // Dynamic sources should not delete existing Static options. Keep them as fallback
+      // so accidental source changes do not make previously configured options disappear.
       // For LookupTable, use table name only in apiUrl
       let apiUrlValue: string | null = null;
       let valuePathValue: string | null = null;
@@ -7133,6 +7229,10 @@ export class FieldsListComponent implements OnInit, OnDestroy {
         apiUrlValue = this.formSubmissionConfig.formId ? String(this.formSubmissionConfig.formId) : null;
         valuePathValue = this.formSubmissionConfig.valueFieldCode || null;
         textPathValue = this.formSubmissionConfig.textFieldCode || null;
+      } else if (this.dataSourceType === 'MasterData') {
+        apiUrlValue = this.selectedMasterDataSetId ? String(this.selectedMasterDataSetId) : null;
+        valuePathValue = 'value';
+        textPathValue = 'text';
       } else if (this.dataSourceType === 'SqlQuery' || this.dataSourceType === 'SapHana') {
         // For SqlQuery and SapHana, store SQL query in requestBodyJson
         apiUrlValue = null;
@@ -7221,6 +7321,12 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           autoFillMode: this.autoFillUsesContextValue ? 'contextValue' : undefined,
           contextBindings
         });
+      } else if (this.dataSourceType === 'MasterData') {
+        configurationJsonValue = JSON.stringify({
+          masterDataSetId: this.selectedMasterDataSetId,
+          valueField: 'value',
+          textField: 'text'
+        });
       } else {
         requestBodyJsonValue = this.dataSourceConfig.requestBodyJson || null;
         if (this.dataSourceType === 'Api') {
@@ -7308,10 +7414,6 @@ export class FieldsListComponent implements OnInit, OnDestroy {
           });
           reject();
         }
-      });
-      }).catch(() => {
-        // Even if delete fails, continue with DataSource save
-        reject();
       });
     });
   }

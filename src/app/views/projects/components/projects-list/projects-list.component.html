@@ -253,7 +253,8 @@
                   <app-table-actions>
                     <button
                       class="action-btn action-restore"
-                      title="Restore"
+                      [title]="permissionService.canManageProjects() ? 'Restore' : 'No permission to restore'"
+                      [disabled]="!permissionService.canManageProjects()"
                       (click)="restoreProject(project)"
                     >
                       <i class="pi pi-refresh"></i>

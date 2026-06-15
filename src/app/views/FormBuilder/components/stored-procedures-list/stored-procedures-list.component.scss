@@ -237,7 +237,7 @@
     }
 
     &.stat-icon-info {
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
     }
   }
 
@@ -599,7 +599,7 @@
     }
     
     &.badge-database {
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
       color: white;
     }
     
@@ -665,11 +665,11 @@
     }
     
     &.action-edit {
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
       color: white;
       
       &:hover {
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
       }
     }
     
@@ -706,11 +706,11 @@
 }
 
 .btn-primary {
-  background: #3b82f6;
+  background: #14b8a6;
   color: white;
   
   &:hover:not(:disabled) {
-    background: #2563eb;
+    background: #0d9488;
   }
 }
 
@@ -733,3 +733,52 @@
   }
 }
 
+
+/* Test-run button + dialog */
+.action-run { background: #cffafe; color: #155e75; }
+
+.sp-exec-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.5);
+  display: flex; align-items: center; justify-content: center; z-index: 1100;
+}
+.sp-exec-modal {
+  background: #fff; width: min(620px, 94vw); max-height: 88vh; overflow: hidden;
+  border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.3); display: flex; flex-direction: column;
+  .sp-exec-header {
+    display: flex; align-items: center; justify-content: space-between; padding: 16px 20px;
+    background: linear-gradient(135deg, #0e7490 0%, #22d3ee 100%); color: #fff;
+    h3 { margin: 0; font-size: 16px; font-weight: 600; }
+    .sp-exec-close { background: transparent; border: none; color: #fff; font-size: 18px; cursor: pointer; }
+  }
+  .sp-exec-body { padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+    label { font-size: 12px; font-weight: 600; color: #334155; margin-top: 6px; }
+    textarea { border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px 11px; font-size: 13px; font-family: monospace; resize: vertical;
+      &:focus { outline: none; border-color: #0e7490; box-shadow: 0 0 0 3px rgba(14,116,144,.12); } }
+    .sp-exec-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #475569; font-family: monospace;
+      .sp-exec-usage { background: #f1f5f9; border-radius: 8px; padding: 2px 8px; font-weight: 600; } }
+    .sp-exec-hint { font-size: 11px; color: #94a3b8; }
+    .sp-exec-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+    .btn-cancel-sp { border: 1px solid #e5e7eb; background: #fff; color: #475569; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-run-sp { border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+      background: linear-gradient(135deg, #0e7490 0%, #22d3ee 100%); color: #fff;
+      &:disabled { opacity: .6; cursor: not-allowed; } }
+    .sp-exec-error { margin-top: 8px; background: #fee2e2; color: #991b1b; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+    .sp-exec-result { margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 10px;
+      h4 { margin: 0 0 8px; font-size: 13px; color: #334155; }
+      .sp-exec-result-line { font-size: 13px; margin-bottom: 6px; .lbl { color: #64748b; margin-right: 6px; }
+        .val { font-weight: 700; &.ok { color: #166534; } &.no { color: #b91c1c; } } }
+      pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; font-size: 12px; max-height: 240px; overflow: auto; margin: 0; }
+    }
+  }
+}
+
+.sp-exec-modal .sp-exec-body {
+  .sp-exec-table {
+    width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px;
+    th, td { border: 1px solid #e2e8f0; padding: 6px 9px; text-align: left; }
+    th { background: #f1f5f9; color: #334155; font-weight: 700; position: sticky; top: 0; }
+    td { color: #1e293b; }
+    .sp-exec-norows { color: #94a3b8; text-align: center; }
+  }
+  .sp-exec-outputs { margin-top: 12px; h4 { margin: 0 0 6px; font-size: 13px; color: #334155; } }
+}

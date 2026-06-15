@@ -882,17 +882,19 @@ export class FormViewComponent implements OnInit {
     const isSqlQuery = normalizedSourceType === 'sqlquery' || normalizedSourceType === 'datasourcesqlquery';
     const isSapHana = normalizedSourceType === 'saphana' || normalizedSourceType === 'sap';
     const isFormSubmissions = normalizedSourceType === 'formsubmissions' || normalizedSourceType === 'formsubmission';
+    const isMasterData = normalizedSourceType === 'masterdata';
     console.log(`[FormView] Checking DataSource type for field ${field.id}:`, {
       sourceType: dataSource.sourceType,
       isSqlQuery: isSqlQuery,
       isSapHana: isSapHana,
       isFormSubmissions: isFormSubmissions,
+      isMasterData: isMasterData,
       isApi: normalizedSourceType === 'api',
       isLookupTable: normalizedSourceType === 'lookuptable',
-      willLoad: normalizedSourceType === 'api' || normalizedSourceType === 'lookuptable' || isSqlQuery || isSapHana || isFormSubmissions
+      willLoad: normalizedSourceType === 'api' || normalizedSourceType === 'lookuptable' || isSqlQuery || isSapHana || isFormSubmissions || isMasterData
     });
     
-    if (normalizedSourceType === 'api' || normalizedSourceType === 'lookuptable' || isSqlQuery || isSapHana || isFormSubmissions) {
+    if (normalizedSourceType === 'api' || normalizedSourceType === 'lookuptable' || isSqlQuery || isSapHana || isFormSubmissions || isMasterData) {
       console.log(`[FormView] ✅ Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`, {
         sourceType: dataSource.sourceType,
         requestBodyJson: dataSource.requestBodyJson,
@@ -1370,7 +1372,7 @@ export class FormViewComponent implements OnInit {
    */
   isSearchableSelectField(field: FormFieldDto): boolean {
     const sourceType = this.normalizeDataSourceType(field.fieldDataSource?.sourceType);
-    const dynamicSources = ['api', 'lookuptable', 'sqlquery', 'datasourcesqlquery', 'saphana', 'sap', 'formsubmissions', 'formsubmission'];
+    const dynamicSources = ['api', 'lookuptable', 'sqlquery', 'datasourcesqlquery', 'saphana', 'sap', 'formsubmissions', 'formsubmission', 'masterdata'];
     return this.getFieldType(field) === 'select' &&
       !field.fieldType?.allowMultiple &&
       dynamicSources.includes(sourceType);
@@ -2930,8 +2932,9 @@ export class FormViewComponent implements OnInit {
         selectedValues = selectedValues.filter(v => v !== optStr);
       }
 
-      // Update field value
-      const newValue = selectedValues.length > 0 ? JSON.stringify(selectedValues) : '';
+      // Keep checkbox state as an array internally. Serializing here causes
+      // submit to double-wrap the value as JSON instead of saving real options.
+      const newValue = selectedValues.length > 0 ? selectedValues : [];
       console.log(`[FormView] Checkbox new value for field ID ${fieldId}:`, newValue, 'selectedValues:', selectedValues);
       this.onFieldValueChange(fieldId, newValue, fieldCode);
     } catch (error) {
@@ -6043,6 +6046,18 @@ export class FormViewComponent implements OnInit {
                 const fieldType = this.getFieldType(field);
                 
                 switch (fieldType) {
+                  case 'calculated':
+                    {
+                      const calculatedNumber = Number(fieldValue);
+                      if (!isNaN(calculatedNumber) && isFinite(calculatedNumber)) {
+                        valueDto.valueNumber = calculatedNumber;
+                        valueDto.valueString = String(fieldValue);
+                      } else {
+                        valueDto.valueString = String(fieldValue);
+                      }
+                      valueDto.valueJson = "";
+                    }
+                    break;
                   case 'number':
                     const numValue = Number(fieldValue);
                     valueDto.valueNumber = numValue;
@@ -6090,8 +6105,21 @@ export class FormViewComponent implements OnInit {
                   case 'checkbox':
                     // For checkbox, backend expects JSON array format in valueJson
                     // Try both formats: valueJson (JSON array) and valueString (comma-separated fallback)
-                    if (Array.isArray(fieldValue)) {
-                      const selected = fieldValue
+                    const checkboxValues = Array.isArray(fieldValue)
+                      ? fieldValue
+                      : (() => {
+                          const raw = String(fieldValue ?? '').trim();
+                          if (!raw) return [];
+                          try {
+                            const parsed = JSON.parse(raw);
+                            return Array.isArray(parsed) ? parsed : [parsed];
+                          } catch {
+                            return raw.includes(',') ? raw.split(',') : [raw];
+                          }
+                        })();
+
+                    if (checkboxValues.length > 0) {
+                      const selected = checkboxValues
                         .map(v => String(v).trim())
                         .filter(v => v !== '');
                       
@@ -6106,16 +6134,8 @@ export class FormViewComponent implements OnInit {
                         valueDto.valueString = selected.join(',');
                       }
                     } else {
-                      // Single value (not array) - convert to array format
-                      const stringValue = String(fieldValue ?? '').trim();
-                      if (stringValue) {
-                        // Store as single-item JSON array in valueJson
-                        valueDto.valueJson = JSON.stringify([stringValue]);
-                        valueDto.valueString = stringValue;
-                      } else {
-                        valueDto.valueString = '';
-                        valueDto.valueJson = '';
-                      }
+                      valueDto.valueString = '';
+                      valueDto.valueJson = '';
                     }
                     break;
                   case 'select':

@@ -81,6 +81,9 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
   // Search Filter
   searchTerm = '';
 
+  // When true, the list shows soft-deleted workflows (so they can be restored).
+  showDeleted = false;
+
   // Pagination
   first = 0;
   rows = 10;
@@ -164,29 +167,35 @@ export class ApprovalWorkflowsListComponent implements OnInit, OnDestroy {
     });
   }
 
+  toggleShowDeleted(): void {
+    this.showDeleted = !this.showDeleted;
+    this.loadApprovalWorkflows();
+  }
+
   loadApprovalWorkflows(): void {
     this.loading.workflows = true;
-    this.approvalWorkflowService.getAllApprovalWorkflows().subscribe({
+
+    // When viewing the recycle bin, fetch the soft-deleted workflows so they can be restored.
+    const source$ = this.showDeleted
+      ? this.approvalWorkflowService.getDeletedApprovalWorkflows()
+      : this.approvalWorkflowService.getAllApprovalWorkflows();
+
+    source$.subscribe({
       next: (workflows: ApprovalWorkflowDto[]) => {
         const allWorkflows = workflows || [];
-        console.log('[ApprovalWorkflowsList] All workflows loaded from API:', allWorkflows.map(w => ({ id: w.id, name: w.name, isDeleted: w.isDeleted, isDeletedType: typeof w.isDeleted })));
-        
-        // Filter out soft-deleted workflows (isDeleted = false only) - rely on API isDeleted flag
-        // Handle boolean, string, null, undefined cases
-        const visibleWorkflows = allWorkflows.filter(workflow => {
-          const isDeletedValue: any = workflow.isDeleted;
-          
-          // If isDeleted is true (boolean or string), exclude it
-          if (isDeletedValue === true || isDeletedValue === 'true' || isDeletedValue === 'True' || isDeletedValue === 1 || isDeletedValue === '1') {
-            return false; // Exclude deleted
-          }
-          
-          // If isDeleted is false, null, undefined, 'false', 'False', 0, '0', include it
-          return true; // Include non-deleted
-        });
-        
-        console.log('[ApprovalWorkflowsList] Filtered workflows (isDeleted=false):', visibleWorkflows.map(w => ({ id: w.id, name: w.name, isDeleted: w.isDeleted })));
-        
+
+        // In deleted view, keep all returned rows (they are all deleted). Otherwise filter out
+        // any soft-deleted rows defensively (the API already excludes them).
+        const visibleWorkflows = this.showDeleted
+          ? allWorkflows
+          : allWorkflows.filter(workflow => {
+              const isDeletedValue: any = workflow.isDeleted;
+              if (isDeletedValue === true || isDeletedValue === 'true' || isDeletedValue === 'True' || isDeletedValue === 1 || isDeletedValue === '1') {
+                return false; // Exclude deleted
+              }
+              return true; // Include non-deleted
+            });
+
         this.approvalWorkflows = visibleWorkflows;
         this.filteredWorkflows = [...this.approvalWorkflows];
         this.totalRecords = this.filteredWorkflows.length;

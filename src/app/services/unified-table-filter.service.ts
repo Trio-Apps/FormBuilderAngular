@@ -175,6 +175,10 @@ export class UnifiedTableFilterService {
   }
 
   private getLegacySearchContainer(element: HTMLElement): HTMLElement | null {
+    if (element.closest('app-master-data-manage, .master-page')) {
+      return null;
+    }
+
     if (element.closest('.unified-column-filter-row, .searchable-select')) {
       return null;
     }

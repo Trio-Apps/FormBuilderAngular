@@ -922,39 +922,36 @@ export class PermissionService {
    * Permission: StoredProcedure_Allow_View
    */
   canViewStoredProcedures(): boolean {
-    return this.hasPermission('StoredProcedure_Allow_View');
+    return this.hasPermission('FormStoredProcedure_Allow_View') || this.hasPermission('StoredProcedure_Allow_View');
   }
 
   /**
-   * Check if user can create stored procedures
-   * Permission: StoredProcedure_Allow_Create
+   * Check if user can create stored procedures.
+   * Backend grants the FormStoredProcedure_* family; the legacy StoredProcedure_* is unused.
    */
   canCreateStoredProcedures(): boolean {
-    return this.hasPermission('StoredProcedure_Allow_Create');
+    return this.hasPermission('FormStoredProcedure_Allow_Create') || this.hasPermission('StoredProcedure_Allow_Create');
   }
 
   /**
    * Check if user can edit stored procedures
-   * Permission: StoredProcedure_Allow_Edit
    */
   canEditStoredProcedures(): boolean {
-    return this.hasPermission('StoredProcedure_Allow_Edit');
+    return this.hasPermission('FormStoredProcedure_Allow_Edit') || this.hasPermission('StoredProcedure_Allow_Edit');
   }
 
   /**
    * Check if user can delete stored procedures
-   * Permission: StoredProcedure_Allow_Delete
    */
   canDeleteStoredProcedures(): boolean {
-    return this.hasPermission('StoredProcedure_Allow_Delete');
+    return this.hasPermission('FormStoredProcedure_Allow_Delete') || this.hasPermission('StoredProcedure_Allow_Delete');
   }
 
   /**
    * Check if user can manage stored procedures (full control)
-   * Permission: StoredProcedure_Allow_Manage
    */
   canManageStoredProcedures(): boolean {
-    return this.hasPermission('StoredProcedure_Allow_Manage');
+    return this.hasPermission('FormStoredProcedure_Allow_Manage') || this.hasPermission('StoredProcedure_Allow_Manage');
   }
 
   // ==================== Form Rule Permission Helpers ====================
@@ -1173,40 +1170,46 @@ export class PermissionService {
    * Check if user can view table sub menus
    * Permission: TableSubMenu_Allow_View
    */
+  // NOTE: Sub-menu actions are enforced by the backend using the parent TableMenu_Allow_*
+  // permission codes (TableMenusController gates sub-menus and menu-documents on
+  // TableMenu_Allow_Create/Edit/Delete). The TableSubMenu_Allow_* codes were never defined
+  // or granted, so gating the UI on them disabled the buttons for everyone. We check the
+  // real backend codes first, keeping the legacy TableSubMenu_* codes as a forward-compatible
+  // fallback in case dedicated sub-menu permissions are introduced later.
   canViewTableSubMenus(): boolean {
-    return this.hasPermission('TableSubMenu_Allow_View');
+    return this.hasPermission('TableMenu_Allow_View') || this.hasPermission('TableSubMenu_Allow_View');
   }
 
   /**
    * Check if user can create table sub menus
-   * Permission: TableSubMenu_Allow_Create
+   * Permission: TableMenu_Allow_Create (legacy: TableSubMenu_Allow_Create)
    */
   canCreateTableSubMenus(): boolean {
-    return this.hasPermission('TableSubMenu_Allow_Create');
+    return this.hasPermission('TableMenu_Allow_Create') || this.hasPermission('TableSubMenu_Allow_Create');
   }
 
   /**
    * Check if user can edit table sub menus
-   * Permission: TableSubMenu_Allow_Edit
+   * Permission: TableMenu_Allow_Edit (legacy: TableSubMenu_Allow_Edit)
    */
   canEditTableSubMenus(): boolean {
-    return this.hasPermission('TableSubMenu_Allow_Edit');
+    return this.hasPermission('TableMenu_Allow_Edit') || this.hasPermission('TableSubMenu_Allow_Edit');
   }
 
   /**
    * Check if user can delete table sub menus
-   * Permission: TableSubMenu_Allow_Delete
+   * Permission: TableMenu_Allow_Delete (legacy: TableSubMenu_Allow_Delete)
    */
   canDeleteTableSubMenus(): boolean {
-    return this.hasPermission('TableSubMenu_Allow_Delete');
+    return this.hasPermission('TableMenu_Allow_Delete') || this.hasPermission('TableSubMenu_Allow_Delete');
   }
 
   /**
    * Check if user can manage table sub menus (full control)
-   * Permission: TableSubMenu_Allow_Manage
+   * Permission: TableMenu_Allow_Manage (legacy: TableSubMenu_Allow_Manage)
    */
   canManageTableSubMenus(): boolean {
-    return this.hasPermission('TableSubMenu_Allow_Manage');
+    return this.hasPermission('TableMenu_Allow_Manage') || this.hasPermission('TableSubMenu_Allow_Manage');
   }
 
   // ==================== Grid Permission Helpers ====================

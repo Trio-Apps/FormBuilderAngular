@@ -83,7 +83,7 @@ export class FormSubmissionSuccessComponent implements OnInit {
         : null;
       
       if (documentTypeId) {
-        this.router.navigate(['/document-types', documentTypeId, 'submissions']);
+        this.router.navigate(['/document-submissions', documentTypeId]);
       } else {
         this.router.navigate(['/document-types']);
       }

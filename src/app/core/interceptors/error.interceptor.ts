@@ -12,7 +12,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
-      if (shouldIgnoreErrorToast(req.url, error.status)) {
+      if (shouldIgnoreErrorToast(req.urlWithParams, error.status)) {
         return throwError(() => error);
       }
 
@@ -61,6 +61,10 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 function shouldIgnoreErrorToast(url: string, status: number): boolean {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
   const normalizedUrl = (url || '').toLowerCase();
+
+  if (normalizedUrl.includes('suppressglobalerrortoast=true')) {
+    return true;
+  }
 
   if ((status === 401 || status === 403) && currentPath.includes('/forms/view/')) {
     return true;

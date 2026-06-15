@@ -25,6 +25,8 @@ export interface CreateAlertRuleDto {
   targetRoleId?: string | null;
   targetUserId?: string | null;
   isActive: boolean;
+  scheduleIntervalMinutes?: number | null;
+  sqlCondition?: string | null;
 }
 
 export interface AlertRuleDto {
@@ -39,6 +41,9 @@ export interface AlertRuleDto {
   targetRoleId?: string | null;
   targetUserId?: string | null;
   isActive: boolean;
+  scheduleIntervalMinutes?: number | null;
+  lastRunAt?: string | null;
+  sqlCondition?: string | null;
 }
 
 @Injectable({

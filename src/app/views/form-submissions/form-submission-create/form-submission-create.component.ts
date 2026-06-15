@@ -14,6 +14,7 @@ import { ProjectsService } from '../../projects/services/projects.service';
 import { FormsService } from '../../FormBuilder/services/forms.service';
 import { TabsService } from '../../FormBuilder/services/tabs.service';
 import { FieldsService } from '../../FormBuilder/services/fields.service';
+import { FieldOptionsService } from '../../FormBuilder/services/field-options.service';
 import { FieldDataSourceService } from '../../FormBuilder/services/field-data-source.service';
 import { RuleEvaluationService, FieldState } from '../../FormBuilder/services/rule-evaluation.service';
 import { FormRulesService } from '../../FormBuilder/services/form-rules.service';
@@ -40,6 +41,10 @@ import { ApprovalWorkflowRuntimeService } from '../../FormBuilder/services/appro
 import { ApprovalWorkflowService } from '../../FormBuilder/services/approval-workflow.service';
 import { ApprovalStageService } from '../../FormBuilder/services/approval-stage.service';
 import { GridService } from '../../FormBuilder/services/grid.service';
+import { CrystalReportsService, CrystalLayoutDto } from '../../FormBuilder/services/crystal-reports.service';
+import { SubmissionEmailsService, SubmissionEmailDto } from '../services/submission-emails.service';
+import { SubmissionLettersService, DocumentLetterDto, LetterTypeDto } from '../services/submission-letters.service';
+import { DocumentClausesService, DocumentClauseLinkDto, AvailableClauseDto } from '../services/document-clauses.service';
 import { FormGridDto } from '../../FormBuilder/form-builder/models/grid-dto.model';
 
 @Component({
@@ -97,6 +102,16 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   fieldFiles: { [fieldId: number]: File[] } = {};
   existingAttachments: { [fieldId: number]: FormSubmissionAttachmentDto[] } = {}; // Store existing attachments for edit mode
   deletedAttachments: number[] = []; // Track deleted attachment IDs to delete from server
+
+  // --- Edit-mode hydration coordination (deterministic, order-independent) ---
+  // Fields and submission data load on independent async pipelines. Each marks
+  // its readiness flag and calls tryHydrateFromSubmission(); whichever finishes
+  // last performs the population exactly once. Removes the previous race where
+  // values/grids could arrive before fields and be silently lost.
+  private _fieldsReady = false;
+  private _submissionDataReady = false;
+  private _hydratedFromSubmission = false;
+  private _attachmentLoadAttempts = 0;
   attachmentPreviewOpen = false;
   attachmentPreviewName = '';
   attachmentPreviewUrl: SafeResourceUrl | null = null;
@@ -106,6 +121,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   // Field DataSource state
   fieldDataSourceOptions: { [fieldId: number]: FieldOptionResponse[] } = {}; // Options loaded from DataSource
   loadingFieldOptions: { [fieldId: number]: boolean } = {}; // Loading state for each field
+  searchableFieldQueries: { [fieldId: number]: string } = {};
+  searchableFieldSelectedLabels: { [fieldId: number]: string } = {};
+  searchableFieldDropdownOpen: { [fieldId: number]: boolean } = {};
+  private searchableFieldSearchTimers: { [fieldId: number]: any } = {};
   private _cachedMappedOptions: { [fieldId: number]: any[] } = {}; // Cache for mapped DataSource options
   private _cachedStaticOptions: { [fieldId: number]: any[] } = {}; // Cache for static options
   private _loggedFieldOptions: { [fieldId: number]: boolean } = {}; // Track logged fields to avoid console spam
@@ -177,6 +196,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     private formsService: FormsService,
     private tabsService: TabsService,
     private fieldsService: FieldsService,
+    private fieldOptionsService: FieldOptionsService,
     private fieldDataSourceService: FieldDataSourceService,
     private ruleEvaluationService: RuleEvaluationService,
     private formRulesService: FormRulesService,
@@ -192,7 +212,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     private approvalStageService: ApprovalStageService,
     private approvalWorkflowService: ApprovalWorkflowService,
     private gridService: GridService,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private crystalReportsService: CrystalReportsService,
+    private submissionEmailsService: SubmissionEmailsService,
+    private submissionLettersService: SubmissionLettersService,
+    private documentClausesService: DocumentClausesService
   ) {
     // Submission form
     this.submissionForm = this.fb.group({
@@ -315,6 +339,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             this.documentSeries = [];
           }
         }
+        // Order the series so the default appears first, then alphabetically by code.
+        // This makes the "choose between multiple series" dropdown predictable (#1).
+        this.documentSeries = [...this.documentSeries].sort((a, b) => {
+          if ((a.isDefault === true) !== (b.isDefault === true)) {
+            return a.isDefault === true ? -1 : 1;
+          }
+          return (a.seriesCode || '').localeCompare(b.seriesCode || '');
+        });
         this.applySeriesSelectionFromContext();
         this.loading.series = false;
         this.cdr.detectChanges();
@@ -501,10 +533,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.fields = [];
     this.fieldFiles = {};
     this.fieldsForm = this.fb.group({});
+
+    // Reset edit-mode hydration coordination for this (re)load
+    this._fieldsReady = false;
+    this._submissionDataReady = false;
+    this._hydratedFromSubmission = false;
+    this._attachmentLoadAttempts = 0;
+
     this.loadTabs(formId);
-    
-    // If in edit mode, load submission data after form is selected
-    // This will load field values, and attachments will be loaded after fields are loaded in processFields
+
+    // If in edit mode, load submission data after form is selected.
+    // Field values, grids, and attachments are populated by tryHydrateFromSubmission()
+    // once BOTH this pipeline and the field-load pipeline have completed.
     if (this.isEditMode && this.submissionId) {
       this.loadSubmissionForEdit();
     }
@@ -518,16 +558,39 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
 
     this.loading.tabs = true;
+
+    if (this.currentForm?.formCode) {
+      this.formsService.getFormByCode(this.currentForm.formCode).subscribe({
+        next: (form: FormBuilderDto | null) => {
+          const fullTabs = this.normalizeTabs(form?.tabs || []);
+          if (form && fullTabs.length > 0) {
+            this.currentForm = form;
+            this.tabs = fullTabs;
+            this.loadTabGrids();
+            this.selectInitialTab();
+            this.loading.tabs = false;
+            this.cdr.detectChanges();
+            return;
+          }
+
+          this.loadTabsFallback(formId);
+        },
+        error: () => this.loadTabsFallback(formId)
+      });
+      return;
+    }
+
+    this.loadTabsFallback(formId);
+  }
+
+  private loadTabsFallback(formId: number): void {
     this.tabsService.getTabs(formId).subscribe({
       next: (tabs: FormTabDto[]) => {
-        this.tabs = tabs.filter(t => t.isActive).sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
+        this.tabs = this.normalizeTabs(tabs);
         // Load grids for tabs
         this.loadTabGrids();
         // Auto-select first tab
-        if (this.tabs.length > 0) {
-          this.activeTabIndex = 0;
-          this.onTabSelected(this.tabs[0].id || null);
-        }
+        this.selectInitialTab();
         this.loading.tabs = false;
         this.cdr.detectChanges();
       },
@@ -538,6 +601,25 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  private normalizeTabs(tabs: FormTabDto[]): FormTabDto[] {
+    return (tabs || [])
+      .filter(t => t.isActive !== false && !t.isDeleted)
+      .sort((a, b) => (a.tabOrder || 0) - (b.tabOrder || 0));
+  }
+
+  private selectInitialTab(): void {
+    if (this.tabs.length === 0) {
+      this.selectedTabId = null;
+      return;
+    }
+
+    const existingTabIndex = this.selectedTabId
+      ? this.tabs.findIndex(tab => tab.id === this.selectedTabId)
+      : -1;
+    this.activeTabIndex = existingTabIndex >= 0 ? existingTabIndex : 0;
+    this.onTabSelected(this.tabs[this.activeTabIndex].id || null);
   }
 
   /**
@@ -905,6 +987,21 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     const formCode = this.currentForm?.formCode;
     
     if (formCode) {
+      // Reuse the form definition already fetched by loadTabs() instead of issuing
+      // a second getFormByCode round-trip. This keeps tabs and fields from the SAME
+      // fetch (single source of truth) and avoids the divergence risk of two calls.
+      const cachedTab = this.currentForm?.formCode === formCode
+        ? this.currentForm?.tabs?.find(t => t.id === tabId)
+        : undefined;
+      if (cachedTab && (cachedTab.fields?.length || 0) > 0) {
+        console.log('[FormSubmissionCreate] Reusing already-loaded form definition for tab', tabId);
+        this.processFields(cachedTab.fields || []).catch(error => {
+          console.error('[FormSubmissionCreate] Error processing fields (cached):', error);
+          this.loading.fields = false;
+        });
+        return;
+      }
+
       // Use getFormByCode (like FormViewComponent) to get complete form with tabs, fields, and fieldDataSource
       console.log('[FormSubmissionCreate] Loading form by code:', formCode);
       this.formsService.getFormByCode(formCode).subscribe({
@@ -918,6 +1015,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           console.log('[FormSubmissionCreate] Form loaded by code:', form?.id);
           console.log('[FormSubmissionCreate] Form tabs count:', form.tabs?.length || 0);
           console.log('[FormSubmissionCreate] Form tab IDs:', form.tabs?.map(t => t.id) || []);
+
+          const fullTabs = this.normalizeTabs(form.tabs || []);
+          if (fullTabs.length > this.tabs.length) {
+            this.currentForm = form;
+            this.tabs = fullTabs;
+            this.loadTabGrids();
+          }
           
           // Find the selected tab in the form
           const selectedTab = form.tabs?.find(tab => tab.id === tabId);
@@ -1068,6 +1172,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     
     this.fields = fields.filter(f => f.isActive).sort((a, b) => (a.fieldOrder || 0) - (b.fieldOrder || 0));
     console.log('[FormSubmissionCreate] Active fields after filtering:', this.fields.length);
+
+    await this.enrichOptionFieldsWithDetails();
     
     // Load expressionText for calculated fields that don't have it
     const calculatedFieldsWithoutExpression = this.fields.filter(f => 
@@ -1153,7 +1259,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           requiresContext(field.fieldDataSource) &&
           (sourceType === 'formsubmissions' || sourceType === 'formsubmission' || sourceType === 'lookuptable');
 
-        if (isOptionsField || shouldAutoPopulateFromDataSource || (field.fieldOptions && field.fieldOptions.length > 0)) {
+        if (isOptionsField || shouldAutoPopulateFromDataSource || this.getRawFieldOptions(field).length > 0) {
           this.loadFieldOptionsFromDataSource(field);
         }
       }
@@ -1238,7 +1344,13 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           }
         });
         this.fieldsForm = this.fb.group(formControls);
-        
+
+        // Enforce read-only / non-editable fields at the FormControl level so EVERY input
+        // type (text, number, date, textarea, select, radio, checkbox, boolean, switch, ...)
+        // is disabled — not just the few that bind [disabled] in the template. Calculated and
+        // setup "not editable" (isEditable === false) fields get a disabled control here.
+        this.fields.forEach(field => this.updateFieldDisabledState(field));
+
     try {
       // Unsubscribe from previous subscription if exists
       if (this.fieldsFormValueChangesSubscription) {
@@ -1307,23 +1419,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     
     console.log('[FormSubmissionCreate] Fields loading completed. Fields count:', this.fields.length);
     
-    // If in edit mode, load attachments after fields are loaded
-    if (this.isEditMode && this.submissionId && this.fields.length > 0) {
-      // Load attachments for file fields
-      this.loadAttachmentsForEdit();
-      
-      // Also populate form with field values if they were loaded earlier
-      const pendingFieldValues = (this as any)._pendingFieldValues;
-      if (pendingFieldValues && pendingFieldValues.length > 0) {
-        this.populateFormWithFieldValues(pendingFieldValues);
-      }
-      
-      // Load grid data if submission was loaded earlier
-      if (this.currentSubmissionDetail && this.currentSubmissionDetail.gridData && this.currentSubmissionDetail.gridData.length > 0) {
-        setTimeout(() => {
-          this.loadGridDataIntoComponents(this.currentSubmissionDetail!);
-        }, 500); // Wait for grid components to be initialized
-      }
+    // Edit mode: fields are now built. Signal readiness; tryHydrateFromSubmission()
+    // populates values, grids and attachments once submission data is also ready.
+    if (this.isEditMode && this.submissionId) {
+      this._fieldsReady = true;
+      this.tryHydrateFromSubmission();
     }
     
     // Always set loading to false, even if there were errors
@@ -1439,6 +1539,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     // PRIORITY ORDER: Check specific types BEFORE checking options/grid
     const combined = `${typeName} ${dataType}`.toLowerCase();
+    const fieldTypeId = Number(field.fieldTypeId ?? ft?.id ?? field.fieldType?.id ?? 0);
 
     // Additional heuristic: if defaultValueJson contains file configuration
     // (allowedExtensions / customExtensions), prefer treating it as a file field.
@@ -1619,8 +1720,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       return 'number';
     }
 
-    // DateTime must be checked before Date because "datetime" contains "date".
-    if (typeName === 'datetime' || typeName === 'date time' || dataType === 'datetime' ||
+    // Respect explicit field type IDs first. The backend stores Date with a DateTime data type,
+    // so relying only on dataType makes draft/edit render a date as datetime-local.
+    if (fieldTypeId === 7 || typeName === 'date' || ftTypeNameLower === 'date') {
+      return 'date';
+    }
+
+    // DateTime must be checked before generic Date because "datetime" contains "date".
+    if (fieldTypeId === 8 || typeName === 'datetime' || typeName === 'date time' || dataType === 'datetime' ||
         combined.includes('datetime') || combined.includes('date time')) {
       return 'datetime-local';
     }
@@ -1665,7 +1772,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   getFieldOptions(field: FormFieldDto): any[] {
     if (!field.id) {
-      return field.fieldOptions || [];
+      return this.getRawFieldOptions(field);
     }
 
     // If options are still loading from DataSource, return empty array (will be updated when loading completes)
@@ -1706,16 +1813,18 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           // Check if this is a FieldOptionDto (static options from database) or FieldOptionResponse (from DataSource)
           // FieldOptionDto has: optionText, optionValue
           // FieldOptionResponse has: text, value (or custom paths)
-          const isStaticOption = 'optionText' in optAny || 'optionValue' in optAny;
+          const isStaticOption = 'optionText' in optAny || 'optionValue' in optAny || 'OptionText' in optAny || 'OptionValue' in optAny;
           
           if (isStaticOption) {
             // This is a static option from database (FieldOptionDto format)
             // Use optionText and optionValue directly
-            if (optAny.optionText !== undefined && optAny.optionText !== null) {
-              text = String(optAny.optionText).trim();
+            const rawText = optAny.optionText ?? optAny.OptionText;
+            const rawValue = optAny.optionValue ?? optAny.OptionValue;
+            if (rawText !== undefined && rawText !== null) {
+              text = String(rawText).trim();
             }
-            if (optAny.optionValue !== undefined && optAny.optionValue !== null) {
-              value = String(optAny.optionValue);
+            if (rawValue !== undefined && rawValue !== null) {
+              value = String(rawValue);
             }
             // Also check foreignOptionText for multilingual support
             if (!text && optAny.foreignOptionText) {
@@ -1851,7 +1960,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // Otherwise, use static options from field.fieldOptions
     // IMPORTANT: Even if field has Api/LookupTable DataSource, use static options as fallback
     // if DataSource failed or returned no options
-    const staticOptions = field.fieldOptions || [];
+    const staticOptions = this.getRawFieldOptions(field);
     
     // Check if DataSource failed or returned no options
     const dataSource = field.fieldDataSource;
@@ -1898,7 +2007,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     // Check cache first to avoid recreating array on every call
     if (this._cachedStaticOptions[field.id]) {
-      return this._cachedStaticOptions[field.id];
+      return this.filterStaticOptionsForSearch(field, this._cachedStaticOptions[field.id]);
     }
 
     // Ensure static options also have proper text
@@ -1907,6 +2016,30 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       .map((opt, index) => {
         // Create a copy to avoid mutating the original
         const option = { ...opt };
+        const rawOptionText =
+          option.optionText ??
+          option.OptionText ??
+          option.text ??
+          option.Text ??
+          option.label ??
+          option.Label ??
+          '';
+        const rawForeignOptionText =
+          option.foreignOptionText ??
+          option.ForeignOptionText ??
+          '';
+        const rawOptionValue =
+          option.optionValue ??
+          option.OptionValue ??
+          option.value ??
+          option.Value ??
+          option.key ??
+          option.Key ??
+          '';
+
+        option.optionText = rawOptionText;
+        option.foreignOptionText = rawForeignOptionText;
+        option.optionValue = rawOptionValue;
 
         // Ensure optionText is never undefined
         if (!option.optionText || String(option.optionText).trim() === '') {
@@ -1930,7 +2063,80 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     // Cache the processed options to avoid recreating array on every call
     this._cachedStaticOptions[field.id] = processedOptions;
-    return processedOptions;
+    return this.filterStaticOptionsForSearch(field, processedOptions);
+  }
+
+  private filterStaticOptionsForSearch(field: FormFieldDto, options: any[]): any[] {
+    if (!field.id || !this.searchableFieldDropdownOpen[field.id]) {
+      return options;
+    }
+
+    const query = (this.searchableFieldQueries[field.id] || '').trim().toLowerCase();
+    const selectedLabel = (this.searchableFieldSelectedLabels[field.id] || '').trim().toLowerCase();
+    if (!query || query === selectedLabel) {
+      return options;
+    }
+
+    return options.filter(option => {
+      const text = this.getOptionText(option).toLowerCase();
+      const value = this.getOptionValue(option).toLowerCase();
+      return text.includes(query) || value.includes(query);
+    });
+  }
+
+  private async enrichOptionFieldsWithDetails(): Promise<void> {
+    const fieldsNeedingDetails = this.fields.filter(field => {
+      if (!field.id) return false;
+      const fieldType = this.getFieldType(field);
+      const ft = this.getFieldTypeFromCache(field) || field.fieldType;
+      const hasOptionsFromFieldType = ft?.hasOptions === true;
+      const isOptionsField = ['select', 'radio', 'checkbox'].includes(fieldType) || hasOptionsFromFieldType;
+      return isOptionsField && this.getRawFieldOptions(field).length === 0;
+    });
+
+    if (fieldsNeedingDetails.length === 0) {
+      return;
+    }
+
+    await Promise.all(fieldsNeedingDetails.map(async field => {
+      try {
+        const [fieldDetails, activeOptions] = await Promise.all([
+          this.fieldsService.getFieldById(field.id!).toPromise(),
+          this.fieldOptionsService.getActiveFieldOptionsByFieldId(field.id!).toPromise()
+        ]);
+        if (!fieldDetails) return;
+
+        const detailedOptions = (activeOptions && activeOptions.length > 0)
+          ? activeOptions
+          : this.getRawFieldOptions(fieldDetails);
+
+        if (detailedOptions.length > 0) {
+          field.fieldOptions = detailedOptions;
+          delete this._cachedStaticOptions[field.id!];
+          delete this._loggedFieldOptions[field.id!];
+        }
+
+        if (!field.fieldDataSource && (fieldDetails as any).fieldDataSource) {
+          field.fieldDataSource = (fieldDetails as any).fieldDataSource;
+        }
+      } catch (error) {
+        console.warn(`[FormSubmissionCreate] Could not enrich options for field ${field.id}:`, error);
+      }
+    }));
+  }
+
+  private getRawFieldOptions(field: any): any[] {
+    if (!field) return [];
+
+    const options =
+      field.fieldOptions ??
+      field.FieldOptions ??
+      field.FIELD_OPTIONS ??
+      field.options ??
+      field.Options ??
+      [];
+
+    return Array.isArray(options) ? options : [];
   }
 
   getFieldPlaceholder(field: FormFieldDto): string {
@@ -2086,6 +2292,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   isFieldEditable(field: FormFieldDto): boolean {
     // Calculated fields are always read-only
     if (this.calculationEngine.isCalculatedField(field)) {
+      return false;
+    }
+
+    // Once the document is signed, ALL fields are locked (manual or electronic signature).
+    if (this.isSubmissionSigned) {
       return false;
     }
 
@@ -2446,6 +2657,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.attachmentPreviewOpen = true;
   }
 
+  viewExistingAttachment(attachment: FormSubmissionAttachmentDto): void {
+    if (!attachment.id) {
+      return;
+    }
+
+    if (this.canPreviewAttachment(attachment)) {
+      this.openExistingAttachmentPreview(attachment);
+      return;
+    }
+
+    window.open(this.getAttachmentDownloadUrl(attachment.id), '_blank', 'noopener');
+  }
+
   closeAttachmentPreview(): void {
     this.attachmentPreviewOpen = false;
     this.attachmentPreviewName = '';
@@ -2457,21 +2681,214 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
    * Track by function for options to prevent unnecessary re-renders
    */
   trackByOptionValue(index: number, option: any): any {
-    return option?.optionValue || option?.value || option?.id || index;
+    const rawValue =
+      option?.optionValue ?? option?.value ?? option?.Value ?? option?.id ?? option?.Id ?? '';
+
+    const value = rawValue === null || rawValue === undefined ? '' : String(rawValue).trim();
+    return value || option?.id || option?.Id || index;
+  }
+
+  private normalizeDataSourceType(sourceType?: string | null): string {
+    return (sourceType || '').trim().toLowerCase();
+  }
+
+  isSearchableSelectField(field: FormFieldDto): boolean {
+    return this.getFieldType(field) === 'select' &&
+      !field.fieldType?.allowMultiple;
+  }
+
+  getSearchableFieldQuery(field: FormFieldDto): string {
+    if (!field.id) {
+      return '';
+    }
+
+    if (this.searchableFieldQueries[field.id] !== undefined) {
+      return this.searchableFieldQueries[field.id];
+    }
+
+    const currentValue = this.getFieldValue(field);
+    if (currentValue === null || currentValue === undefined || currentValue === '') {
+      return '';
+    }
+
+    const selectedOption = this.getFieldOptions(field)
+      .find(opt => String(this.getOptionValue(opt)) === String(currentValue));
+
+    if (selectedOption) {
+      const selectedLabel = this.getOptionText(selectedOption);
+      this.searchableFieldSelectedLabels[field.id] = selectedLabel;
+      return selectedLabel;
+    }
+
+    return this.searchableFieldSelectedLabels[field.id] || String(currentValue);
+  }
+
+  openSearchableFieldDropdown(field: FormFieldDto): void {
+    if (!field.id || !this.isFieldEditable(field)) {
+      return;
+    }
+
+    this.searchableFieldDropdownOpen[field.id] = true;
+    this.loadFieldOptionsFromDataSource(field, undefined, this.searchableFieldQueries[field.id] || '');
+  }
+
+  onSearchableFieldInput(field: FormFieldDto, event: Event): void {
+    if (!field.id) {
+      return;
+    }
+
+    const value = (event.target as HTMLInputElement).value || '';
+    this.searchableFieldQueries[field.id] = value;
+    this.searchableFieldDropdownOpen[field.id] = true;
+    const selectedLabel = this.searchableFieldSelectedLabels[field.id];
+
+    if (selectedLabel !== undefined && value !== selectedLabel) {
+      delete this.searchableFieldSelectedLabels[field.id];
+      this.setSearchableFieldValue(field, '');
+    }
+
+    if (value.trim() === '') {
+      delete this.searchableFieldSelectedLabels[field.id];
+      this.setSearchableFieldValue(field, '');
+    }
+
+    if (this.searchableFieldSearchTimers[field.id]) {
+      clearTimeout(this.searchableFieldSearchTimers[field.id]);
+    }
+
+    this.searchableFieldSearchTimers[field.id] = setTimeout(() => {
+      this.loadFieldOptionsFromDataSource(field, undefined, value);
+    }, 250);
+  }
+
+  selectSearchableFieldOption(field: FormFieldDto, option: any): void {
+    if (!field.id) {
+      return;
+    }
+
+    const optionText = this.getOptionText(option);
+    const optionValue = this.getOptionValue(option);
+
+    this.searchableFieldQueries[field.id] = optionText;
+    this.searchableFieldSelectedLabels[field.id] = optionText;
+    this.searchableFieldDropdownOpen[field.id] = false;
+    this.setSearchableFieldValue(field, optionValue);
+    this.clearFieldError(field);
+  }
+
+  onSearchableFieldBlur(field: FormFieldDto): void {
+    if (!field.id) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      this.searchableFieldDropdownOpen[field.id!] = false;
+      this.validateSearchableFieldSelection(field);
+      this.cdr.markForCheck();
+    }, 150);
+  }
+
+  shouldShowSearchableFieldDropdown(field: FormFieldDto): boolean {
+    return !!field.id && !!this.searchableFieldDropdownOpen[field.id];
+  }
+
+  private validateSearchableFieldSelection(field: FormFieldDto): string | null {
+    if (!field.id || !this.isSearchableSelectField(field)) {
+      return null;
+    }
+
+    const fieldCode = field.fieldCode || `field_${field.id}`;
+    const query = (this.searchableFieldQueries[field.id] || '').trim();
+    const value = this.getFieldValue(field);
+
+    if (!query && (value === undefined || value === null || value === '')) {
+      return null;
+    }
+
+    if (value === undefined || value === null || value === '') {
+      const errorMsg = this.translationService.getCurrentLanguage() === 'ar'
+        ? 'Please select a value from the list'
+        : 'Please select a value from the list';
+      this.fieldValidationErrors[fieldCode] = errorMsg;
+      return errorMsg;
+    }
+
+    const selectedLabel = (this.searchableFieldSelectedLabels[field.id] || '').trim();
+    if (query && selectedLabel && query !== selectedLabel) {
+      const errorMsg = this.translationService.getCurrentLanguage() === 'ar'
+        ? 'Please select a value from the list'
+        : 'Please select a value from the list';
+      this.fieldValidationErrors[fieldCode] = errorMsg;
+      return errorMsg;
+    }
+
+    return null;
+  }
+
+  private setSearchableFieldValue(field: FormFieldDto, value: any): void {
+    if (!field.id) {
+      return;
+    }
+
+    const fieldKey = `field_${field.id}`;
+    const control = this.fieldsForm.get(fieldKey);
+    control?.setValue(value, { emitEvent: true });
+    this.fieldValues[String(field.id)] = value;
+    if (field.fieldCode) {
+      this.fieldValues[field.fieldCode] = value;
+    }
+
+    this.updateFieldValues();
+    this.reloadDependentFieldOptions([field.fieldCode || String(field.id), String(field.id)]);
+    if (field.fieldCode) {
+      this.calculateFields(field.fieldCode).catch(error => {
+        console.error('[FormSubmissionCreate] Error calculating fields after searchable select change:', error);
+      });
+    }
+    this.cdr.markForCheck();
+  }
+
+  private syncSearchableFieldLabel(field: FormFieldDto, options: FieldOptionResponse[]): void {
+    if (!field.id || !this.isSearchableSelectField(field)) {
+      return;
+    }
+
+    const currentValue = this.getFieldValue(field);
+    if (currentValue === null || currentValue === undefined || currentValue === '') {
+      return;
+    }
+
+    const selectedOption = (options || []).find((opt: any) => {
+      const optionValue = this.getOptionValue(opt);
+      return String(optionValue) === String(currentValue);
+    });
+
+    if (!selectedOption) {
+      return;
+    }
+
+    const optionText = this.getOptionText(selectedOption);
+    this.searchableFieldQueries[field.id] = optionText;
+    this.searchableFieldSelectedLabels[field.id] = optionText;
   }
 
   /**
    * Handle select dropdown change
    */
-  onSelectChange(field: FormFieldDto, event: any): void {
+  onSelectChange(field: FormFieldDto, event?: any): void {
     // Note: This method is no longer needed with reactive forms
     // Reactive forms handle value changes automatically through formControlName
     // But we keep it for backward compatibility and to trigger calculations
+    if (!field.id) {
+      return;
+    }
+
     const fieldKey = `field_${field.id}`;
     const control = this.fieldsForm.get(fieldKey);
     
     if (control) {
-      // Get the current value from the control (reactive forms already updated it)
+      // With Angular [ngValue], event.target.value can be an internal option id (e.g. "1: X").
+      // The reactive control already has the real option value, so use it as the source of truth.
       const selectedValue = control.value;
       
       console.log(`[FormSubmissionCreate] Select changed for field ${field.id} (${field.fieldCode || 'no-code'})`, {
@@ -2482,12 +2899,19 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       
       // Update fieldValues for rule evaluation
       this.updateFieldValues();
+      this.fieldValues[String(field.id)] = selectedValue;
+      if (field.fieldCode) {
+        this.fieldValues[field.fieldCode] = selectedValue;
+      }
+
+      this.reloadDependentFieldOptions([field.fieldCode || String(field.id), String(field.id)]);
       // Calculate dependent calculated fields (like FormViewComponent)
       if (field.fieldCode) {
         this.calculateFields(field.fieldCode).catch(error => {
           console.error('[FormSubmissionCreate] Error calculating fields:', error);
         });
       }
+      this.cdr.markForCheck();
     }
   }
 
@@ -2526,14 +2950,15 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     if (!control) return;
     
     const currentValue = control.value || [];
-    let newValue: any[] = Array.isArray(currentValue) ? [...currentValue] : [];
+    let newValue: string[] = this.normalizeCheckboxValue(currentValue);
+    const normalizedOptionValue = String(optionValue).trim();
     
     if (event.target.checked) {
-      if (!newValue.includes(optionValue)) {
-        newValue.push(optionValue);
+      if (!newValue.includes(normalizedOptionValue)) {
+        newValue.push(normalizedOptionValue);
       }
     } else {
-      const index = newValue.indexOf(optionValue);
+      const index = newValue.indexOf(normalizedOptionValue);
       if (index > -1) {
         newValue.splice(index, 1);
       }
@@ -2556,6 +2981,32 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.evaluateFormRules();
       }
     }, 0);
+  }
+
+  private normalizeCheckboxValue(value: any): string[] {
+    if (value === undefined || value === null || value === '') {
+      return [];
+    }
+
+    if (Array.isArray(value)) {
+      return value.map(item => String(item).trim()).filter(item => item.length > 0);
+    }
+
+    const stringValue = String(value).trim();
+    if (!stringValue) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(stringValue);
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => String(item).trim()).filter(item => item.length > 0);
+      }
+    } catch {
+      // Not JSON; fall back to comma-separated values.
+    }
+
+    return stringValue.split(',').map(item => item.trim()).filter(item => item.length > 0);
   }
 
   getAllowedExtensions(field: FormFieldDto): string[] {
@@ -2588,7 +3039,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   /**
    * Load field options from DataSource if available
    */
-  loadFieldOptionsFromDataSource(field: FormFieldDto, context?: Record<string, any>): void {
+  loadFieldOptionsFromDataSource(field: FormFieldDto, context?: Record<string, any>, searchTerm?: string): void {
     if (!field.id) {
       console.log(`[FormSubmissionCreate] Skipping DataSource load: field has no ID`);
       return;
@@ -2652,7 +3103,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       const isSqlQuery = normalizedSourceType === 'sqlquery' || normalizedSourceType === 'datasourcesqlquery';
       const isSapHana = normalizedSourceType === 'saphana' || normalizedSourceType === 'sap';
       const isFormSubmissions = normalizedSourceType === 'formsubmissions' || normalizedSourceType === 'formsubmission';
-      if (normalizedSourceType === 'api' || normalizedSourceType === 'lookuptable' || isSqlQuery || isSapHana || isFormSubmissions) {
+      const isMasterData = normalizedSourceType === 'masterdata';
+      if (normalizedSourceType === 'api' || normalizedSourceType === 'lookuptable' || isSqlQuery || isSapHana || isFormSubmissions || isMasterData) {
         console.log(`[FormSubmissionCreate] Loading options for field ${field.id} from ${dataSource.sourceType} DataSource`);
         this.loadingFieldOptions[field.id] = true;
       
@@ -2690,7 +3142,12 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         return;
       }
 
-      this.fieldDataSourceService.getFieldOptions(field.id, finalContext).subscribe({
+      const requestOptions = {
+        search: searchTerm?.trim() || undefined,
+        take: 50
+      };
+
+      this.fieldDataSourceService.getFieldOptions(field.id, finalContext, requestOptions).subscribe({
         next: (options: FieldOptionResponse[]) => {
           console.log(`[FormSubmissionCreate] Received options for field ${field.id}:`, {
             optionsCount: options?.length || 0,
@@ -2705,6 +3162,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             const isOptionsField = !isLookupTableValueAutoFill(field.fieldDataSource) &&
               (['select', 'radio', 'checkbox'].includes(fieldType) || ft?.hasOptions === true);
             this.fieldDataSourceOptions[field.id] = isOptionsField ? options : [];
+            if (isOptionsField) {
+              this.syncSearchableFieldLabel(field, options);
+            } else {
+              this.searchableFieldDropdownOpen[field.id] = false;
+            }
             // Clear cache when DataSource options are updated
             delete this._cachedMappedOptions[field.id];
             delete this._cachedStaticOptions[field.id];
@@ -3189,7 +3651,11 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     });
   }
 
-  private reloadDependentFieldOptions(changedFieldCodes: string | string[]): void {
+  private reloadDependentFieldOptions(
+    changedFieldCodes: string | string[],
+    options: { clearCurrentValue?: boolean } = {}
+  ): void {
+    const clearCurrentValue = options.clearCurrentValue !== false;
     const changedCodes = Array.isArray(changedFieldCodes)
       ? changedFieldCodes.filter(code => !!code)
       : [changedFieldCodes].filter(code => !!code);
@@ -3207,9 +3673,22 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         return;
       }
 
-      this.clearDependentFieldRuntimeState(field);
+      if (clearCurrentValue || this.shouldClearDependentFieldOnRefresh(field)) {
+        this.clearDependentFieldRuntimeState(field);
+      } else {
+        this.clearDependentFieldOptionsCache(field);
+      }
       this.loadFieldOptionsFromDataSource(field);
     });
+  }
+
+  private shouldClearDependentFieldOnRefresh(field: FormFieldDto): boolean {
+    const dataSource = field.fieldDataSource;
+    if (!dataSource) {
+      return false;
+    }
+
+    return isContextValueAutoFill(dataSource) || isLookupTableValueAutoFill(dataSource);
   }
 
   private clearDependentFieldRuntimeState(field: FormFieldDto): void {
@@ -3222,6 +3701,20 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.fieldValues[String(field.id)] = '';
     if (field.fieldCode) {
       this.fieldValues[field.fieldCode] = '';
+    }
+
+    delete this.fieldDataSourceOptions[field.id];
+    delete this._cachedMappedOptions[field.id];
+    delete this._cachedStaticOptions[field.id];
+    delete this._loggedFieldOptions[field.id];
+    delete this.searchableFieldQueries[field.id];
+    delete this.searchableFieldSelectedLabels[field.id];
+    delete this.searchableFieldDropdownOpen[field.id];
+  }
+
+  private clearDependentFieldOptionsCache(field: FormFieldDto): void {
+    if (!field.id) {
+      return;
     }
 
     delete this.fieldDataSourceOptions[field.id];
@@ -3781,12 +4274,502 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     this.router.navigate(['/submissions']);
   }
 
+  /** True once we are editing a persisted submission, so a letter can be generated for it. */
+  get canGenerateLetter(): boolean {
+    return this.isEditMode && !!this.submissionId;
+  }
+
+  generatingLetter = false;
+
+  /**
+   * Generate / download the Crystal "letter" (PDF) for the currently open submission,
+   * using the document type's default layout. Mirrors the list-screen download flow so
+   * the action is available directly from the submission edit screen too.
+   */
+  generateLetter(): void {
+    const submissionId = Number(this.submissionId || 0);
+    const documentTypeId = Number(this.documentTypeId || 0);
+
+    if (!submissionId || !documentTypeId || this.generatingLetter) {
+      return;
+    }
+
+    this.generatingLetter = true;
+    this.cdr.detectChanges();
+
+    this.crystalReportsService.getDefaultLayout(documentTypeId).subscribe({
+      next: (layout: CrystalLayoutDto) => {
+        if (!layout || !layout.id) {
+          this.generatingLetter = false;
+          this.cdr.detectChanges();
+          this.messageService.add({
+            severity: 'info',
+            summary: 'No letter layout',
+            detail: 'No active letter/report layout is configured for this document type.'
+          });
+          return;
+        }
+
+        const fallbackFileName = (this.currentSubmission?.documentNumber || `Submission_${submissionId}`)
+          .toString()
+          .replace(/[^\w\-]+/g, '_');
+
+        this.crystalReportsService.getLayoutPdf(layout.id, submissionId, fallbackFileName).subscribe({
+          next: (response) => {
+            this.generatingLetter = false;
+            this.cdr.detectChanges();
+
+            const blob = response.body;
+            if (!blob) {
+              this.messageService.add({ severity: 'warn', summary: 'Empty letter', detail: 'The generated letter was empty.' });
+              return;
+            }
+
+            const fileName = this.resolveLetterFileName(response.headers.get('content-disposition'))
+              || `${fallbackFileName}.pdf`;
+
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = fileName;
+            anchor.click();
+            URL.revokeObjectURL(url);
+
+            this.messageService.add({ severity: 'success', summary: 'Letter generated', detail: fileName });
+          },
+          error: () => {
+            this.generatingLetter = false;
+            this.cdr.detectChanges();
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Letter failed',
+              detail: 'Could not generate the letter. The report service may be unavailable.'
+            });
+          }
+        });
+      },
+      error: () => {
+        this.generatingLetter = false;
+        this.cdr.detectChanges();
+        this.messageService.add({
+          severity: 'info',
+          summary: 'No letter layout',
+          detail: 'No active letter/report layout is configured for this document type.'
+        });
+      }
+    });
+  }
+
+  private resolveLetterFileName(contentDisposition: string | null): string | null {
+    if (!contentDisposition) {
+      return null;
+    }
+    const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
+    if (utf8Match?.[1]) {
+      return decodeURIComponent(utf8Match[1]);
+    }
+    const asciiMatch = /filename=\"?([^\";]+)\"?/i.exec(contentDisposition);
+    return asciiMatch?.[1] ?? null;
+  }
+
+  // ===================== Signature (manual) =====================
+
+  signingManual = false;
+
+  /** True once the document has been signed (manual or electronic) — locks all fields. */
+  get isSubmissionSigned(): boolean {
+    const sigStatus = (this.currentSubmission?.signatureStatus || this.signatureStatus || '').toString().toLowerCase();
+    const status = (this.currentSubmission?.status || '').toString().toLowerCase();
+    return sigStatus === 'signed' || status === 'approved-signed';
+  }
+
+  /** A manual signature can be recorded for an Approved document that is not yet signed. */
+  get canSignManually(): boolean {
+    if (!this.isEditMode || !this.submissionId) return false;
+    const status = (this.currentSubmission?.status || '').toString().toLowerCase();
+    return status === 'approved' && !this.isSubmissionSigned;
+  }
+
+  signManually(): void {
+    if (!this.submissionId || this.signingManual || !this.canSignManually) {
+      return;
+    }
+    this.signingManual = true;
+    this.cdr.detectChanges();
+
+    this.formSubmissionsService.manualSign(this.submissionId).subscribe({
+      next: (updated: any) => {
+        this.signingManual = false;
+        // Reflect the new signed/locked state locally.
+        if (this.currentSubmission) {
+          this.currentSubmission.signatureStatus = 'signed';
+          this.currentSubmission.status = 'Approved-Signed';
+        }
+        this.signatureStatus = 'signed';
+        this.refreshFieldDisabledStates();
+        this.messageService.add({ severity: 'success', summary: 'Document signed', detail: 'All fields are now locked.' });
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.signingManual = false;
+        const detail = err?.error?.message || 'Could not mark the document as signed.';
+        this.messageService.add({ severity: 'error', summary: 'Sign failed', detail });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /** Re-evaluate disabled state for all field controls (used after signing). */
+  private refreshFieldDisabledStates(): void {
+    try {
+      (this.fields || []).forEach((f) => this.updateFieldDisabledState(f));
+    } catch {
+      // best-effort
+    }
+  }
+
+  // ===================== Letters (generation / escalation) =====================
+
+  get canManageLetters(): boolean {
+    return this.isEditMode && !!this.submissionId;
+  }
+
+  showLettersDialog = false;
+  loadingLetters = false;
+  letterActionBusy = false;
+  submissionLetters: DocumentLetterDto[] = [];
+  letterTypes: LetterTypeDto[] = [];
+  selectedLetterTypeId: number | null = null;
+
+  /** Letter types not yet generated for this submission (so we don't duplicate). */
+  get availableLetterTypes(): LetterTypeDto[] {
+    const usedTypeIds = new Set((this.submissionLetters || []).map(l => l.letterTypeId));
+    return (this.letterTypes || []).filter(t => t.isActive && !usedTypeIds.has(t.id));
+  }
+
+  openLettersDialog(): void {
+    if (!this.canManageLetters) { return; }
+    this.selectedLetterTypeId = null;
+    this.showLettersDialog = true;
+    this.loadLettersData();
+    this.cdr.detectChanges();
+  }
+
+  closeLettersDialog(): void {
+    this.showLettersDialog = false;
+    this.cdr.detectChanges();
+  }
+
+  loadLettersData(): void {
+    if (!this.submissionId) { return; }
+    this.loadingLetters = true;
+    const dtId = Number(this.documentTypeId || 0);
+    this.submissionLettersService.getLetters(this.submissionId).subscribe({
+      next: (letters) => {
+        this.submissionLetters = letters || [];
+        this.cdr.detectChanges();
+      },
+      error: () => { this.submissionLetters = []; }
+    });
+    if (dtId) {
+      this.submissionLettersService.getLetterTypes(dtId).subscribe({
+        next: (types) => { this.letterTypes = types || []; this.loadingLetters = false; this.cdr.detectChanges(); },
+        error: () => { this.letterTypes = []; this.loadingLetters = false; this.cdr.detectChanges(); }
+      });
+    } else {
+      this.loadingLetters = false;
+    }
+  }
+
+  generateLetterInstance(): void {
+    if (!this.submissionId || !this.selectedLetterTypeId || this.letterActionBusy) { return; }
+    this.letterActionBusy = true;
+    this.cdr.detectChanges();
+    this.submissionLettersService.generate(this.submissionId, this.selectedLetterTypeId).subscribe({
+      next: () => {
+        this.letterActionBusy = false;
+        this.selectedLetterTypeId = null;
+        this.messageService.add({ severity: 'success', summary: 'Letter generated', detail: 'The letter was created.' });
+        this.loadLettersData();
+      },
+      error: (err) => {
+        this.letterActionBusy = false;
+        this.messageService.add({ severity: 'warn', summary: 'Cannot generate', detail: err?.error?.message || 'Failed to generate letter.' });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  issueLetter(letter: DocumentLetterDto): void {
+    if (!this.submissionId || this.letterActionBusy) { return; }
+    this.letterActionBusy = true;
+    this.submissionLettersService.issue(this.submissionId, letter.id).subscribe({
+      next: () => { this.letterActionBusy = false; this.messageService.add({ severity: 'success', summary: 'Letter issued', detail: letter.letterName }); this.loadLettersData(); },
+      error: (err) => { this.letterActionBusy = false; this.messageService.add({ severity: 'warn', summary: 'Cannot issue', detail: err?.error?.message || 'Failed to issue letter.' }); this.cdr.detectChanges(); }
+    });
+  }
+
+  signLetter(letter: DocumentLetterDto): void {
+    if (!this.submissionId || this.letterActionBusy) { return; }
+    this.letterActionBusy = true;
+    this.submissionLettersService.sign(this.submissionId, letter.id).subscribe({
+      next: () => { this.letterActionBusy = false; this.messageService.add({ severity: 'success', summary: 'Letter signed', detail: letter.letterName }); this.loadLettersData(); },
+      error: (err) => { this.letterActionBusy = false; this.messageService.add({ severity: 'warn', summary: 'Cannot sign', detail: err?.error?.message || 'Failed to sign letter.' }); this.cdr.detectChanges(); }
+    });
+  }
+
+  // Inline send-letter state (per row)
+  sendingLetterId: number | null = null;
+  sendLetterTo = '';
+
+  toggleSendLetter(letter: DocumentLetterDto): void {
+    this.sendingLetterId = this.sendingLetterId === letter.id ? null : letter.id;
+    this.sendLetterTo = '';
+    this.cdr.detectChanges();
+  }
+
+  confirmSendLetter(letter: DocumentLetterDto): void {
+    if (!this.submissionId || this.letterActionBusy) { return; }
+    if (!this.sendLetterTo || !this.sendLetterTo.includes('@')) {
+      this.messageService.add({ severity: 'warn', summary: 'Recipient required', detail: 'Enter a valid recipient email.' });
+      return;
+    }
+    this.letterActionBusy = true;
+    this.submissionLettersService.send(this.submissionId, letter.id, this.sendLetterTo.trim()).subscribe({
+      next: () => {
+        this.letterActionBusy = false;
+        this.sendingLetterId = null;
+        this.sendLetterTo = '';
+        this.messageService.add({ severity: 'success', summary: 'Letter sent', detail: 'Logged in Letters & follow-ups.' });
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.letterActionBusy = false;
+        // 502 => provider failed but it was still logged; 400 => validation
+        const detail = err?.error?.message || 'Failed to send letter (check SMTP). It may be logged as failed.';
+        this.messageService.add({ severity: err?.status === 502 ? 'warn' : 'error', summary: 'Send', detail });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  // Inline extend-deadline state (per row)
+  extendingLetterId: number | null = null;
+  extendDays: number | null = 5;
+  extendReason = '';
+
+  toggleExtendDeadline(letter: DocumentLetterDto): void {
+    this.extendingLetterId = this.extendingLetterId === letter.id ? null : letter.id;
+    this.extendDays = 5;
+    this.extendReason = '';
+    this.cdr.detectChanges();
+  }
+
+  confirmExtendDeadline(letter: DocumentLetterDto): void {
+    if (!this.submissionId || this.letterActionBusy) { return; }
+    if (!this.extendDays || this.extendDays <= 0) {
+      this.messageService.add({ severity: 'warn', summary: 'Days required', detail: 'Enter a positive number of working days.' });
+      return;
+    }
+    this.letterActionBusy = true;
+    this.submissionLettersService.extendDeadline(this.submissionId, letter.id, {
+      days: this.extendDays,
+      reason: this.extendReason?.trim() || null
+    }).subscribe({
+      next: () => {
+        this.letterActionBusy = false;
+        this.extendingLetterId = null;
+        this.extendReason = '';
+        this.messageService.add({ severity: 'success', summary: 'Deadline extended', detail: letter.letterName });
+        this.loadLettersData();
+      },
+      error: (err) => {
+        this.letterActionBusy = false;
+        this.messageService.add({ severity: 'warn', summary: 'Cannot extend', detail: err?.error?.message || 'Failed to extend deadline.' });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  // ===================== Contract clauses (per document) =====================
+  showClausesDialog = false;
+  loadingClauses = false;
+  clauseActionBusy = false;
+  documentClauses: DocumentClauseLinkDto[] = [];
+  availableClauses: AvailableClauseDto[] = [];
+  selectedClauseId: number | null = null;
+
+  openClausesDialog(): void {
+    if (!this.canManageLetters || !this.submissionId) { return; }
+    this.selectedClauseId = null;
+    this.showClausesDialog = true;
+    this.loadClausesData();
+    this.cdr.detectChanges();
+  }
+
+  closeClausesDialog(): void {
+    this.showClausesDialog = false;
+    this.cdr.detectChanges();
+  }
+
+  loadClausesData(): void {
+    if (!this.submissionId) { return; }
+    this.loadingClauses = true;
+    this.documentClausesService.getLinks(this.submissionId).subscribe({
+      next: (links) => { this.documentClauses = links || []; this.cdr.detectChanges(); },
+      error: () => { this.documentClauses = []; }
+    });
+    this.documentClausesService.getAvailable(this.submissionId).subscribe({
+      next: (avail) => { this.availableClauses = avail || []; this.loadingClauses = false; this.cdr.detectChanges(); },
+      error: () => { this.availableClauses = []; this.loadingClauses = false; this.cdr.detectChanges(); }
+    });
+  }
+
+  attachClause(): void {
+    if (!this.submissionId || !this.selectedClauseId || this.clauseActionBusy) { return; }
+    this.clauseActionBusy = true;
+    this.documentClausesService.attach(this.submissionId, this.selectedClauseId).subscribe({
+      next: () => {
+        this.clauseActionBusy = false;
+        this.selectedClauseId = null;
+        this.messageService.add({ severity: 'success', summary: 'Clause attached', detail: 'Added to this document.' });
+        this.loadClausesData();
+      },
+      error: (err) => {
+        this.clauseActionBusy = false;
+        this.messageService.add({ severity: 'warn', summary: 'Cannot attach', detail: err?.error?.message || 'Failed to attach clause.' });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  syncClause(link: DocumentClauseLinkDto): void {
+    if (!this.submissionId || this.clauseActionBusy) { return; }
+    this.clauseActionBusy = true;
+    this.documentClausesService.sync(this.submissionId, link.id).subscribe({
+      next: () => { this.clauseActionBusy = false; this.messageService.add({ severity: 'success', summary: 'Clause updated', detail: 'Synced to latest version.' }); this.loadClausesData(); },
+      error: (err) => { this.clauseActionBusy = false; this.messageService.add({ severity: 'warn', summary: 'Cannot update', detail: err?.error?.message || 'Failed to sync clause.' }); this.cdr.detectChanges(); }
+    });
+  }
+
+  detachClause(link: DocumentClauseLinkDto): void {
+    if (!this.submissionId || this.clauseActionBusy) { return; }
+    this.clauseActionBusy = true;
+    this.documentClausesService.detach(this.submissionId, link.id).subscribe({
+      next: () => { this.clauseActionBusy = false; this.messageService.add({ severity: 'success', summary: 'Clause removed', detail: link.title }); this.loadClausesData(); },
+      error: (err) => { this.clauseActionBusy = false; this.messageService.add({ severity: 'warn', summary: 'Cannot remove', detail: err?.error?.message || 'Failed to remove clause.' }); this.cdr.detectChanges(); }
+    });
+  }
+
+  // ===================== Letters & follow-ups (Send Email) =====================
+
+  /** Same gate as letters: only available for a persisted submission. */
+  get canSendEmail(): boolean {
+    return this.isEditMode && !!this.submissionId;
+  }
+
+  showEmailDialog = false;
+  sendingEmail = false;
+  loadingEmails = false;
+  submissionEmails: SubmissionEmailDto[] = [];
+  emailTo = '';
+  emailCc = '';
+  emailSubject = '';
+  emailBody = '';
+
+  openSendEmailDialog(): void {
+    if (!this.canSendEmail) {
+      return;
+    }
+    this.emailTo = '';
+    this.emailCc = '';
+    this.emailSubject = '';
+    this.emailBody = '';
+    this.showEmailDialog = true;
+    this.loadSubmissionEmails();
+    this.cdr.detectChanges();
+  }
+
+  closeSendEmailDialog(): void {
+    this.showEmailDialog = false;
+    this.cdr.detectChanges();
+  }
+
+  loadSubmissionEmails(): void {
+    if (!this.submissionId) {
+      return;
+    }
+    this.loadingEmails = true;
+    this.submissionEmailsService.getForSubmission(this.submissionId).subscribe({
+      next: (rows) => {
+        this.submissionEmails = rows || [];
+        this.loadingEmails = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.submissionEmails = [];
+        this.loadingEmails = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  sendSubmissionEmail(): void {
+    if (!this.submissionId || this.sendingEmail) {
+      return;
+    }
+    if (!this.emailTo || !this.emailTo.includes('@')) {
+      this.messageService.add({ severity: 'warn', summary: 'Recipient required', detail: 'Enter at least one valid recipient email.' });
+      return;
+    }
+    if (!this.emailSubject || !this.emailSubject.trim()) {
+      this.messageService.add({ severity: 'warn', summary: 'Subject required', detail: 'Enter a subject for the email.' });
+      return;
+    }
+
+    this.sendingEmail = true;
+    this.cdr.detectChanges();
+
+    this.submissionEmailsService.send(this.submissionId, {
+      to: this.emailTo.trim(),
+      cc: this.emailCc?.trim() || undefined,
+      subject: this.emailSubject.trim(),
+      body: this.emailBody || ''
+    }).subscribe({
+      next: () => {
+        this.sendingEmail = false;
+        this.messageService.add({ severity: 'success', summary: 'Email sent', detail: this.emailTo.trim() });
+        this.emailSubject = '';
+        this.emailBody = '';
+        this.loadSubmissionEmails();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.sendingEmail = false;
+        // The server still logs failed attempts; refresh the list so the user sees it.
+        const detail = err?.error?.message || 'The email could not be delivered (check SMTP configuration). It was logged as failed.';
+        this.messageService.add({ severity: 'error', summary: 'Send failed', detail });
+        this.loadSubmissionEmails();
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   private isCopiedSubmissionContext(): boolean {
     return Number(this.currentSubmission?.parentDocumentId || this.currentSubmissionDetail?.parentDocumentId || 0) > 0;
   }
 
-  private shouldActivateWorkflowForCurrentSubmission(): boolean {
-    return !this.isCopiedSubmissionContext();
+  private shouldActivateWorkflowForCurrentSubmission(statusOverride?: string | null): boolean {
+    if (this.isCopiedSubmissionContext()) {
+      return false;
+    }
+
+    const status = (statusOverride || this.currentSubmission?.status || this.currentSubmissionDetail?.status || '')
+      .toString()
+      .trim()
+      .toLowerCase();
+
+    return status === 'submitted';
   }
 
   get isEditingDraftSubmission(): boolean {
@@ -3921,13 +4904,9 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         // Update grid components submissionId first
         this.updateGridComponentsSubmissionId();
         
-        // Load grid data into components if available
-        if (submission.gridData && submission.gridData.length > 0) {
-          setTimeout(() => {
-            this.loadGridDataIntoComponents(submission);
-          }, 300); // Wait for grid components to be initialized
-        }
-        
+        // Grid data is populated by tryHydrateFromSubmission() once fields are also
+        // ready (it uses currentSubmissionDetail.gridData stored above).
+
         // Load field values
         // Prefer explicit values endpoint, but fallback to values included in submission payload.
         this.formSubmissionValuesService.getBySubmissionId(submissionId).subscribe({
@@ -3941,33 +4920,33 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               fromSubmissionPayload: fallbackFromSubmission.length,
               resolved: resolvedFieldValues.length
             });
-            // Store field values to populate form after fields are loaded
+            // Store field values; tryHydrateFromSubmission() populates them once
+            // the field-load pipeline has also completed (order-independent).
             (this as any)._pendingFieldValues = resolvedFieldValues;
-            
-            // If fields are already loaded, populate form
-            if (this.fields.length > 0) {
-              this.populateFormWithFieldValues(resolvedFieldValues);
-            }
+            this._submissionDataReady = true;
+            this.tryHydrateFromSubmission();
           },
           error: (error) => {
             console.error('[FormSubmissionCreate] Error loading field values:', error);
             // Fallback to fieldValues embedded in submission payload.
             const fallbackFromSubmission = this.normalizeLoadedFieldValues((submission as any)?.fieldValues);
-            if (fallbackFromSubmission.length > 0) {
-              (this as any)._pendingFieldValues = fallbackFromSubmission;
-              if (this.fields.length > 0) {
-                this.populateFormWithFieldValues(fallbackFromSubmission);
-              }
-              return;
+            (this as any)._pendingFieldValues = fallbackFromSubmission;
+
+            if (fallbackFromSubmission.length === 0) {
+              const currentLang = this.translationService.getCurrentLanguage();
+              this.messageService.add({
+                severity: 'warn',
+                summary: currentLang === 'ar' ? 'تحذير' : 'Warning',
+                detail: currentLang === 'ar'
+                  ? 'فشل تحميل قيم الحقول. قد تكون بعض البيانات غير متاحة.'
+                  : 'Failed to load field values. Some data may not be available.'
+              });
             }
-            const currentLang = this.translationService.getCurrentLanguage();
-            this.messageService.add({
-              severity: 'warn',
-              summary: currentLang === 'ar' ? 'تحذير' : 'Warning',
-              detail: currentLang === 'ar' 
-                ? 'فشل تحميل قيم الحقول. قد تكون بعض البيانات غير متاحة.' 
-                : 'Failed to load field values. Some data may not be available.'
-            });
+
+            // Submission detail (status, grids, attachments) is still available,
+            // so signal readiness so grids/attachments can still hydrate.
+            this._submissionDataReady = true;
+            this.tryHydrateFromSubmission();
           }
         });
       },
@@ -4028,23 +5007,60 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     // This ensures fields are available before loading attachments
   }
 
+  /**
+   * Deterministic, order-independent hydration for edit mode.
+   * The field-load pipeline (processFields) and the submission-data load
+   * (loadSubmissionForEdit) each set their readiness flag and call this when
+   * they finish. Whichever finishes last performs the population exactly once,
+   * so values/grids/attachments can never be applied before fields exist.
+   */
+  private tryHydrateFromSubmission(): void {
+    if (!this.isEditMode || !this.submissionId) return;
+    if (this._hydratedFromSubmission) return;
+    if (!this._fieldsReady || !this._submissionDataReady) return;
+
+    this._hydratedFromSubmission = true;
+
+    // 1) Field values
+    const pendingFieldValues = (this as any)._pendingFieldValues;
+    if (pendingFieldValues && pendingFieldValues.length > 0) {
+      this.populateFormWithFieldValues(pendingFieldValues);
+    }
+
+    // 2) Grid data (the grid loader manages its own component-readiness retries)
+    if (this.currentSubmissionDetail?.gridData && this.currentSubmissionDetail.gridData.length > 0) {
+      this.loadGridDataIntoComponents(this.currentSubmissionDetail);
+    }
+
+    // 3) Attachments (file fields)
+    this._attachmentLoadAttempts = 0;
+    this.loadAttachmentsForEdit();
+  }
+
   loadAttachmentsForEdit(): void {
     if (!this.submissionId) {
       console.warn('[FormSubmissionCreate] loadAttachmentsForEdit: No submissionId');
       return;
     }
-    
+
     console.log(`[FormSubmissionCreate] loadAttachmentsForEdit called for submissionId: ${this.submissionId}`);
-    
+
     // Reset deleted attachments when loading new submission
     this.deletedAttachments = [];
 
-    // Wait for fields to be loaded
+    // Wait for fields to be loaded (bounded retry to avoid an infinite loop if
+    // fields never load).
     if (this.fields.length === 0) {
+      if (this._attachmentLoadAttempts >= 25) {
+        console.warn('[FormSubmissionCreate] Fields still not loaded after retries; skipping attachment load.');
+        return;
+      }
+      this._attachmentLoadAttempts++;
       console.log('[FormSubmissionCreate] Fields not loaded yet, retrying in 200ms...');
       setTimeout(() => this.loadAttachmentsForEdit(), 200);
       return;
     }
+    this._attachmentLoadAttempts = 0;
 
     console.log(`[FormSubmissionCreate] Checking ${this.fields.length} fields for file/image fields...`);
 
@@ -4121,16 +5137,35 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
   removeExistingAttachment(fieldId: number, attachmentId: number): void {
     if (!this.existingAttachments[fieldId]) return;
-    
-    // Track deleted attachment for server deletion
-    if (attachmentId && !this.deletedAttachments.includes(attachmentId)) {
-      this.deletedAttachments.push(attachmentId);
-      console.log(`[FormSubmissionCreate] Marked attachment ${attachmentId} for deletion`);
+
+    if (!confirm('Delete this attachment?')) {
+      return;
     }
-    
-    // Remove from local display
+
+    const previousAttachments = [...this.existingAttachments[fieldId]];
     this.existingAttachments[fieldId] = this.existingAttachments[fieldId].filter(att => att.id !== attachmentId);
     this.cdr.detectChanges();
+
+    this.formSubmissionAttachmentsService.delete(attachmentId).subscribe({
+      next: () => {
+        this.deletedAttachments = this.deletedAttachments.filter(id => id !== attachmentId);
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Attachment',
+          detail: 'Attachment deleted successfully'
+        });
+      },
+      error: (error) => {
+        console.error(`[FormSubmissionCreate] Error deleting attachment ${attachmentId}:`, error);
+        this.existingAttachments[fieldId] = previousAttachments;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Attachment',
+          detail: error?.message || 'Failed to delete attachment'
+        });
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   /**
@@ -4212,7 +5247,28 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
       this.fieldsForm.get(fieldKey)?.updateValueAndValidity({ emitEvent: false });
     });
     this.updateFieldValues();
+    (this as any)._previousFormValues = { ...this.fieldsForm.getRawValue() };
+    this.refreshContextDependentFieldsAfterValueLoad(formValues);
     this.cdr.detectChanges();
+  }
+
+  private refreshContextDependentFieldsAfterValueLoad(formValues: Record<string, any>): void {
+    const changedIdentifiers = Object.keys(formValues)
+      .filter(key => key.startsWith('field_'))
+      .flatMap(key => {
+        const fieldId = key.replace('field_', '');
+        const field = this.fields.find(f => String(f.id) === fieldId);
+        return [field?.fieldCode, fieldId].filter((value): value is string => !!value);
+      });
+
+    if (changedIdentifiers.length === 0) {
+      return;
+    }
+
+    setTimeout(() => {
+      this.reloadDependentFieldOptions(changedIdentifiers, { clearCurrentValue: false });
+      this.cdr.markForCheck();
+    }, 0);
   }
 
   private toNumberOrNull(value: any): number | null {
@@ -4606,18 +5662,60 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     // In Edit Mode, if submission status is not Draft, just update the data without submitting
     if (this.isEditMode && this.currentSubmission && this.currentSubmission.status !== 'Draft') {
+      const status = (this.currentSubmission.status || '').toLowerCase();
+      const dt: any = this.documentType || {};
+      const isPending = status === 'pending' || status === 'submitted';
+      const isApproved = status === 'approved';
+
+      // #3: enforce the document-type edit settings.
+      if (isPending && dt.allowEditWhilePending === false) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Editing not allowed',
+          detail: 'This document is under approval and editing is disabled for this document type.'
+        });
+        this.isSubmitting = false; this.loading.create = false; this.cdr.detectChanges();
+        return;
+      }
+      if (isApproved && dt.allowEditWhenApproved === false) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Editing not allowed',
+          detail: 'This document is approved and editing is disabled for this document type.'
+        });
+        this.isSubmitting = false; this.loading.create = false; this.cdr.detectChanges();
+        return;
+      }
+
       console.log('[FormSubmissionCreate] Edit Mode: Submission status is', this.currentSubmission.status, '- updating data only');
       this.isSubmitting = true;
-      
+
       // Just save the data without submitting
       this.saveSubmissionData(this.submissionId!, this.currentSubmission.status);
-      
+
+      // #3: editing a document that is under approval / already approved re-triggers the
+      // approval workflow so the changes get re-reviewed.
+      const shouldRetriggerApproval = (isPending || isApproved) && !!dt.approvalWorkflowId && !!this.submissionId;
+      if (shouldRetriggerApproval) {
+        this.approvalWorkflowRuntimeService.activateStage(this.submissionId!).subscribe({
+          next: () => {
+            this.messageService.add({
+              severity: 'info',
+              summary: 'Approval restarted',
+              detail: 'The document was updated and re-submitted for approval.'
+            });
+            this.loadSubmissionForEdit();
+          },
+          error: (err) => console.error('[FormSubmissionCreate] #3 failed to re-trigger approval:', err)
+        });
+      }
+
       this.messageService.add({
         severity: 'success',
         summary: 'Success',
         detail: 'Submission updated successfully'
       });
-      
+
       this.isSubmitting = false;
       this.loading.create = false;
       this.cdr.detectChanges();
@@ -4677,17 +5775,6 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
           this.isSubmitting = false;
           this.loading.create = false;
-
-          if (this.shouldActivateWorkflowForCurrentSubmission()) {
-            this.approvalWorkflowRuntimeService.activateStage(this.submissionId!).subscribe({
-              next: () => {
-                console.log('[FormSubmissionCreate] activate-stage succeeded in background (already submitted after create)');
-              },
-              error: (activateError) => {
-                console.warn('[FormSubmissionCreate] Failed to activate workflow stage in background (already submitted after create):', activateError);
-              }
-            });
-          }
 
           this.router.navigate(['/submissions']);
           this.cdr.detectChanges();
@@ -4852,17 +5939,6 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               this.isSubmitting = false;
               this.loading.create = false;
 
-              if (this.shouldActivateWorkflowForCurrentSubmission()) {
-                this.approvalWorkflowRuntimeService.activateStage(this.submissionId).subscribe({
-                  next: () => {
-                    console.log('[FormSubmissionCreate] activate-stage succeeded after already-submitted response');
-                  },
-                  error: (activateError) => {
-                    console.warn('[FormSubmissionCreate] Failed to activate workflow stage after already-submitted response:', activateError);
-                  }
-                });
-              }
-
               this.router.navigate(['/submissions']);
               this.cdr.detectChanges();
               return;
@@ -4970,8 +6046,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         this.router.navigate(['/submissions']);
 
         // Activate workflow stage in background (don't wait for it)
-        if (this.submissionId && this.shouldActivateWorkflowForCurrentSubmission()) {
-          this.approvalWorkflowRuntimeService.activateStage(this.submissionId).subscribe({
+        if (false && this.submissionId && this.shouldActivateWorkflowForCurrentSubmission('Submitted')) {
+          this.approvalWorkflowRuntimeService.activateStage(this.submissionId!).subscribe({
             next: () => {
               console.log('[FormSubmissionCreate] ✅ activate-stage succeeded in background');
             },
@@ -5067,7 +6143,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
         const isAlreadySubmitted = backendMsg.toLowerCase().includes('already submitted');
 
         if (isAlreadySubmitted && this.submissionId) {
-          if (!this.shouldActivateWorkflowForCurrentSubmission()) {
+          if (!false) {
             this.isSubmitting = false;
             this.loading.create = false;
             this.cdr.detectChanges();
@@ -5171,7 +6247,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
           if (this.documentType?.approvalWorkflowId && this.documentType.approvalWorkflowId > 0) {
             approvalWorkflowId = this.documentType.approvalWorkflowId;
             console.log('[FormSubmissionCreate] Using approvalWorkflowId from loaded documentType:', approvalWorkflowId);
-            this.setSubmissionStageId(submission.id, approvalWorkflowId);
+            this.setSubmissionStageId(submission.id, approvalWorkflowId, submission.status);
           } else {
             // Load document type to get approvalWorkflowId
             const loadDocumentType = (): Observable<any> => {
@@ -5195,7 +6271,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
                 
                 if (documentType?.approvalWorkflowId && documentType.approvalWorkflowId > 0) {
                   this.documentType = documentType;
-                  this.setSubmissionStageId(submission.id, documentType.approvalWorkflowId);
+                  this.setSubmissionStageId(submission.id, documentType.approvalWorkflowId, submission.status);
                 } else {
                   console.warn('[FormSubmissionCreate] No approval workflow ID found in document type.');
                 }
@@ -5215,8 +6291,8 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
   /**
    * Set submission stageId and activate workflow stage
    */
-  private setSubmissionStageId(submissionId: number, approvalWorkflowId: number): void {
-    if (!approvalWorkflowId || !this.shouldActivateWorkflowForCurrentSubmission()) {
+  private setSubmissionStageId(submissionId: number, approvalWorkflowId: number, statusOverride?: string | null): void {
+    if (true || !approvalWorkflowId || !this.shouldActivateWorkflowForCurrentSubmission(statusOverride)) {
       return;
     }
 
@@ -5512,11 +6588,7 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             valueDto.valueString = String(fieldValue);
             break;
           case 'checkbox':
-            if (Array.isArray(fieldValue)) {
-              valueDto.valueString = fieldValue.join(', ');
-            } else {
-              valueDto.valueString = String(fieldValue);
-            }
+            valueDto.valueString = this.normalizeCheckboxValue(fieldValue).join(', ');
             break;
           case 'select':
           case 'radio':
@@ -5687,12 +6759,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
               valueDto.valueString = String(boolValue);
               break;
             case 'checkbox':
-              if (Array.isArray(fieldValue)) {
-                valueDto.valueJson = JSON.stringify(fieldValue);
-                valueDto.valueString = fieldValue.join(', ');
-              } else {
-                valueDto.valueString = String(fieldValue);
-                valueDto.valueJson = JSON.stringify(fieldValue);
+              {
+                const checkboxValues = this.normalizeCheckboxValue(fieldValue);
+                valueDto.valueJson = JSON.stringify(checkboxValues);
+                valueDto.valueString = checkboxValues.join(', ');
               }
               break;
             case 'select':
@@ -5970,12 +7040,10 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
             valueDto.valueString = String(boolValue);
             break;
           case 'checkbox':
-            if (Array.isArray(fieldValue)) {
-              valueDto.valueJson = JSON.stringify(fieldValue);
-              valueDto.valueString = fieldValue.join(', ');
-            } else {
-              valueDto.valueString = String(fieldValue);
-              valueDto.valueJson = JSON.stringify(fieldValue);
+            {
+              const checkboxValues = this.normalizeCheckboxValue(fieldValue);
+              valueDto.valueJson = JSON.stringify(checkboxValues);
+              valueDto.valueString = checkboxValues.join(', ');
             }
             break;
           case 'select':
@@ -6369,12 +7437,14 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
 
     // Handle FieldOptionDto (static options)
     const lang = this.translationService.getCurrentLanguage();
-    if (lang === 'ar' && option.foreignOptionText && String(option.foreignOptionText).trim()) {
-      return parseJsonText(String(option.foreignOptionText).trim());
+    const foreignOptionText = option.foreignOptionText ?? option.ForeignOptionText;
+    if (lang === 'ar' && foreignOptionText && String(foreignOptionText).trim()) {
+      return parseJsonText(String(foreignOptionText).trim());
     }
 
-    let optionText = option.optionText !== undefined && option.optionText !== null
-      ? String(option.optionText).trim()
+    const rawOptionText = option.optionText ?? option.OptionText ?? option.label ?? option.Label ?? option.name ?? option.Name;
+    let optionText = rawOptionText !== undefined && rawOptionText !== null
+      ? String(rawOptionText).trim()
       : '';
 
     // Parse JSON strings if present
@@ -6383,13 +7453,23 @@ export class FormSubmissionCreateComponent implements OnInit, OnDestroy {
     }
 
     // If optionText is empty, try to use optionValue as fallback
-    if (!optionText && option.optionValue !== undefined && option.optionValue !== null) {
-      const valueText = String(option.optionValue).trim();
+    const rawOptionValue = option.optionValue ?? option.OptionValue ?? option.value ?? option.Value;
+    if (!optionText && rawOptionValue !== undefined && rawOptionValue !== null) {
+      const valueText = String(rawOptionValue).trim();
       return parseJsonText(valueText);
     }
 
     // Final fallback - return empty string instead of undefined
     return optionText || '';
+  }
+
+  getOptionValue(option: any): string {
+    if (!option) return '';
+
+    const rawValue =
+      option.optionValue ?? option.OptionValue ?? option.value ?? option.Value ?? option.key ?? option.Key ?? option.id ?? option.Id ?? '';
+
+    return rawValue === null || rawValue === undefined ? '' : String(rawValue).trim();
   }
 
   /**

@@ -1,0 +1,67 @@
+.audit-page-container { min-height: 100vh; }
+
+.top-navbar {
+  .nav-content { display: flex; align-items: center; justify-content: space-between; }
+  .page-title { margin: 0; font-size: 22px; font-weight: 700; color: #14302b; }
+  .page-subtitle { margin: 2px 0 0; font-size: 13px; color: #6b7280; }
+}
+
+.main-content { padding: 20px 24px; }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  .flt {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    min-width: 160px;
+    &:focus { outline: none; border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12); }
+  }
+  .btn-apply, .btn-clear {
+    display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+  }
+  .btn-apply { background: linear-gradient(135deg, #286A61 0%, #00EBB5 100%); color: #fff; }
+  .btn-clear { background: #fff; color: #475569; border: 1px solid #e2e8f0; }
+}
+
+.loading-container, .empty-state {
+  text-align: center; padding: 40px 20px; color: #6b7280;
+  .empty-icon i { font-size: 34px; color: #cbd5e1; }
+  h4 { margin: 10px 0 4px; color: #334155; }
+}
+
+:host ::ng-deep .audit-table {
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b; }
+  td { font-size: 13px; color: #334155; vertical-align: top; }
+  .when { color: #64748b; font-size: 12.5px; white-space: nowrap; }
+  .entity { font-weight: 600; color: #14302b; white-space: nowrap; }
+  .desc { color: #475569; line-height: 1.5; }
+  .desc .details { color: #94a3b8; font-style: italic; }
+  .by { color: #64748b; }
+}
+
+.act-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: #f1f5f9;
+  color: #475569;
+}
+.act-approved { background: #dcfce7; color: #15803d; }
+.act-rejected { background: #fee2e2; color: #b91c1c; }
+.act-returned { background: #fef3c7; color: #92400e; }
+.act-letter   { background: #ccfbf1; color: #0f766e; }
+.act-clause   { background: #cffafe; color: #155e75; }
+.act-email    { background: #e0e7ff; color: #4338ca; }
+.act-post     { background: #ede9fe; color: #6d28d9; }
+.act-sign     { background: #fae8ff; color: #a21caf; }

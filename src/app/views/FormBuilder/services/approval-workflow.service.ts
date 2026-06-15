@@ -63,6 +63,28 @@ export class ApprovalWorkflowService {
   }
 
   /**
+   * Get soft-deleted approval workflows (so they can be restored).
+   * GET /api/ApprovalWorkflow/deleted
+   */
+  getDeletedApprovalWorkflows(): Observable<ApprovalWorkflowDto[]> {
+    return this.http.get<any>(`${this.baseUrl}/deleted`).pipe(
+      map((response: any) => {
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          if (response.success !== undefined) {
+            return response.data || [];
+          }
+          return response.data || response.items || response.result || [];
+        }
+        return Array.isArray(response) ? response : [];
+      }),
+      catchError((error) => {
+        console.error('Error fetching deleted approval workflows:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
    * Get approval workflow by ID
    * GET /api/ApprovalWorkflow/{id}
    */

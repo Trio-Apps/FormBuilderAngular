@@ -95,6 +95,11 @@ export class TranslationService {
         this.translationsCache[lang] = translations; // Cache translations
         this.translations = translations;
         this.translationsLoaded = true;
+        // Re-notify subscribers (e.g. the translate pipe) now that the async load
+        // has completed, so any keys rendered before load resolve to their text.
+        if (this.currentLanguage$.value === lang) {
+          this.currentLanguage$.next(lang);
+        }
       })
       .catch(error => {
         console.error(`Failed to load translations for ${lang}:`, error);
@@ -102,6 +107,9 @@ export class TranslationService {
         this.translationsCache[lang] = {};
         this.translations = {};
         this.translationsLoaded = true;
+        if (this.currentLanguage$.value === lang) {
+          this.currentLanguage$.next(lang);
+        }
       });
   }
 

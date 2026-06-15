@@ -282,7 +282,7 @@
     }
 
     &.stat-icon-info {
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
     }
   }
 
@@ -348,7 +348,7 @@
 
   i {
     font-size: 1.2rem;
-    color: #3b82f6;
+    color: #14b8a6;
   }
 }
 
@@ -461,11 +461,11 @@
   }
 
   &.action-duplicate:not(:disabled) {
-    color: #3b82f6;
-    border-color: #3b82f6;
+    color: #14b8a6;
+    border-color: #14b8a6;
 
     &:hover {
-      background: #3b82f6;
+      background: #14b8a6;
       color: white;
     }
   }
@@ -561,7 +561,7 @@
   }
 
   .page-item.active .page-link {
-    background-color: #3b82f6;
+    background-color: #14b8a6;
     color: white;
     box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
   }

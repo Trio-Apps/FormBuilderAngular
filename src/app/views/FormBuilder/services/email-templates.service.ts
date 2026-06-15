@@ -89,8 +89,9 @@ export class EmailTemplatesService {
     return this.http.get<any>(this.baseUrl, { params: httpParams }).pipe(
       map((response: any) => this.unwrapMany<EmailTemplateDto>(response)),
       catchError((error) => {
+        // Surface the failure; the component shows an error toast instead of a misleading empty list.
         console.error('[EmailTemplatesService] Error fetching email templates:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
